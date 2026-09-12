@@ -1,0 +1,65 @@
+/* ============================================================
+   GPI Shared CSS — Fase 3 de MIGRATION.md.
+
+   Solo lo que se verificó IDÉNTICO (o común en su base) entre los 13
+   módulos HTML antes de extraerlo. Cada módulo, al migrarse en la
+   Fase 4, agrega este archivo con <link rel="stylesheet"> y conserva en
+   su propio <style> únicamente sus variaciones puntuales (ancho del
+   modal, margen del párrafo, etc.) -- no hay una talla única para eso.
+
+   NO incluye:
+   - .kpi: es una colisión de nombre entre dos componentes distintos
+     (fila KPI de Panel_Control vs. tarjeta KPI de Cost-management /
+     Recopilar_Requisitos). Ver el comentario de GPI.ui en gpi-core.ts.
+   - Nada de la lógica JS de los modales: las 13 firmas de función
+     divergen demasiado para unificarse sin rediseñar cada módulo (fuera
+     del alcance de "extraer duplicados").
+   ============================================================ */
+
+/* ----- Modal de confirmación (.modal-overlay / .modal-card) -----
+   Verificado idéntico en 11 de los 13 módulos: OBS_Builder, RACI_Matrix,
+   Stakeholder_Studio, WBS_Builder, Enunciado_del_Alcance, Pert_Analysis,
+   Cronograma_CPM, Panel_Control, Project_Charter, Activity_Definition,
+   Schedule_Management_Plan. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(10, 16, 28, 0.5);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-overlay.open { display: flex; }
+
+.modal-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 22px 24px;
+  max-width: 100%;
+  box-shadow: 0 24px 60px rgba(10, 16, 28, 0.35);
+  border: 1px solid var(--panel-border);
+  /* El ancho (360-560px según el módulo) y max-height/overflow para
+     modales más altos quedan como override local de cada módulo. */
+}
+.modal-card h3 {
+  margin: 0 0 10px;
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink-0);
+}
+.modal-card p {
+  /* margin-bottom varía 14-20px entre módulos: se deja el valor más
+     común (20px) aquí; cada módulo puede sobrescribirlo localmente. */
+  margin: 0 0 20px;
+  font-size: 13.5px;
+  color: var(--ink-1);
+  line-height: 1.55;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

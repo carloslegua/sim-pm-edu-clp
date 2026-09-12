@@ -33,12 +33,15 @@ describe("artefacto compilado gpi-core.js (consumido como <script> clásico)", (
       "KEY", "schema", "available", "defaultMeta", "raw", "listProjects", "activeId",
       "active", "meta", "getModule", "setActive", "patchMeta", "setModule",
       "createProject", "renameProject", "duplicateProject", "deleteProject",
-      "exportActive", "importProject", "ingestToolExport", "onChange", "util"
+      "exportActive", "importProject", "ingestToolExport", "onChange", "util", "ui"
     ];
     requiredKeys.forEach((k) => expect(GPI).toHaveProperty(k));
 
     const utilKeys = ["cpm", "pertProbability", "wbsLeaves", "wbsRollup", "raciAudit", "charterAudit", "parsePredecessorCell"];
     utilKeys.forEach((k) => expect(GPI.util).toHaveProperty(k));
+
+    expect(GPI.ui.esc("<b>")).toBe("&lt;b&gt;");
+    expect(GPI.ui.kpi(1, null, "x")).toContain('class="kpi"');
   });
 
   it("hace round-trip real de datos a través del script clásico (no del módulo TS)", () => {

@@ -42,6 +42,39 @@ negociables mientras dure.
 | 12 | Acta de Constitución | `Project_Charter.html` | Pendiente (entregado a alumnos — al final) |
 | 13 | Panel de Control | `Panel_Control.html` | Pendiente (punto de entrada — absolutamente al final) |
 
+## Hallazgos de la Fase 3 (ajustan el alcance original)
+
+Antes de extraer nada se comparó el contenido real de los 13 módulos, no
+solo los nombres de función. Dos supuestos del plan original no se
+sostuvieron y se corrigieron:
+
+- **`kpi()` NO se unifica.** Solo `Panel_Control.html` tiene una función
+  `kpi()` (fila valor+unidad+etiqueta). `Cost-management.html` y
+  `Recopilar_Requisitos.html` usan la clase CSS `.kpi` para una **tarjeta**
+  visualmente distinta (borde+fondo+`.lab`/`.val`). Es una colisión de
+  nombre entre dos componentes distintos, no una duplicación real —
+  unificarlos habría sido inventar un diseño nuevo, no extraer código
+  repetido. `GPI.ui.kpi()` replica fielmente la única implementación real
+  (la de Panel_Control); los otros dos módulos eligen su propio nombre de
+  clase al migrarse en la Fase 4 para no chocar.
+- **La lógica JS de los modales NO se unifica.** Aunque el CSS
+  (`.modal-overlay`/`.modal-card`) es casi idéntico en 11 archivos, el
+  *comportamiento* JS tiene al menos 5 firmas de función distintas entre
+  los 13 módulos: `showModal(opts)`, `showModal({title,message,
+  confirmText,cancelText,danger})`, `baseModal/confirmModal/promptModal`
+  (Panel_Control), `openFormModal` (Recopilar_Requisitos), `confirmModal`
+  posicional (Enunciado del Alcance), `showModalHTML` (Cronograma_CPM).
+  Unificar esas firmas es un rediseño de 13 módulos, no una extracción de
+  duplicados — contradice el principio "port mecánico, no refactor" de la
+  Fase 1. Solo se extrajo la CSS del contenedor a `gpi-shared.css`.
+- **Hallazgo colateral:** `scripts/check-shared-snippets.mjs` detectó que
+  `Cost-management.html` y `Recopilar_Requisitos.html` cargan una URL de
+  Google Fonts *distinta* a los otros 11 módulos (les falta la familia
+  "Inter" y difieren los pesos tipográficos). Es preexistente a esta
+  migración, no algo que haya cambiado. Queda pendiente para cuando esos
+  dos módulos se migren en la Fase 4 (o antes, si se quiere corregir por
+  separado).
+
 ## Fases
 
 - **Fase 0** — Control de versiones. ✅ Hecho (`git init`, commit baseline,
@@ -62,7 +95,14 @@ negociables mientras dure.
   (incluido el "cruce fino" DEL↔WP que el README documenta como el bug más
   sutil), helpers de árbol WBS/OBS, y los getters simples (con
   compatibilidad de esquema antiguo en `charterRans`).
-- **Fase 3** — Extraer duplicados (`GPI.ui.esc/kpi/modal`, `gpi-shared.css`).
+- **Fase 3** — Extraer duplicados. ✅ Hecho, con alcance ajustado (ver
+  "Hallazgos" arriba): `GPI.ui.esc/kpi` en `gpi-core.ts`, y
+  `gpi-shared.css` (generado con `npm run build:shared` desde
+  `src/shared/styles/shared.css`) con la CSS común del modal. La lógica
+  JS de los modales y la clase `.kpi` de Cost-management/Recopilar
+  Requisitos NO se tocan. `npm run check:snippets` audita que el `<link>`
+  de Google Fonts siga igual entre módulos (ya encontró una divergencia
+  preexistente, ver arriba).
 - **Fase 4** — Migración de los 13 módulos, en el orden de la tabla.
 - **Fase 5** — Verificación de despliegue (GitHub Pages y `file://`).
 

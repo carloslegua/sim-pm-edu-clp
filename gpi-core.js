@@ -1910,6 +1910,22 @@ var GPI = (function(exports) {
 			finishDate: result.ok ? result.projectFinishDate : ""
 		};
 	}
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+			"&": "&amp;",
+			"<": "&lt;",
+			">": "&gt;",
+			"\"": "&quot;",
+			"'": "&#39;"
+		})[c]);
+	}
+	function kpi(v, u, l) {
+		return "<div class=\"kpi\"><span class=\"v\">" + esc(String(v)) + "</span>" + (u ? "<span class=\"u\">" + esc(u) + "</span>" : "") + "<span class=\"l\">" + esc(l) + "</span></div>";
+	}
+	var ui = {
+		esc,
+		kpi
+	};
 	var util = {
 		wbsRollup,
 		wbsResources,
@@ -1969,7 +1985,8 @@ var GPI = (function(exports) {
 		importProject,
 		ingestToolExport,
 		onChange,
-		util
+		util,
+		ui
 	};
 	exports.KEY = KEY;
 	exports.active = active;
@@ -1987,10 +2004,12 @@ var GPI = (function(exports) {
 	exports.defaultMeta = defaultMeta;
 	exports.deleteProject = deleteProject;
 	exports.duplicateProject = duplicateProject;
+	exports.esc = esc;
 	exports.exportActive = exportActive;
 	exports.getModule = getModule;
 	exports.importProject = importProject;
 	exports.ingestToolExport = ingestToolExport;
+	exports.kpi = kpi;
 	exports.listProjects = listProjects;
 	exports.meta = meta;
 	exports.obsLabel = obsLabel;
@@ -2018,6 +2037,7 @@ var GPI = (function(exports) {
 	exports.setActive = setActive;
 	exports.setModule = setModule;
 	exports.traceMatrix = traceMatrix;
+	exports.ui = ui;
 	exports.util = util;
 	exports.wbsCodes = wbsCodes;
 	exports.wbsDelIds = wbsDelIds;

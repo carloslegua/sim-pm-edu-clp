@@ -1570,6 +1570,50 @@ export function scheduleStats(): ScheduleStats {
 }
 
 // =================================================================
+// GPI.ui — helpers de interfaz compartidos (Fase 3 de MIGRATION.md).
+//
+// Alcance deliberadamente acotado a lo que de verdad está duplicado
+// byte-a-byte entre módulos, verificado antes de escribir esto:
+//   - esc(): lógica IDÉNTICA en 9 de los 13 HTML (8 la llaman "esc", uno
+//     -WBS_Builder.html- la llama "escapeHtml"). Segura de unificar.
+//   - kpi(): NO se unifica. Solo Panel_Control.html tiene una función
+//     kpi() (fila valor+unidad+etiqueta). Cost-management.html y
+//     Recopilar_Requisitos.html usan la clase CSS ".kpi" para una TARJETA
+//     visualmente distinta (borde+fondo+.lab/.val) -- es una colisión de
+//     nombre entre dos componentes distintos, no una duplicación real.
+//     GPI.ui.kpi() replica fielmente la única implementación real (la de
+//     Panel_Control) para cuando ese módulo se migre en la Fase 4; los
+//     otros dos módulos deciden su propio nombre de clase al migrar, para
+//     no chocar con esta.
+//   - Los modales (.modal-overlay/.modal-card) NO se unifican en JS aquí:
+//     hay al menos 5 firmas de función distintas entre los 13 archivos
+//     (showModal(opts), showModal({title,message,confirmText,...}),
+//     baseModal/confirmModal/promptModal, openFormModal, confirmModal
+//     posicional, showModalHTML). Unificar esas firmas es un rediseño,
+//     no una extracción de código duplicado -- contradice el principio
+//     "port mecánico, no refactor" de la Fase 1. Lo que SÍ es idéntico
+//     entre 11 archivos es la CSS del contenedor (.modal-overlay,
+//     .modal-overlay.open, .modal-actions): eso vive en gpi-shared.css,
+//     no aquí.
+// =================================================================
+
+export function esc(s: unknown): string {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string
+  ));
+}
+
+// Fila KPI "valor + unidad opcional + etiqueta", tal como la usa
+// Panel_Control.html (única implementación real de esta función hoy).
+export function kpi(v: unknown, u: string | null | undefined, l: string): string {
+  return '<div class="kpi"><span class="v">' + esc(String(v)) + "</span>"
+    + (u ? '<span class="u">' + esc(u) + "</span>" : "")
+    + '<span class="l">' + esc(l) + "</span></div>";
+}
+
+export const ui = { esc, kpi };
+
+// =================================================================
 // Ensamblado de GPI.util y GPI, y adjunto a window para consumo desde
 // los 13 módulos HTML como script clásico (no como módulo ES).
 // =================================================================
@@ -1614,5 +1658,6 @@ export const GPI = {
   importProject,
   ingestToolExport,
   onChange,
-  util
+  util,
+  ui
 };
