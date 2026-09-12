@@ -33,7 +33,7 @@ negociables mientras dure.
 | 3 | Costos | `Cost-management.html` | ✅ Migrado |
 | 4 | Requisitos | `Recopilar_Requisitos.html` | ✅ Migrado |
 | 5 | Enunciado del Alcance | `Enunciado_del_Alcance.html` | ✅ Migrado |
-| 6 | EDT | `WBS_Builder.html` | Pendiente |
+| 6 | EDT | `WBS_Builder.html` | ✅ Migrado |
 | 7 | Definir Actividades | `Activity_Definition.html` | Pendiente |
 | 8 | PERT | `Pert_Analysis.html` | Pendiente |
 | 9 | Plan de Cronograma | `Schedule_Management_Plan.html` | Pendiente |
@@ -76,6 +76,25 @@ sostuvieron y se corrigieron:
   separado).
 
 ## Hallazgos de la Fase 4 (por módulo migrado)
+
+**WBS_Builder.html (sexto módulo migrado, el de mayor fan-out):**
+
+- Mismo patrón que OBS/Enunciado del Alcance: `addEventListener`
+  exclusivamente, `window.GPI` explícito, IIFE propio, CSS del modal
+  idéntico byte a byte al de OBS (mismo `width:360px`, mismos márgenes)
+  — se armonizó sin ningún ajuste especial.
+- El módulo con más integraciones cruzadas de todo el ecosistema: lee
+  `raci` (bloquea el campo "Responsable" de un paquete si la RACI ya
+  le asignó un "R" — `raciLocksResource`), `obs` (autocompletado de
+  responsables) y `scopeStatement` (siembra de entregables como ramas
+  de nivel 1 vía `seedFromScope`). Los tres se mantuvieron sin tocar la
+  lógica, solo tipados.
+- Verificado de punta a punta (servido por HTTP local): el ejemplo
+  DISTRIB+ calcula el costo total exacto documentado en el README
+  (S/ 7,100,000, el "Estimado base (EDT)" de la cadena Acta→EDT→Costos);
+  y con una Matriz RACI real donde un paquete tiene "R" asignado, el
+  campo Responsable del panel de propiedades aparece bloqueado y
+  prellenado con el nombre correcto desde el OBS.
 
 **Enunciado_del_Alcance.html (quinto módulo migrado):**
 
@@ -234,8 +253,9 @@ sostuvieron y se corrigieron:
   de Google Fonts siga igual entre módulos (ya encontró una divergencia
   preexistente, ver arriba).
 - **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. En
-  progreso: 5/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
-  `Recopilar_Requisitos.html`, `Enunciado_del_Alcance.html`). Patrón establecido: `src/modules/<key>/main.ts`
+  progreso: 6/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
+  `Recopilar_Requisitos.html`, `Enunciado_del_Alcance.html`, `WBS_Builder.html`).
+  Patrón establecido: `src/modules/<key>/main.ts`
   + `configs/<key>.vite.config.ts` (usa el helper `configs/lib.config.mjs`)
   + `npm run build:<key>` + `tests/smoke/<key>.smoke.test.ts`.
 - **Fase 5** — Verificación de despliegue (GitHub Pages y `file://`).

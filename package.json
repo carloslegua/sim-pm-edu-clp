@@ -11,6 +11,7 @@
     "build:cost": "vite build --config configs/cost.vite.config.ts && node scripts/sync-artifact.mjs cost.js",
     "build:requirements": "vite build --config configs/requirements.vite.config.ts && node scripts/sync-artifact.mjs requirements.js",
     "build:scope-statement": "vite build --config configs/scope-statement.vite.config.ts && node scripts/sync-artifact.mjs scope-statement.js",
+    "build:wbs": "vite build --config configs/wbs.vite.config.ts && node scripts/sync-artifact.mjs wbs.js",
     "check:snippets": "node scripts/check-shared-snippets.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
