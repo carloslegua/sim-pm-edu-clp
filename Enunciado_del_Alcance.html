@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enunciado del Alcance — Gestión de Proyectos de Ingeniería</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#eef4f9; --bg-1:#ffffff; --bg-2:#f3f8fc;
+    --panel:#ffffff; --panel-border:#e0e8f0;
+    --ink-0:#1a2027; --ink-1:#4d5768; --ink-2:#8992a3;
+    --cyan:#00b6ec; --cyan-dark:#0090c2; --cyan-dim:rgba(0,182,236,0.13);
+    --black:#1a1a1c;
+    --violet:#6c5ce7; --violet-dim:rgba(108,92,231,0.13);
+    --teal:#00c2a8; --amber:#ff9f1c; --coral:#ff6b8b;
+    --danger:#ff5470; --good:#00c2a8; --warn:#ff9f1c;
+    --radius:10px;
+    --mono:'JetBrains Mono',monospace; --display:'Manrope',sans-serif; --body:'Manrope','Inter',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; color:var(--ink-0); font-family:var(--body);
+    background:radial-gradient(circle, rgba(0,182,236,0.06) 1px, transparent 1px) 0 0/26px 26px, var(--bg-0);
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+  a{color:inherit;}
+
+  /* HEADER */
+  header{
+    border-bottom:1px solid var(--panel-border); background:linear-gradient(180deg,#fff,#fbfdff);
+    padding:12px 26px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; position:relative;
+  }
+  header::after{content:''; position:absolute; left:0; right:0; bottom:-1px; height:3px;
+    background:linear-gradient(90deg, var(--violet), var(--cyan) 55%, var(--teal));}
+  .brand{display:flex; align-items:center; gap:13px;}
+  .brand .logo{width:38px;height:38px;border-radius:10px;flex-shrink:0;
+    background:linear-gradient(135deg,var(--violet),#5646c9); display:flex;align-items:center;justify-content:center;
+    box-shadow:0 2px 8px rgba(108,92,231,0.35);}
+  .brand h1{font-family:var(--display); font-size:20px; font-weight:800; margin:0; color:var(--black); letter-spacing:0.1px;}
+  .brand .tag{font-family:var(--mono); font-size:11px; font-weight:600; color:#fff; background:linear-gradient(135deg,var(--violet),#5646c9); padding:3px 9px; border-radius:20px; letter-spacing:0.5px;}
+  .project-title-input{font-family:var(--body); font-weight:700; font-size:13px; color:var(--ink-0); background:transparent; border:none; border-bottom:1.5px dashed var(--panel-border); padding:2px 0; margin-top:3px; min-width:280px;}
+  .project-title-input:focus{outline:none; border-bottom-color:var(--cyan);}
+  .course-title-input{font-family:var(--body); font-size:12px; font-weight:600; color:var(--ink-2); background:var(--bg-2); border:1px solid var(--panel-border); border-radius:8px; padding:6px 10px; min-width:230px; text-align:right;}
+  .course-title-input:focus{outline:none; border-color:var(--cyan);}
+
+  /* TOOLBAR */
+  .toolbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:11px 26px; background:var(--bg-1); border-bottom:1px solid var(--panel-border);}
+  .btn{font-family:var(--body); font-size:12.5px; font-weight:600; color:var(--ink-1);
+    background:var(--bg-2); border:1px solid var(--panel-border); padding:8px 13px; border-radius:8px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px; transition:border-color .12s,color .12s,background .12s,box-shadow .12s,transform .08s; white-space:nowrap; text-decoration:none;}
+  .btn:hover{border-color:var(--cyan); color:var(--cyan-dark); background:#fff; box-shadow:0 2px 6px rgba(0,182,236,0.15);}
+  .btn:active{transform:translateY(1px);}
+  .btn.primary{background:linear-gradient(135deg,var(--violet),#5646c9); border-color:transparent; color:#fff; box-shadow:0 2px 8px rgba(108,92,231,0.32);}
+  .btn.primary:hover{filter:brightness(1.06); color:#fff;}
+  .btn.danger{color:var(--danger);} .btn.danger:hover{border-color:var(--danger); color:var(--danger);}
+  .btn.sm{padding:5px 9px; font-size:11.5px;}
+  .btn:disabled{opacity:.4; cursor:not-allowed;}
+  .toolbar .spacer{flex:1;}
+  input[type=file]{display:none;}
+
+  /* TABS */
+  .tabs{display:flex; gap:4px; background:var(--bg-2); border:1px solid var(--panel-border); border-radius:10px; padding:3px;}
+  .tabs .tab{font-family:var(--display); font-weight:700; font-size:12.5px; color:var(--ink-1); background:transparent; border:none; padding:7px 13px; border-radius:8px; cursor:pointer;}
+  .tabs .tab.active{background:var(--black); color:#fff;}
+
+  /* FLOW STRIP */
+  .flowstrip{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 26px; background:linear-gradient(180deg,#faf9ff,#fff); border-bottom:1px solid var(--panel-border); font-size:12px;}
+  .flowstrip .lbl{font-family:var(--display); font-weight:800; font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-2); margin-right:4px;}
+  .flowstrip .node{display:inline-flex; align-items:center; gap:7px; background:#fff; border:1px solid var(--panel-border); border-radius:20px; padding:5px 12px; color:var(--ink-1); font-weight:600;}
+  .flowstrip .node .n{font-family:var(--mono); font-weight:700; font-size:10px; width:17px; height:17px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:var(--cyan-dim); color:var(--cyan-dark);}
+  .flowstrip .node.here{border-color:var(--violet); background:var(--violet-dim); color:#4a3aad;}
+  .flowstrip .node.here .n{background:var(--violet); color:#fff;}
+  .flowstrip .arrow{color:var(--ink-2); font-family:var(--mono);}
+  .flowstrip .note{color:var(--ink-2); margin-left:6px;}
+
+  .container{max-width:1120px; margin:0 auto; padding:22px 26px 90px; width:100%;}
+  .view{display:none;} .view.active{display:block;}
+
+  h2.section{font-family:var(--display); font-size:15px; font-weight:800; color:var(--ink-0); margin:6px 0 12px; display:flex; align-items:center; gap:9px; flex-wrap:wrap;}
+  h2.section::before{content:''; width:4px; height:16px; border-radius:3px; background:linear-gradient(180deg,var(--violet),var(--cyan)); display:inline-block;}
+  h2.section .hint{font-family:var(--body); font-weight:500; font-size:12px; color:var(--ink-2); margin-left:2px;}
+
+  .card{background:var(--panel); border:1px solid var(--panel-border); border-radius:12px; padding:16px 18px; box-shadow:0 2px 12px rgba(20,30,60,0.05); margin-bottom:16px;}
+  .card .card-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px;}
+  .card h3{margin:0; font-family:var(--display); font-size:13.5px; font-weight:800; color:var(--ink-0);}
+  label.fl{display:block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-2); margin:0 0 5px;}
+  textarea, input.txt{width:100%; background:var(--bg-2); border:1.5px solid var(--panel-border); border-radius:8px; color:var(--ink-0); padding:9px 11px; font-family:var(--body); font-size:13px;}
+  textarea:focus, input.txt:focus{outline:none; border-color:var(--cyan); background:#fff;}
+  textarea{resize:vertical; min-height:60px;}
+  .muted{font-size:12.5px; color:var(--ink-2); line-height:1.6;}
+
+  /* DELIVERABLE TABLE */
+  table.del{width:100%; border-collapse:collapse; font-size:12.5px;}
+  table.del th{background:var(--bg-2); text-align:left; font-family:var(--display); font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-2); padding:8px 10px; border-bottom:1px solid var(--panel-border);}
+  table.del td{padding:9px 10px; border-bottom:1px solid var(--panel-border); vertical-align:top;}
+  table.del tr:hover td{background:#fafcfe;}
+  .code-badge{font-family:var(--mono); font-weight:700; font-size:11px; color:#fff; background:var(--violet); padding:2px 8px; border-radius:6px; white-space:nowrap;}
+  .del-name{font-weight:700; color:var(--ink-0);}
+  .del-desc{color:var(--ink-1); margin-top:2px; font-size:11.5px; line-height:1.45;}
+  .chip{display:inline-flex; align-items:center; gap:4px; font-family:var(--mono); font-size:10px; font-weight:700; padding:2px 7px; border-radius:12px; margin:2px 3px 0 0;}
+  .chip.ran{background:rgba(0,182,236,0.14); color:var(--cyan-dark);}
+  .chip.req{background:rgba(108,92,231,0.14); color:#5646c9;}
+  .chip.del{background:rgba(0,194,168,0.16); color:#00877a;}
+  .chip.wp{background:rgba(26,26,28,0.08); color:var(--ink-0);}
+  .chip.none{background:var(--bg-2); color:var(--ink-2); font-family:var(--body); font-weight:600;}
+  .chip.none.warn{background:rgba(255,159,28,0.18); color:#b56b00;}
+  .chip.none.bad{background:rgba(255,84,112,0.15); color:#c0304a;}
+
+  /* MATRIZ DE CONSISTENCIA */
+  .trace-scroll{overflow-x:auto; border:1px solid var(--panel-border); border-radius:10px;}
+  table.trace{width:100%; border-collapse:collapse; font-size:12px; min-width:820px;}
+  table.trace th{background:var(--bg-2); text-align:left; font-family:var(--display); font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-2); padding:8px 10px; border-bottom:1px solid var(--panel-border); position:sticky; top:0;}
+  table.trace th .arw{color:var(--ink-2); font-family:var(--mono); font-weight:400;}
+  table.trace td{padding:8px 10px; border-bottom:1px solid var(--panel-border); vertical-align:top;}
+  table.trace tr[data-st="rojo"] td{background:rgba(255,84,112,0.05);}
+  table.trace tr[data-st="ambar"] td{background:rgba(255,159,28,0.05);}
+  table.trace tr:hover td{filter:brightness(0.985);}
+  table.trace td.chain{white-space:nowrap;}
+  .st-dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle;}
+  .est{font-family:var(--body); font-size:11px; font-weight:700; white-space:nowrap;}
+  .legend{display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--ink-1); margin-top:12px;}
+  .legend span{display:inline-flex; align-items:center; gap:6px;}
+  .orphan-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; margin-top:14px;}
+  .orphan-box{background:var(--bg-2); border:1px solid var(--panel-border); border-radius:10px; padding:11px 13px;}
+  .orphan-box h4{margin:0 0 6px; font-family:var(--display); font-size:11.5px; font-weight:800; color:var(--ink-0); display:flex; align-items:center; gap:7px;}
+  .orphan-box .n{font-family:var(--mono); font-weight:700; font-size:11px; padding:1px 7px; border-radius:10px;}
+  .orphan-box ul{margin:4px 0 0; padding-left:16px; font-size:11.5px; color:var(--ink-1); line-height:1.5;}
+  .orphan-box .clean{font-size:11.5px; color:#00967f; font-weight:600;}
+  .flag{font-family:var(--body); font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:12px; white-space:nowrap;}
+  .flag.ok{background:rgba(0,194,168,0.16); color:#00967f;}
+  .flag.no{background:rgba(255,159,28,0.18); color:#b56b00;}
+  .row-actions{display:flex; gap:6px; flex-wrap:wrap;}
+
+  /* SRE LISTS */
+  .sre-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px;}
+  .list-item{display:flex; gap:8px; align-items:flex-start; padding:7px 0; border-bottom:1px dashed var(--panel-border);}
+  .list-item textarea{min-height:40px;}
+  .list-item .del-x{flex-shrink:0; margin-top:6px;}
+
+  /* COHERENCE */
+  .kpi-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:6px;}
+  .kpi-box{background:var(--bg-2); border:1px solid var(--panel-border); border-radius:10px; padding:12px 14px;}
+  .kpi-box .v{font-family:var(--mono); font-size:24px; font-weight:800;}
+  .kpi-box .l{font-size:11px; color:var(--ink-1); margin-top:2px;}
+  .bar-track{height:9px; background:rgba(0,0,0,.06); border-radius:5px; overflow:hidden; margin:6px 0 12px;}
+  .bar-fill{height:100%; border-radius:5px;}
+  .warn-list{font-size:12.5px; color:var(--ink-1); line-height:1.6; margin:6px 0 0; padding:0; list-style:none;}
+  .warn-list li{display:flex; align-items:flex-start; gap:8px; padding:4px 0;}
+  .warn-list .tag{font-family:var(--mono); font-size:10px; font-weight:700; padding:2px 7px; border-radius:5px; flex-shrink:0;}
+  .warn-list .tag.a{background:rgba(255,159,28,0.18); color:#b56b00;}
+  .warn-list .tag.r{background:rgba(255,84,112,0.16); color:#c0304a;}
+  .ok-note{font-size:12.5px; color:#00967f; font-weight:600; display:flex; align-items:center; gap:7px; margin-top:6px;}
+  .empty-note{font-size:12.5px; color:var(--ink-2); line-height:1.6;}
+  .state-pill{font-family:var(--display); font-weight:800; font-size:12px; padding:4px 12px; border-radius:20px;}
+
+  .banner{background:rgba(255,159,28,0.12); border:1px solid rgba(255,159,28,0.35); color:#8a5300; border-radius:10px; padding:11px 14px; font-size:12.5px; line-height:1.5; margin-bottom:16px; display:none;}
+  .banner.show{display:block;}
+
+  /* MODAL */
+  .modal-overlay{position:fixed; inset:0; z-index:1000; background:rgba(10,16,28,.5); display:none; align-items:center; justify-content:center; padding:20px;}
+  .modal-overlay.open{display:flex;}
+  .modal-card{background:#fff; border-radius:14px; padding:22px 24px; width:560px; max-width:100%; max-height:90vh; overflow:auto; box-shadow:0 24px 60px rgba(10,16,28,.35); border:1px solid var(--panel-border);}
+  .modal-card h3{margin:0 0 14px; font-family:var(--display); font-size:16px; font-weight:800;}
+  .modal-card .fld{margin-bottom:13px;}
+  .picker{border:1px solid var(--panel-border); border-radius:8px; padding:8px; max-height:150px; overflow:auto; background:var(--bg-2);}
+  .pick-item{display:flex; gap:8px; align-items:flex-start; padding:5px 4px; font-size:12px; cursor:pointer; border-radius:6px;}
+  .pick-item:hover{background:#fff;}
+  .pick-item input{margin-top:2px;}
+  .pick-item .c{font-family:var(--mono); font-weight:700; font-size:10.5px; padding:1px 6px; border-radius:5px; flex-shrink:0;}
+  .pick-item .c.ran{background:rgba(0,182,236,0.14); color:var(--cyan-dark);}
+  .pick-item .c.req{background:rgba(108,92,231,0.14); color:#5646c9;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:6px;}
+  .confirm-card{width:400px;}
+  .confirm-card p{margin:0 0 18px; font-size:13.5px; color:var(--ink-1); line-height:1.55;}
+
+  .toast{position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--black); color:#fff; padding:10px 18px; border-radius:10px; font-size:13px; font-weight:600; opacity:0; transition:opacity .2s, transform .2s; z-index:1100; box-shadow:0 8px 24px rgba(0,0,0,.3);}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .statusbar{border-top:1px solid var(--panel-border); background:var(--bg-1); padding:7px 26px; font-size:11px; color:var(--ink-2); display:flex; justify-content:space-between; font-family:var(--mono); margin-top:auto;}
+  ::-webkit-scrollbar{width:10px;height:10px;} ::-webkit-scrollbar-track{background:var(--bg-0);} ::-webkit-scrollbar-thumb{background:#c7d3de;border-radius:5px;border:2px solid var(--bg-0);} ::-webkit-scrollbar-thumb:hover{background:var(--cyan);}
+
+  /* REPORTE IMPRIMIBLE */
+  #gpiReport{display:none; font-family:var(--body); color:#1a2027; font-size:11.5px; line-height:1.5; background:#fff;}
+  @media print{
+    body{background:#fff !important;}
+    header,.toolbar,.flowstrip,.statusbar,.gpi-badge,.banner{display:none !important;}
+    body.report-mode > *:not(#gpiReport){display:none !important;}
+    body.report-mode #gpiReport{display:block !important;}
+  }
+  #gpiReport .rep-head{display:flex; justify-content:space-between; align-items:flex-start; gap:14px; border-bottom:3px solid var(--violet); padding-bottom:10px; margin-bottom:14px;}
+  #gpiReport .rep-head h1{font-family:var(--display); font-size:19px; margin:0 0 3px; font-weight:800; color:#1a1a1c;}
+  #gpiReport .rep-head .sub{font-size:11.5px; color:#4d5768; font-weight:600;}
+  #gpiReport .rep-meta{font-family:var(--mono); font-size:10px; color:#4d5768; text-align:right; white-space:nowrap; line-height:1.7;}
+  #gpiReport h2{font-family:var(--display); font-size:13px; font-weight:800; margin:16px 0 6px; padding-bottom:3px; border-bottom:1px solid #e0e8f0;}
+  #gpiReport table{width:100%; border-collapse:collapse; margin:6px 0 10px; font-size:10.5px;}
+  #gpiReport th{background:#f3f8fc; text-align:left; font-weight:700; padding:5px 7px; border:1px solid #d5dee8;}
+  #gpiReport td{padding:4px 7px; border:1px solid #d5dee8; vertical-align:top;}
+  #gpiReport ul{margin:4px 0 10px; padding-left:18px;} #gpiReport li{margin:2px 0;}
+  #gpiReport .rep-note{color:#4d5768; font-size:10px; margin:2px 0 8px;}
+  @page{margin:15mm 13mm;}
+</style>
+<script src="gpi-core.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="4.2" stroke="#fff" stroke-width="2" opacity="0.85"/><circle cx="12" cy="12" r="1.4" fill="#fff"/></svg>
+    </div>
+    <div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <h1>Enunciado del Alcance</h1><span class="tag">GPI</span>
+      </div>
+      <input id="projectTitle" class="project-title-input" value="Proyecto sin título" />
+    </div>
+  </div>
+  <input id="courseTitle" class="course-title-input" value="Gestión de Proyectos de Ingeniería" />
+</header>
+
+<div class="toolbar">
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="scope">🎯 Alcance</button>
+    <button class="tab" data-tab="dels">📦 Entregables</button>
+    <button class="tab" data-tab="sre">⚖ Supuestos · Restricciones · Exclusiones</button>
+    <button class="tab" data-tab="coh">🔗 Coherencia</button>
+    <button class="tab" data-tab="trace">🧭 Consistencia</button>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn sm" id="btnExport">⭳ Guardar (.json)</button>
+  <button class="btn sm" id="btnImport">⭱ Abrir (.json)</button>
+  <input type="file" id="fileInput" accept=".json">
+  <button class="btn sm" id="btnReport">📄 Reporte</button>
+  <button class="btn sm" id="btnSample">Cargar ejemplo</button>
+  <button class="btn sm danger" id="btnReset">Nuevo</button>
+</div>
+
+<div class="flowstrip">
+  <span class="lbl">Flujo del alcance</span>
+  <span class="node"><span class="n">1</span>Recopilar Requisitos</span>
+  <span class="arrow">→</span>
+  <span class="node here"><span class="n">2</span>Enunciado del Alcance</span>
+  <span class="arrow">→</span>
+  <span class="node"><span class="n">3</span>EDT / WBS</span>
+  <span class="note">— la EDT descompone <b>entregables</b>, no requisitos. Este documento es el puente.</span>
+</div>
+
+<div class="container">
+  <div class="banner" id="banner"></div>
+
+  <!-- ===== TAB: ALCANCE ===== -->
+  <div class="view active" id="view-scope">
+    <h2 class="section">Descripción del alcance <span class="hint">— qué producto se entrega y qué trabajo lo produce</span></h2>
+    <div class="card">
+      <div class="card-head"><h3>Alcance del producto</h3>
+        <button class="btn sm" id="btnPullDesc">↧ Traer descripción del Acta</button></div>
+      <label class="fl">Características y funciones del producto/servicio/resultado del proyecto</label>
+      <textarea id="productScope" placeholder="Describe el producto que el proyecto va a entregar: sus características, capacidad y funciones esperadas…"></textarea>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:10px;">Alcance del trabajo (proyecto)</h3>
+      <label class="fl">Trabajo que debe realizarse para entregar el producto con las características indicadas</label>
+      <textarea id="projectScope" placeholder="Describe el trabajo del proyecto: fases, límites de lo que se hará…"></textarea>
+    </div>
+    <p class="muted">El detalle de <b>qué</b> se entrega vive en la pestaña <b>Entregables</b>; los límites de <b>qué no</b> se hace, en <b>Supuestos · Restricciones · Exclusiones</b>. La pestaña <b>Coherencia</b> verifica que todo requisito tenga entregable y que cada entregable se descomponga en la EDT.</p>
+  </div>
+
+  <!-- ===== TAB: ENTREGABLES ===== -->
+  <div class="view" id="view-dels">
+    <h2 class="section">Entregables del proyecto <span class="hint">— DEL.0X · la EDT se construye descomponiendo estos entregables</span></h2>
+    <div class="card">
+      <div class="card-head">
+        <h3>Lista de entregables</h3>
+        <div class="row-actions">
+          <button class="btn sm" id="btnSuggestDels">↧ Sugerir desde el Acta</button>
+          <button class="btn sm primary" id="btnAddDel">+ Entregable</button>
+        </div>
+      </div>
+      <div id="delsHost"></div>
+    </div>
+    <p class="muted">Cada entregable puede trazar hacia atrás a los <b>RAN</b> del Acta y a los <b>REQ</b> que lo justifican, y hacia adelante a la <b>EDT</b>. Para descomponerlo en paquetes de trabajo, abre <b>WBS Builder</b> y usa <b>«↧ Sembrar Entregables»</b>: creará una rama por cada entregable de este documento.</p>
+  </div>
+
+  <!-- ===== TAB: SRE ===== -->
+  <div class="view" id="view-sre">
+    <h2 class="section">Supuestos, restricciones y exclusiones <span class="hint">— el marco dentro del cual es válido el alcance</span></h2>
+    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+      <button class="btn sm" id="btnPullSre">↧ Traer del Acta (alto nivel)</button>
+    </div>
+    <div class="sre-grid">
+      <div class="card">
+        <div class="card-head"><h3>🟦 Supuestos</h3><button class="btn sm" data-add-sre="assumptions">+ Agregar</button></div>
+        <div class="muted" style="margin-bottom:8px;">Factores que se dan por ciertos sin prueba. Si fallan, son riesgos.</div>
+        <div id="assumptionsHost"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>🟨 Restricciones</h3><button class="btn sm" data-add-sre="constraints">+ Agregar</button></div>
+        <div class="muted" style="margin-bottom:8px;">Límites que acotan las opciones del equipo (presupuesto, plazo, normativa).</div>
+        <div id="constraintsHost"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>🟥 Exclusiones</h3><button class="btn sm" data-add-sre="exclusions">+ Agregar</button></div>
+        <div class="muted" style="margin-bottom:8px;">Lo que queda explícitamente <b>fuera</b> del alcance (evita el <i>scope creep</i>).</div>
+        <div id="exclusionsHost"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: COHERENCIA ===== -->
+  <div class="view" id="view-coh">
+    <h2 class="section">Coherencia del alcance <span class="hint">— puerta de control entre Requisitos, este documento y la EDT</span></h2>
+    <div class="card" id="cohHost"></div>
+    <div class="card">
+      <div class="card-head"><h3>Línea base del alcance</h3><span id="baselineState"></span></div>
+      <div id="baselineHost"></div>
+    </div>
+  </div>
+
+  <!-- ===== TAB: CONSISTENCIA ===== -->
+  <div class="view" id="view-trace">
+    <h2 class="section">Matriz de consistencia <span class="hint">— integración vertical RAN → REQ → DEL → WP · una fila por requisito · solo lectura</span></h2>
+    <div class="card" id="traceHost"></div>
+  </div>
+</div>
+
+<div class="statusbar">
+  <span id="statusLeft">Listo</span>
+  <span>PMBOK 8 · Definir el Alcance (Project Scope Statement) · Ecosistema GPI</span>
+</div>
+
+<!-- MODAL genérico -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-card" id="modalCard"></div>
+</div>
+<div class="toast" id="toast"></div>
+<div id="gpiReport"></div>
+
+<script>
+(function(){
+  "use strict";
+  var CUR = { USD:"USD $", PEN:"S/", EUR:"€" };
+
+  // ---------- estado ----------
+  var state = null;
+
+  function blank(){
+    return { productScope:"", projectScope:"", deliverables:[],
+      assumptions:[], constraints:[], exclusions:[],
+      baseline:{ frozen:false, version:"1.0", date:"", approver:"", snapshot:null },
+      idCounter:1, delCounter:1 };
+  }
+  function uid(){ return "s" + (state.idCounter++); }
+  function pad2(n){ n=Number(n)||0; return (n<10?"0":"")+n; }
+  function delCode(i){ return "DEL." + pad2(i+1); }
+
+  // Normaliza datos entrantes (retrocompatibilidad + tolerancia de esquema).
+  function normalize(d){
+    d = d || {};
+    var s = blank();
+    s.productScope = d.productScope || d.productScopeDescription || "";
+    s.projectScope = d.projectScope || "";
+    s.idCounter = d.idCounter || 1;
+    s.delCounter = d.delCounter || 1;
+    (d.deliverables||[]).forEach(function(x,i){
+      if (typeof x === "string") x = { name:x };
+      s.deliverables.push({
+        id: x.id || ("del"+(i+1)),
+        code: x.code || delCode(i),
+        name: x.name || "",
+        description: x.description || "",
+        acceptanceCriteria: x.acceptanceCriteria || "",
+        ranIds: Array.isArray(x.ranIds)?x.ranIds.slice():[],
+        reqIds: Array.isArray(x.reqIds)?x.reqIds.slice():[]
+      });
+    });
+    ["assumptions","constraints","exclusions"].forEach(function(k){
+      (d[k]||[]).forEach(function(x){
+        if (typeof x === "string") s[k].push({ id:uid(), text:x });
+        else s[k].push({ id:x.id||uid(), text:x.text||"" });
+      });
+    });
+    if (d.baseline) s.baseline = {
+      frozen:!!d.baseline.frozen, version:d.baseline.version||"1.0",
+      date:d.baseline.date||"", approver:d.baseline.approver||"", snapshot:d.baseline.snapshot||null
+    };
+    reCode(s);
+    return s;
+  }
+  function reCode(s){ s.deliverables.forEach(function(d,i){ d.code = delCode(i); }); }
+
+  // ---------- puente GPI (lectura de otros módulos) ----------
+  function gpiOn(){ return typeof window.GPI !== "undefined"; }
+  function activeProject(){ try { return gpiOn() && GPI.available() ? GPI.active() : null; } catch(_){ return null; } }
+  function mod(name){ try { return gpiOn() ? GPI.getModule(name) : null; } catch(_){ return null; } }
+  function rans(){ try { return gpiOn() && GPI.util ? GPI.util.charterRans(mod("charter")||{}) : []; } catch(_){ return []; } }
+  function reqItems(){ var r = mod("requirements"); return (r && r.items) || []; }
+
+  // ---------- helpers ----------
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+  function escAttr(s){ return esc(s); }
+  function setStatus(m){ var el=document.getElementById("statusLeft"); if(el) el.textContent=m; }
+  function toast(m){ var t=document.getElementById("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(function(){t.classList.remove("show");},1900); }
+  function $(id){ return document.getElementById(id); }
+
+  // ---------- modal (Promise-based, sin confirm/alert nativos) ----------
+  function confirmModal(title, msg, okText, danger){
+    return new Promise(function(resolve){
+      var ov=$("modalOverlay"), card=$("modalCard");
+      card.className = "modal-card confirm-card";
+      card.innerHTML = '<h3>'+esc(title)+'</h3><p>'+esc(msg)+'</p>'
+        +'<div class="modal-actions"><button class="btn" id="mCancel">Cancelar</button>'
+        +'<button class="btn '+(danger?"danger":"primary")+'" id="mOk">'+esc(okText||"Confirmar")+'</button></div>';
+      function done(v){ ov.classList.remove("open"); document.removeEventListener("keydown",key); resolve(v); }
+      function key(e){ if(e.key==="Escape")done(false); }
+      $("mOk").onclick=function(){ done(true); };
+      $("mCancel").onclick=function(){ done(false); };
+      ov.onclick=function(e){ if(e.target===ov)done(false); };
+      document.addEventListener("keydown",key);
+      ov.classList.add("open");
+    });
+  }
+
+  // ---------- render maestro ----------
+  function render(){
+    renderScope();
+    renderDeliverables();
+    renderSre();
+    renderCoherence();
+    renderTrace();
+  }
+
+  // ===== TAB ALCANCE =====
+  function renderScope(){
+    $("productScope").value = state.productScope || "";
+    $("projectScope").value = state.projectScope || "";
+  }
+
+  // ===== TAB ENTREGABLES =====
+  function renderDeliverables(){
+    var host = $("delsHost");
+    var ranById = {}; rans().forEach(function(r){ ranById[r.id]=r; });
+    var reqById = {}; reqItems().forEach(function(it){ reqById[it.id]=it; });
+    var decomposed = (gpiOn() && GPI.util) ? GPI.util.wbsDelIds(mod("wbs")||{}) : {};
+
+    if (!state.deliverables.length){
+      host.innerHTML = '<div class="empty-note">Aún no hay entregables. Usa <b>«+ Entregable»</b> para agregarlos, o <b>«↧ Sugerir desde el Acta»</b> si ya registraste los entregables clave en el Acta de Constitución.</div>';
+      return;
+    }
+    var rows = state.deliverables.map(function(d,i){
+      var ranChips = d.ranIds.filter(function(id){return ranById[id];}).map(function(id){ return '<span class="chip ran">'+esc(ranById[id].code)+'</span>'; }).join("");
+      var reqChips = d.reqIds.filter(function(id){return reqById[id];}).map(function(id){ return '<span class="chip req">'+esc(reqById[id].code)+'</span>'; }).join("");
+      var brokenReq = d.reqIds.filter(function(id){return !reqById[id];}).length;
+      if (!ranChips && !reqChips) reqChips = '<span class="chip none">sin trazar</span>';
+      var dec = decomposed[d.id];
+      return '<tr>'
+        + '<td><span class="code-badge">'+esc(d.code)+'</span></td>'
+        + '<td><div class="del-name">'+esc(d.name||"(sin nombre)")+'</div>'
+          + (d.description?'<div class="del-desc">'+esc(d.description)+'</div>':'')
+          + (d.acceptanceCriteria?'<div class="del-desc"><b>Aceptación:</b> '+esc(d.acceptanceCriteria)+'</div>':'<div class="del-desc" style="color:var(--warn)">Sin criterio de aceptación</div>')+'</td>'
+        + '<td>'+ranChips+reqChips+(brokenReq?' <span class="chip req" style="background:rgba(255,84,112,.15);color:#c0304a">'+brokenReq+' rota(s)</span>':'')+'</td>'
+        + '<td>'+(dec?'<span class="flag ok">✓ en la EDT</span>':'<span class="flag no">pendiente EDT</span>')+'</td>'
+        + '<td><div class="row-actions"><button class="btn sm" data-edit="'+i+'">✎</button>'
+          + '<button class="btn sm danger" data-del="'+i+'">🗑</button></div></td>'
+        + '</tr>';
+    }).join("");
+    host.innerHTML = '<table class="del"><thead><tr><th>Código</th><th>Entregable · criterio de aceptación</th><th>Trazabilidad (RAN · REQ)</th><th>EDT</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+
+    host.querySelectorAll("[data-edit]").forEach(function(b){ b.onclick=function(){ editDeliverable(Number(b.dataset.edit)); }; });
+    host.querySelectorAll("[data-del]").forEach(function(b){ b.onclick=function(){
+      confirmModal("Eliminar entregable","¿Eliminar «"+(state.deliverables[Number(b.dataset.del)].name||"entregable")+"»?","Eliminar",true).then(function(ok){
+        if(ok){ state.deliverables.splice(Number(b.dataset.del),1); reCode(state); persist(); render(); toast("Entregable eliminado"); }
+      });
+    }; });
+  }
+
+  function editDeliverable(i){
+    var isNew = (i==null);
+    var d = isNew ? { id:"del"+(state.delCounter++), code:"", name:"", description:"", acceptanceCriteria:"", ranIds:[], reqIds:[] }
+                  : JSON.parse(JSON.stringify(state.deliverables[i]));
+    var ov=$("modalOverlay"), card=$("modalCard");
+    var ranList = rans(), reqList = reqItems();
+    var ranSet={}; d.ranIds.forEach(function(x){ranSet[x]=true;});
+    var reqSet={}; d.reqIds.forEach(function(x){reqSet[x]=true;});
+
+    function pickerHtml(list, kind, chosen){
+      if(!list.length) return '<div class="empty-note">No hay '+(kind==="ran"?"requisitos de alto nivel en el Acta":"requisitos (REQ) en Recopilar Requisitos")+'. '+(activeProject()?"Regístralos y vuelve aquí.":"Conecta el Panel de Control para trazar.")+'</div>';
+      return list.map(function(x){
+        var code = x.code, id = x.id, txt = x.text||"";
+        return '<label class="pick-item"><input type="checkbox" data-pick="'+kind+'" value="'+escAttr(id)+'" '+(chosen[id]?"checked":"")+'>'
+          + '<span class="c '+kind+'">'+esc(code)+'</span><span>'+esc(txt)+'</span></label>';
+      }).join("");
+    }
+
+    card.className = "modal-card";
+    card.innerHTML = '<h3>'+(isNew?"Nuevo entregable":"Editar "+esc(state.deliverables[i].code))+'</h3>'
+      + '<div class="fld"><label class="fl">Nombre del entregable</label><input class="txt" id="d_name" value="'+escAttr(d.name)+'" placeholder="p. ej. Obra civil y estructura del almacén"></div>'
+      + '<div class="fld"><label class="fl">Descripción</label><textarea id="d_desc" placeholder="Alcance del entregable…">'+esc(d.description)+'</textarea></div>'
+      + '<div class="fld"><label class="fl">Criterio de aceptación</label><textarea id="d_acc" placeholder="Cómo se verifica que el entregable es aceptable…">'+esc(d.acceptanceCriteria)+'</textarea></div>'
+      + '<div class="fld"><label class="fl">Requisitos de alto nivel del Acta (RAN) que satisface</label><div class="picker">'+pickerHtml(ranList,"ran",ranSet)+'</div></div>'
+      + '<div class="fld"><label class="fl">Requisitos (REQ) que lo justifican</label><div class="picker">'+pickerHtml(reqList,"req",reqSet)+'</div></div>'
+      + '<div class="modal-actions"><button class="btn" id="d_cancel">Cancelar</button><button class="btn primary" id="d_save">Guardar</button></div>';
+
+    function close(){ ov.classList.remove("open"); }
+    $("d_cancel").onclick=close;
+    ov.onclick=function(e){ if(e.target===ov) close(); };
+    $("d_save").onclick=function(){
+      d.name = $("d_name").value.trim();
+      d.description = $("d_desc").value.trim();
+      d.acceptanceCriteria = $("d_acc").value.trim();
+      d.ranIds = []; d.reqIds = [];
+      card.querySelectorAll('[data-pick="ran"]:checked').forEach(function(c){ d.ranIds.push(c.value); });
+      card.querySelectorAll('[data-pick="req"]:checked').forEach(function(c){ d.reqIds.push(c.value); });
+      if(isNew) state.deliverables.push(d); else state.deliverables[i]=d;
+      reCode(state); persist(); close(); render(); toast(isNew?"Entregable agregado":"Entregable actualizado");
+    };
+    ov.classList.add("open");
+    setTimeout(function(){ $("d_name").focus(); },30);
+  }
+
+  function suggestFromCharter(){
+    var ch = mod("charter");
+    var dels = (ch && ch.deliverables) || [];
+    if(!dels.length){ toast("El Acta no tiene entregables clave registrados"); return; }
+    var existing = {}; state.deliverables.forEach(function(d){ existing[(d.name||"").toLowerCase().trim()]=true; });
+    var added=0;
+    dels.forEach(function(txt){
+      var name = String(txt||"").trim(); if(!name) return;
+      var short = name.length>70 ? name.slice(0,68)+"…" : name;
+      if(existing[short.toLowerCase()] || existing[name.toLowerCase()]) return;
+      state.deliverables.push({ id:"del"+(state.delCounter++), code:"", name:short, description:(short!==name?name:""), acceptanceCriteria:"", ranIds:[], reqIds:[] });
+      added++;
+    });
+    reCode(state); persist(); render(); toast(added?("Se agregaron "+added+" entregable(s) desde el Acta"):"Los entregables del Acta ya estaban en la lista");
+  }
+
+  // ===== TAB SRE =====
+  function renderSre(){
+    ["assumptions","constraints","exclusions"].forEach(function(k){
+      var host = $(k+"Host"), arr = state[k];
+      if(!arr.length){ host.innerHTML = '<div class="empty-note">Sin elementos.</div>'; }
+      else host.innerHTML = arr.map(function(it,i){
+        return '<div class="list-item"><textarea data-k="'+k+'" data-i="'+i+'">'+esc(it.text)+'</textarea>'
+          + '<button class="btn sm danger del-x" data-rm="'+k+'" data-ri="'+i+'">🗑</button></div>';
+      }).join("");
+    });
+    document.querySelectorAll('#view-sre textarea[data-k]').forEach(function(t){
+      t.addEventListener("input", function(){ state[t.dataset.k][Number(t.dataset.i)].text = t.value; persistDebounced(); });
+    });
+    document.querySelectorAll('#view-sre [data-rm]').forEach(function(b){
+      b.onclick=function(){ state[b.dataset.rm].splice(Number(b.dataset.ri),1); persist(); renderSre(); renderCoherence(); };
+    });
+  }
+
+  function pullSreFromCharter(){
+    var ch = mod("charter"); if(!ch){ toast("Conecta el Panel para traer datos del Acta"); return; }
+    var map = { assumptions:"assumptions", constraints:"constraints", exclusions:"exclusions" };
+    var added=0;
+    Object.keys(map).forEach(function(k){
+      var src = ch[map[k]] || [];
+      var existing = {}; state[k].forEach(function(x){ existing[x.text.toLowerCase().trim()]=true; });
+      src.forEach(function(txt){
+        var t = String(txt||"").trim(); if(!t || existing[t.toLowerCase()]) return;
+        state[k].push({ id:uid(), text:t }); added++;
+      });
+    });
+    persist(); renderSre(); renderCoherence();
+    toast(added?("Se importaron "+added+" elemento(s) del Acta"):"El Acta no aportó elementos nuevos");
+  }
+
+  // ===== TAB COHERENCIA =====
+  function audit(){
+    if(gpiOn() && GPI.util) return GPI.util.scopeAudit(state, mod("requirements")||{}, mod("charter")||{}, mod("wbs")||{});
+    // Respaldo mínimo si no está el núcleo (no debería ocurrir: gpi-core.js va junto)
+    return { total:state.deliverables.length, deliverables:state.deliverables,
+      delsWithoutReq:[], delsWithoutAccept:[], delsNotDecomposed:[], delsBrokenReq:0,
+      decomposedCount:0, decompPct:0, reqsWithoutDel:[], reqCovPct:0, reqTotal:0,
+      ransWithoutDel:[], ranTotal:0, state:"vacio" };
+  }
+
+  function renderCoherence(){
+    var a = audit();
+    var host = $("cohHost");
+    var col = { verde:"var(--good)", ambar:"var(--warn)", rojo:"var(--danger)", vacio:"var(--ink-2)" }[a.state];
+    var lab = { verde:"Coherente", ambar:"En progreso", rojo:"Con huecos", vacio:"Sin datos" }[a.state];
+
+    var html = '<div class="card-head"><h3>Estado de coherencia Requisitos ↔ Entregables ↔ EDT</h3>'
+      + '<span class="state-pill" style="background:'+col+'22;color:'+col+'">'+esc(lab)+'</span></div>';
+
+    html += '<div class="kpi-row">'
+      + '<div class="kpi-box"><div class="v" style="color:var(--violet)">'+a.total+'</div><div class="l">entregables (DEL)</div></div>'
+      + '<div class="kpi-box"><div class="v" style="color:'+col+'">'+a.reqCovPct+'%</div><div class="l">de los '+a.reqTotal+' REQ tienen entregable</div></div>'
+      + '<div class="kpi-box"><div class="v" style="color:'+col+'">'+a.decompPct+'%</div><div class="l">entregables descompuestos en la EDT</div></div>'
+      + '</div>';
+
+    html += '<div class="bar-track"><div class="bar-fill" style="width:'+a.reqCovPct+'%;background:'+col+'"></div></div>';
+
+    var warns = [];
+    if(a.delsWithoutReq.length) warns.push(["a", a.delsWithoutReq.length+" entregable(s) sin ningún REQ que los justifique (posible sobre-alcance): "+a.delsWithoutReq.map(function(d){return d.code;}).slice(0,6).join(", ")]);
+    if(a.reqsWithoutDel.length) warns.push(["r", a.reqsWithoutDel.length+" requisito(s) sin entregable que los acoja (alcance faltante): "+a.reqsWithoutDel.map(function(x){return x.code;}).slice(0,6).join(", ")]);
+    if(a.delsNotDecomposed.length) warns.push(["a", a.delsNotDecomposed.length+" entregable(s) aún sin descomponer en la EDT: "+a.delsNotDecomposed.map(function(d){return d.code;}).slice(0,6).join(", ")+" — usa «↧ Sembrar Entregables» en WBS Builder"]);
+    if(a.delsWithoutAccept.length) warns.push(["a", a.delsWithoutAccept.length+" entregable(s) sin criterio de aceptación"]);
+    if(a.delsBrokenReq) warns.push(["r", a.delsBrokenReq+" entregable(s) con enlace a un REQ eliminado"]);
+    if(a.ransWithoutDel.length) warns.push(["a", a.ransWithoutDel.length+" RAN del Acta sin ningún entregable que lo materialice"]);
+
+    if(!a.total && !a.reqTotal){
+      html += '<div class="empty-note">Empieza registrando los <b>entregables</b> (idealmente sugiriéndolos desde el Acta y enlazándolos a los REQ de Recopilar Requisitos). La coherencia se evalúa cuando existan requisitos y entregables.</div>';
+    } else if(warns.length){
+      html += '<ul class="warn-list">'+warns.map(function(w){ return '<li><span class="tag '+w[0]+'">'+(w[0]==="r"?"crítico":"revisar")+'</span>'+esc(w[1])+'</li>'; }).join("")+'</ul>';
+    } else {
+      html += '<div class="ok-note">✓ Todo REQ tiene entregable, todo entregable tiene REQ y criterio de aceptación, y todos están descompuestos en la EDT.</div>';
+    }
+
+    if(!activeProject()){
+      html += '<div class="empty-note" style="margin-top:10px">ⓘ Sin proyecto activo del Panel, la trazabilidad RAN/REQ y la descomposición en la EDT no pueden cruzarse. Abre esta herramienta desde el <b>Panel de Control</b> para la coherencia completa.</div>';
+    }
+    host.innerHTML = html;
+    renderBaseline(a);
+  }
+
+  function renderBaseline(a){
+    var b = state.baseline, host=$("baselineHost"), st=$("baselineState");
+    if(b.frozen){
+      st.innerHTML = '<span class="state-pill" style="background:rgba(0,194,168,.16);color:#00967f">🔒 Congelada v'+esc(b.version)+'</span>';
+      host.innerHTML = '<div class="muted">Línea base <b>v'+esc(b.version)+'</b> congelada el <b>'+esc(b.date||"—")+'</b> por <b>'+esc(b.approver||"—")+'</b>. '
+        + 'Contiene '+((b.snapshot&&b.snapshot.deliverables||[]).length)+' entregable(s). '
+        + 'Los cambios posteriores deberían gestionarse por Control Integrado de Cambios.</div>'
+        + '<div style="margin-top:10px"><button class="btn sm danger" id="btnUnfreeze">Descongelar (volver a editar la línea base)</button></div>';
+      $("btnUnfreeze").onclick=function(){
+        confirmModal("Descongelar línea base","¿Reabrir la línea base del alcance para editarla? Deberías dejar constancia del cambio.","Descongelar",true).then(function(ok){
+          if(ok){ b.frozen=false; persist(); renderCoherence(); toast("Línea base reabierta"); }
+        });
+      };
+    } else {
+      var canFreeze = a.total>0;
+      host.innerHTML = '<div class="muted" style="margin-bottom:10px">Cuando el alcance esté acordado, <b>congela la línea base</b>: guarda una copia inmutable de los entregables y del marco de supuestos/restricciones/exclusiones. Sirve de referencia para medir el <i>scope creep</i>.</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:10px">'
+        + '<div><label class="fl">Versión</label><input class="txt" id="b_ver" value="'+escAttr(b.version||"1.0")+'"></div>'
+        + '<div><label class="fl">Fecha</label><input class="txt" id="b_date" type="date" value="'+escAttr(b.date||"")+'"></div>'
+        + '<div><label class="fl">Aprobador</label><input class="txt" id="b_appr" value="'+escAttr(b.approver||"")+'" placeholder="Patrocinador / PM"></div>'
+        + '</div>'
+        + '<button class="btn primary sm" id="btnFreeze" '+(canFreeze?"":"disabled")+'>🔒 Congelar línea base</button>'
+        + (canFreeze?"":'<div class="empty-note" style="margin-top:8px">Registra al menos un entregable antes de congelar.</div>');
+      var f=$("btnFreeze");
+      if(f) f.onclick=function(){
+        b.version = $("b_ver").value.trim()||"1.0";
+        b.date = $("b_date").value || new Date().toISOString().slice(0,10);
+        b.approver = $("b_appr").value.trim();
+        b.snapshot = JSON.parse(JSON.stringify({ deliverables:state.deliverables, assumptions:state.assumptions, constraints:state.constraints, exclusions:state.exclusions, productScope:state.productScope, projectScope:state.projectScope }));
+        b.frozen = true; persist(); renderCoherence(); toast("Línea base v"+b.version+" congelada");
+      };
+    }
+  }
+
+  // ===== TAB CONSISTENCIA (solo lectura) =====
+  function renderTrace(){
+    var host = $("traceHost"); if(!host) return;
+    if(!(gpiOn() && GPI.util)){ host.innerHTML = '<div class="empty-note">La matriz de consistencia requiere el núcleo del ecosistema (gpi-core.js).</div>'; return; }
+    if(!activeProject()){
+      host.innerHTML = '<div class="empty-note">La integración vertical <b>RAN → REQ → DEL → WP</b> cruza cuatro módulos (Acta, Requisitos, este documento y la EDT). Abre esta herramienta desde el <b>Panel de Control</b> con un proyecto activo para verla completa.</div>';
+      return;
+    }
+    var m = GPI.util.traceMatrix(mod("requirements"), mod("charter"), state, mod("wbs"));
+    if(!m.rows.length){
+      host.innerHTML = '<div class="empty-note">Aún no hay requisitos (REQ) que trazar. Registra requisitos en <b>Recopilar Requisitos</b>, enlázalos a entregables en la pestaña <b>Entregables</b>, y descompón los entregables en la EDT.</div>';
+      return;
+    }
+    var col = { verde:"var(--good)", ambar:"var(--warn)", rojo:"var(--danger)", vacio:"var(--ink-2)" }[m.state];
+    var lab = { verde:"Consistente", ambar:"Con avisos", rojo:"Con rupturas", vacio:"Sin datos" }[m.state];
+
+    var html = '<div class="card-head"><h3>Cadena de trazabilidad por requisito</h3>'
+      + '<span class="state-pill" style="background:'+col+'22;color:'+col+'">'+esc(lab)+'</span></div>';
+
+    html += '<div class="kpi-row">'
+      + '<div class="kpi-box"><div class="v" style="color:'+col+'">'+m.kpi.fullChainPct+'%</div><div class="l">de los '+m.kpi.reqTotal+' REQ con cadena completa y coherente</div></div>'
+      + '<div class="kpi-box"><div class="v" style="color:var(--danger)">'+(m.kpi.noDel+m.kpi.noWp)+'</div><div class="l">rupturas: '+m.kpi.noDel+' sin entregable · '+m.kpi.noWp+' sin paquete</div></div>'
+      + '<div class="kpi-box"><div class="v" style="color:var(--warn)">'+(m.kpi.emergent+m.kpi.delWpMismatch+m.kpi.wpNoDel)+'</div><div class="l">avisos: '+m.kpi.emergent+' emergentes · '+m.kpi.delWpMismatch+' DEL↔WP · '+m.kpi.wpNoDel+' EDT sin entregable</div></div>'
+      + '</div>';
+
+    function chips(arr, cls){ return arr.map(function(x){ return '<span class="chip '+cls+'">'+esc(x.code||x.name)+'</span>'; }).join(""); }
+    var rowsHtml = m.rows.map(function(r){
+      var scol = { verde:"var(--good)", ambar:"var(--warn)", rojo:"var(--danger)" }[r.state];
+      var ranCell = r.rans.length ? chips(r.rans,"ran") : (r.flags.emergent ? '<span class="chip none warn">emergente</span>' : '<span class="chip none">—</span>');
+      var delCell = r.dels.length ? chips(r.dels,"del") : '<span class="chip none bad">sin entregable</span>';
+      var wpCell = r.wps.length ? r.wps.map(function(w){ return '<span class="chip wp" title="'+escAttr(w.name)+'">'+esc(w.code||w.name)+'</span>'; }).join("") : '<span class="chip none bad">sin paquete</span>';
+      var cross;
+      if(r.flags.noDel || r.flags.noWp) cross = '<span class="chip none">—</span>';
+      else if(r.coherent) cross = '<span class="flag ok">✓ coherente</span>';
+      else if(r.flags.delWpMismatch) cross = '<span class="flag no">✕ discrepan</span>';
+      else if(r.flags.wpNoDel) cross = '<span class="flag no">EDT sin entregable</span>';
+      else cross = '<span class="flag ok">✓</span>';
+      var estLabel = r.flags.noDel ? "Sin entregable" : r.flags.noWp ? "Sin paquete"
+        : r.flags.delWpMismatch ? "DEL↔WP discrepan" : r.flags.wpNoDel ? "EDT no por entregables"
+        : r.flags.emergent ? "Emergente (revisar)" : "Completa";
+      return '<tr data-st="'+r.state+'">'
+        + '<td><span class="code-badge" style="background:var(--violet)">'+esc(r.req.code)+'</span>'
+          + (r.req.text?'<div class="del-desc" style="margin-top:4px">'+esc(r.req.text.length>80?r.req.text.slice(0,78)+"…":r.req.text)+'</div>':'')+'</td>'
+        + '<td class="chain">'+ranCell+'</td>'
+        + '<td class="chain">'+delCell+'</td>'
+        + '<td class="chain">'+wpCell+'</td>'
+        + '<td>'+cross+'</td>'
+        + '<td><span class="est" style="color:'+scol+'"><span class="st-dot" style="background:'+scol+'"></span>'+esc(estLabel)+'</span></td>'
+        + '</tr>';
+    }).join("");
+    html += '<div class="trace-scroll"><table class="trace"><thead><tr>'
+      + '<th>REQ</th><th>RAN <span class="arw">→ origen</span></th><th>DEL <span class="arw">→ acoge</span></th><th>WP <span class="arw">→ produce</span></th><th>DEL↔WP</th><th>Estado</th>'
+      + '</tr></thead><tbody>'+rowsHtml+'</tbody></table></div>';
+
+    html += '<div class="legend">'
+      + '<span><span class="st-dot" style="background:var(--good)"></span>Verde: cadena completa y coherente</span>'
+      + '<span><span class="st-dot" style="background:var(--warn)"></span>Ámbar: emergente · EDT no organizada por entregables · DEL↔WP discrepan</span>'
+      + '<span><span class="st-dot" style="background:var(--danger)"></span>Rojo: requisito sin entregable o sin paquete</span>'
+      + '</div>';
+
+    var o = m.orphans;
+    function ob(title, items, mapper, kind){
+      var n = items.length;
+      var ncol = n ? (kind==="bad"?"var(--danger)":"var(--warn)") : "var(--good)";
+      var bodyH = n ? '<ul>'+items.slice(0,8).map(mapper).join("")+(items.length>8?'<li>… (+'+(items.length-8)+' más)</li>':'')+'</ul>' : '<div class="clean">✓ ninguno</div>';
+      return '<div class="orphan-box"><h4>'+esc(title)+' <span class="n" style="background:'+ncol+'22;color:'+ncol+'">'+n+'</span></h4>'+bodyH+'</div>';
+    }
+    html += '<h3 style="font-family:var(--display);font-size:13px;margin:20px 0 4px">Huérfanos y sobre-alcance <span style="font-weight:500;font-size:11.5px;color:var(--ink-2)">— lo que la espina por requisito no revela por sí sola</span></h3>';
+    html += '<div class="orphan-grid">'
+      + ob("Entregables sin ningún REQ (gold-plating)", o.delsWithoutReq, function(d){ return '<li>'+esc(d.code)+' · '+esc(d.name||"")+'</li>'; }, "warn")
+      + ob("Paquetes sin REQ ni entregable", o.wpsOrphan, function(w){ return '<li>'+esc((w.code?w.code+" · ":"")+(w.name||""))+'</li>'; }, "bad")
+      + ob("Paquetes bajo entregable pero sin REQ", o.wpsNoReq, function(w){ return '<li>'+esc((w.code?w.code+" · ":"")+(w.name||""))+'</li>'; }, "warn")
+      + ob("RAN sin ningún REQ que lo desarrolle", o.ransWithoutReq, function(r){ return '<li>'+esc(r.code)+'</li>'; }, "warn")
+      + ob("REQ emergentes (sin RAN)", o.emergentReqs, function(r){ return '<li>'+esc(r.code)+'</li>'; }, "warn")
+      + '</div>';
+
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;align-items:center">'
+      + '<a class="btn sm" href="Recopilar_Requisitos.html">→ abrir Requisitos</a>'
+      + '<a class="btn sm" href="WBS_Builder.html">→ abrir la EDT</a>'
+      + '<span class="empty-note">Vista de solo lectura: corrige en el módulo correspondiente y la matriz se actualiza al volver.</span>'
+      + '</div>';
+
+    host.innerHTML = html;
+  }
+
+  // ---------- persistencia ----------
+  var pd=null;
+  function persistDebounced(){ clearTimeout(pd); pd=setTimeout(persist, 400); }
+  function persist(){
+    if(gpiOn() && GPI.available() && GPI.active()){
+      GPI.setModule("scopeStatement", serialize());
+      GPI.patchMeta({ name:$("projectTitle").value, course:$("courseTitle").value });
+    }
+    setStatus("Cambios guardados.");
+  }
+  function serialize(){
+    return { productScope:state.productScope, projectScope:state.projectScope,
+      deliverables:state.deliverables, assumptions:state.assumptions,
+      constraints:state.constraints, exclusions:state.exclusions,
+      baseline:state.baseline, idCounter:state.idCounter, delCounter:state.delCounter };
+  }
+
+  // ---------- datos de ejemplo (DISTRIB+) ----------
+  // Texto compartido; los ids RAN/REQ solo se enlazan cuando hay proyecto activo
+  // (donde existen los módulos charter/requirements de ejemplo).
+  var SAMPLE_DELS = [
+    { name:"Expediente técnico de ingeniería", description:"Estudio de suelos, diseño estructural y diseño MEP aprobados para construcción.", acc:"Expediente revisado y aprobado por la supervisión; planos aptos para construcción.", ran:["ran1","ran3"], req:["q5"] },
+    { name:"Permisos y licencias municipales de construcción", description:"Licencias de edificación y conformidades municipales obtenidas.", acc:"Licencias emitidas por la Municipalidad de Lurín y certificado de seguridad aprobado.", ran:["ran2"], req:["q3"] },
+    { name:"Obra civil y estructura del almacén", description:"Nave, cobertura y acabados de la edificación concluidos.", acc:"Altura libre, disposición de racks y acabados conformes a los planos aprobados.", ran:["ran1"], req:["q1","q2","q6"] },
+    { name:"Instalaciones MEP operativas y probadas", description:"Instalaciones eléctricas y sanitarias ejecutadas y en funcionamiento.", acc:"Cargas eléctricas y caudales sanitarios probados y conformes a memoria de cálculo.", ran:["ran3"], req:["q5"] },
+    { name:"Patio de maniobras y obras exteriores", description:"Patio y áreas de maniobra para vehículos de carga pesada.", acc:"Radios de giro y áreas de maniobra verificados con vehículo de diseño (tráiler).", ran:["ran4"], req:["q4"] },
+    { name:"Dossier de calidad y acta de entrega final", description:"Documentación de calidad, pruebas y acta de entrega firmada.", acc:"Dossier de calidad completo y acta de entrega y cierre firmada por el cliente.", ran:[], req:["q6"] }
+  ];
+  var SAMPLE_ASSUM = [
+    "El terreno de Lurín está saneado legalmente y disponible desde el inicio del proyecto.",
+    "La disponibilidad de cuadrillas y subcontratistas se mantiene según el plan de recursos.",
+    "El tipo de cambio y el precio del acero se mantienen dentro del rango presupuestado."
+  ];
+  var SAMPLE_CONS = [
+    "El presupuesto (CAPEX) del proyecto no debe exceder USD 8.5 millones.",
+    "El plazo de ejecución va del 6 de julio al 6 de noviembre de 2026.",
+    "El diseño y la construcción deben cumplir el RNE, INDECI y la normativa de SST (Ley 29783)."
+  ];
+  var SAMPLE_EXCL = [
+    "Operación y mantenimiento del almacén posteriores a la entrega.",
+    "Equipamiento logístico interno (racks, montacargas, sistemas de gestión de almacén).",
+    "Obras fuera del lindero del terreno y ampliaciones futuras de la nave."
+  ];
+
+  function buildSample(linked){
+    state = blank();
+    state.productScope = "Almacén logístico para DISTRIB+ S.A. en Lurín (Lima): nave industrial con cobertura metálica, instalaciones eléctricas y sanitarias dimensionadas para operación logística, y patio de maniobras para vehículos de carga pesada. CAPEX de referencia: USD 8.5 M.";
+    state.projectScope = "Comprende ingeniería de detalle, gestión de permisos, procura de estructuras y materiales, construcción de obra civil y MEP, y pruebas/puesta en marcha hasta la entrega formal.";
+    SAMPLE_DELS.forEach(function(s){
+      state.deliverables.push({ id:"del"+(state.delCounter++), code:"", name:s.name, description:s.description,
+        acceptanceCriteria:s.acc, ranIds:linked?s.ran.slice():[], reqIds:linked?s.req.slice():[] });
+    });
+    SAMPLE_ASSUM.forEach(function(t){ state.assumptions.push({id:uid(),text:t}); });
+    SAMPLE_CONS.forEach(function(t){ state.constraints.push({id:uid(),text:t}); });
+    SAMPLE_EXCL.forEach(function(t){ state.exclusions.push({id:uid(),text:t}); });
+    reCode(state);
+  }
+
+  // ---------- reporte imprimible ----------
+  function buildReport(){
+    var meta = {}; try { if(gpiOn() && GPI.available() && GPI.meta()) meta = GPI.meta(); } catch(_){}
+    var a = audit();
+    var ranById={}; rans().forEach(function(r){ranById[r.id]=r;});
+    var reqById={}; reqItems().forEach(function(it){reqById[it.id]=it;});
+    var body = "";
+    body += '<h2>1. Descripción del alcance</h2>'
+      + '<table class="rep-kv"><tr><th style="width:26%">Alcance del producto</th><td>'+esc(state.productScope||"—")+'</td></tr>'
+      + '<tr><th>Alcance del trabajo</th><td>'+esc(state.projectScope||"—")+'</td></tr></table>';
+    body += '<h2>2. Entregables del proyecto</h2><table><tr><th>Código</th><th>Entregable</th><th>Criterio de aceptación</th><th>RAN · REQ</th></tr>'
+      + state.deliverables.map(function(d){
+          var tr = d.ranIds.filter(function(x){return ranById[x];}).map(function(x){return ranById[x].code;})
+                   .concat(d.reqIds.filter(function(x){return reqById[x];}).map(function(x){return reqById[x].code;})).join(", ");
+          return '<tr><td>'+esc(d.code)+'</td><td><b>'+esc(d.name)+'</b>'+(d.description?'<br>'+esc(d.description):'')+'</td><td>'+esc(d.acceptanceCriteria||"—")+'</td><td>'+esc(tr||"—")+'</td></tr>';
+        }).join("") + '</table>';
+    function lst(arr){ return arr.length? '<ul>'+arr.map(function(x){return '<li>'+esc(x.text)+'</li>';}).join("")+'</ul>' : '<p class="rep-note">—</p>'; }
+    body += '<h2>3. Supuestos</h2>'+lst(state.assumptions);
+    body += '<h2>4. Restricciones</h2>'+lst(state.constraints);
+    body += '<h2>5. Exclusiones (fuera del alcance)</h2>'+lst(state.exclusions);
+    body += '<h2>6. Coherencia</h2><table class="rep-kv">'
+      + '<tr><th style="width:40%">Entregables</th><td>'+a.total+'</td></tr>'
+      + '<tr><th>REQ con entregable</th><td>'+a.reqCovPct+'% ('+(a.reqTotal-a.reqsWithoutDel.length)+'/'+a.reqTotal+')</td></tr>'
+      + '<tr><th>Entregables descompuestos en la EDT</th><td>'+a.decompPct+'% ('+a.decomposedCount+'/'+a.total+')</td></tr>'
+      + '<tr><th>Línea base</th><td>'+(a.baselineFrozen?('Congelada v'+esc(a.baselineVersion||"1.0")):'No congelada')+'</td></tr></table>';
+
+    var el=$("gpiReport");
+    var today = new Date().toLocaleDateString("es-PE",{year:"numeric",month:"long",day:"numeric"});
+    var pName = $("projectTitle").value || meta.name || "Proyecto";
+    var course = $("courseTitle").value || meta.course || "Gestión de Proyectos de Ingeniería";
+    el.innerHTML = '<div class="rep-head"><div><h1>Enunciado del Alcance del Proyecto</h1>'
+      + '<div class="sub">'+esc(pName)+(meta.code?' · '+esc(meta.code):'')+'</div>'
+      + '<div class="sub" style="font-weight:500">'+esc(course)+'</div></div>'
+      + '<div class="rep-meta">Definir el Alcance · PMBOK 8<br>Emitido: '+esc(today)
+      + (meta.client?'<br>Cliente: '+esc(meta.client):'')+(meta.location?'<br>'+esc(meta.location):'')+'</div></div>'+body;
+    document.body.classList.add("report-mode");
+    function done(){ document.body.classList.remove("report-mode"); window.removeEventListener("afterprint",done); }
+    window.addEventListener("afterprint",done);
+    setTimeout(function(){ window.print(); setTimeout(done,500); },60);
+  }
+
+  // ---------- export / import archivo ----------
+  function exportJson(){
+    var data = { kind:"gpi.scopeStatement/v1", title:$("projectTitle").value, course:$("courseTitle").value, data:serialize() };
+    var blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    var url=URL.createObjectURL(blob), a=document.createElement("a");
+    var safe=(data.title||"proyecto").replace(/[^a-z0-9_\-]+/gi,"_").toLowerCase();
+    a.href=url; a.download="alcance_"+safe+".json"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    setStatus("Enunciado del alcance exportado.");
+  }
+  function importJson(file){
+    var r=new FileReader();
+    r.onload=function(e){
+      var obj; try{ obj=JSON.parse(e.target.result); }catch(_){ toast("Archivo no válido"); return; }
+      var payload = (obj && obj.kind==="gpi.scopeStatement/v1" && obj.data) ? obj.data : obj;
+      state = normalize(payload);
+      if(obj.title) $("projectTitle").value = obj.title;
+      if(obj.course) $("courseTitle").value = obj.course;
+      persist(); render(); toast("Enunciado del alcance cargado");
+    };
+    r.readAsText(file);
+  }
+
+  // ---------- tabs ----------
+  function setTab(t){
+    document.querySelectorAll("#tabs .tab").forEach(function(b){ b.classList.toggle("active", b.dataset.tab===t); });
+    document.querySelectorAll(".view").forEach(function(v){ v.classList.toggle("active", v.id==="view-"+t); });
+    if(t==="coh") renderCoherence();
+    if(t==="trace") renderTrace();
+  }
+
+  // ---------- init / eventos ----------
+  function wire(){
+    document.querySelectorAll("#tabs .tab").forEach(function(b){ b.onclick=function(){ setTab(b.dataset.tab); }; });
+    $("productScope").addEventListener("input", function(){ state.productScope=this.value; persistDebounced(); });
+    $("projectScope").addEventListener("input", function(){ state.projectScope=this.value; persistDebounced(); });
+    $("btnPullDesc").onclick=function(){
+      var ch=mod("charter"); if(!ch){ toast("Conecta el Panel para traer la descripción del Acta"); return; }
+      if(ch.description){ state.productScope = ch.description; renderScope(); persist(); toast("Descripción traída del Acta"); }
+      else toast("El Acta no tiene descripción de alto nivel");
+    };
+    $("btnAddDel").onclick=function(){ editDeliverable(null); };
+    $("btnSuggestDels").onclick=suggestFromCharter;
+    $("btnPullSre").onclick=pullSreFromCharter;
+    document.querySelectorAll("[data-add-sre]").forEach(function(b){
+      b.onclick=function(){ var k=b.dataset.addSre; state[k].push({id:uid(),text:""}); persist(); renderSre();
+        setTimeout(function(){ var ta=document.querySelector('#'+k+'Host textarea[data-i="'+(state[k].length-1)+'"]'); if(ta) ta.focus(); },30); };
+    });
+    $("btnExport").onclick=exportJson;
+    $("btnImport").onclick=function(){ $("fileInput").click(); };
+    $("fileInput").addEventListener("change", function(e){ if(e.target.files[0]) importJson(e.target.files[0]); e.target.value=""; });
+    $("btnReport").onclick=buildReport;
+    $("btnSample").onclick=function(){
+      confirmModal("Cargar ejemplo","Esto reemplazará el contenido actual por el caso DISTRIB+ S.A. ¿Continuar?","Cargar ejemplo",true).then(function(ok){
+        if(ok){ buildSample(!!activeProject()); persist(); render(); toast("Ejemplo DISTRIB+ cargado"); }
+      });
+    };
+    $("btnReset").onclick=function(){
+      confirmModal("Nuevo enunciado","Esto borrará el contenido actual del Enunciado del Alcance. ¿Continuar?","Borrar",true).then(function(ok){
+        if(ok){ state=blank(); persist(); render(); toast("Enunciado del alcance reiniciado"); }
+      });
+    };
+    $("projectTitle").addEventListener("input", persistDebounced);
+    $("courseTitle").addEventListener("input", persistDebounced);
+  }
+
+  // ---------- arranque + puente GPI ----------
+  var booted = false;
+  function boot(){
+    if (booted) return; booted = true; // idempotente: evita dobles listeners/badges
+    wire();
+    var proj = activeProject();
+    if(proj){
+      // Regla de oro del ecosistema: con proyecto activo, hidrata desde el módulo;
+      // si no hay datos aún, arranca EN BLANCO (con guía), sin datos de ejemplo.
+      var d = mod("scopeStatement");
+      if(d){ state = normalize(d); setStatus("Cargado desde el Panel de Control."); }
+      else { state = blank(); setStatus("Proyecto sin Enunciado del Alcance todavía. Agrega entregables o usa «Cargar ejemplo»."); }
+      if(proj.meta){ if(proj.meta.name) $("projectTitle").value=proj.meta.name; if(proj.meta.course) $("courseTitle").value=proj.meta.course; }
+      $("banner").classList.remove("show");
+      // guardado en cambios de foco/salida y refresco reactivo entre pestañas
+      window.addEventListener("beforeunload", persist);
+      document.addEventListener("visibilitychange", function(){ if(document.hidden) persist(); else refreshFromGpi(); });
+      if(GPI.onChange) GPI.onChange(function(){ if(!document.hidden) refreshFromGpi(); });
+      gpiBadge(proj.meta ? proj.meta.name : "");
+    } else {
+      // Modo independiente / vista previa: demo autocontenida (sin enlaces RAN/REQ).
+      buildSample(false);
+      $("banner").classList.add("show");
+      $("banner").innerHTML = "<b>Modo independiente (sin proyecto activo del Panel).</b> Estás viendo una demostración del caso DISTRIB+. Para trazar RAN/REQ y verificar la descomposición en la EDT, abre esta herramienta desde el <b>Panel de Control</b>.";
+    }
+    render();
+  }
+
+  // Refresco ligero: si cambian requirements/charter/wbs en otra pestaña, solo
+  // re-renderiza (no pisa el texto que el usuario esté editando aquí).
+  function refreshFromGpi(){
+    if(!activeProject()) return;
+    renderDeliverables(); renderCoherence(); renderTrace();
+  }
+
+  function gpiBadge(name){
+    var css=document.createElement("style");
+    css.textContent=".gpi-badge{position:fixed;right:16px;bottom:42px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-dot{width:8px;height:8px;border-radius:50%;background:#6c5ce7;box-shadow:0 0 0 3px rgba(108,92,231,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#5646c9;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#6c5ce7;background:#fff}";
+    document.head.appendChild(css);
+    var bar=document.createElement("div"); bar.className="gpi-badge";
+    bar.innerHTML='<span class="gpi-dot"></span><span>Panel: <b>'+String(name||"—").replace(/</g,"&lt;")+'</b></span><button class="gpi-btn" id="gpiSyncBtn">☁ Sincronizar</button><a class="gpi-btn" href="Panel_Control.html">⌂ Panel</a>';
+    document.body.appendChild(bar);
+    var sb=bar.querySelector("#gpiSyncBtn");
+    if(sb) sb.onclick=function(){ persist(); var t=sb.textContent; sb.textContent="✓ Sincronizado"; setTimeout(function(){sb.textContent=t;},1400); };
+  }
+
+  document.addEventListener("DOMContentLoaded", boot);
+})();
+</script>
+</body>
+</html>

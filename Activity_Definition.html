@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Definir las Actividades — Descomposición de la EDT en actividades</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#eef4f9; --bg-1:#ffffff; --bg-2:#f3f8fc;
+    --panel:#ffffff; --panel-border:#e0e8f0;
+    --ink-0:#1a2027; --ink-1:#4d5768; --ink-2:#8992a3;
+    --cyan:#00b6ec; --cyan-dark:#0090c2; --cyan-dim:rgba(0,182,236,0.13);
+    --black:#1a1a1c;
+    --act-a:#ff8a3d; --act-b:#e56a10; --act-dim:rgba(229,106,16,0.10);
+    --danger:#ff5470; --good:#00c2a8; --warn:#ff9f1c;
+    --radius:10px;
+    --mono:'JetBrains Mono',monospace; --display:'Manrope',sans-serif; --body:'Manrope','Inter',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; color:var(--ink-0); font-family:var(--body);
+    background:radial-gradient(circle, rgba(0,182,236,0.06) 1px, transparent 1px) 0 0/26px 26px, var(--bg-0);
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+
+  /* ===== HEADER ===== */
+  header{ border-bottom:1px solid var(--panel-border); background:linear-gradient(180deg,#fff,#fbfdff); padding:12px 22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; position:relative; }
+  header::after{ content:''; position:absolute; left:0; right:0; bottom:-1px; height:3px; background:linear-gradient(90deg, var(--cyan), var(--act-a) 45%, var(--act-b)); }
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand h1{font-family:var(--display); font-size:19px; font-weight:800; margin:0; letter-spacing:0.1px; color:var(--black);}
+  .brand .tag{font-family:var(--mono); font-size:11px; font-weight:600; color:#fff; background:linear-gradient(135deg, var(--act-a), var(--act-b)); padding:3px 9px; border-radius:20px; letter-spacing:0.5px;}
+  .mode-chip{font-family:var(--mono); font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:20px; border:1.5px solid; letter-spacing:.3px;}
+  .mode-chip.live{color:#00967f; border-color:rgba(0,194,168,.5); background:rgba(0,194,168,.09);}
+  .mode-chip.sample{color:#b25400; border-color:rgba(229,106,16,.45); background:var(--act-dim);}
+  .project-title-input{background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--ink-0); font-family:var(--display); font-weight:600; font-size:13px; padding:2px 0; max-width:320px;}
+  .project-title-input:hover, .project-title-input:focus{border-bottom:1px dashed var(--cyan); outline:none;}
+  .course-title-input{background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--ink-2); font-family:var(--body); font-weight:600; font-size:12px; text-align:right; padding:2px 0; min-width:220px; max-width:320px;}
+  .course-title-input:hover, .course-title-input:focus{border-bottom:1px dashed var(--cyan); outline:none; color:var(--ink-0);}
+
+  /* ===== TOOLBAR ===== */
+  .toolbar{display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:10px 22px; background:var(--bg-1); border-bottom:1px solid var(--panel-border); box-shadow:0 1px 0 rgba(20,30,60,0.02);}
+  .btn{font-family:var(--body); font-size:12.5px; font-weight:600; color:var(--ink-1); background:var(--bg-2); border:1px solid var(--panel-border); padding:7px 13px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:border-color .12s,color .12s,background .12s,transform .08s,box-shadow .12s; white-space:nowrap;}
+  .btn:hover{border-color:var(--cyan); color:var(--cyan-dark); background:#fff; box-shadow:0 2px 6px rgba(0,182,236,0.15);}
+  .btn:active{transform:translateY(1px);}
+  .btn.primary{background:linear-gradient(135deg, var(--act-a), var(--act-b)); border-color:transparent; color:#fff; box-shadow:0 2px 8px rgba(229,106,16,0.35);}
+  .btn.primary:hover{filter:brightness(1.06); color:#fff;}
+  .btn.danger{color:var(--danger);} .btn.danger:hover{border-color:var(--danger); color:var(--danger);}
+  .btn.sm{padding:5px 9px; font-size:11.5px;}
+  .btn:disabled{opacity:0.35; cursor:not-allowed;}
+  .sep{width:1px; height:22px; background:var(--panel-border); margin:0 4px;}
+  input[type=file]{display:none;}
+
+  /* ===== LAYOUT ===== */
+  .workspace{flex:1; display:flex; min-height:0;}
+  .main{flex:1; overflow-y:auto; padding:22px 24px 80px;}
+  .sidebar{width:300px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--panel-border); overflow-y:auto; padding:18px 18px 40px;}
+  .sidebar h2{font-family:var(--display); font-size:13px; font-weight:800; color:var(--ink-0); margin:0 0 12px; display:flex; align-items:center; gap:8px;}
+  .sidebar h2::before{content:''; width:4px; height:14px; background:linear-gradient(180deg, var(--act-a), var(--act-b)); display:inline-block; border-radius:3px;}
+
+  .banner{background:rgba(255,159,28,0.12); border:1px solid rgba(255,159,28,0.35); color:#8a5300; border-radius:10px; padding:10px 14px; font-size:12.5px; line-height:1.5; margin-bottom:14px; display:none;}
+  .banner.show{display:block;}
+  .banner b{color:#7a4a00;}
+  .banner .btn{margin-left:8px;}
+
+  .tip-box{background:var(--cyan-dim); border:1px solid rgba(0,182,236,0.25); border-radius:9px; padding:10px 12px; font-size:11.5px; color:var(--ink-1); line-height:1.55; margin-bottom:12px;}
+  .tip-box b{color:var(--cyan-dark);}
+
+  /* ===== TABLA DE ACTIVIDADES ===== */
+  .tbl-card{background:var(--panel); border:1px solid var(--panel-border); border-radius:13px; box-shadow:0 2px 12px rgba(20,30,60,0.05); overflow:hidden;}
+  .tbl-scroll{overflow-x:auto;}
+  table.acts{width:100%; border-collapse:collapse; font-size:13px; min-width:720px;}
+  table.acts thead th{
+    background:linear-gradient(180deg,#f7fafd,#eef4f9); font-family:var(--display); font-size:10.5px; font-weight:800;
+    text-transform:uppercase; letter-spacing:.4px; color:var(--ink-1); text-align:left; padding:10px 10px;
+    border-bottom:2px solid var(--panel-border); position:sticky; top:0; z-index:2; white-space:nowrap;
+  }
+  table.acts td{padding:5px 8px; border:1px solid #e4eaf1; vertical-align:middle;}
+  .col-item{width:56px; text-align:center;}
+  .col-code{width:96px;}
+  .col-unit{width:120px;}
+  .col-qty{width:130px;}
+  .col-perf{width:104px;}
+  .col-eq{width:78px;}
+  .col-dur{width:88px;}
+  .col-del{width:42px;}
+  /* Duración: campo DERIVADO (Dur = Met / (#Eq × R), redondeo al entero
+     superior) — se muestra como celda calculada, nunca editable. */
+  td.dur-cell{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--ink-0); text-align:center; background:var(--act-dim); border-radius:6px;}
+  td.dur-cell.empty{color:var(--ink-2); font-weight:500; background:transparent;}
+
+  tr.phase-row td{
+    background:linear-gradient(90deg, rgba(108,92,231,.10), rgba(108,92,231,.02));
+    font-family:var(--display); font-weight:800; font-size:12.5px; color:#463a9e;
+    border-top:1px solid var(--panel-border); border-bottom:1px solid var(--panel-border); padding:8px 10px;
+  }
+  tr.phase-row .ph-code{font-family:var(--mono); font-size:11px; font-weight:700; color:#6c5ce7; margin-right:8px;}
+
+  tr.proj-row td{
+    background:linear-gradient(90deg, rgba(0,182,236,.14), rgba(0,182,236,.03));
+    font-family:var(--display); font-weight:800; font-size:13.5px; color:var(--black);
+    border-bottom:2px solid var(--panel-border); padding:9px 10px;
+  }
+  tr.proj-row .proj-hint{font-family:var(--mono); font-size:9.5px; font-weight:600; color:var(--ink-2); text-transform:uppercase; letter-spacing:.4px;}
+  .n-cell{font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--ink-1); text-align:center;}
+  tr.phase-row .n-cell, tr.pkg-row .n-cell{color:var(--ink-2);}
+  .code-cell{font-family:var(--mono); font-size:11px; font-weight:700; color:#6c5ce7;}
+  tr.pkg-row td{background:var(--bg-2); border-top:1px solid var(--panel-border);}
+  tr.pkg-row .pk-code{font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--act-b);}
+  tr.pkg-row .pk-name{font-weight:800; font-size:13px; color:var(--ink-0);}
+  .pk-count{font-family:var(--mono); font-size:10px; font-weight:700; color:var(--ink-2); background:#fff; border:1px solid var(--panel-border); padding:1px 8px; border-radius:12px; margin-left:8px;}
+  .pk-count.zero{color:#b25400; border-color:rgba(229,106,16,.4); background:var(--act-dim);}
+  .btn-add-act{font-family:var(--body); font-size:11px; font-weight:700; color:var(--act-b); background:#fff; border:1.5px solid rgba(229,106,16,.4); padding:3px 10px; border-radius:14px; cursor:pointer; white-space:nowrap;}
+  .btn-add-act:hover{background:var(--act-dim); border-color:var(--act-b);}
+
+  tr.act-row td{background:#fff;}
+  tr.act-row:hover td{background:#fcfdff;}
+  .act-item{font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--ink-1); text-align:center;}
+  .act-code{font-family:var(--mono); font-size:11.5px; color:var(--ink-2);}
+  /* Celdas editables estilo Excel: el input llena TODA la celda, sin bordes
+     propios; el foco dibuja el "cursor de celda" (contorno cian hacia adentro). */
+  tr.act-row td.in-cell{padding:0; background:#fff;}
+  tr.act-row td.in-cell input{
+    display:block; width:100%; background:transparent; border:none; border-radius:0; color:var(--ink-0);
+    padding:7px 9px; font-family:var(--body); font-size:12.5px; box-sizing:border-box;
+  }
+  tr.act-row td.in-cell input:focus{outline:2px solid var(--cyan); outline-offset:-2px; background:#fff; position:relative; z-index:1;}
+  tr.act-row td.in-cell input.qty{font-family:var(--mono); text-align:right;}
+  tr.act-row td.in-cell input::placeholder{color:#c3ccd8;}
+  /* Rango seleccionado (Shift+clic), como la selección azulada de Excel */
+  table.acts td.sel{background:rgba(0,182,236,.16) !important;}
+  table.acts td.sel input{background:transparent;}
+  .act-del{border:none; background:transparent; color:var(--danger); cursor:pointer; font-size:13px; border-radius:6px; padding:4px 6px;}
+  .act-del:hover{background:rgba(255,84,112,0.1);}
+
+  .empty-state{padding:44px 26px; text-align:center; color:var(--ink-2); font-size:13.5px; line-height:1.7;}
+  .empty-state b{color:var(--ink-1);}
+  .empty-state .btn{margin:12px 4px 0;}
+
+  /* ===== SIDEBAR WIDGETS ===== */
+  .sb-card{background:linear-gradient(145deg, var(--bg-2), #fff); border:1.5px solid var(--panel-border); border-radius:12px; padding:14px; margin-bottom:16px;}
+  .sb-big{font-family:var(--mono); font-size:30px; font-weight:800; line-height:1; color:var(--act-b);}
+  .sb-sub{font-size:11.5px; color:var(--ink-1); font-weight:600; margin-top:3px;}
+  .sb-bar-track{height:8px; background:rgba(0,0,0,.06); border-radius:4px; overflow:hidden; margin:10px 0 5px;}
+  .sb-bar-fill{height:100%; border-radius:4px; transition:width .2s; width:0%;}
+  .sb-mini{display:flex; justify-content:space-between; font-size:11px; color:var(--ink-2); font-family:var(--mono);}
+
+  .miss-list{display:flex; flex-direction:column; gap:5px; margin-bottom:16px;}
+  .miss-item{display:flex; gap:7px; align-items:baseline; font-size:11.5px; color:var(--ink-1); background:var(--bg-2); border:1px solid var(--panel-border); border-radius:8px; padding:6px 9px; cursor:pointer;}
+  .miss-item:hover{border-color:var(--act-a); background:var(--act-dim);}
+  .miss-item .mc{font-family:var(--mono); font-size:10.5px; font-weight:700; color:var(--act-b); flex-shrink:0;}
+  .miss-ok{font-size:11.5px; color:var(--good); font-weight:700; background:rgba(0,194,168,.08); border:1px solid rgba(0,194,168,.3); border-radius:8px; padding:8px 10px; margin-bottom:16px;}
+
+  .statusbar{border-top:1px solid var(--panel-border); background:var(--bg-1); padding:7px 26px; font-size:11px; color:var(--ink-2); display:flex; justify-content:space-between; font-family:var(--mono); margin-top:auto;}
+  ::-webkit-scrollbar{width:10px;height:10px;} ::-webkit-scrollbar-track{background:var(--bg-0);} ::-webkit-scrollbar-thumb{background:#c7d3de;border-radius:5px;border:2px solid var(--bg-0);} ::-webkit-scrollbar-thumb:hover{background:var(--cyan);}
+
+  @media print{
+    header,.toolbar,.sidebar,.statusbar,.gpi-badge,.banner{display:none !important;}
+    body{background:#fff !important;}
+    .main{overflow:visible; padding:0;}
+    .tbl-card{box-shadow:none; border:none;}
+    table.acts thead th{position:static;}
+  }
+
+  /* ===== REPORTE IMPRIMIBLE (📄) ===== */
+  #gpiReport{display:none; font-family:var(--body); color:#1a2027; font-size:11.5px; line-height:1.5; background:#fff;}
+  @media print{
+    body.report-mode{display:block; background:#fff !important;}
+    body.report-mode > *:not(#gpiReport){display:none !important;}
+    body.report-mode #gpiReport{display:block !important;}
+  }
+  #gpiReport .rep-head{display:flex; justify-content:space-between; align-items:flex-start; gap:14px; border-bottom:3px solid #00b6ec; padding-bottom:10px; margin-bottom:14px;}
+  #gpiReport .rep-head h1{font-family:var(--display); font-size:19px; margin:0 0 3px; font-weight:800; color:#1a1a1c;}
+  #gpiReport .rep-head .sub{font-size:11.5px; color:#4d5768; font-weight:600;}
+  #gpiReport .rep-meta{font-family:var(--mono); font-size:10px; color:#4d5768; text-align:right; white-space:nowrap; line-height:1.7;}
+  #gpiReport h2{font-family:var(--display); font-size:13px; font-weight:800; margin:16px 0 6px; padding-bottom:3px; border-bottom:1px solid #e0e8f0; break-after:avoid;}
+  #gpiReport table{width:100%; border-collapse:collapse; margin:6px 0 10px; font-size:10.5px;}
+  #gpiReport th{background:#f3f8fc; text-align:left; font-weight:700; padding:5px 7px; border:1px solid #d5dee8;}
+  #gpiReport td{padding:4px 7px; border:1px solid #d5dee8; vertical-align:top;}
+  #gpiReport tr{break-inside:avoid;}
+  #gpiReport table.rep-kv td:first-child{width:30%; background:#f8fbfe; font-weight:700;}
+  #gpiReport ul{margin:4px 0 10px; padding-left:18px;}
+  #gpiReport li{margin:2px 0;}
+  #gpiReport p{margin:4px 0 10px;}
+  #gpiReport .rep-note{color:#4d5768; font-size:10px; margin:2px 0 8px;}
+  #gpiReport .num{font-family:var(--mono);}
+  #gpiReport td.rep-phase{background:#eef0fb; font-weight:800;}
+  #gpiReport td.rep-pkg{background:#f8fbfe; font-weight:700;}
+  @page{margin:15mm 13mm;}
+
+  /* MODAL */
+  .modal-overlay{position:fixed; inset:0; z-index:1000; background:rgba(10,16,28,0.5); display:none; align-items:center; justify-content:center; padding:20px;}
+  .modal-overlay.open{display:flex;}
+  .modal-card{background:#fff; border-radius:14px; padding:22px 24px; width:400px; max-width:100%; box-shadow:0 24px 60px rgba(10,16,28,0.35); border:1px solid var(--panel-border);}
+  .modal-card h3{margin:0 0 10px; font-family:var(--display); font-size:16px; font-weight:800; color:var(--ink-0);}
+  .modal-card p{margin:0 0 20px; font-size:13.5px; color:var(--ink-1); line-height:1.55;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:8px;}
+</style>
+<script src="gpi-core.js"></script>
+<!-- JSZip: generación de .xlsx en el navegador (si no carga, se exporta CSV equivalente) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <h1>Definir las Actividades</h1>
+        <span class="tag">EDU</span>
+        <span class="mode-chip live" id="modeChip">EDT del proyecto</span>
+      </div>
+      <input id="projectTitle" class="project-title-input" value="Proyecto sin título" />
+    </div>
+  </div>
+  <input id="courseTitle" class="course-title-input" value="Gestión de Proyectos de Ingeniería" />
+</header>
+
+<div class="toolbar">
+  <button class="btn" id="btnExportJson">⭳ Guardar (.json)</button>
+  <button class="btn" id="btnImportJson">⭱ Abrir (.json)</button>
+  <input type="file" id="fileInput" accept=".json">
+  <div class="sep"></div>
+  <button class="btn" id="btnCopyTable" title="Copia toda la tabla al portapapeles (con encabezados) para pegarla en Excel">⧉ Copiar tabla</button>
+  <button class="btn" id="btnExcel">⇪ Excel → MS Project</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnReload">⟳ Recargar EDT</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnReport">📄 Reporte</button>
+  <button class="btn" id="btnPrint">🖨 Imprimir / PDF</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnSample">Modo ejemplo</button>
+  <button class="btn" id="btnLive" style="display:none">⌂ Usar EDT del proyecto</button>
+  <button class="btn danger" id="btnClear">Limpiar actividades</button>
+</div>
+
+<div class="workspace">
+  <div class="main">
+    <div class="banner" id="banner"></div>
+    <div class="banner" id="orphanBanner"></div>
+    <div class="tbl-card">
+      <div class="tbl-scroll">
+        <table class="acts" id="actsTable">
+          <thead>
+            <tr>
+              <th class="col-item" title="Correlativo consecutivo de todas las filas, como el ID de MS Project: 0 = proyecto (tarea resumen)">N.º</th>
+              <th class="col-code">Código EDT</th>
+              <th>Paquete de trabajo / Actividad</th>
+              <th class="col-unit">Unidad</th>
+              <th class="col-qty" title="Met: cantidad de unidades a ejecutar en la partida">Metrado (Met)</th>
+              <th class="col-perf" title="R: rendimiento de UN equipo de trabajo — cuánto metrado ejecuta por día, en la misma unidad de la partida (p. ej. 25 m³/día). Se ingresa a mano.">Rend. (R)</th>
+              <th class="col-eq" title="#Eq: número de equipos (cuadrillas) trabajando en paralelo en la actividad. Por defecto 1. Se ingresa a mano.">#Eq</th>
+              <th class="col-dur" title="Duración calculada: Dur = Met ÷ (#Eq × R), redondeada al ENTERO SUPERIOR. No editable — cambia sola al modificar Met, R o #Eq.">Dur. (d)</th>
+              <th class="col-del"></th>
+            </tr>
+          </thead>
+          <tbody id="actsBody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="emptyState" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sb-card">
+      <div class="sb-big" id="sbTotal">0</div>
+      <div class="sb-sub">actividades definidas</div>
+      <div class="sb-bar-track"><div class="sb-bar-fill" id="sbBar"></div></div>
+      <div class="sb-mini"><span id="sbCov">0/0 paquetes con actividades</span><span id="sbPct">0%</span></div>
+    </div>
+
+    <h2>Paquetes sin actividades</h2>
+    <div class="miss-list" id="missList"></div>
+
+    <div class="tip-box"><b>PMBOK — Definir las Actividades:</b> cada paquete de trabajo (hoja de la EDT) se descompone en las actividades necesarias para producir su entregable. El <b>metrado</b> (unidad de medida × cantidad) es la base con la que luego estimarás duraciones, recursos y costos de cada actividad en el cronograma.</div>
+    <div class="tip-box"><b>Trabaja como en Excel:</b> <b>Ctrl+V</b> pega bloques copiados de una hoja (se reparten hacia abajo y hacia la derecha: Nombre → Unidad → Metrado → Rend. → #Eq, con limpieza automática de formatos como 4,800.50 · 4.800,50 · 12,5). <b>Enter</b> y las flechas ↑ ↓ bajan y suben por la columna; ← → cruzan de celda en los bordes del texto; <b>Tab</b> avanza de celda en celda. <b>Shift+clic</b> selecciona un rango y <b>Ctrl+C</b> lo copia listo para Excel (Esc lo limpia). El botón <b>⧉ Copiar tabla</b> lleva toda la tabla con encabezados al portapapeles.</div>
+    <div class="tip-box"><b>Duración por rendimiento de cuadrillas:</b> Dur = Met ÷ (#Eq × R), redondeada al entero superior. <b>R</b> es el rendimiento diario de UN equipo en la unidad del metrado (p. ej. 25 m³/día) y <b>#Eq</b> las cuadrillas en paralelo (1 por defecto). La duración es un valor derivado: se recalcula solo y no se edita.</div>
+    <div class="tip-box">Como en MS Project: la fila <b>0</b> es la tarea resumen del proyecto (EDT <b>0</b>) y la columna <b>N.º</b> numera consecutivamente todas las filas — fases, paquetes y actividades — renumerándose sola al agregar o eliminar. Cada actividad hereda el código EDT de su paquete más un correlativo (el paquete <b>4.2</b> genera <b>4.2.1</b>, <b>4.2.2</b>…).</div>
+  </aside>
+</div>
+
+<div class="statusbar">
+  <span id="statusLeft">Listo</span>
+  <span>Definir las Actividades · PMBOK — Define Activities</span>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-card">
+    <h3 id="modalTitle">Título</h3>
+    <p id="modalMsg"></p>
+    <div class="modal-actions">
+      <button class="btn" id="modalCancel">Cancelar</button>
+      <button class="btn primary" id="modalOk">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<datalist id="unitList">
+  <option value="glb"><option value="und"><option value="m"><option value="m²"><option value="m³">
+  <option value="kg"><option value="ton"><option value="ml"><option value="pto"><option value="pza">
+  <option value="doc"><option value="lám"><option value="hh"><option value="mes"><option value="%">
+</datalist>
+
+<div id="gpiReport"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- estado ----------
+  // Las actividades se guardan POR PAQUETE de trabajo (hoja de la EDT), refe-
+  // renciando su id: la EDT nunca se duplica aquí, se lee en vivo desde el
+  // WBS Builder a través de gpi-core (principio de fuente única de verdad).
+  var mode = "live";                 // "live" (EDT real vía GPI) | "sample" (demo independiente)
+  var stateLive = { byLeaf: {}, idCounter: 1 };
+  var stateSample = null;            // se crea al entrar al modo ejemplo
+  var wbsLive = null;                // snapshot del módulo wbs del proyecto activo
+
+  function state() { return mode === "sample" ? stateSample : stateLive; }
+  function wbsData() { return mode === "sample" ? SAMPLE_WBS : wbsLive; }
+
+  function uid() { var st = state(); return "a" + (st.idCounter++); }
+
+  // ---------- utilidades ----------
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function setStatus(m) { document.getElementById("statusLeft").textContent = m; }
+  function normalizeState(obj) {
+    obj = obj || {};
+    var by = {}, src = obj.byLeaf || {};
+    Object.keys(src).forEach(function (k) {
+      by[k] = (Array.isArray(src[k]) ? src[k] : []).map(function (a) {
+        return {
+          id: a.id || ("a" + Math.random().toString(36).slice(2, 8)),
+          name: a.name || "", unit: a.unit || "",
+          qty: (a.qty == null ? "" : a.qty),
+          perf: (a.perf == null ? "" : a.perf),                      // rendimiento por equipo (manual)
+          teams: (a.teams == null || a.teams === "" ? 1 : a.teams)   // n.º de equipos (manual, default 1)
+        };
+      });
+    });
+    return { byLeaf: by, idCounter: Number(obj.idCounter) || 1 };
+  }
+
+  // ---------- modal (los diálogos nativos se bloquean en iframes) ----------
+  function showModal(opts) {
+    return new Promise(function (resolve) {
+      var ov = document.getElementById("modalOverlay");
+      document.getElementById("modalTitle").textContent = opts.title || "";
+      document.getElementById("modalMsg").textContent = opts.message || "";
+      var ok = document.getElementById("modalOk"), cancel = document.getElementById("modalCancel");
+      ok.textContent = opts.confirmText || "Aceptar";
+      ok.className = "btn " + (opts.danger ? "danger" : "primary");
+      cancel.style.display = opts.cancelText === null ? "none" : "";
+      cancel.textContent = opts.cancelText || "Cancelar";
+      function done(v) { ov.classList.remove("open"); ok.onclick = cancel.onclick = ov.onclick = null; document.removeEventListener("keydown", key); resolve(v); }
+      function key(e) { if (e.key === "Escape") done(false); if (e.key === "Enter") done(true); }
+      ok.onclick = function () { done(true); };
+      cancel.onclick = function () { done(false); };
+      ov.onclick = function (e) { if (e.target === ov) done(false); };
+      document.addEventListener("keydown", key);
+      ov.classList.add("open"); ok.focus();
+    });
+  }
+  function showConfirm(message, title) { return showModal({ title: title || "Confirmar acción", message: message, confirmText: "Continuar", cancelText: "Cancelar" }); }
+  function showAlert(message, title) { return showModal({ title: title || "Aviso", message: message, confirmText: "Entendido", cancelText: null }); }
+
+  // ---------- EDT: modelo de filas en orden jerárquico ----------
+  // Devuelve [{kind:"phase"|"package", id, code, name, depth}] recorriendo la
+  // EDT con la misma numeración jerárquica que expone WBS Builder (1, 1.1, …).
+  function treeRows() {
+    var w = wbsData();
+    var out = [];
+    if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
+    (function walk(id, code, depth) {
+      var n = w.nodes[id]; if (!n) return;
+      var kids = n.children || [];
+      if (id !== w.rootId) {
+        out.push({ kind: kids.length ? "phase" : "package", id: id, code: code, name: n.name || "", depth: depth });
+      }
+      kids.forEach(function (cid, i) { walk(cid, code ? code + "." + (i + 1) : String(i + 1), depth + 1); });
+    })(w.rootId, "", 0);
+    return out;
+  }
+  function leafRows() { return treeRows().filter(function (r) { return r.kind === "package"; }); }
+
+  // Estadísticas locales (mismo algoritmo que GPI.util.activitiesStats, en
+  // copia local para que la herramienta funcione sin gpi-core.js).
+  function stats() {
+    var st = state(), leaves = leafRows();
+    var leafIds = {}; leaves.forEach(function (l) { leafIds[l.id] = true; });
+    var total = 0, orphans = 0, covered = 0, uncovered = [];
+    Object.keys(st.byLeaf).forEach(function (k) {
+      var n = (st.byLeaf[k] || []).length;
+      if (leafIds[k]) total += n; else orphans += n;
+    });
+    leaves.forEach(function (l) { if ((st.byLeaf[l.id] || []).length) covered++; else uncovered.push(l); });
+    return { total: total, leaves: leaves.length, covered: covered, uncovered: uncovered, orphans: orphans, pct: leaves.length ? Math.round(covered / leaves.length * 100) : 0 };
+  }
+
+  // ---------- render ----------
+  function render() {
+    var chip = document.getElementById("modeChip");
+    chip.textContent = mode === "sample" ? "MODO EJEMPLO" : "EDT del proyecto";
+    chip.className = "mode-chip " + (mode === "sample" ? "sample" : "live");
+    document.getElementById("btnSample").style.display = mode === "sample" ? "none" : "";
+    document.getElementById("btnLive").style.display = mode === "sample" ? "" : "none";
+    document.getElementById("btnReload").disabled = mode === "sample";
+
+    renderTable();
+    renderSidebar();
+    renderOrphans();
+  }
+
+  // Duración de una actividad (campo DERIVADO — nunca se edita ni se guarda):
+  //   Dur = Met / (#Eq × R), redondeada al ENTERO SUPERIOR (Math.ceil).
+  // Devuelve null si falta el metrado o el rendimiento (se muestra "—").
+  // Si #Eq viene vacío o menor que 1, el cálculo asume 1 equipo.
+  // Valor numérico tolerante: acepta coma decimal y separadores de miles,
+  // igual que Excel ("12,5" · "4,800.50" · "4 800"). NaN si no es número.
+  function numVal(v) {
+    if (v === "" || v == null) return NaN;
+    var p = parseExcelNum(v);
+    return (p === null || p === "") ? NaN : Number(p);
+  }
+
+  function durActivity(a) {
+    var met = numVal(a.qty), r = numVal(a.perf), eq = numVal(a.teams);
+    if (!isFinite(met) || met <= 0 || !isFinite(r) || r <= 0) return null;
+    if (!isFinite(eq) || eq < 1) eq = 1;
+    return Math.ceil(met / (eq * r));
+  }
+
+  // Modelo de filas completo, estilo MS Project: fila 0 = proyecto (tarea
+  // resumen), y N.º consecutivo para TODAS las filas (fases, paquetes y
+  // actividades). Es la única fuente de numeración: la tabla, el reporte y la
+  // exportación a Excel lo comparten para que nunca se desalineen.
+  // level = nivel de esquema de MS Project (proyecto=1, sus fases=2, …).
+  function fullRows() {
+    var w = wbsData(), st = state(), out = [];
+    if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
+    var n = 0;
+    var rootName = ((w.nodes[w.rootId].name || "").trim()) || document.getElementById("projectTitle").value || "Proyecto";
+    out.push({ kind: "project", n: n++, code: "0", level: 1, name: rootName });
+    treeRows().forEach(function (r) {
+      if (r.kind === "phase") {
+        out.push({ kind: "phase", n: n++, code: r.code, level: r.depth + 1, name: r.name, id: r.id });
+      } else {
+        out.push({ kind: "package", n: n++, code: r.code, level: r.depth + 1, name: r.name, id: r.id, count: (st.byLeaf[r.id] || []).length });
+        (st.byLeaf[r.id] || []).forEach(function (a, i) {
+          out.push({ kind: "activity", n: n++, code: r.code + "." + (i + 1), level: r.depth + 2, name: a.name, unit: a.unit, qty: a.qty, perf: a.perf, teams: a.teams, dur: durActivity(a), leafId: r.id, actIndex: i });
+        });
+      }
+    });
+    return out;
+  }
+
+  function renderTable() {
+    var tbody = document.getElementById("actsBody");
+    var empty = document.getElementById("emptyState");
+    var rows = fullRows();
+
+    if (!rows.length) {
+      actsCache = []; selAnchor = null; selEnd = null;
+      tbody.innerHTML = "";
+      empty.style.display = "";
+      empty.innerHTML = mode === "live"
+        ? "<b>La EDT del proyecto activo está vacía.</b><br>Construye primero la estructura de desglose del trabajo en WBS Builder; este módulo descompone sus paquetes de trabajo en actividades.<br><a class=\"btn\" href=\"WBS_Builder.html\">▦ Abrir WBS Builder</a><button class=\"btn primary\" id=\"btnSampleInner\">Explorar con el modo ejemplo</button>"
+        : "<b>Sin EDT de ejemplo.</b>";
+      var bi = document.getElementById("btnSampleInner");
+      if (bi) bi.addEventListener("click", enterSample);
+      return;
+    }
+    empty.style.display = "none";
+    actsCache = rows.filter(function (r) { return r.kind === "activity"; });
+    selAnchor = null; selEnd = null; // el DOM se reconstruye: el rango deja de existir
+
+    var html = "";
+    rows.forEach(function (r) {
+      if (r.kind === "project") {
+        html += '<tr class="proj-row">'
+          + '<td class="n-cell">' + r.n + '</td>'
+          + '<td class="code-cell" style="color:var(--ink-1)">0</td>'
+          + '<td colspan="6">' + esc(r.name) + '</td>'
+          + '<td style="text-align:center"><span class="proj-hint">Fila 0</span></td>'
+          + '</tr>';
+      } else if (r.kind === "phase") {
+        html += '<tr class="phase-row">'
+          + '<td class="n-cell">' + r.n + '</td>'
+          + '<td class="code-cell">' + esc(r.code) + '</td>'
+          + '<td colspan="7" style="padding-left:' + (10 + Math.max(0, r.level - 2) * 16) + 'px">' + esc(r.name) + '</td>'
+          + '</tr>';
+      } else if (r.kind === "package") {
+        html += '<tr class="pkg-row" id="pkg-' + esc(r.id) + '">'
+          + '<td class="n-cell">' + r.n + '</td>'
+          + '<td class="pk-code">' + esc(r.code) + '</td>'
+          + '<td style="padding-left:' + (8 + Math.max(0, r.level - 2) * 16) + 'px"><span class="pk-name">' + esc(r.name) + '</span><span class="pk-count' + (r.count ? '' : ' zero') + '">' + r.count + ' act.</span></td>'
+          + '<td colspan="5"></td>'
+          + '<td style="text-align:center"><button class="btn-add-act" tabindex="-1" data-add="' + esc(r.id) + '" title="Agregar actividad a este paquete">+ Actividad</button></td>'
+          + '</tr>';
+      } else {
+        html += '<tr class="act-row">'
+          + '<td class="n-cell act-item">' + r.n + '</td>'
+          + '<td class="act-code">' + esc(r.code) + '</td>'
+          + '<td class="in-cell"><input data-leaf="' + esc(r.leafId) + '" data-i="' + r.actIndex + '" data-f="name" value="' + esc(r.name) + '" placeholder="Nombre de la actividad…"></td>'
+          + '<td class="in-cell"><input data-leaf="' + esc(r.leafId) + '" data-i="' + r.actIndex + '" data-f="unit" value="' + esc(r.unit) + '" list="unitList" placeholder="m³, kg…"></td>'
+          + '<td class="in-cell"><input class="qty" type="text" inputmode="decimal" data-leaf="' + esc(r.leafId) + '" data-i="' + r.actIndex + '" data-f="qty" value="' + esc(r.qty) + '" placeholder="0.00"></td>'
+          + '<td class="in-cell"><input class="qty" type="text" inputmode="decimal" data-leaf="' + esc(r.leafId) + '" data-i="' + r.actIndex + '" data-f="perf" value="' + esc(r.perf) + '" placeholder="p. ej. 25" title="Rendimiento de un equipo por día"></td>'
+          + '<td class="in-cell"><input class="qty" type="text" inputmode="numeric" data-leaf="' + esc(r.leafId) + '" data-i="' + r.actIndex + '" data-f="teams" value="' + esc(r.teams) + '" title="Número de equipos en paralelo (1 por defecto)"></td>'
+          + (r.dur == null
+              ? '<td class="dur-cell empty" title="Falta el metrado o el rendimiento para calcular la duración">—</td>'
+              : '<td class="dur-cell" title="Dur = ' + esc(r.qty) + ' ÷ (' + esc(String(Math.max(1, numVal(r.teams) || 1))) + ' × ' + esc(r.perf) + '), redondeada al entero superior">' + r.dur + '</td>')
+          + '<td style="text-align:center"><button class="act-del" tabindex="-1" data-del-leaf="' + esc(r.leafId) + '" data-i="' + r.actIndex + '" title="Eliminar actividad">🗑</button></td>'
+          + '</tr>';
+      }
+    });
+    tbody.innerHTML = html;
+    // Sin recableado por fila: los eventos de la tabla se manejan por
+    // DELEGACIÓN con dos listeners fijos en el tbody (ver wireTableDelegation).
+  }
+
+  // ---------- PEGADO DIRECTO DESDE EXCEL ----------
+  // Excel coloca en el portapapeles texto TSV: tabulaciones entre columnas y
+  // saltos de línea entre filas. Al pegar sobre la celda de una actividad, los
+  // valores se reparten hacia abajo por las actividades visibles (cruzando
+  // paquetes y fases, que no son editables) y hacia la derecha siguiendo el
+  // orden de campos Nombre → Unidad → Metrado → Rend. → #Eq.
+  var PASTE_FIELDS = ["name", "unit", "qty", "perf", "teams"];
+
+  // Limpia formatos numéricos de Excel: "4,800.50", "4.800,50", "12,5", "4 800".
+  // Regla: si hay punto y coma, el ÚLTIMO es el decimal; una coma seguida de
+  // exactamente 3 dígitos se trata como separador de miles.
+  function parseExcelNum(s) {
+    s = String(s == null ? "" : s).trim().replace(/[\s\u00a0]/g, "");
+    if (!s) return "";
+    var hasDot = s.indexOf(".") !== -1, hasComma = s.indexOf(",") !== -1;
+    if (hasDot && hasComma) {
+      if (s.lastIndexOf(".") > s.lastIndexOf(",")) s = s.replace(/,/g, "");
+      else s = s.replace(/\./g, "").replace(/,/g, ".");
+    } else if (hasComma) {
+      var parts = s.split(",");
+      var allThousands = parts.length >= 2 && parts.slice(1).every(function (p) { return p.length === 3 && /^\d+$/.test(p); });
+      s = allThousands ? parts.join("") : parts.join(".");
+    }
+    var n = Number(s);
+    return isFinite(n) ? String(n) : null; // null = no numérico (se omite, no se pisa)
+  }
+
+  function handleTablePaste(e) {
+    var el = e.target.closest ? e.target.closest("input[data-leaf]") : null;
+    if (!el || !e.clipboardData) return;
+    var text = e.clipboardData.getData("text/plain") || "";
+    // una sola celda sin tabs ni saltos: dejar el pegado nativo del navegador
+    if (text.indexOf("\t") === -1 && !/\r?\n./.test(text)) return;
+    e.preventDefault();
+
+    var grid = text.replace(/\r/g, "").split("\n");
+    while (grid.length && grid[grid.length - 1] === "") grid.pop(); // línea final vacía de Excel
+    if (!grid.length) return;
+
+    // actividades en el mismo orden visual de la tabla
+    var actsList = fullRows().filter(function (r) { return r.kind === "activity"; });
+    var startField = PASTE_FIELDS.indexOf(el.dataset.f);
+    var start = -1;
+    for (var i = 0; i < actsList.length; i++) {
+      if (actsList[i].leafId === el.dataset.leaf && actsList[i].actIndex === Number(el.dataset.i)) { start = i; break; }
+    }
+    if (start === -1 || startField === -1) return;
+
+    var applied = 0, skipped = 0, fieldsTouched = {};
+    grid.forEach(function (line, ri) {
+      var target = actsList[start + ri];
+      if (!target) { skipped++; return; } // se acabaron las actividades hacia abajo
+      var act = state().byLeaf[target.leafId] && state().byLeaf[target.leafId][target.actIndex];
+      if (!act) { skipped++; return; }
+      line.split("\t").forEach(function (raw, ci) {
+        var f = PASTE_FIELDS[startField + ci];
+        if (!f) return; // más columnas que campos: se ignoran
+        var val;
+        if (f === "qty" || f === "perf" || f === "teams") {
+          val = parseExcelNum(raw);
+          if (val === null) { if (String(raw).trim()) skipped++; return; } // texto en campo numérico: no pisar
+          if (val === "") return;                                          // celda vacía: conservar lo existente
+        } else {
+          val = String(raw).trim();
+          if (!val) return;                                                // celda vacía: conservar lo existente
+        }
+        act[f] = val;
+        applied++; fieldsTouched[f] = true;
+      });
+    });
+
+    onDirty(true); // re-render completo: renumera y recalcula todas las duraciones
+    var LBL = { name: "Actividad", unit: "Unidad", qty: "Metrado", perf: "Rend. (R)", teams: "#Eq" };
+    var names = Object.keys(fieldsTouched).map(function (f) { return LBL[f]; }).join(", ");
+    setStatus("Pegado desde Excel: " + applied + " valor(es) en " + Math.min(grid.length, actsList.length - start) + " fila(s)"
+      + (names ? " — " + names : "") + (skipped ? " · " + skipped + " celda(s) omitida(s)" : "") + ".");
+  }
+
+  // ---------- GRILLA ESTILO EXCEL: navegación, selección y copiado ----------
+  // actsCache guarda las actividades en el orden visual de la tabla; una celda
+  // se identifica por {r: índice de actividad, f: índice de campo en PASTE_FIELDS}.
+  var actsCache = [];
+  var selAnchor = null, selEnd = null; // rango seleccionado con Shift+clic
+
+  function cellCoord(el) {
+    var f = PASTE_FIELDS.indexOf(el.dataset.f);
+    if (f === -1) return null;
+    for (var r = 0; r < actsCache.length; r++) {
+      if (actsCache[r].leafId === el.dataset.leaf && actsCache[r].actIndex === Number(el.dataset.i)) return { r: r, f: f };
+    }
+    return null;
+  }
+  function cellInput(r, f) {
+    var a = actsCache[r];
+    if (!a || !PASTE_FIELDS[f]) return null;
+    return document.querySelector('input[data-leaf="' + a.leafId + '"][data-i="' + a.actIndex + '"][data-f="' + PASTE_FIELDS[f] + '"]');
+  }
+  function clearSelection() { selEnd = null; paintSelection(); }
+  function paintSelection() {
+    document.querySelectorAll("#actsBody td.sel").forEach(function (td) { td.classList.remove("sel"); });
+    if (!selAnchor || !selEnd) return;
+    var r1 = Math.min(selAnchor.r, selEnd.r), r2 = Math.max(selAnchor.r, selEnd.r);
+    var f1 = Math.min(selAnchor.f, selEnd.f), f2 = Math.max(selAnchor.f, selEnd.f);
+    for (var r = r1; r <= r2; r++) for (var f = f1; f <= f2; f++) {
+      var inp = cellInput(r, f);
+      if (inp) inp.closest("td").classList.add("sel");
+    }
+  }
+  // TSV del rango seleccionado (valores del estado, no del DOM)
+  function selectionTsv() {
+    if (!selAnchor || !selEnd) return null;
+    var r1 = Math.min(selAnchor.r, selEnd.r), r2 = Math.max(selAnchor.r, selEnd.r);
+    var f1 = Math.min(selAnchor.f, selEnd.f), f2 = Math.max(selAnchor.f, selEnd.f);
+    var lines = [];
+    for (var r = r1; r <= r2; r++) {
+      var a = actsCache[r];
+      var act = state().byLeaf[a.leafId] && state().byLeaf[a.leafId][a.actIndex];
+      var cells = [];
+      for (var f = f1; f <= f2; f++) { var v = act ? act[PASTE_FIELDS[f]] : ""; cells.push(v == null ? "" : String(v)); }
+      lines.push(cells.join("\t"));
+    }
+    return lines.join("\n");
+  }
+  function moveTo(r, f, keepCaret) {
+    var inp = cellInput(r, f);
+    if (!inp) return false;
+    inp.focus();
+    if (!keepCaret) { try { inp.select(); } catch (_) {} }
+    return true;
+  }
+  function caretAtStart(el) { try { return el.selectionStart === 0 && el.selectionEnd === 0; } catch (_) { return false; } }
+  function caretAtEnd(el) { try { return el.selectionStart === el.value.length && el.selectionEnd === el.value.length; } catch (_) { return false; } }
+
+  function handleGridKeys(e) {
+    var el = e.target.closest ? e.target.closest("input[data-leaf]") : null;
+    if (!el) return;
+    var c = cellCoord(el);
+    if (!c) return;
+    if (e.key === "Enter") { e.preventDefault(); moveTo(c.r + 1, c.f) || el.blur(); return; }
+    if (e.key === "ArrowDown" && !e.shiftKey) { e.preventDefault(); moveTo(c.r + 1, c.f); return; }
+    if (e.key === "ArrowUp" && !e.shiftKey) { e.preventDefault(); moveTo(c.r - 1, c.f); return; }
+    if (e.key === "ArrowRight" && !e.shiftKey && caretAtEnd(el)) { if (moveTo(c.r, c.f + 1)) e.preventDefault(); return; }
+    if (e.key === "ArrowLeft" && !e.shiftKey && caretAtStart(el)) { if (moveTo(c.r, c.f - 1)) e.preventDefault(); return; }
+    if (e.key === "Escape") { clearSelection(); return; }
+  }
+
+  function wireGridSelection(tbody) {
+    // Shift+clic: extiende el rango desde el ancla (la celda enfocada)
+    tbody.addEventListener("mousedown", function (e) {
+      var el = e.target.closest ? e.target.closest("input[data-leaf]") : null;
+      if (!el) return;
+      if (e.shiftKey && selAnchor) {
+        e.preventDefault(); // no mover el foco ni seleccionar texto
+        var c = cellCoord(el);
+        if (c) { selEnd = c; paintSelection(); }
+      }
+    });
+    // el foco simple fija el ancla y limpia el rango anterior
+    tbody.addEventListener("focusin", function (e) {
+      var el = e.target.closest ? e.target.closest("input[data-leaf]") : null;
+      if (!el) return;
+      var c = cellCoord(el);
+      if (c) { selAnchor = c; clearSelection(); }
+    });
+    // Ctrl+C sobre un rango: TSV al portapapeles (pegable en Excel o aquí mismo)
+    tbody.addEventListener("copy", function (e) {
+      var tsv = selectionTsv();
+      if (tsv == null || !e.clipboardData) return; // sin rango: copia nativa del input
+      e.clipboardData.setData("text/plain", tsv);
+      e.preventDefault();
+      var r1 = Math.min(selAnchor.r, selEnd.r), r2 = Math.max(selAnchor.r, selEnd.r);
+      setStatus("Rango copiado: " + (r2 - r1 + 1) + " fila(s) — pégalo en Excel o en otra parte de la tabla.");
+    });
+    tbody.addEventListener("keydown", handleGridKeys);
+  }
+
+  // Copia toda la tabla (con encabezados) como TSV — pegable directo en Excel
+  function copyWholeTable() {
+    var rows = fullRows();
+    if (!rows.length) { setStatus("No hay tabla que copiar."); return; }
+    var lines = ["N.º\tEDT\tPaquete de trabajo / Actividad\tUnidad\tMetrado\tRend. (R)\t#Eq\tDur. (d)"];
+    rows.forEach(function (r) {
+      var isAct = r.kind === "activity";
+      lines.push([
+        r.n, r.code, r.name || "",
+        isAct ? (r.unit || "") : "",
+        isAct ? (r.qty == null ? "" : r.qty) : "",
+        isAct ? (r.perf == null ? "" : r.perf) : "",
+        isAct ? Math.max(1, numVal(r.teams) || 1) : "",
+        isAct && r.dur != null ? r.dur : ""
+      ].join("\t"));
+    });
+    var text = lines.join("\n");
+    function done() { setStatus("Tabla copiada al portapapeles (" + rows.length + " filas + encabezado): pégala en Excel con Ctrl+V."); }
+    function legacy() {
+      var ta = document.createElement("textarea");
+      ta.value = text; ta.style.cssText = "position:fixed;opacity:0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch (_) { setStatus("No se pudo copiar al portapapeles."); }
+      ta.remove();
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, legacy);
+    else legacy();
+  }
+
+  // Delegación de eventos: un listener de "input" y uno de "click" en el tbody
+  // atienden todas las filas presentes y futuras. Así el costo del render no
+  // crece con la cantidad de actividades (antes se adjuntaban ~3 listeners por
+  // fila en cada re-render) y la memoria se mantiene constante.
+  function wireTableDelegation() {
+    var tbody = document.getElementById("actsBody");
+
+    tbody.addEventListener("paste", handleTablePaste);
+    wireGridSelection(tbody);
+
+    tbody.addEventListener("input", function (e) {
+      var el = e.target.closest ? e.target.closest("input[data-leaf]") : null;
+      if (!el) return;
+      var arr = state().byLeaf[el.dataset.leaf];
+      if (arr && arr[Number(el.dataset.i)]) {
+        var act = arr[Number(el.dataset.i)];
+        act[el.dataset.f] = el.value;
+        // la duración es derivada: refrescarla en vivo SIN re-render (no perder el foco)
+        if (el.dataset.f === "qty" || el.dataset.f === "perf" || el.dataset.f === "teams") {
+          var tr = el.closest("tr");
+          var durCell = tr && tr.querySelector(".dur-cell");
+          if (durCell) {
+            var dv = durActivity(act);
+            durCell.textContent = dv == null ? "—" : dv;
+            durCell.className = "dur-cell" + (dv == null ? " empty" : "");
+          }
+        }
+        onDirty(false); // sin re-render: no perder el foco al tipear
+      }
+    });
+
+    tbody.addEventListener("click", async function (e) {
+      var add = e.target.closest ? e.target.closest("[data-add]") : null;
+      if (add) { addActivity(add.dataset.add); return; }
+
+      var del = e.target.closest ? e.target.closest("[data-del-leaf]") : null;
+      if (!del) return;
+      var arr = state().byLeaf[del.dataset.delLeaf];
+      var a = arr && arr[Number(del.dataset.i)];
+      if (!a) return;
+      if ((a.name || "").trim()) {
+        var ok = await showConfirm('Se eliminará la actividad "' + a.name + '". El resto de la tabla se renumera automáticamente.', "Eliminar actividad");
+        if (!ok) return;
+      }
+      arr.splice(Number(del.dataset.i), 1);
+      if (!arr.length) delete state().byLeaf[del.dataset.delLeaf];
+      onDirty(true);
+      setStatus("Actividad eliminada — numeración actualizada.");
+    });
+  }
+
+  function addActivity(leafId) {
+    var st = state();
+    if (!st.byLeaf[leafId]) st.byLeaf[leafId] = [];
+    st.byLeaf[leafId].push({ id: uid(), name: "", unit: "", qty: "", perf: "", teams: 1 });
+    onDirty(true);
+    // foco en el nombre de la actividad recién creada
+    var pkgRow = document.getElementById("pkg-" + leafId);
+    if (pkgRow) {
+      var row = pkgRow, count = st.byLeaf[leafId].length, seen = 0;
+      while (row && row.nextElementSibling) {
+        row = row.nextElementSibling;
+        if (!row.classList.contains("act-row")) break;
+        seen++;
+        if (seen === count) { var inp = row.querySelector('input[data-f="name"]'); if (inp) inp.focus(); break; }
+      }
+    }
+    setStatus("Actividad agregada — completa nombre, unidad y metrado.");
+  }
+
+  function renderSidebar() {
+    var s = stats();
+    document.getElementById("sbTotal").textContent = s.total;
+    document.getElementById("sbCov").textContent = s.covered + "/" + s.leaves + " paquetes con actividades";
+    document.getElementById("sbPct").textContent = s.pct + "%";
+    var bar = document.getElementById("sbBar");
+    bar.style.width = s.pct + "%";
+    bar.style.background = s.pct >= 100 ? "var(--good)" : (s.pct >= 50 ? "var(--warn)" : "var(--act-a)");
+    var host = document.getElementById("missList");
+    if (!s.leaves) {
+      host.innerHTML = '<div style="font-size:11.5px;color:var(--ink-2)">Sin EDT cargada.</div>';
+    } else if (!s.uncovered.length) {
+      host.innerHTML = '<div class="miss-ok">✓ Todos los paquetes de trabajo tienen al menos una actividad.</div>';
+    } else {
+      host.innerHTML = s.uncovered.map(function (l) {
+        return '<div class="miss-item" data-goto="' + esc(l.id) + '"><span class="mc">' + esc(l.code) + '</span><span>' + esc(l.name) + '</span></div>';
+      }).join("");
+      host.querySelectorAll("[data-goto]").forEach(function (el) {
+        el.addEventListener("click", function () {
+          var row = document.getElementById("pkg-" + el.dataset.goto);
+          if (row) { row.scrollIntoView({ behavior: "smooth", block: "center" }); }
+        });
+      });
+    }
+  }
+
+  function renderOrphans() {
+    var st = state(), leaves = leafRows();
+    var leafIds = {}; leaves.forEach(function (l) { leafIds[l.id] = true; });
+    var orphanKeys = Object.keys(st.byLeaf).filter(function (k) { return !leafIds[k] && (st.byLeaf[k] || []).length; });
+    var n = orphanKeys.reduce(function (acc, k) { return acc + st.byLeaf[k].length; }, 0);
+    var bn = document.getElementById("orphanBanner");
+    if (!n) { bn.classList.remove("show"); bn.innerHTML = ""; return; }
+    bn.classList.add("show");
+    bn.innerHTML = "<b>⚠ " + n + " actividad(es) huérfana(s):</b> su paquete de trabajo ya no existe en la EDT o dejó de ser una hoja (se le agregaron sub-paquetes). No aparecen en la tabla ni en los conteos. "
+      + '<button class="btn sm danger" id="btnOrphans">Eliminar huérfanas</button>';
+    document.getElementById("btnOrphans").addEventListener("click", async function () {
+      var ok = await showConfirm("Se eliminarán definitivamente las " + n + " actividades huérfanas. Si en realidad la EDT cambió por error, corrígela primero en WBS Builder y vuelve a recargar.", "Eliminar actividades huérfanas");
+      if (!ok) return;
+      orphanKeys.forEach(function (k) { delete st.byLeaf[k]; });
+      onDirty(true);
+      setStatus("Actividades huérfanas eliminadas.");
+    });
+  }
+
+  var dirtyTimer = null;
+  function onDirty(rerender) {
+    if (rerender) render(); else renderSidebar();
+    clearTimeout(dirtyTimer);
+    dirtyTimer = setTimeout(gpiPush, 800);
+    setStatus("Cambios sin exportar — se sincronizan solos con el Panel.");
+  }
+
+  // ---------- export / import ----------
+  function exportJson() {
+    var data = { kind: "gpi.activities/v1", title: document.getElementById("projectTitle").value, course: document.getElementById("courseTitle").value, data: state() };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    var safe = (data.title || "actividades").replace(/[^a-z0-9_\-]+/gi, "_").toLowerCase();
+    a.href = url; a.download = "actividades_" + safe + ".json";
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    setStatus("Lista de actividades exportada como .json.");
+  }
+  function importJson(file) {
+    var r = new FileReader();
+    r.onload = function (e) {
+      var obj; try { obj = JSON.parse(e.target.result); } catch (_) { showAlert("El archivo no es un .json válido."); return; }
+      if (obj && obj.kind === "gpi.activities/v1" && obj.data) {
+        if (mode === "sample") { stateSample = normalizeState(obj.data); }
+        else { stateLive = normalizeState(obj.data); }
+        if (obj.title) document.getElementById("projectTitle").value = obj.title;
+        if (obj.course) document.getElementById("courseTitle").value = obj.course;
+        render(); gpiPush();
+        setStatus("Lista de actividades importada. Las actividades se enlazan a la EDT por el id de cada paquete.");
+      } else {
+        showAlert("No reconocí el formato: se esperaba una exportación de esta herramienta (gpi.activities/v1).");
+      }
+    };
+    r.readAsText(file);
+  }
+
+  // ---------- EDT y actividades DE EJEMPLO (demo independiente) ----------
+  // Réplica compacta de la EDT de ejemplo de WBS Builder. El modo ejemplo es
+  // autocontenido: nunca escribe sobre los datos reales del proyecto activo.
+  var SAMPLE_WBS = (function () {
+    var nodes = {}, k = 0;
+    function N(parentId, name) {
+      var id = "w" + (++k);
+      nodes[id] = { id: id, parentId: parentId, name: name, children: [] };
+      if (parentId) nodes[parentId].children.push(id);
+      return id;
+    }
+    var root = N(null, "Proyecto DISTRIB+ S.A. — Almacén Lurín");
+    var f1 = N(root, "Dirección de Proyecto");
+    var p11 = N(f1, "Acta de constitución"), p12 = N(f1, "Plan de gestión del proyecto"), p13 = N(f1, "Informes de seguimiento y control");
+    var f2 = N(root, "Ingeniería y Diseño");
+    var p21 = N(f2, "Estudio de suelos"), p22 = N(f2, "Diseño estructural"), p23 = N(f2, "Diseño eléctrico y sanitario"), p24 = N(f2, "Permisos y licencias municipales");
+    var f3 = N(root, "Procura");
+    var p31 = N(f3, "Estructuras metálicas prefabricadas"), p32 = N(f3, "Materiales de construcción"), p33 = N(f3, "Equipos eléctricos e instalaciones");
+    var f4 = N(root, "Construcción");
+    var p41 = N(f4, "Movimiento de tierras"), p42 = N(f4, "Cimentaciones"), p43 = N(f4, "Estructura y cobertura"), p44 = N(f4, "Acabados y cerramientos"), p45 = N(f4, "Instalaciones MEP");
+    var f5 = N(root, "Pruebas y Puesta en Marcha");
+    var p51 = N(f5, "Pruebas de instalaciones"), p52 = N(f5, "Capacitación al cliente"), p53 = N(f5, "Acta de entrega y cierre");
+    return { rootId: root, nodes: nodes, ids: { p11: p11, p12: p12, p21: p21, p22: p22, p41: p41, p42: p42, p43: p43, p51: p51 } };
+  })();
+
+  function sampleActivities() {
+    var I = SAMPLE_WBS.ids, by = {}, n = 0;
+    // A(nombre, unidad, metrado, rendimiento por equipo, n.º de equipos)
+    // Dur = Met / (#Eq × R), redondeada al entero superior.
+    function A(name, unit, qty, perf, teams) {
+      return { id: "a" + (++n), name: name, unit: unit, qty: qty, perf: (perf == null ? "" : perf), teams: (teams == null ? 1 : teams) };
+    }
+    by[I.p11] = [A("Elaboración y aprobación del acta de constitución", "doc", 1, 0.25)];                        // ceil(1/0.25)=4 d
+    by[I.p12] = [A("Plan para la dirección del proyecto (líneas base)", "doc", 1, 0.2), A("Planes subsidiarios de gestión", "doc", 6, 0.5)]; // 5 d · 12 d
+    by[I.p21] = [A("Calicatas exploratorias", "und", 8, 2), A("Ensayos de laboratorio de suelos", "glb", 1, 0.1), A("Informe geotécnico", "doc", 1, 0.25)]; // 4 · 10 · 4
+    by[I.p22] = [A("Memoria de cálculo estructural", "doc", 1, 0.1), A("Planos estructurales", "lám", 24, 2)];   // 10 d · 12 d
+    by[I.p41] = [A("Corte y excavación masiva", "m³", 4800, 320, 2), A("Relleno y compactación con material propio", "m³", 2100, 250), A("Eliminación de material excedente", "m³", 2700, 300), A("Nivelación y perfilado de plataforma", "m²", 6500, 1200)]; // 8 · 9 · 9 · 6
+    by[I.p42] = [A("Excavación de zanjas para zapatas", "m³", 620, 60, 2), A("Solado de concreto e=10 cm", "m²", 480, 120), A("Acero de refuerzo fy=4200 kg/cm²", "kg", 38500, 2500, 2), A("Concreto f'c=280 kg/cm² en zapatas", "m³", 410, 45, 2), A("Encofrado y desencofrado de cimentaciones", "m²", 950, 90, 2)]; // 6 · 4 · 8 · 5 · 6
+    by[I.p43] = [A("Montaje de columnas metálicas", "und", 48, 6), A("Montaje de vigas y tijerales", "ton", 96, 8), A("Instalación de cobertura TR-4", "m²", 5200, 350, 2)]; // 8 · 12 · 8
+    by[I.p51] = [A("Pruebas de tableros y circuitos eléctricos", "pto", 120, 30), A("Pruebas hidráulicas de redes sanitarias", "glb", 1, 0.5)]; // 4 · 2
+    // Varios paquetes quedan sin actividades a propósito: el alumno debe
+    // completarlos y ver cómo sube la cobertura en el panel lateral.
+    return { byLeaf: by, idCounter: n + 1 };
+  }
+
+  function enterSample() {
+    mode = "sample";
+    if (!stateSample) stateSample = sampleActivities();
+    render();
+    setStatus("Modo ejemplo: EDT y actividades didácticas (no toca los datos del proyecto).");
+  }
+  function enterLive() {
+    mode = "live";
+    render();
+    setStatus("De vuelta a la EDT del proyecto activo.");
+  }
+
+  // ---------- REPORTE IMPRIMIBLE ----------
+  function reportShell(docTitle, moduleName, bodyHtml) {
+    var el = document.getElementById("gpiReport");
+    var meta = {};
+    try { if (window.GPI && window.GPI.available() && window.GPI.meta()) meta = window.GPI.meta(); } catch (_) {}
+    var pName = document.getElementById("projectTitle").value || meta.name || "Proyecto";
+    var course = document.getElementById("courseTitle").value || meta.course || "Gestión de Proyectos de Ingeniería";
+    var today = new Date().toLocaleDateString("es-PE", { year: "numeric", month: "long", day: "numeric" });
+    el.innerHTML =
+      '<div class="rep-head"><div><h1>' + esc(docTitle) + '</h1>'
+      + '<div class="sub">' + esc(pName) + (meta.code ? ' · ' + esc(meta.code) : '') + '</div>'
+      + '<div class="sub" style="font-weight:500">' + esc(course) + '</div></div>'
+      + '<div class="rep-meta">' + esc(moduleName) + '<br>Emitido: ' + esc(today)
+      + (meta.client ? '<br>Cliente: ' + esc(meta.client) : '')
+      + (meta.location ? '<br>' + esc(meta.location) : '') + '</div></div>'
+      + bodyHtml;
+    document.body.classList.add("report-mode");
+    function repDone() { document.body.classList.remove("report-mode"); window.removeEventListener("afterprint", repDone); }
+    window.addEventListener("afterprint", repDone);
+    setTimeout(function () { window.print(); setTimeout(repDone, 500); }, 60);
+  }
+  function fmtQty(v) {
+    var n = numVal(v);
+    if (!isFinite(n) || v === "" || v == null) return "—";
+    return n.toLocaleString("es-PE", { maximumFractionDigits: 2 });
+  }
+  function buildReport() {
+    var s = stats();
+    var body = (mode === "sample" ? '<p class="rep-note"><b>Modo ejemplo:</b> este listado usa la EDT y las actividades didácticas, no los datos del proyecto activo.</p>' : '')
+      + '<h2>1. Resumen</h2><table class="rep-kv">'
+      + '<tr><td>Actividades definidas</td><td><b>' + s.total + '</b></td></tr>'
+      + '<tr><td>Cobertura de paquetes de trabajo</td><td>' + s.covered + ' de ' + s.leaves + ' paquetes con actividades (<b>' + s.pct + '%</b>)</td></tr>'
+      + (s.orphans ? '<tr><td>Actividades huérfanas</td><td>⚠ ' + s.orphans + ' (su paquete ya no existe en la EDT)</td></tr>' : '')
+      + '</table>'
+      + '<h2>2. Listado de actividades y metrados</h2>'
+      + '<p class="rep-note">Numeración estilo MS Project: la fila 0 es la tarea resumen del proyecto y el N.º corre consecutivo por todas las filas. Cada actividad hereda el código EDT de su paquete más un correlativo. La duración es un valor calculado: Dur = Met ÷ (#Eq × R), donde R es el rendimiento diario de un equipo y #Eq el número de equipos en paralelo, redondeada al entero superior.</p>'
+      + '<table><tr><th style="width:6%">N.º</th><th style="width:9%">Código EDT</th><th>Paquete de trabajo / Actividad</th><th style="width:7%">Unidad</th><th style="width:9%">Metrado</th><th style="width:9%">Rend. (R)</th><th style="width:6%">#Eq</th><th style="width:8%">Dur. (d)</th></tr>';
+    var repRows = fullRows();
+    if (!repRows.length) {
+      body += '<tr><td colspan="8" class="rep-note">— Sin EDT cargada —</td></tr>';
+    }
+    repRows.forEach(function (r) {
+      if (r.kind === "project") {
+        body += '<tr><td class="num rep-phase" style="text-align:center">0</td><td class="num rep-phase">0</td><td class="rep-phase" colspan="6">' + esc(r.name) + ' <span class="rep-note">(tarea resumen del proyecto)</span></td></tr>';
+      } else if (r.kind === "phase") {
+        body += '<tr><td class="num rep-phase" style="text-align:center">' + r.n + '</td><td class="num rep-phase">' + esc(r.code) + '</td><td class="rep-phase" colspan="6">' + esc(r.name) + '</td></tr>';
+      } else if (r.kind === "package") {
+        body += '<tr><td class="num rep-pkg" style="text-align:center">' + r.n + '</td><td class="num rep-pkg">' + esc(r.code) + '</td><td class="rep-pkg">' + esc(r.name) + '</td><td class="rep-pkg" colspan="5">' + (r.count ? r.count + ' actividad(es)' : '<span class="rep-note">sin actividades</span>') + '</td></tr>';
+      } else {
+        body += '<tr><td class="num" style="text-align:center">' + r.n + '</td>'
+          + '<td class="num">' + esc(r.code) + '</td>'
+          + '<td>' + (r.name ? esc(r.name) : '<span class="rep-note">— sin nombre —</span>') + '</td>'
+          + '<td>' + esc(r.unit || "—") + '</td>'
+          + '<td class="num" style="text-align:right">' + fmtQty(r.qty) + '</td>'
+          + '<td class="num" style="text-align:right">' + fmtQty(r.perf) + '</td>'
+          + '<td class="num" style="text-align:center">' + esc(String(Math.max(1, numVal(r.teams) || 1))) + '</td>'
+          + '<td class="num" style="text-align:center"><b>' + (r.dur == null ? "—" : r.dur) + '</b></td></tr>';
+      }
+    });
+    body += '</table>';
+    reportShell("Listado de Actividades y Metrados", "Definir las Actividades · Gestión del Cronograma", body);
+  }
+
+  // ---------- EXPORTAR A EXCEL (para MS Project) ----------
+  // El .xlsx lleva la columna "Nivel de esquema": MS Project la usa, junto con
+  // el orden de las filas, para reconstruir la jerarquía completa al importar
+  // (Archivo > Abrir > este libro > asistente de importación). El pegado
+  // directo desde Excel entra plano en Project (solo desde Word conserva el
+  // esquema), por eso el libro incluye una hoja de instrucciones con ambas rutas.
+  function xmlEsc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+
+  // Estilos: 0 normal · 1 encabezado · 2 centrado · 3 metrado #,##0.00 · 4 nota
+  // 5..14 nombre con sangría 0..9 · 15..24 nombre negrita con sangría 0..9 · 25 proyecto
+  function xlsxStylesXml() {
+    var xfs = [
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>',
+      '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>',
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" applyAlignment="1"><alignment horizontal="center"/></xf>',
+      '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right"/></xf>',
+      '<xf numFmtId="0" fontId="3" fillId="0" borderId="0" applyFont="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>'
+    ];
+    var i;
+    for (i = 0; i < 10; i++) xfs.push('<xf numFmtId="0" fontId="0" fillId="0" borderId="0" applyAlignment="1"><alignment horizontal="left" indent="' + i + '"/></xf>');
+    for (i = 0; i < 10; i++) xfs.push('<xf numFmtId="0" fontId="1" fillId="0" borderId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" indent="' + i + '"/></xf>');
+    xfs.push('<xf numFmtId="0" fontId="2" fillId="3" borderId="0" applyFont="1" applyFill="1"/>');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+      + '<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts>'
+      + '<fonts count="4">'
+      + '<font><sz val="11"/><name val="Calibri"/></font>'
+      + '<font><b/><sz val="11"/><name val="Calibri"/></font>'
+      + '<font><b/><sz val="12"/><name val="Calibri"/></font>'
+      + '<font><i/><sz val="10"/><color rgb="FF4D5768"/><name val="Calibri"/></font>'
+      + '</fonts>'
+      + '<fills count="4">'
+      + '<fill><patternFill patternType="none"/></fill>'
+      + '<fill><patternFill patternType="gray125"/></fill>'
+      + '<fill><patternFill patternType="solid"><fgColor rgb="FFDDEBF7"/><bgColor indexed="64"/></patternFill></fill>'
+      + '<fill><patternFill patternType="solid"><fgColor rgb="FFE8F6FC"/><bgColor indexed="64"/></patternFill></fill>'
+      + '</fills>'
+      + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'
+      + '<border><left style="thin"><color rgb="FFB9C6D2"/></left><right style="thin"><color rgb="FFB9C6D2"/></right><top style="thin"><color rgb="FFB9C6D2"/></top><bottom style="thin"><color rgb="FFB9C6D2"/></bottom><diagonal/></border></borders>'
+      + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+      + '<cellXfs count="' + xfs.length + '">' + xfs.join("") + '</cellXfs>'
+      + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+      + '</styleSheet>';
+  }
+
+  // rows: [[{v, t:"s"|"n", s}]], widths: [n], freezeTop: bool
+  function xlsxSheetXml(rows, widths, freezeTop) {
+    var COLS = "ABCDEFGHIJ";
+    var cols = widths.map(function (w, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join("");
+    var body = rows.map(function (cells, ri) {
+      var cs = cells.map(function (c, ci) {
+        if (c == null || c.v === "" || c.v == null) return "";
+        var ref = COLS[ci] + (ri + 1), st = c.s ? ' s="' + c.s + '"' : "";
+        if (c.t === "n") return '<c r="' + ref + '"' + st + '><v>' + c.v + '</v></c>';
+        return '<c r="' + ref + '"' + st + ' t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(c.v) + '</t></is></c>';
+      }).join("");
+      return '<row r="' + (ri + 1) + '">' + cs + '</row>';
+    }).join("");
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+      + (freezeTop ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' : '')
+      + '<cols>' + cols + '</cols>'
+      + '<sheetData>' + body + '</sheetData>'
+      + '</worksheet>';
+  }
+
+  function excelRowModel() {
+    // filas de la hoja principal a partir del modelo único fullRows()
+    var head = ["N.º", "EDT", "Nivel de esquema", "Nombre", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos", "Duración (días)"].map(function (h) { return { v: h, t: "s", s: 1 }; });
+    var out = [head];
+    fullRows().forEach(function (r) {
+      var ind = Math.min(9, r.level - 1);
+      var nameStyle = r.kind === "project" ? 25 : (r.kind === "activity" ? 5 + ind : 15 + ind);
+      var qtyNum = numVal(r.qty);
+      out.push([
+        { v: r.n, t: "n", s: 2 },
+        { v: r.code, t: "s", s: 2 },
+        { v: r.level, t: "n", s: 2 },
+        { v: r.name || "", t: "s", s: nameStyle },
+        { v: r.kind === "activity" ? (r.unit || "") : "", t: "s", s: 2 },
+        (r.kind === "activity" && r.qty !== "" && isFinite(qtyNum)) ? { v: qtyNum, t: "n", s: 3 } : null,
+        (r.kind === "activity" && r.perf !== "" && isFinite(numVal(r.perf))) ? { v: numVal(r.perf), t: "n", s: 3 } : null,
+        r.kind === "activity" ? { v: Math.max(1, numVal(r.teams) || 1), t: "n", s: 2 } : null,
+        (r.kind === "activity" && r.dur != null) ? { v: r.dur, t: "n", s: 2 } : null
+      ]);
+    });
+    return out;
+  }
+
+  function excelInstructions() {
+    var L = [
+      ["Cómo llevar esta tabla a MS Project", 25],
+      ["", 0],
+      ["RUTA A — Importar con jerarquía automática (recomendada)", 15],
+      ["1. En MS Project: Archivo > Abrir > Examinar. En el tipo de archivo elige \u201cLibro de Excel (*.xlsx)\u201d y abre este archivo.", 4],
+      ["2. En el Asistente para importación: Nueva asignación > Importar como proyecto nuevo > marca \u201cTareas\u201d y \u201cLa importación incluye encabezados\u201d.", 4],
+      ["3. Elige la hoja \u201cEDT y Actividades\u201d y asigna los campos: Nombre \u2192 Nombre · Nivel de esquema \u2192 Nivel de esquema.", 4],
+      ["   Muy recomendado: Duraci\u00f3n (d\u00edas) \u2192 Duraci\u00f3n \u2014 las actividades entran ya con su duraci\u00f3n calculada (Met \u00f7 (#Eq \u00d7 R), redondeada al entero superior) y Project resume solo las fases.", 4],
+      ["   Opcional: Unidad \u2192 Texto1 · Metrado \u2192 N\u00famero1 · Rendimiento \u2192 N\u00famero2 · N.\u00ba de equipos \u2192 N\u00famero3 · EDT \u2192 Texto2 (la columna N.º puedes omitirla).", 4],
+      ["4. Finalizar. MS Project reconstruye toda la jerarquía usando el Nivel de esquema y el orden de las filas: el proyecto (nivel 1) queda como tarea resumen y bajo él las fases, paquetes y actividades.", 4],
+      ["   Nota: la numeración EDT que genera Project coincidirá con la columna EDT de este libro porque el orden es el mismo.", 4],
+      ["", 0],
+      ["RUTA B — Copiar y pegar", 15],
+      ["1. Copia SOLO las celdas de la columna \u201cNombre\u201d (sin el encabezado).", 4],
+      ["2. En MS Project, haz clic en la primera celda de \u201cNombre de tarea\u201d y pega (Ctrl+V).", 4],
+      ["3. Importante: al pegar desde Excel las tareas entran en lista PLANA (Project solo conserva el esquema al pegar desde Word). Usa la columna \u201cNivel de esquema\u201d como guía y aplica sangría con Alt+May\u00fas+\u2192 (nivel 2 = una sangría bajo el proyecto, nivel 3 = dos, etc.).", 4],
+      ["", 0],
+      ["Después de importar", 15],
+      ["\u2022 Si mapeaste \u201cDuraci\u00f3n (d\u00edas)\u201d, las actividades ya llegan con su duraci\u00f3n calculada por rendimiento de cuadrillas; ajusta R y #Eq en el simulador si necesitas otra duraci\u00f3n.", 4],
+      ["\u2022 Vincula las actividades (predecesoras) para construir la red del cronograma y obtener la ruta crítica.", 4],
+      ["\u2022 La Unidad y el Metrado (Texto1 / N\u00famero1 si los importaste) son la base para estimar duraciones y recursos de cada partida.", 4],
+      ["", 0],
+      ["Generado por el simulador GPI \u2014 m\u00f3dulo Definir las Actividades.", 4]
+    ];
+    return L.map(function (row) { return [{ v: row[0], t: "s", s: row[1] === 25 ? 25 : (row[1] === 15 ? 16 : 4) }]; });
+  }
+
+  function buildXlsxBlob() {
+    var zip = new window.JSZip();
+    zip.file("[Content_Types].xml",
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+      + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+      + '<Default Extension="xml" ContentType="application/xml"/>'
+      + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+      + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+      + '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+      + '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+      + '</Types>');
+    zip.file("_rels/.rels",
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+      + '</Relationships>');
+    zip.file("xl/workbook.xml",
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+      + '<sheets><sheet name="EDT y Actividades" sheetId="1" r:id="rId1"/><sheet name="Instrucciones" sheetId="2" r:id="rId2"/></sheets>'
+      + '</workbook>');
+    zip.file("xl/_rels/workbook.xml.rels",
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+      + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+      + '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>'
+      + '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+      + '</Relationships>');
+    zip.file("xl/styles.xml", xlsxStylesXml());
+    zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(excelRowModel(), [6, 10, 15, 58, 9, 11, 14, 12, 13], true));
+    zip.file("xl/worksheets/sheet2.xml", xlsxSheetXml(excelInstructions(), [115], false));
+    return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  }
+
+  function buildCsv() {
+    function cell(v) { v = String(v == null ? "" : v); return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+    var lines = [["N.º", "EDT", "Nivel de esquema", "Nombre", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos", "Duración (días)"].join(";")];
+    fullRows().forEach(function (r) {
+      var isAct = r.kind === "activity";
+      lines.push([
+        r.n, r.code, r.level, cell(r.name || ""),
+        isAct ? cell(r.unit || "") : "",
+        isAct ? (isFinite(numVal(r.qty)) ? numVal(r.qty) : "") : "",
+        isAct ? (isFinite(numVal(r.perf)) ? numVal(r.perf) : "") : "",
+        isAct ? Math.max(1, numVal(r.teams) || 1) : "",
+        isAct && r.dur != null ? r.dur : ""
+      ].join(";"));
+    });
+    return lines.join("\r\n");
+  }
+
+  function downloadBlob(blob, filename) {
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+
+  async function exportExcel() {
+    if (!fullRows().length) {
+      await showAlert("No hay EDT cargada: construye la estructura en WBS Builder (o entra al modo ejemplo) antes de exportar.");
+      return;
+    }
+    var safe = (document.getElementById("projectTitle").value || "proyecto").replace(/[^a-z0-9_\-]+/gi, "_").toLowerCase();
+    if (window.JSZip) {
+      try {
+        var blob = await buildXlsxBlob();
+        downloadBlob(blob, "actividades_msproject_" + safe + ".xlsx");
+        setStatus("Excel exportado. En MS Project: Archivo > Abrir > este libro (la hoja Instrucciones trae el paso a paso).");
+        return;
+      } catch (e) { /* si algo falla, cae al CSV */ }
+    }
+    downloadBlob(new Blob(["\uFEFF" + buildCsv()], { type: "text/csv;charset=utf-8" }), "actividades_msproject_" + safe + ".csv");
+    setStatus("No se pudo cargar la librería de Excel (¿sin conexión?): exporté un CSV equivalente (separado por «;») que MS Project también importa con el mismo mapa de campos.");
+  }
+
+  // ---------- toolbar ----------
+  function wireToolbar() {
+    document.getElementById("btnExportJson").addEventListener("click", exportJson);
+    document.getElementById("btnImportJson").addEventListener("click", function () { document.getElementById("fileInput").click(); });
+    document.getElementById("fileInput").addEventListener("change", function (e) { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ""; });
+    document.getElementById("btnReload").addEventListener("click", function () {
+      gpiPullWbs(); render();
+      setStatus("EDT recargada desde el proyecto activo.");
+    });
+    document.getElementById("btnCopyTable").addEventListener("click", copyWholeTable);
+    document.getElementById("btnExcel").addEventListener("click", exportExcel);
+    document.getElementById("btnReport").addEventListener("click", buildReport);
+    document.getElementById("btnPrint").addEventListener("click", function () { window.print(); });
+    document.getElementById("btnSample").addEventListener("click", enterSample);
+    document.getElementById("btnLive").addEventListener("click", enterLive);
+    document.getElementById("btnClear").addEventListener("click", async function () {
+      var s = stats();
+      var ok = await showConfirm("Se eliminarán las " + (s.total + s.orphans) + " actividades de la lista actual" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT no se toca. ¿Continuar?", "Limpiar actividades");
+      if (!ok) return;
+      if (mode === "sample") stateSample = { byLeaf: {}, idCounter: 1 };
+      else stateLive = { byLeaf: {}, idCounter: 1 };
+      onDirty(true);
+      setStatus("Lista de actividades vacía.");
+    });
+  }
+
+  // ===== Puente con el Panel de Control (GPI) =====
+  // La EDT se LEE del módulo wbs (nunca se duplica ni se edita aquí); las
+  // actividades se guardan en el módulo "activities" del proyecto activo.
+  function gpiPullWbs() {
+    if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
+    wbsLive = window.GPI.getModule("wbs");
+  }
+  function gpiPush() {
+    if (mode === "sample") return; // el modo ejemplo jamás escribe sobre el proyecto
+    if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
+    window.GPI.setModule("activities", stateLive);
+    window.GPI.patchMeta({ name: document.getElementById("projectTitle").value, course: document.getElementById("courseTitle").value });
+  }
+
+  var initialized = false;
+  function init() {
+    if (initialized) return; // guardia: un doble DOMContentLoaded no debe re-leer el estado
+    initialized = true;
+    wireToolbar();
+    wireTableDelegation();
+
+    if (typeof window.GPI !== "undefined" && window.GPI.available()) {
+      var proj = window.GPI.active();
+      if (proj) {
+        if (proj.meta) {
+          if (proj.meta.name) document.getElementById("projectTitle").value = proj.meta.name;
+          if (proj.meta.course) document.getElementById("courseTitle").value = proj.meta.course;
+        }
+        gpiPullWbs();
+        var mod = window.GPI.getModule("activities");
+        if (mod) stateLive = normalizeState(mod);
+        setStatus("Proyecto cargado desde el Panel de Control.");
+      }
+      window.addEventListener("beforeunload", gpiPush);
+      document.addEventListener("visibilitychange", function () { if (document.hidden) gpiPush(); });
+      if (window.GPI.onChange) window.GPI.onChange(function () {
+        // otra pestaña (p. ej. WBS Builder) cambió el proyecto: refrescar la
+        // EDT sin perder lo que se está escribiendo aquí
+        if (mode === "live") { gpiPullWbs(); render(); }
+      });
+      gpiBadge(proj ? (proj.meta && proj.meta.name) : "", gpiPush);
+    } else {
+      var bn = document.getElementById("banner");
+      bn.classList.add("show");
+      bn.innerHTML = "<b>Vista previa sin almacenamiento persistente.</b> Abre este archivo junto a <code>gpi-core.js</code> y los demás módulos desde un servidor local o GitHub Pages para leer la EDT real del proyecto. Mientras tanto trabajas con el modo ejemplo.";
+      enterSample();
+      return;
+    }
+    render();
+  }
+
+  function gpiBadge(name, pushFn) {
+    var css = document.createElement("style");
+    css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:42px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-dot{width:8px;height:8px;border-radius:50%;background:#00c2a8;box-shadow:0 0 0 3px rgba(0,194,168,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#0090c2;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#00b6ec;background:#fff}";
+    document.head.appendChild(css);
+    var bar = document.createElement("div");
+    bar.className = "gpi-badge";
+    bar.innerHTML = '<span class="gpi-dot"></span><span>Panel: <b>' + String(name || "—").replace(/</g, "&lt;") + '</b></span><button class="gpi-btn" id="gpiSyncBtn">☁ Sincronizar</button><a class="gpi-btn" href="Panel_Control.html">⌂ Panel</a>';
+    document.body.appendChild(bar);
+    var sb = bar.querySelector("#gpiSyncBtn");
+    if (sb) sb.addEventListener("click", function () {
+      pushFn(); var t = sb.textContent; sb.textContent = "✓ Sincronizado";
+      setTimeout(function () { sb.textContent = t; }, 1400);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+})();
+</script>
+</body>
+</html>

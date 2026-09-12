@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matriz RACI — Asignación de Responsabilidades</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#eef4f9; --bg-1:#ffffff; --bg-2:#f3f8fc;
+    --panel:#ffffff; --panel-border:#e0e8f0;
+    --ink-0:#1a2027; --ink-1:#4d5768; --ink-2:#8992a3;
+    --cyan:#00b6ec; --cyan-dark:#0090c2; --cyan-dim:rgba(0,182,236,0.13);
+    --black:#1a1a1c;
+    --danger:#ff5470; --good:#00c2a8; --warn:#ff9f1c;
+    --r-color:#00b6ec; --a-color:#2e4374; --c-color:#6c5ce7; --i-color:#8992a3;
+    --radius:10px;
+    --mono:'JetBrains Mono',monospace; --display:'Manrope',sans-serif; --body:'Manrope','Inter',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; color:var(--ink-0); font-family:var(--body);
+    background:radial-gradient(circle, rgba(0,182,236,0.06) 1px, transparent 1px) 0 0/26px 26px, var(--bg-0);
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+
+  header{ border-bottom:1px solid var(--panel-border); background:linear-gradient(180deg,#fff,#fbfdff); padding:12px 22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; position:relative; }
+  header::after{ content:''; position:absolute; left:0; right:0; bottom:-1px; height:3px; background:linear-gradient(90deg, var(--r-color), var(--a-color) 40%, var(--c-color) 70%, var(--i-color)); }
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand h1{font-family:var(--display); font-size:19px; font-weight:800; margin:0; letter-spacing:0.1px; color:var(--black);}
+  .brand .tag{font-family:var(--mono); font-size:11px; font-weight:600; color:#fff; background:linear-gradient(135deg, var(--r-color), var(--a-color)); padding:3px 9px; border-radius:20px; letter-spacing:0.5px;}
+  .project-title-input{background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--ink-0); font-family:var(--display); font-weight:600; font-size:13px; padding:2px 0; max-width:320px;}
+  .project-title-input:hover, .project-title-input:focus{border-bottom:1px dashed var(--cyan); outline:none;}
+  .course-title-input{background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--ink-2); font-family:var(--body); font-weight:600; font-size:12px; text-align:right; padding:2px 0; min-width:220px; max-width:320px;}
+  .course-title-input:hover, .course-title-input:focus{border-bottom:1px dashed var(--cyan); outline:none; color:var(--ink-0);}
+
+  .toolbar{display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:10px 22px; background:var(--bg-1); border-bottom:1px solid var(--panel-border); box-shadow:0 1px 0 rgba(20,30,60,0.02);}
+  .btn{font-family:var(--body); font-size:12.5px; font-weight:600; color:var(--ink-1); background:var(--bg-2); border:1px solid var(--panel-border); padding:7px 13px; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; transition:border-color .12s,color .12s,background .12s,transform .08s,box-shadow .12s; white-space:nowrap;}
+  .btn:hover{border-color:var(--cyan); color:var(--cyan-dark); background:#fff; box-shadow:0 2px 6px rgba(0,182,236,0.15);}
+  .btn:active{transform:translateY(1px);}
+  .btn.primary{background:linear-gradient(135deg, var(--cyan), var(--cyan-dark)); border-color:transparent; color:#fff; box-shadow:0 2px 8px rgba(0,182,236,0.35);}
+  .btn.primary:hover{filter:brightness(1.06); color:#fff;}
+  .btn.danger{color:var(--danger);} .btn.danger:hover{border-color:var(--danger); color:var(--danger);}
+  .btn:disabled{opacity:0.35; cursor:not-allowed;}
+  .sep{width:1px; height:22px; background:var(--panel-border); margin:0 4px;}
+  input[type=file]{display:none;}
+  .mode-flag{font-family:var(--mono); font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:20px; letter-spacing:.3px;}
+  .mode-flag.live{background:rgba(0,194,168,0.16); color:#00967f;}
+  .mode-flag.sample{background:rgba(255,159,28,0.16); color:#b56b00;}
+
+  .workspace{flex:1; display:flex; min-height:0;}
+  .raci-wrap{flex:1; overflow:auto; padding:22px; background:var(--bg-0);}
+  .banner{background:rgba(255,159,28,0.12); border:1px solid rgba(255,159,28,0.35); color:#8a5300; border-radius:10px; padding:10px 14px; font-size:12.5px; line-height:1.5; margin-bottom:14px; display:none;}
+  .banner.show{display:block;}
+  .banner b{color:#7a4a00;}
+
+  table.raci-table{border-collapse:separate; border-spacing:0; background:#fff; box-shadow:0 2px 12px rgba(20,30,60,0.06); border-radius:10px; overflow:hidden;}
+  table.raci-table th, table.raci-table td{border-right:1px solid var(--panel-border); border-bottom:1px solid var(--panel-border);}
+  th.corner{position:sticky; top:0; left:0; z-index:5; background:#fff; min-width:260px; max-width:320px; text-align:left; padding:10px 14px; font-family:var(--display); font-size:11.5px; font-weight:800; color:var(--ink-2); text-transform:uppercase; letter-spacing:.4px;}
+  th.col-head{position:sticky; top:0; z-index:3; background:#fff; width:56px; min-width:56px; max-width:56px; padding:10px 4px; vertical-align:bottom; height:150px;}
+  th.col-head .cwrap{writing-mode:vertical-rl; transform:rotate(180deg); font-family:var(--display); font-weight:700; font-size:11.5px; color:var(--ink-0); white-space:nowrap; display:flex; align-items:center; gap:5px; height:100%;}
+  th.col-head .cwrap .ccode{font-family:var(--mono); font-weight:700; color:var(--ink-2); font-size:9.5px;}
+  th.col-head .ctype-dot{width:7px;height:7px;border-radius:2px; flex-shrink:0; writing-mode:horizontal-tb; transform:rotate(90deg);}
+  td.row-head{position:sticky; left:0; z-index:2; background:#fff; min-width:260px; max-width:320px; padding:9px 14px; vertical-align:middle;}
+  tr:nth-child(even) td.row-head, tr:nth-child(even) th.corner{background:var(--bg-2);}
+  tr:hover td.row-head{background:var(--cyan-dim);}
+  .row-code{font-family:var(--mono); font-size:10.5px; font-weight:700; color:var(--cyan-dark); background:var(--cyan-dim); padding:1px 6px; border-radius:5px; margin-right:6px;}
+  .row-name{font-weight:600; font-size:12.5px;}
+  .row-warn-icon{color:var(--warn); font-size:11px; margin-left:5px;}
+  tr.row-warn td.row-head{box-shadow:inset 3px 0 0 var(--warn);}
+  /* Regla 1R: si un paquete acumula más de un Responsable (p. ej. datos de
+     ejemplo o un archivo importado), toda la línea se tiñe de rojo tenue. */
+  tr.row-multi-r td.cell{background:rgba(255,84,112,.08);}
+  tr.row-multi-r td.cell:hover{background:rgba(255,84,112,.16);}
+  tr.row-multi-r td.row-head, tr.row-multi-r:nth-child(even) td.row-head{background:#ffeef1; box-shadow:inset 3px 0 0 var(--danger);}
+  tr.row-multi-r .row-warn-icon{color:var(--danger);}
+
+  td.cell{width:56px; height:38px; text-align:center; cursor:pointer; user-select:none; transition:background .1s; padding:0;}
+  td.cell:hover{background:var(--cyan-dim);}
+  td.cell .badge{display:inline-flex; align-items:center; justify-content:center; width:25px; height:25px; border-radius:7px; font-family:var(--mono); font-weight:800; font-size:11.5px; color:#fff;}
+  td.cell.empty .badge{display:none;}
+  .badge.R{background:var(--r-color);}
+  .badge.A{background:var(--a-color);}
+  .badge.C{background:var(--c-color);}
+  .badge.I{background:var(--i-color);}
+
+  .sidebar{width:300px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--panel-border); overflow-y:auto; padding:18px 18px 40px;}
+  .sidebar h2{font-family:var(--display); font-size:13px; font-weight:800; color:var(--ink-0); margin:0 0 14px; display:flex; align-items:center; gap:8px;}
+  .sidebar h2::before{content:''; width:4px; height:14px; background:linear-gradient(180deg, var(--r-color), var(--a-color)); display:inline-block; border-radius:3px;}
+  .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:18px;}
+  .stat{background:linear-gradient(145deg, var(--bg-2), #fff); border:1.5px solid var(--panel-border); border-radius:10px; padding:10px 11px;}
+  .stat .v{font-family:var(--mono); font-size:16px; font-weight:800; color:var(--cyan-dark);}
+  .stat .l{font-size:9.5px; color:var(--ink-2); font-weight:600; text-transform:uppercase; letter-spacing:.4px; margin-top:2px;}
+  .legend{display:flex; flex-direction:column; gap:8px; margin-bottom:18px;}
+  .legend-item{display:flex; align-items:flex-start; gap:9px; font-size:11.5px; color:var(--ink-1); line-height:1.4;}
+  .legend-badge{width:22px;height:22px;border-radius:6px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-weight:800; font-size:11px; color:#fff; margin-top:1px;}
+  .legend-item b{color:var(--ink-0); display:block;}
+  .bar-row{display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:11px;}
+  .bar-row .nm{width:96px; flex-shrink:0; color:var(--ink-1); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .bar-track{flex:1; height:7px; background:rgba(0,0,0,.06); border-radius:4px; overflow:hidden; display:flex;}
+  .bar-seg{height:100%;}
+  .bar-row .n{font-family:var(--mono); font-size:10.5px; font-weight:700; color:var(--ink-1); width:16px; text-align:right;}
+  .tip-box{background:var(--cyan-dim); border:1px solid rgba(0,182,236,0.25); border-radius:9px; padding:10px 12px; font-size:11.5px; color:var(--ink-1); line-height:1.55; margin-bottom:10px;}
+  .tip-box b{color:var(--cyan-dark);}
+
+  .gauge-wrap{text-align:center; margin-bottom:6px;}
+  .gauge-state{font-family:var(--display); font-weight:800; font-size:13px; margin-top:-8px;}
+  .gauge-sub{font-size:10.5px; color:var(--ink-2); margin-top:2px; margin-bottom:14px;}
+  .hr-item{display:flex; align-items:flex-start; gap:8px; padding:7px 0; font-size:12px; color:var(--ink-1); border-bottom:1px solid var(--panel-border);}
+  .hr-item:last-child{border-bottom:none;}
+  .hr-icon{width:18px; height:18px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; margin-top:1px;}
+  .hr-item.ok .hr-icon{background:rgba(0,194,168,0.16); color:#00967f;}
+  .hr-item.fail .hr-icon{background:rgba(255,84,112,0.16); color:#ff5470;}
+  .hr-item.warn .hr-icon{background:rgba(255,159,28,0.16); color:#b56b00;}
+  .hr-text{flex:1; line-height:1.4;}
+  .hr-count{font-family:var(--mono); color:var(--ink-2); font-weight:700;}
+  .hr-rows{margin:3px 0 6px 26px; padding:0; list-style:none; font-size:11px; color:var(--ink-2);}
+  .hr-rows li{padding:1px 0;}
+  .hr-rows li.muted{font-style:italic;}
+
+  .statusbar{border-top:1px solid var(--panel-border); background:var(--bg-1); padding:7px 22px; font-size:11px; color:var(--ink-2); display:flex; justify-content:space-between; font-family:var(--mono);}
+  ::-webkit-scrollbar{width:10px;height:10px;} ::-webkit-scrollbar-track{background:var(--bg-0);} ::-webkit-scrollbar-thumb{background:#c7d3de;border-radius:5px;border:2px solid var(--bg-0);} ::-webkit-scrollbar-thumb:hover{background:var(--cyan);}
+
+
+  /* ===== REPORTE IMPRIMIBLE (📄) ===== */
+  #gpiReport{display:none; font-family:var(--body); color:#1a2027; font-size:11.5px; line-height:1.5; background:#fff;}
+  @media print{
+    body.report-mode{display:block; background:#fff !important;}
+    body.report-mode > *:not(#gpiReport){display:none !important;}
+    body.report-mode #gpiReport{display:block !important;}
+  }
+  #gpiReport .rep-head{display:flex; justify-content:space-between; align-items:flex-start; gap:14px; border-bottom:3px solid #00b6ec; padding-bottom:10px; margin-bottom:14px;}
+  #gpiReport .rep-head h1{font-family:var(--display); font-size:19px; margin:0 0 3px; font-weight:800; color:#1a1a1c;}
+  #gpiReport .rep-head .sub{font-size:11.5px; color:#4d5768; font-weight:600;}
+  #gpiReport .rep-meta{font-family:var(--mono); font-size:10px; color:#4d5768; text-align:right; white-space:nowrap; line-height:1.7;}
+  #gpiReport h2{font-family:var(--display); font-size:13px; font-weight:800; margin:16px 0 6px; padding-bottom:3px; border-bottom:1px solid #e0e8f0; break-after:avoid;}
+  #gpiReport table{width:100%; border-collapse:collapse; margin:6px 0 10px; font-size:10.5px;}
+  #gpiReport th{background:#f3f8fc; text-align:left; font-weight:700; padding:5px 7px; border:1px solid #d5dee8;}
+  #gpiReport td{padding:4px 7px; border:1px solid #d5dee8; vertical-align:top;}
+  #gpiReport tr{break-inside:avoid;}
+  #gpiReport table.rep-kv td:first-child{width:30%; background:#f8fbfe; font-weight:700;}
+  #gpiReport ul{margin:4px 0 10px; padding-left:18px;}
+  #gpiReport li{margin:2px 0;}
+  #gpiReport p{margin:4px 0 10px;}
+  #gpiReport .rep-note{color:#4d5768; font-size:10px; margin:2px 0 8px;}
+  #gpiReport .num{font-family:var(--mono);}
+  #gpiReport .rep-sign{display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:46px;}
+  #gpiReport .rep-sign .box{border-top:1.5px solid #1a2027; padding-top:6px; font-size:10.5px; text-align:center; color:#1a2027;}
+  #gpiReport .rep-sign .box .r{color:#8992a3; font-size:9.5px;}
+  @page{margin:15mm 13mm;}
+
+  @media print{
+    header,.toolbar,.sidebar,.statusbar,.banner{display:none !important;}
+    body{background:#fff !important;}
+    .raci-wrap{overflow:visible;}
+  }
+
+  .modal-overlay{position:fixed; inset:0; z-index:1000; background:rgba(10,16,28,.5); display:none; align-items:center; justify-content:center; padding:20px;}
+  .modal-overlay.open{display:flex;}
+  .modal-card{background:#fff; border-radius:14px; padding:22px 24px; width:380px; max-width:100%; box-shadow:0 24px 60px rgba(10,16,28,.35); border:1px solid var(--panel-border);}
+  .modal-card h3{margin:0 0 10px; font-family:var(--display); font-size:16px; font-weight:800;}
+  .modal-card p{margin:0 0 20px; font-size:13.5px; color:var(--ink-1); line-height:1.55;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:8px;}
+</style>
+  <script src="gpi-core.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <h1>Matriz RACI</h1>
+        <span class="tag">EDU</span>
+      </div>
+      <input id="projectTitle" class="project-title-input" value="Proyecto sin título" />
+    </div>
+  </div>
+  <input id="courseTitle" class="course-title-input" value="Gestión de Proyectos de Ingeniería" />
+</header>
+
+<div class="toolbar">
+  <span class="mode-flag" id="modeFlag">—</span>
+  <button class="btn" id="btnRefresh">↻ Actualizar filas/columnas (WBS/OBS)</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnClear">Limpiar asignaciones</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnExportJson">⭳ Guardar (.json)</button>
+  <button class="btn" id="btnImportJson">⭱ Abrir (.json)</button>
+  <input type="file" id="fileInput" accept=".json">
+  <button class="btn" id="btnExportCsv">⭳ CSV</button>
+  <button class="btn" id="btnReport">📄 Reporte</button>
+  <button class="btn" id="btnPrint">🖨 Imprimir / PDF</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnSample">Cargar ejemplo</button>
+  <button class="btn danger" id="btnReset">Nueva matriz</button>
+</div>
+
+<div class="workspace">
+  <div class="raci-wrap">
+    <div class="banner" id="banner"></div>
+    <div id="tableHost"></div>
+  </div>
+
+  <aside class="sidebar">
+    <h2>Velocímetro de Gobernanza</h2>
+    <div id="gaugeBox"></div>
+
+    <h2>Restricciones críticas (Hard)</h2>
+    <div id="hardBox"></div>
+
+    <h2>Restricciones de optimización (Soft)</h2>
+    <div id="softBox"></div>
+
+    <h2>Cobertura</h2>
+    <div class="stat-grid" id="statGrid"></div>
+
+    <h2>Carga por rol</h2>
+    <div id="workloadBox"></div>
+
+    <h2>Leyenda RACI</h2>
+    <div class="legend" id="legendBox"></div>
+
+    <h2>Cómo se usa</h2>
+    <div class="tip-box"><b>Filas = paquetes de trabajo.</b> Se obtienen de las hojas de la EDT (WBS Builder). Las fases y entregables no llevan asignación directa.</div>
+    <div class="tip-box"><b>Columnas = roles.</b> Se obtienen del organigrama (Equipo del Proyecto). Haz clic en una celda para asignar R → A → C → I → vacío.</div>
+    <div class="tip-box"><b>Sincronización.</b> Todo puesto marcado "R" en una fila queda registrado automáticamente como <b>Responsable</b> del paquete correspondiente en el WBS.</div>
+    <div class="tip-box"><b>Sin promedios.</b> Una sola Restricción Crítica (Hard) incumplida bloquea toda la matriz en Rojo, sin importar qué tan bien esté el resto. Corrige esa fila para desbloquearla.</div>
+    <div class="tip-box"><b>R &gt; 1 sin culpa.</b> Si un paquete necesita varios Responsables (p. ej. dos cuadrillas en paralelo), escribe el motivo en el campo "Notas" de ese paquete en WBS Builder — así no penaliza como SR-01.</div>
+  </aside>
+</div>
+
+<div class="statusbar">
+  <span id="statusLeft">Listo</span>
+  <span id="statusRight">Clic en una celda para asignar R / A / C / I · Regla: un solo Responsable (R) por paquete · La "R" se sincroniza con el WBS</span>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-card">
+    <h3 id="modalTitle">Confirmar</h3>
+    <p id="modalMessage"></p>
+    <div class="modal-actions">
+      <button class="btn" id="modalCancelBtn">Cancelar</button>
+      <button class="btn danger" id="modalConfirmBtn">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   Matriz RACI — intersección EDT (filas) × OBS (columnas)
+   Las FILAS (paquetes de trabajo) vienen de los nodos hoja del
+   WBS activo; las COLUMNAS (roles) vienen del OBS activo. La
+   herramienta NUNCA inventa personas: solo lee lo que ya existe
+   en esas dos estructuras. Al asignar "R", el responsable queda
+   escrito de vuelta en el campo "Responsable" del WBS — por
+   diseño, esa es la ÚNICA fuente de responsabilidades del WBS
+   (ya no se copia de la lista de interesados).
+   ========================================================= */
+(function () {
+  "use strict";
+
+  const RACI_DEFS = [
+    { key: "R", label: "Responsable", desc: "Ejecuta el trabajo. Regla del curso: un solo R por paquete.", color: "var(--r-color)", hex: "#00b6ec" },
+    { key: "A", label: "Aprueba (Accountable)", desc: "Rinde cuentas del resultado ante el proyecto. Debe haber exactamente uno.", color: "var(--a-color)", hex: "#2e4374" },
+    { key: "C", label: "Consultado", desc: "Aporta información antes de decidir (comunicación en ambos sentidos).", color: "var(--c-color)", hex: "#6c5ce7" },
+    { key: "I", label: "Informado", desc: "Se le comunica el resultado (comunicación en un solo sentido).", color: "var(--i-color)", hex: "#8992a3" }
+  ];
+  const CYCLE = ["", "R", "A", "C", "I"];
+  const OBS_TYPE_HEX = { patrocinio: "#2e4374", direccion: "#00b6ec", core: "#6c5ce7", funcional: "#00c2a8", externo: "#ff9f1c", root: "#1a2027" };
+
+  // ---------- SAMPLE (caso DISTRIB+ S.A., independiente de WBS Builder/Equipo del Proyecto) ----------
+  const SAMPLE_LEAVES = [
+    { id: "l1", code: "1.1", name: "Acta de constitución" },
+    { id: "l2", code: "1.2", name: "Plan de gestión del proyecto" },
+    { id: "l3", code: "1.3", name: "Informes de seguimiento y control" },
+    { id: "l4", code: "2.1", name: "Estudio de suelos" },
+    { id: "l5", code: "2.2", name: "Diseño estructural" },
+    { id: "l6", code: "2.3", name: "Diseño eléctrico y sanitario" },
+    { id: "l7", code: "2.4", name: "Permisos y licencias municipales" },
+    { id: "l8", code: "3.1", name: "Estructuras metálicas prefabricadas" },
+    { id: "l9", code: "3.2", name: "Materiales de construcción" },
+    { id: "l10", code: "3.3", name: "Equipos eléctricos e instalaciones" },
+    { id: "l11", code: "4.1", name: "Movimiento de tierras", notes: "División en dos frentes de trabajo simultáneos: Zona Norte y Zona Sur del terreno." },
+    { id: "l12", code: "4.2", name: "Cimentaciones" },
+    { id: "l13", code: "4.3", name: "Estructura y cobertura" },
+    { id: "l14", code: "4.4", name: "Acabados y cerramientos" },
+    { id: "l15", code: "4.5", name: "Instalaciones MEP" },
+    { id: "l16", code: "5.1", name: "Pruebas de instalaciones" },
+    { id: "l17", code: "5.2", name: "Capacitación al cliente" },
+    { id: "l18", code: "5.3", name: "Acta de entrega y cierre" }
+  ];
+  const SAMPLE_COLS = [
+    { id: "c1", code: "1", role: "Comité Directivo / Sponsor", person: "Gerencia General DISTRIB+", type: "patrocinio" },
+    { id: "c2", code: "2", role: "Director de Proyecto", person: "PM", type: "direccion" },
+    { id: "c3", code: "2.1", role: "Jefe de Ingeniería", person: "Ing. Civil", type: "core" },
+    { id: "c4", code: "2.1.1", role: "Especialista en Geotecnia", person: "Geotecnia", type: "funcional" },
+    { id: "c5", code: "2.1.2", role: "Ingeniero Estructural", person: "Ing. Estructural", type: "funcional" },
+    { id: "c6", code: "2.1.3", role: "Ingeniero MEP", person: "Ing. MEP", type: "funcional" },
+    { id: "c7", code: "2.2", role: "Jefe de Logística", person: "Logística", type: "core" },
+    { id: "c8", code: "2.2.1", role: "Proveedor — Estructuras metálicas", person: "Proveedor A", type: "externo" },
+    { id: "c9", code: "2.2.2", role: "Proveedor — Materiales de construcción", person: "Proveedor B", type: "externo" },
+    { id: "c10", code: "2.2.3", role: "Proveedor — Equipos eléctricos", person: "Proveedor C", type: "externo" },
+    { id: "c11", code: "2.3", role: "Residente de Obra", person: "Residente de Obra", type: "core" },
+    { id: "c12", code: "2.3.1", role: "Cuadrilla A — Movimiento de tierras", person: "Cuadrilla A", type: "funcional" },
+    { id: "c13", code: "2.3.2", role: "Cuadrilla B — Cimentaciones", person: "Cuadrilla B", type: "funcional" },
+    { id: "c14", code: "2.3.3", role: "Cuadrilla C — Estructura y cobertura", person: "Cuadrilla C", type: "funcional" },
+    { id: "c15", code: "2.3.4", role: "Cuadrilla D — Acabados", person: "Cuadrilla D", type: "funcional" },
+    { id: "c16", code: "2.3.5", role: "Subcontrata MEP", person: "Subcontrata MEP", type: "externo" },
+    { id: "c17", code: "2.4", role: "Control de Calidad", person: "QA/QC", type: "funcional" },
+    { id: "c18", code: "3", role: "Asesoría Legal", person: "Legal", type: "externo" },
+    { id: "c19", code: "4", role: "Coordinador HSE (Seguridad)", person: "HSE", type: "funcional" }
+  ];
+  // Nota didáctica: este ejemplo trae errores DELIBERADOS para que el Velocímetro
+  // de Gobernanza tenga algo real que detectar apenas se carga — cada una de las
+  // 7 reglas Hard/Soft se dispara al menos una vez:
+  //   HR-01 l3 sin ninguna asignación · HR-02 l14 sin "A" · HR-03 l9 con dos "A"
+  //   HR-04 l3 sin "R" · SR-01 l17 con dos "R" sin justificar (l11 sí la justifica
+  //   en sus notas) · SR-02 l7 con 4 "C" · SR-03 "Coordinador HSE" (c19) sin usar.
+  const SAMPLE_ASSIGNMENTS = {
+    l1: { c2: "R", c1: "A" },
+    l2: { c2: "R", c1: "A" },
+    l4: { c4: "R", c3: "A", c2: "C" },
+    l5: { c5: "R", c3: "A", c4: "C" },
+    l6: { c6: "R", c3: "A" },
+    l7: { c18: "R", c2: "A", c3: "C", c7: "C", c11: "C", c1: "C" },
+    l8: { c8: "R", c7: "A", c5: "C" },
+    l9: { c9: "R", c7: "A", c11: "A" },
+    l10: { c10: "R", c7: "A", c6: "C" },
+    l11: { c12: "R", c13: "R", c11: "A", c4: "C" },
+    l12: { c13: "R", c11: "A", c5: "C" },
+    l13: { c14: "R", c11: "A" },
+    l14: { c15: "R" },
+    l15: { c16: "R", c11: "A", c6: "C" },
+    l16: { c17: "R", c11: "A", c6: "C" },
+    l17: { c2: "R", c3: "R", c1: "A" },
+    l18: { c2: "R", c1: "A", c3: "I", c7: "I", c11: "I" }
+  };
+
+  // ---------- STATE ----------
+  let mode = "sample";     // "live" (WBS/OBS reales vía GPI) | "sample" (ejemplo independiente)
+  let rows = [];           // {id, code, name, notes}
+  let cols = [];           // {id, code, role, person, type}
+  let assignments = {};    // { rowId: { colId: "R"|"A"|"C"|"I" } }
+
+  function loadSample() {
+    mode = "sample";
+    rows = SAMPLE_LEAVES.slice();
+    cols = SAMPLE_COLS.slice();
+    assignments = JSON.parse(JSON.stringify(SAMPLE_ASSIGNMENTS));
+  }
+
+  function tryLoadLive() {
+    if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return false;
+    const wbsMod = window.GPI.getModule("wbs");
+    const obsMod = window.GPI.getModule("obs");
+    const leaves = window.GPI.util.wbsLeaves(wbsMod || {});
+    const obsCols = window.GPI.util.obsNodes(obsMod || {});
+    if (!leaves.length || !obsCols.length) return false;
+    mode = "live";
+    rows = leaves.map(l => ({ id: l.id, code: l.code, name: l.name, notes: l.notes || "" }));
+    cols = obsCols.map(c => ({ id: c.id, code: c.code, role: c.role, person: c.person, type: c.type }));
+    const raciMod = window.GPI.getModule("raci");
+    assignments = (raciMod && raciMod.assignments) ? JSON.parse(JSON.stringify(raciMod.assignments)) : {};
+    return true;
+  }
+
+  function cellValue(rowId, colId) { return (assignments[rowId] && assignments[rowId][colId]) || ""; }
+  function setCellValue(rowId, colId, val) {
+    if (!assignments[rowId]) assignments[rowId] = {};
+    if (val) assignments[rowId][colId] = val; else delete assignments[rowId][colId];
+  }
+
+  // Persiste la matriz de inmediato en GPI (localStorage) y, en modo "live",
+  // reescribe el "Responsable" de cada paquete de trabajo en el WBS activo a
+  // partir de los "R" de esta matriz. Se llama en cada clic de celda — no solo
+  // al cerrar la pestaña — para que el WBS quede sincronizado al instante.
+  // En modo "sample" (ejemplo desconectado) NUNCA se escribe en GPI: sus ids
+  // no corresponden al WBS/OBS reales y sobrescribirían datos válidos del proyecto.
+  function syncToGpi(opts) {
+    if (mode !== "live") return;
+    if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
+    window.GPI.setModule("raci", { assignments: assignments });
+    var wbsMod = window.GPI.getModule("wbs");
+    var obsMod = window.GPI.getModule("obs");
+    if (wbsMod && obsMod) {
+      var updated = window.GPI.util.applyRaciToWbs(wbsMod, { assignments: assignments }, obsMod);
+      window.GPI.setModule("wbs", updated);
+    }
+    if (opts && opts.meta) {
+      var courseEl = document.getElementById("courseTitle");
+      if (courseEl) window.GPI.patchMeta({ course: courseEl.value });
+    }
+  }
+
+  // ---------- RENDER ----------
+  function render() {
+    renderBanner();
+    renderTable();
+    renderGauge();
+    renderHard();
+    renderSoft();
+    renderStats();
+    renderWorkload();
+    renderLegend();
+    document.getElementById("modeFlag").textContent = mode === "live" ? "🔗 Vinculado a WBS/OBS" : "🧪 Ejemplo independiente";
+    document.getElementById("modeFlag").className = "mode-flag " + mode;
+  }
+
+  function renderBanner() {
+    const b = document.getElementById("banner");
+    if (mode === "sample" && window.GPI && window.GPI.available && window.GPI.available() && window.GPI.active && window.GPI.active()) {
+      b.className = "banner show";
+      b.innerHTML = "<b>Estás viendo la matriz de ejemplo</b>, independiente del proyecto activo. El proyecto activo aún no tiene paquetes de trabajo (WBS) y roles (OBS) cargados, o no se pudieron leer. Completa esas dos herramientas y luego usa <b>↻ Actualizar filas/columnas</b> para vincular la matriz real.";
+    } else {
+      b.className = "banner";
+    }
+  }
+
+  function renderTable() {
+    const host = document.getElementById("tableHost");
+    if (!rows.length || !cols.length) {
+      host.innerHTML = '<div class="empty-hint" style="padding:30px; color:var(--ink-2); font-size:13px;">No hay paquetes de trabajo o roles para mostrar. Carga el ejemplo o completa WBS Builder y Equipo del Proyecto.</div>';
+      return;
+    }
+    const rIssues = rowIssues();
+    let html = '<table class="raci-table"><thead><tr><th class="corner">Paquete de trabajo (EDT)</th>';
+    cols.forEach(c => {
+      const hex = OBS_TYPE_HEX[c.type] || "#8992a3";
+      const label = (c.person && c.person.trim()) || c.role;
+      html += `<th class="col-head" title="${escapeAttr(c.role)}${c.person ? ' — ' + escapeAttr(c.person) : ''}">
+        <div class="cwrap"><span class="ctype-dot" style="background:${hex}"></span><span class="ccode">${escapeHtml(c.code)}</span> ${escapeHtml(label)}</div>
+      </th>`;
+    });
+    html += "</tr></thead><tbody>";
+    rows.forEach(r => {
+      const issue = rIssues[r.id];
+      html += `<tr class="${issue ? 'row-warn' : ''}${issue && issue.multiR ? ' row-multi-r' : ''}" data-row="${r.id}">
+        <td class="row-head"><span class="row-code">${escapeHtml(r.code)}</span><span class="row-name">${escapeHtml(r.name)}</span>${issue ? `<span class="row-warn-icon" title="${escapeAttr(issue.msg)}">⚠</span>` : ""}</td>`;
+      cols.forEach(c => {
+        const v = cellValue(r.id, c.id);
+        const def = RACI_DEFS.find(d => d.key === v);
+        html += `<td class="cell${v ? "" : " empty"}" data-row="${r.id}" data-col="${c.id}" title="${def ? escapeAttr(def.label) : "Sin asignar — clic para asignar"}">
+          <span class="badge ${v}">${v}</span>
+        </td>`;
+      });
+      html += "</tr>";
+    });
+    html += "</tbody></table>";
+    host.innerHTML = html;
+
+    host.querySelectorAll("td.cell").forEach(td => {
+      td.addEventListener("click", () => {
+        const rowId = td.dataset.row, colId = td.dataset.col;
+        const cur = cellValue(rowId, colId);
+        let next = CYCLE[(CYCLE.indexOf(cur) + 1) % CYCLE.length];
+        let ruleNote = "";
+        // Regla del curso: SOLO un Responsable (R) por paquete de trabajo.
+        // Si la fila ya tiene una R en otra columna, el ciclo la omite y salta
+        // al siguiente valor; las filas que llegan con varias R (ejemplo o
+        // importación) se pintan en rojo tenue hasta que quede una sola.
+        if (next === "R") {
+          const cell = assignments[rowId] || {};
+          const hasOtherR = Object.keys(cell).some(cid => cid !== colId && cell[cid] === "R");
+          if (hasOtherR) {
+            next = CYCLE[(CYCLE.indexOf("R") + 1) % CYCLE.length];
+            ruleNote = " · regla 1R: este paquete ya tiene un Responsable, la R se omitió";
+          }
+        }
+        setCellValue(rowId, colId, next);
+        syncToGpi();
+        render();
+        const syncNote = mode === "live" ? " · sincronizado con el WBS" : "";
+        setStatus(`${rowLabel(rowId)} × ${colLabel(colId)} → ${next || "sin asignar"}${ruleNote}${syncNote}`);
+      });
+    });
+  }
+
+  function rowLabel(id) { const r = rows.find(x => x.id === id); return r ? `${r.code} ${r.name}` : id; }
+  function colLabel(id) { const c = cols.find(x => x.id === id); return c ? ((c.person && c.person.trim()) || c.role) : id; }
+
+  function rowIssues() {
+    const out = {};
+    rows.forEach(r => {
+      const cell = assignments[r.id] || {};
+      let rCount = 0, aCount = 0;
+      Object.keys(cell).forEach(cid => { if (cell[cid] === "R") rCount++; if (cell[cid] === "A") aCount++; });
+      if (rCount === 0 && aCount === 0) out[r.id] = { msg: "Sin ninguna asignación" };
+      else if (rCount === 0) out[r.id] = { msg: "Sin Responsable (R)" };
+      else if (rCount > 1) out[r.id] = { msg: "Más de un Responsable (R): la regla es un solo R por paquete de trabajo — deja solo uno", multiR: true };
+      else if (aCount === 0) out[r.id] = { msg: "Sin Aprobador (A)" };
+      else if (aCount > 1) out[r.id] = { msg: "Más de un Aprobador (A)" };
+    });
+    return out;
+  }
+
+  function renderStats() {
+    const total = rows.length;
+    const issues = rowIssues();
+    const clean = total - Object.keys(issues).length;
+    let totalCells = 0;
+    rows.forEach(r => { const cell = assignments[r.id] || {}; totalCells += Object.keys(cell).length; });
+    document.getElementById("statGrid").innerHTML = `
+      <div class="stat"><div class="v">${total}</div><div class="l">Paquetes de trabajo</div></div>
+      <div class="stat"><div class="v">${cols.length}</div><div class="l">Roles (columnas)</div></div>
+      <div class="stat"><div class="v">${clean}/${total}</div><div class="l">Filas sin observaciones</div></div>
+      <div class="stat"><div class="v">${totalCells}</div><div class="l">Celdas asignadas</div></div>
+    `;
+  }
+
+  function currentAudit() {
+    if (typeof window.GPI === "undefined" || !window.GPI.util) return null;
+    return window.GPI.util.raciAudit(rows, cols, assignments);
+  }
+
+  const STATE_META = {
+    rojo:  { label: "🔴 RECHAZADO",  color: "#ff5470", sub: "Restricción crítica incumplida — matriz bloqueada." },
+    ambar: { label: "🟡 OBSERVADO",  color: "#b56b00", sub: "Aprobación condicionada — hay optimizaciones pendientes." },
+    verde: { label: "🟢 CERTIFICADO", color: "#00967f", sub: "Línea base lista para distribuirse como estándar." },
+    vacio: { label: "— Sin datos —", color: "#8992a3", sub: "Carga paquetes de trabajo y roles para evaluar." }
+  };
+
+  function renderGauge() {
+    const box = document.getElementById("gaugeBox");
+    const audit = currentAudit();
+    if (!audit || audit.state === "vacio") {
+      box.innerHTML = '<div class="empty-hint" style="font-size:12px; color:var(--ink-2); padding:6px 0 14px;">Carga el ejemplo o vincula el WBS/OBS del proyecto para evaluar la gobernanza de la matriz.</div>';
+      return;
+    }
+    const score = audit.score;
+    const meta = STATE_META[audit.state];
+    const cx = 110, cy = 112, r = 92, sw = 16;
+    function polar(radius, angleDeg) { const rad = (angleDeg - 180) * Math.PI / 180; return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) }; }
+    function arc(radius, a0, a1) { const s = polar(radius, a1), e = polar(radius, a0); const large = (a1 - a0) > 180 ? 1 : 0; return `M ${s.x} ${s.y} A ${radius} ${radius} 0 ${large} 0 ${e.x} ${e.y}`; }
+    const bands = [
+      { a0: 0, a1: 0.84 * 180, color: "#ff5470" },
+      { a0: 0.84 * 180, a1: 0.94 * 180, color: "#ff9f1c" },
+      { a0: 0.94 * 180, a1: 180, color: "#00c2a8" }
+    ];
+    const bandPaths = bands.map(b => `<path d="${arc(r, b.a0, b.a1)}" stroke="${b.color}" stroke-width="${sw}" fill="none" opacity="0.9"/>`).join("");
+    const needleAngle = (score / 100) * 180;
+    const tip = polar(r - sw / 2 - 8, needleAngle);
+    const zeroPt = polar(r + 10, 0), hundredPt = polar(r + 10, 180);
+    box.innerHTML = `
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 220 128" width="100%" style="overflow:visible;">
+          ${bandPaths}
+          <text x="${zeroPt.x}" y="${zeroPt.y + 4}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--ink-2)">0</text>
+          <text x="${hundredPt.x}" y="${hundredPt.y + 4}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="var(--ink-2)">100</text>
+          <line x1="${cx}" y1="${cy}" x2="${tip.x}" y2="${tip.y}" stroke="var(--ink-0)" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="${cx}" cy="${cy}" r="6" fill="var(--ink-0)"/>
+          <text x="${cx}" y="${cy - 16}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-weight="800" font-size="26" fill="${meta.color}">${score}%</text>
+        </svg>
+        <div class="gauge-state" style="color:${meta.color}">${meta.label}</div>
+        <div class="gauge-sub">${meta.sub}</div>
+      </div>`;
+  }
+
+  function renderHard() {
+    const box = document.getElementById("hardBox");
+    const audit = currentAudit();
+    if (!audit || audit.state === "vacio") { box.innerHTML = ""; return; }
+    const defs = [
+      { k: "HR-01", label: "Actividades sin ninguna asignación", items: audit.hard.HR01 },
+      { k: "HR-02", label: "Sin Aprobador (A = 0)", items: audit.hard.HR02 },
+      { k: "HR-03", label: "Doble Aprobador (A > 1)", items: audit.hard.HR03 },
+      { k: "HR-04", label: "Sin Responsable (R = 0)", items: audit.hard.HR04 }
+    ];
+    box.innerHTML = defs.map(d => {
+      const ok = d.items.length === 0;
+      return `<div class="hr-item ${ok ? "ok" : "fail"}">
+          <span class="hr-icon">${ok ? "✓" : "✕"}</span>
+          <div class="hr-text"><b>${d.k}.</b> ${d.label}${ok ? "" : ` <span class="hr-count">(${d.items.length})</span>`}</div>
+        </div>
+        ${!ok ? `<ul class="hr-rows">${d.items.slice(0, 5).map(l => `<li>${escapeHtml(l.code + " " + l.name)}</li>`).join("")}${d.items.length > 5 ? `<li class="muted">…y ${d.items.length - 5} más</li>` : ""}</ul>` : ""}`;
+    }).join("");
+  }
+
+  function renderSoft() {
+    const box = document.getElementById("softBox");
+    const audit = currentAudit();
+    if (!audit || audit.state === "vacio") { box.innerHTML = ""; return; }
+    const defs = [
+      { k: "SR-01", label: "Más de un Responsable sin justificar en las notas del WBS", items: audit.soft.SR01, fmt: l => l.code + " " + l.name },
+      { k: "SR-02", label: "Más de 3 Consultados (posible cuello de botella)", items: audit.soft.SR02, fmt: l => l.code + " " + l.name },
+      { k: "SR-03", label: "Rol sin ninguna R ni A en toda la matriz (rol fantasma)", items: audit.soft.SR03, fmt: c => (c.person && c.person.trim()) || c.role }
+    ];
+    box.innerHTML = defs.map(d => {
+      const ok = d.items.length === 0;
+      return `<div class="hr-item ${ok ? "ok" : "warn"}">
+          <span class="hr-icon">${ok ? "✓" : "!"}</span>
+          <div class="hr-text"><b>${d.k}.</b> ${d.label}${ok ? "" : ` <span class="hr-count">(${d.items.length})</span>`}</div>
+        </div>
+        ${!ok ? `<ul class="hr-rows">${d.items.slice(0, 5).map(x => `<li>${escapeHtml(d.fmt(x))}</li>`).join("")}${d.items.length > 5 ? `<li class="muted">…y ${d.items.length - 5} más</li>` : ""}</ul>` : ""}`;
+    }).join("") + (audit.leavesTotal ? `<div class="empty-hint" style="font-size:11px; margin-top:6px;">Cumplimiento de optimización: <b>${audit.srCompliance}%</b> (umbral para Verde: 75%)</div>` : "");
+  }
+
+  function renderWorkload() {
+    const counts = {};
+    cols.forEach(c => counts[c.id] = { R: 0, A: 0, C: 0, I: 0 });
+    rows.forEach(r => {
+      const cell = assignments[r.id] || {};
+      Object.keys(cell).forEach(cid => { if (counts[cid]) counts[cid][cell[cid]]++; });
+    });
+    const withLoad = cols.map(c => ({ c, total: counts[c.id].R + counts[c.id].A + counts[c.id].C + counts[c.id].I, counts: counts[c.id] }))
+      .filter(x => x.total > 0).sort((a, b) => b.total - a.total).slice(0, 10);
+    const box = document.getElementById("workloadBox");
+    if (!withLoad.length) { box.innerHTML = '<div class="empty-hint" style="font-size:12px;color:var(--ink-2);">Aún no hay asignaciones.</div>'; return; }
+    const max = Math.max(...withLoad.map(x => x.total));
+    box.innerHTML = withLoad.map(x => {
+      const label = (x.c.person && x.c.person.trim()) || x.c.role;
+      const segs = RACI_DEFS.map(d => x.counts[d.key] > 0 ? `<span class="bar-seg" style="background:${d.hex}; width:${(x.counts[d.key]/max*100)}%"></span>` : "").join("");
+      return `<div class="bar-row"><span class="nm" title="${escapeAttr(label)}">${escapeHtml(label)}</span><span class="bar-track">${segs}</span><span class="n">${x.total}</span></div>`;
+    }).join("");
+  }
+
+  function renderLegend() {
+    document.getElementById("legendBox").innerHTML = RACI_DEFS.map(d =>
+      `<div class="legend-item"><span class="legend-badge" style="background:${d.hex}">${d.key}</span><span><b>${d.label}</b>${d.desc}</span></div>`
+    ).join("")
+      + '<div class="legend-item"><span class="legend-badge" style="background:var(--danger)">1R</span><span><b>Regla 1R</b> — al hacer clic, la matriz omite una segunda R en el mismo paquete; si una fila llega con varias R (ejemplo o archivo importado) se pinta en rojo tenue hasta dejar una sola.</span></div>';
+  }
+
+  // ---------- UTIL ----------
+  function escapeHtml(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+  function escapeAttr(s) { return escapeHtml(s); }
+  function setStatus(msg) { document.getElementById("statusLeft").textContent = msg; }
+
+  // ---------- MODAL ----------
+  function showModal({ title, message, confirmText, cancelText, danger }) {
+    return new Promise(resolve => {
+      const overlay = document.getElementById("modalOverlay");
+      const confirmBtn = document.getElementById("modalConfirmBtn");
+      const cancelBtn = document.getElementById("modalCancelBtn");
+      document.getElementById("modalTitle").textContent = title || "Confirmar";
+      document.getElementById("modalMessage").textContent = message || "";
+      confirmBtn.textContent = confirmText || "Aceptar";
+      confirmBtn.className = "btn" + (danger ? " danger" : " primary");
+      cancelBtn.style.display = cancelText === null ? "none" : "";
+      cancelBtn.textContent = cancelText || "Cancelar";
+      const cleanup = (result) => { overlay.classList.remove("open"); confirmBtn.onclick=null; cancelBtn.onclick=null; overlay.onclick=null; document.removeEventListener("keydown", onKey); resolve(result); };
+      const onKey = (e) => { if (e.key === "Escape") cleanup(false); if (e.key === "Enter") cleanup(true); };
+      confirmBtn.onclick = () => cleanup(true);
+      cancelBtn.onclick = () => cleanup(false);
+      overlay.onclick = (e) => { if (e.target === overlay) cleanup(false); };
+      document.addEventListener("keydown", onKey);
+      overlay.classList.add("open"); confirmBtn.focus();
+    });
+  }
+  function showConfirm(message, title) { return showModal({ title: title || "Confirmar acción", message, confirmText: "Continuar", cancelText: "Cancelar", danger: true }); }
+  function showAlert(message, title) { return showModal({ title: title || "Aviso", message, confirmText: "Entendido", cancelText: null, danger: false }); }
+
+  // ---------- SERIALIZATION ----------
+  function exportJson() {
+    const data = { kind: "gpi.raci/v1", title: document.getElementById("projectTitle").value, course: document.getElementById("courseTitle").value, assignments, rowsSnapshot: rows, colsSnapshot: cols };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob), a = document.createElement("a");
+    const safeName = (data.title || "proyecto").replace(/[^a-z0-9_\-]+/gi, "_").toLowerCase();
+    a.href = url; a.download = `raci_${safeName}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    setStatus("Matriz RACI exportada como JSON.");
+  }
+  function importJson(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data.assignments) throw new Error("Formato inválido");
+        assignments = data.assignments || {};
+        if (Array.isArray(data.rowsSnapshot) && data.rowsSnapshot.length) { rows = data.rowsSnapshot; mode = "sample"; }
+        if (Array.isArray(data.colsSnapshot) && data.colsSnapshot.length) { cols = data.colsSnapshot; mode = "sample"; }
+        if (data.title) document.getElementById("projectTitle").value = data.title;
+        if (data.course) document.getElementById("courseTitle").value = data.course;
+        syncToGpi();
+        render();
+        setStatus("Matriz RACI importada correctamente.");
+      } catch (err) { showAlert("No se pudo leer el archivo. Verifica que sea un JSON exportado por esta herramienta."); }
+    };
+    reader.readAsText(file);
+  }
+  function exportCsv() {
+    const header = ["Código", "Paquete de trabajo"].concat(cols.map(c => (c.person && c.person.trim()) || c.role));
+    const lines = [header];
+    rows.forEach(r => {
+      const line = [r.code, r.name].concat(cols.map(c => cellValue(r.id, c.id)));
+      lines.push(line);
+    });
+    const csv = lines.map(row => row.map(v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = "matriz_raci.csv"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    setStatus("Matriz RACI exportada como CSV.");
+  }
+
+  // ---------- INIT / EVENTS ----------
+  function init() {
+    if (!tryLoadLive()) loadSample();
+    render();
+
+    document.getElementById("btnRefresh").addEventListener("click", () => {
+      const ok = tryLoadLive();
+      if (!ok) { showAlert("El proyecto activo aún no tiene paquetes de trabajo (WBS) y roles (OBS) suficientes para vincular la matriz. Complétalos primero en WBS Builder y Equipo del Proyecto."); return; }
+      render();
+      setStatus("Filas y columnas actualizadas desde el proyecto activo.");
+    });
+    document.getElementById("btnClear").addEventListener("click", async () => {
+      const ok = await showConfirm("¿Borrar todas las asignaciones R/A/C/I de la matriz actual? La estructura de filas y columnas no se modifica.", "Limpiar asignaciones");
+      if (ok) { assignments = {}; syncToGpi(); render(); setStatus("Asignaciones borradas."); }
+    });
+    document.getElementById("btnExportJson").addEventListener("click", exportJson);
+    document.getElementById("btnImportJson").addEventListener("click", () => document.getElementById("fileInput").click());
+    document.getElementById("fileInput").addEventListener("change", (e) => { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ""; });
+    document.getElementById("btnExportCsv").addEventListener("click", exportCsv);
+    document.getElementById("btnPrint").addEventListener("click", () => window.print());
+    document.getElementById("btnSample").addEventListener("click", async () => {
+      const ok = await showConfirm("Esto reemplazará la matriz actual por el ejemplo DISTRIB+ S.A. (independiente del proyecto activo). El ejemplo trae errores deliberados para practicar con el Velocímetro de Gobernanza. ¿Continuar?", "Cargar ejemplo");
+      if (ok) { loadSample(); render(); }
+    });
+    document.getElementById("btnReset").addEventListener("click", async () => {
+      const ok = await showConfirm("Esto borrará las asignaciones actuales y volverá a intentar vincular con el proyecto activo (o quedará vacía si no hay uno). ¿Continuar?", "Nueva matriz");
+      if (ok) { assignments = {}; if (!tryLoadLive()) { rows = []; cols = []; mode = "sample"; } syncToGpi(); render(); }
+    });
+  }
+  document.addEventListener("DOMContentLoaded", init);
+
+  // ===== Puente con el Panel de Control (GPI) =====
+  document.addEventListener("DOMContentLoaded", function gpiBridge(){
+    if (typeof window.GPI === "undefined" || !window.GPI.available()) return;
+    var titleEl = document.getElementById("projectTitle");
+    var courseEl = document.getElementById("courseTitle");
+    function pull(){
+      var p = window.GPI.active(); if (!p) return;
+      if (p.meta){ if (p.meta.name) titleEl.value = p.meta.name; if (p.meta.course) courseEl.value = p.meta.course; }
+      if (tryLoadLive()) { render(); setStatus("Matriz vinculada al proyecto activo."); }
+      else { render(); }
+    }
+    var proj = window.GPI.active();
+    if (proj) pull();
+    window.addEventListener("beforeunload", function(){ syncToGpi({ meta: true }); });
+    document.addEventListener("visibilitychange", function(){ if (document.hidden) syncToGpi({ meta: true }); });
+    // Si el WBS o el OBS cambian en otra pestaña (p. ej. se agrega un puesto o
+    // un paquete nuevo), refresca filas/columnas sin perder las asignaciones ya hechas.
+    if (window.GPI.onChange) window.GPI.onChange(function(){ if (!document.hidden) { tryLoadLive(); render(); } });
+    gpiBadge(proj ? (proj.meta && proj.meta.name) : "", function(){
+      if (mode !== "live") { showAlert("Estás en modo ejemplo (independiente). Usa \"↻ Actualizar filas/columnas\" para vincular la matriz al WBS y OBS reales del proyecto activo antes de sincronizar."); return false; }
+      syncToGpi({ meta: true });
+      return true;
+    });
+  });
+
+  function gpiBadge(name, pushFn){
+    var css = document.createElement("style");
+    css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:42px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-dot{width:8px;height:8px;border-radius:50%;background:#00c2a8;box-shadow:0 0 0 3px rgba(0,194,168,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#0090c2;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#00b6ec;background:#fff}";
+    document.head.appendChild(css);
+    var bar = document.createElement("div");
+    bar.className = "gpi-badge";
+    bar.innerHTML = '<span class="gpi-dot"></span><span>Panel: <b>' + String(name||"—").replace(/</g,"&lt;") + '</b></span><button class="gpi-btn" id="gpiSyncBtn">☁ Sincronizar</button><a class="gpi-btn" href="Panel_Control.html">⌂ Panel</a>';
+    document.body.appendChild(bar);
+    bar.querySelector("#gpiSyncBtn").addEventListener("click", function(){
+      var ok = pushFn();
+      if (ok === false) return;
+      var b = bar.querySelector("#gpiSyncBtn"), t = b.textContent; b.textContent = "✓ Sincronizado — WBS actualizado";
+      setTimeout(function(){ b.textContent = t; }, 1800);
+    });
+  }
+
+  // ===== REPORTE IMPRIMIBLE (📄) =====
+  // Genera un documento formal dentro de #gpiReport y lo imprime en solitario:
+  // en @media print, body.report-mode oculta la aplicación y muestra solo el reporte.
+  function reportShell(docTitle, moduleName, bodyHtml) {
+    var el = document.getElementById("gpiReport");
+    if (!el) { el = document.createElement("div"); el.id = "gpiReport"; document.body.appendChild(el); }
+    var meta = {};
+    try { if (window.GPI && window.GPI.available() && window.GPI.meta()) meta = window.GPI.meta(); } catch (_) {}
+    var tEl = document.getElementById("projectTitle"), cEl = document.getElementById("courseTitle");
+    var pName = (tEl && tEl.value) || meta.name || "Proyecto";
+    var course = (cEl && cEl.value) || meta.course || "Gestión de Proyectos de Ingeniería";
+    var today = new Date().toLocaleDateString("es-PE", { year: "numeric", month: "long", day: "numeric" });
+    el.innerHTML =
+      '<div class="rep-head"><div><h1>' + escapeHtml(docTitle) + '</h1>'
+      + '<div class="sub">' + escapeHtml(pName) + (meta.code ? ' · ' + escapeHtml(meta.code) : '') + '</div>'
+      + '<div class="sub" style="font-weight:500">' + escapeHtml(course) + '</div></div>'
+      + '<div class="rep-meta">' + escapeHtml(moduleName) + '<br>Emitido: ' + escapeHtml(today)
+      + (meta.client ? '<br>Cliente: ' + escapeHtml(meta.client) : '')
+      + (meta.location ? '<br>' + escapeHtml(meta.location) : '') + '</div></div>'
+      + bodyHtml;
+    document.body.classList.add("report-mode");
+    function repDone() { document.body.classList.remove("report-mode"); window.removeEventListener("afterprint", repDone); }
+    window.addEventListener("afterprint", repDone);
+    // window.print() es bloqueante en la mayoría de navegadores; el timeout
+    // posterior actúa de respaldo donde afterprint no dispara.
+    setTimeout(function () { window.print(); setTimeout(repDone, 500); }, 60);
+  }
+  function repDate(s) { if (!s) return "—"; var p = String(s).split("-"); return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : s; }
+
+  function buildReport() {
+    var head = '<tr><th style="width:7%">Código</th><th>Paquete de trabajo</th>'
+      + cols.map(function (c) { return '<th class="num" style="text-align:center" title="' + escapeHtml(c.role) + '">' + escapeHtml(c.code || c.role) + '</th>'; }).join("") + '</tr>';
+    var bodyRows = rows.map(function (r) {
+      return '<tr><td class="num">' + escapeHtml(r.code || "\u2014") + '</td><td>' + escapeHtml(r.name) + '</td>'
+        + cols.map(function (c) {
+            var v = (assignments[r.id] || {})[c.id] || "";
+            return '<td class="num" style="text-align:center;font-weight:700">' + escapeHtml(v) + '</td>';
+          }).join("") + '</tr>';
+    }).join("") || '<tr><td colspan="' + (cols.length + 2) + '" class="rep-note">— Sin paquetes de trabajo —</td></tr>';
+    var body = (mode === "sample" ? '<p class="rep-note"><b>Modo ejemplo:</b> esta matriz usa los datos didácticos independientes, no la EDT/OBS del proyecto activo.</p>' : '')
+      + '<h2>1. Matriz de asignación de responsabilidades (EDT \u00d7 OBS)</h2>'
+      + '<table>' + head + bodyRows + '</table>'
+      + '<p class="rep-note"><b>Leyenda:</b> R = Responsable (ejecuta el trabajo) \u00b7 A = Aprobador (rinde cuentas, uno por fila) \u00b7 C = Consultado \u00b7 I = Informado.<br><b>Roles:</b> '
+      + (cols.map(function (c) { return "<b>" + escapeHtml(c.code || "?") + "</b> " + escapeHtml(c.role) + (c.person ? " (" + escapeHtml(c.person) + ")" : ""); }).join(" \u00b7 ") || "\u2014") + '</p>';
+    var a = currentAudit();
+    if (a && a.state !== "vacio") {
+      var stMap = { verde: "VERDE \u2014 matriz aprobada", ambar: "\u00c1MBAR \u2014 aprobada con observaciones", rojo: "ROJO \u2014 bloqueada por restricciones duras" };
+      body += '<h2>2. Auditoría de gobernanza RACI</h2><table class="rep-kv">'
+        + '<tr><td>Resultado</td><td><b>' + (a.score == null ? "\u2014" : a.score + " / 100") + '</b> \u00b7 ' + (stMap[a.state] || a.state) + '</td></tr>'
+        + '<tr><td>Restricciones duras (HR)</td><td>HR-01 paquetes sin asignación: <b>' + a.hard.HR01.length + '</b> \u00b7 HR-02 sin Aprobador: <b>' + a.hard.HR02.length + '</b> \u00b7 HR-03 con más de un A: <b>' + a.hard.HR03.length + '</b> \u00b7 HR-04 sin Responsable: <b>' + a.hard.HR04.length + '</b></td></tr>'
+        + '<tr><td>Recomendaciones (SR)</td><td>SR-01 múltiples R sin justificación en la EDT: <b>' + a.soft.SR01.length + '</b> \u00b7 SR-02 más de 3 Consultados: <b>' + a.soft.SR02.length + '</b> \u00b7 SR-03 roles sin R/A en toda la matriz: <b>' + a.soft.SR03.length + '</b></td></tr>'
+        + '<tr><td>Cumplimiento de recomendaciones</td><td>' + a.srCompliance + '%</td></tr></table>'
+        + '<p class="rep-note">Modelo de bloqueo duro: una sola restricción dura (HR) deja la matriz en 0% / Rojo, sin promediar con el resto.</p>';
+    } else if (!a) {
+      body += '<p class="rep-note">Auditoría no disponible: este archivo se abrió sin gpi-core.js.</p>';
+    }
+    reportShell("Matriz RACI del Proyecto", "RACI Matrix \u00b7 EDT \u00d7 OBS", body);
+  }
+
+  (function () {
+    var b = document.getElementById("btnReport");
+    if (b) b.addEventListener("click", buildReport);
+  })();
+
+})();
+</script>
+</body>
+</html>

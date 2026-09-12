@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Equipo del Proyecto — Estructura Organizacional (OBS)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* ===== Paleta UTEC: cian vivo + negro, sobre base clara ===== */
+    --bg-0:#eef4f9;
+    --bg-1:#ffffff;
+    --bg-2:#f3f8fc;
+    --panel: #ffffff;
+    --panel-border: #e0e8f0;
+    --ink-0:#1a2027;
+    --ink-1:#4d5768;
+    --ink-2:#8992a3;
+
+    --cyan:#00b6ec;
+    --cyan-dark:#0090c2;
+    --cyan-dim: rgba(0,182,236,0.13);
+    --black:#1a1a1c;
+
+    /* tipos de rol OBS */
+    --t-patrocinio:#2e4374;
+    --t-direccion:#00b6ec;
+    --t-core:#6c5ce7;
+    --t-funcional:#00c2a8;
+    --t-externo:#ff9f1c;
+
+    --danger:#ff5470;
+    --good:#00c2a8;
+    --radius: 10px;
+    --mono: 'JetBrains Mono', monospace;
+    --display: 'Manrope', sans-serif;
+    --body: 'Manrope', 'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle, rgba(0,182,236,0.06) 1px, transparent 1px) 0 0/26px 26px,
+      var(--bg-0);
+    color:var(--ink-0);
+    font-family:var(--body);
+    display:flex;
+    flex-direction:column;
+    min-height:100vh;
+  }
+
+  /* ===== HEADER ===== */
+  header{
+    border-bottom:1px solid var(--panel-border);
+    background:linear-gradient(180deg, #ffffff, #fbfdff);
+    padding:12px 22px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+    position:relative;
+  }
+  header::after{
+    content:'';
+    position:absolute; left:0; right:0; bottom:-1px; height:3px;
+    background:linear-gradient(90deg, var(--t-patrocinio), var(--t-direccion) 40%, var(--t-core) 65%, var(--t-funcional) 85%, var(--t-externo));
+  }
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand h1{
+    font-family:var(--display);
+    font-size:19px;
+    font-weight:800;
+    margin:0;
+    letter-spacing:0.1px;
+    color:var(--black);
+  }
+  .brand .tag{
+    font-family:var(--mono);
+    font-size:11px;
+    font-weight:600;
+    color:#fff;
+    border:none;
+    background:linear-gradient(135deg, var(--t-patrocinio), #1c2f57);
+    padding:3px 9px;
+    border-radius:20px;
+    letter-spacing:0.5px;
+  }
+
+  .project-title-input{
+    background:transparent; border:none; border-bottom:1px dashed transparent;
+    color:var(--ink-0); font-family:var(--display); font-weight:600; font-size:13px;
+    padding:2px 0; max-width:320px;
+  }
+  .project-title-input:hover, .project-title-input:focus{ border-bottom:1px dashed var(--cyan); outline:none; }
+
+  .course-title-input{
+    background:transparent; border:none; border-bottom:1px dashed transparent;
+    color:var(--ink-2); font-family:var(--body); font-weight:600; font-size:12px; text-align:right;
+    padding:2px 0; min-width:220px; max-width:320px;
+  }
+  .course-title-input:hover, .course-title-input:focus{ border-bottom:1px dashed var(--cyan); outline:none; color:var(--ink-0); }
+
+  /* ===== TOOLBAR ===== */
+  .toolbar{
+    display:flex; gap:6px; flex-wrap:wrap; align-items:center;
+    padding:10px 22px; background:var(--bg-1); border-bottom:1px solid var(--panel-border);
+    box-shadow: 0 1px 0 rgba(20,30,60,0.02);
+  }
+  .btn{
+    font-family:var(--body); font-size:12.5px; font-weight:600; color:var(--ink-1);
+    background:var(--bg-2); border:1px solid var(--panel-border); padding:7px 13px; border-radius:8px; cursor:pointer;
+    display:flex; align-items:center; gap:6px;
+    transition:border-color .12s, color .12s, background .12s, transform .08s, box-shadow .12s;
+    white-space:nowrap; text-decoration:none;
+  }
+  .btn:hover{border-color:var(--cyan); color:var(--cyan-dark); background:#fff; box-shadow:0 2px 6px rgba(0,182,236,0.15);}
+  .btn:active{transform:translateY(1px);}
+  .btn.primary{background:linear-gradient(135deg, var(--cyan), var(--cyan-dark)); border-color:transparent; color:#fff; box-shadow:0 2px 8px rgba(0,182,236,0.35);}
+  .btn.primary:hover{filter:brightness(1.06); color:#fff; box-shadow:0 3px 10px rgba(0,182,236,0.45);}
+  .btn.danger{color:var(--danger);}
+  .btn.danger:hover{border-color:var(--danger); color:var(--danger); box-shadow:0 2px 6px rgba(255,84,112,0.18);}
+  .btn.raci{background:linear-gradient(135deg,#ff6b8b,#ff4f76); border-color:transparent; color:#fff; box-shadow:0 2px 8px rgba(255,107,139,0.35);}
+  .btn.raci:hover{filter:brightness(1.06); color:#fff; box-shadow:0 3px 10px rgba(255,107,139,0.45);}
+  .btn:disabled{opacity:0.35; cursor:not-allowed;}
+  .sep{width:1px; height:22px; background:var(--panel-border); margin:0 4px;}
+  .zoom-readout{font-family:var(--mono); font-size:12px; color:var(--ink-2); width:42px; text-align:center;}
+
+  .toggle-group{display:flex; border:1px solid var(--panel-border); border-radius:8px; overflow:hidden;}
+  .toggle-group .btn{border:none; border-radius:0; background:var(--bg-1);}
+  .toggle-group .btn.active{background:var(--black); color:#fff;}
+  .toggle-group .btn.active:hover{color:#fff;}
+
+  input[type=file]{display:none;}
+
+  /* ===== LAYOUT ===== */
+  .workspace{flex:1; display:flex; min-height:0;}
+  .canvas-wrap{
+    flex:1; overflow:auto; position:relative;
+    background: radial-gradient(circle, rgba(0,182,236,0.08) 1px, transparent 1px) 0 0/26px 26px, var(--bg-0);
+  }
+  #canvas{ position:relative; transform-origin: 0 0; padding:60px; }
+  svg.links{position:absolute; top:0; left:0; overflow:visible; pointer-events:none;}
+
+  .node{
+    position:absolute; width:190px; min-height:96px;
+    background:var(--bg-1); border:1.5px solid var(--panel-border); border-left:5px solid var(--cyan);
+    border-radius:var(--radius); padding:9px 12px 10px 11px; cursor:grab; user-select:none;
+    transition:border-color .12s, box-shadow .16s, transform .1s, opacity .15s;
+    box-shadow: 0 2px 8px rgba(20,30,60,0.07);
+  }
+  .node:hover{border-color:var(--cyan); box-shadow:0 6px 16px rgba(0,182,236,0.18); transform:translateY(-1px);}
+  .node.selected{ border-color:var(--cyan); box-shadow: 0 0 0 3px var(--cyan-dim), 0 8px 20px rgba(0,182,236,0.22); }
+  .node.dragging{opacity:0.4;}
+  .node.drop-target{border-color:var(--good); box-shadow:0 0 0 3px rgba(0,194,168,0.25);}
+  .node.is-root{ background:linear-gradient(135deg, var(--black), #2b2c30); border-left:5px solid var(--t-patrocinio); border-color:var(--black); }
+  .node.is-root .role, .node.is-root .type-label{color:#fff;}
+  .node.is-root .person{color:rgba(255,255,255,0.7);}
+
+  .node .code{ font-family:var(--mono); font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:4px; display:inline-block; margin-bottom:3px; letter-spacing:0.3px; }
+  .node .type-label{ display:block; font-size:8.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-2); margin-bottom:5px; }
+  .node .role{ font-family:var(--display); font-size:13px; font-weight:700; line-height:1.25; color:var(--ink-0); margin-bottom:3px; word-break:break-word; }
+  .node .person{ font-family:var(--body); font-size:11.5px; color:var(--ink-1); font-weight:600; display:flex; align-items:center; gap:4px; }
+  .node .person.empty{ color:var(--ink-2); font-style:italic; font-weight:500; }
+  .node .email{ font-size:9.5px; font-family:var(--mono); color:var(--ink-2); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .node .orient-flag{ position:absolute; top:7px; right:8px; font-size:10px; font-family:var(--mono); color:var(--cyan-dark); opacity:0.8; }
+  .node.is-root .orient-flag{color:rgba(255,255,255,0.7);}
+  .node .add-child-btn{
+    position:absolute; bottom:-12px; left:50%; transform:translateX(-50%);
+    width:24px;height:24px;border-radius:50%;
+    background:linear-gradient(135deg, var(--cyan), var(--cyan-dark)); border:2px solid #fff;
+    color:#fff; font-size:14px; font-weight:700; line-height:1;
+    display:none; align-items:center; justify-content:center; cursor:pointer; z-index:3;
+    box-shadow:0 2px 8px rgba(0,182,236,0.4);
+  }
+  .node:hover .add-child-btn{display:flex;}
+  .node .add-child-btn:hover{filter:brightness(1.1); transform:translateX(-50%) scale(1.08);}
+  .node .collapse-btn{
+    position:absolute; width:19px;height:19px;border-radius:50%;
+    background:#fff; border:1.5px solid var(--panel-border); color:var(--ink-1); font-size:10px; font-family:var(--mono); font-weight:700;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:3;
+    bottom:-9px; left:50%; transform:translateX(-50%);
+    box-shadow:0 1px 4px rgba(20,30,60,0.15);
+  }
+  .node .collapse-btn:hover{border-color:var(--cyan); color:var(--cyan-dark);}
+  .node .collapse-btn.is-collapsed{background:var(--cyan); border-color:var(--cyan); color:#fff;}
+  path.link{stroke-width:2; fill:none; opacity:0.65;}
+
+  /* ===== SIDEBAR ===== */
+  .sidebar{ width:300px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--panel-border); overflow-y:auto; padding:18px 18px 40px; }
+  .sidebar h2{ font-family:var(--display); font-size:13px; font-weight:800; color:var(--ink-0); margin:0 0 14px; display:flex; align-items:center; gap:8px; }
+  .sidebar h2::before{content:''; width:4px; height:14px; background:linear-gradient(180deg, var(--t-patrocinio), var(--t-direccion)); display:inline-block; border-radius:3px;}
+  .field{margin-bottom:13px;}
+  .field label{ display:block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--ink-2); margin-bottom:5px; }
+  .field input, .field textarea, .field select{
+    width:100%; background:var(--bg-2); border:1.5px solid var(--panel-border); border-radius:8px; color:var(--ink-0);
+    padding:7px 9px; font-family:var(--body); font-size:13px;
+  }
+  .field input:focus, .field textarea:focus, .field select:focus{outline:none; border-color:var(--cyan); background:#fff;}
+  .field textarea{resize:vertical; min-height:50px;}
+  .field-row{display:flex; gap:8px;}
+  .field-row .field{flex:1;}
+  .empty-hint{ color:var(--ink-2); font-size:12.5px; line-height:1.6; padding:8px 0; }
+  .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:18px;}
+  .stat{ background:linear-gradient(145deg, var(--bg-2), #fff); border:1.5px solid var(--panel-border); border-radius:10px; padding:10px 11px; }
+  .stat .v{font-family:var(--mono); font-size:16px; font-weight:800; color:var(--cyan-dark);}
+  .stat .l{font-size:9.5px; color:var(--ink-2); font-weight:600; text-transform:uppercase; letter-spacing:0.4px; margin-top:2px;}
+  .legend{display:flex; flex-direction:column; gap:6px; margin-bottom:18px;}
+  .legend-item{display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--ink-1); font-weight:500; justify-content:space-between;}
+  .legend-item .lname{display:flex; align-items:center; gap:8px;}
+  .legend-item .lcount{font-family:var(--mono); color:var(--ink-2); font-size:11px;}
+  .legend-dot{width:10px;height:10px;border-radius:3px; flex-shrink:0;}
+  .tip-box{ background:var(--cyan-dim); border:1px solid rgba(0,182,236,0.25); border-radius:9px; padding:10px 12px; font-size:11.5px; color:var(--ink-1); line-height:1.55; margin-bottom:10px; }
+  .tip-box b{color:var(--cyan-dark);}
+  .tip-box.link a{color:var(--cyan-dark); font-weight:700; text-decoration:none;}
+  .tip-box.link a:hover{text-decoration:underline;}
+  .danger-zone{margin-top:18px; padding-top:14px; border-top:1px dashed var(--panel-border);}
+
+  /* ===== TABLE VIEW ===== */
+  #tableView{display:none; padding:24px 30px; overflow:auto; flex:1; background:var(--bg-0);}
+  table.obs-table{width:100%; border-collapse:separate; border-spacing:0 6px; font-size:13px;}
+  table.obs-table th{ text-align:left; font-family:var(--display); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.4px; color:var(--ink-2); padding:9px 12px; }
+  table.obs-table td{padding:10px 12px; background:#fff; vertical-align:top; border-top:1px solid var(--panel-border); border-bottom:1px solid var(--panel-border);}
+  table.obs-table td:first-child{border-left:1px solid var(--panel-border); border-radius:8px 0 0 8px;}
+  table.obs-table td:last-child{border-right:1px solid var(--panel-border); border-radius:0 8px 8px 0;}
+  table.obs-table tr:hover td{background:var(--cyan-dim);}
+  .code-chip{font-family:var(--mono); font-size:11px; font-weight:700; padding:2px 7px; border-radius:5px;}
+  .type-chip{font-family:var(--mono); font-size:10px; font-weight:700; padding:2px 7px; border-radius:5px; white-space:nowrap;}
+  .indent-name{display:flex; align-items:center; gap:6px; font-weight:600;}
+  .muted{color:var(--ink-2);}
+
+  /* ===== FOOTER STATUS ===== */
+  .statusbar{ border-top:1px solid var(--panel-border); background:var(--bg-1); padding:7px 22px; font-size:11px; color:var(--ink-2); display:flex; justify-content:space-between; font-family:var(--mono); }
+
+  ::-webkit-scrollbar{width:10px; height:10px;}
+  ::-webkit-scrollbar-track{background:var(--bg-0);}
+  ::-webkit-scrollbar-thumb{background:#c7d3de; border-radius:5px; border:2px solid var(--bg-0);}
+  ::-webkit-scrollbar-thumb:hover{background:var(--cyan);}
+
+
+  /* ===== REPORTE IMPRIMIBLE (📄) ===== */
+  #gpiReport{display:none; font-family:var(--body); color:#1a2027; font-size:11.5px; line-height:1.5; background:#fff;}
+  @media print{
+    body.report-mode{display:block; background:#fff !important;}
+    body.report-mode > *:not(#gpiReport){display:none !important;}
+    body.report-mode #gpiReport{display:block !important;}
+  }
+  #gpiReport .rep-head{display:flex; justify-content:space-between; align-items:flex-start; gap:14px; border-bottom:3px solid #00b6ec; padding-bottom:10px; margin-bottom:14px;}
+  #gpiReport .rep-head h1{font-family:var(--display); font-size:19px; margin:0 0 3px; font-weight:800; color:#1a1a1c;}
+  #gpiReport .rep-head .sub{font-size:11.5px; color:#4d5768; font-weight:600;}
+  #gpiReport .rep-meta{font-family:var(--mono); font-size:10px; color:#4d5768; text-align:right; white-space:nowrap; line-height:1.7;}
+  #gpiReport h2{font-family:var(--display); font-size:13px; font-weight:800; margin:16px 0 6px; padding-bottom:3px; border-bottom:1px solid #e0e8f0; break-after:avoid;}
+  #gpiReport table{width:100%; border-collapse:collapse; margin:6px 0 10px; font-size:10.5px;}
+  #gpiReport th{background:#f3f8fc; text-align:left; font-weight:700; padding:5px 7px; border:1px solid #d5dee8;}
+  #gpiReport td{padding:4px 7px; border:1px solid #d5dee8; vertical-align:top;}
+  #gpiReport tr{break-inside:avoid;}
+  #gpiReport table.rep-kv td:first-child{width:30%; background:#f8fbfe; font-weight:700;}
+  #gpiReport ul{margin:4px 0 10px; padding-left:18px;}
+  #gpiReport li{margin:2px 0;}
+  #gpiReport p{margin:4px 0 10px;}
+  #gpiReport .rep-note{color:#4d5768; font-size:10px; margin:2px 0 8px;}
+  #gpiReport .num{font-family:var(--mono);}
+  #gpiReport .rep-sign{display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:46px;}
+  #gpiReport .rep-sign .box{border-top:1.5px solid #1a2027; padding-top:6px; font-size:10.5px; text-align:center; color:#1a2027;}
+  #gpiReport .rep-sign .box .r{color:#8992a3; font-size:9.5px;}
+  @page{margin:15mm 13mm;}
+
+  @media print{
+    header,.toolbar,.sidebar,.statusbar{display:none !important;}
+    body{background:#fff !important;}
+    .canvas-wrap{overflow:visible;}
+    #canvas{transform:none !important;}
+    .node{box-shadow:none !important;}
+  }
+
+  /* ===== MODAL ===== */
+  .modal-overlay{ position:fixed; inset:0; z-index:1000; background:rgba(10,16,28,0.5); display:none; align-items:center; justify-content:center; padding:20px; }
+  .modal-overlay.open{display:flex;}
+  .modal-card{ background:#fff; border-radius:14px; padding:22px 24px; width:360px; max-width:100%; box-shadow:0 24px 60px rgba(10,16,28,0.35); border:1px solid var(--panel-border); }
+  .modal-card h3{ margin:0 0 10px; font-family:var(--display); font-size:16px; font-weight:800; color:var(--ink-0); }
+  .modal-card p{ margin:0 0 20px; font-size:13.5px; color:var(--ink-1); line-height:1.55; }
+  .modal-actions{display:flex; justify-content:flex-end; gap:8px;}
+</style>
+  <script src="gpi-core.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <h1>Equipo del Proyecto</h1>
+        <span class="tag">EDU</span>
+      </div>
+      <input id="projectTitle" class="project-title-input" value="Organización del Proyecto" />
+    </div>
+  </div>
+  <input id="courseTitle" class="course-title-input" value="Gestión de Proyectos de Ingeniería" />
+</header>
+
+<div class="toolbar">
+  <button class="btn primary" id="btnAddTop">+ Puesto</button>
+  <button class="btn" id="btnAddChild">+ Subordinado</button>
+  <button class="btn danger" id="btnDelete">🗑 Eliminar</button>
+  <div class="sep"></div>
+  <button class="btn" id="zoomOut">−</button>
+  <span class="zoom-readout" id="zoomReadout">100%</span>
+  <button class="btn" id="zoomIn">+</button>
+  <button class="btn" id="zoomFit">Ajustar</button>
+  <div class="sep"></div>
+  <div class="toggle-group">
+    <button class="btn active" id="viewTreeBtn">🌳 Organigrama</button>
+    <button class="btn" id="viewTableBtn">📋 Directorio</button>
+  </div>
+  <div class="sep"></div>
+  <div class="toggle-group" id="orientationGroup" title="Orientación de la rama seleccionada">
+    <button class="btn active" id="orientSpreadBtn">↔ Horizontal</button>
+    <button class="btn" id="orientStackBtn">↕ Vertical</button>
+  </div>
+  <span id="orientTargetLabel" style="font-size:11px; color:var(--ink-2); font-family:var(--mono);">Toda la organización</span>
+  <div class="sep"></div>
+  <button class="btn" id="btnCollapseAll">⊟ Colapsar todo</button>
+  <button class="btn" id="btnExpandAll">⊞ Expandir todo</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnExportJson">⭳ Guardar (.json)</button>
+  <button class="btn" id="btnImportJson">⭱ Abrir (.json)</button>
+  <input type="file" id="fileInput" accept=".json">
+  <button class="btn" id="btnExportCsv">⭳ CSV</button>
+  <button class="btn" id="btnReport">📄 Reporte</button>
+  <button class="btn" id="btnPrint">🖨 Imprimir / PDF</button>
+  <div class="sep"></div>
+  <a class="btn raci" href="RACI_Matrix.html">▤ Ir a Matriz RACI</a>
+  <div class="sep"></div>
+  <button class="btn" id="btnSample">Cargar ejemplo</button>
+  <button class="btn danger" id="btnReset">Nueva organización</button>
+</div>
+
+<div class="workspace">
+  <div class="canvas-wrap" id="canvasWrap">
+    <div id="canvas">
+      <svg class="links" id="linksSvg"></svg>
+    </div>
+  </div>
+
+  <div id="tableView"></div>
+
+  <aside class="sidebar">
+    <h2>Resumen de la OBS</h2>
+    <div class="stat-grid" id="statGrid"></div>
+
+    <h2>Propiedades del puesto</h2>
+    <div id="propsPanel"><div class="empty-hint">Selecciona un puesto del organigrama para editarlo, o crea uno nuevo con "+ Puesto".</div></div>
+
+    <h2 style="margin-top:20px;">Tipos de rol</h2>
+    <div class="legend" id="legendBox"></div>
+
+    <h2>Buenas prácticas PMBOK</h2>
+    <div class="tip-box"><b>Tramo de control:</b> evita que un puesto supervise a más de 5–7 reportes directos en un equipo de proyecto complejo.</div>
+    <div class="tip-box"><b>Nomenclatura:</b> nombra los puestos por función ("Jefe de Ingeniería"), no solo por el nombre de la persona — así la OBS sigue siendo válida si cambia el titular.</div>
+    <div class="tip-box"><b>Autoridad:</b> distingue autoridad formal (Dirección), consultiva (Áreas funcionales) y contractual (Externos/Proveedores) al asignar responsabilidades.</div>
+    <div class="tip-box link"><b>OBS × EDT = RAM.</b> La intersección entre esta estructura organizacional y los paquetes de trabajo de la EDT es la Matriz de Asignación de Responsabilidades. Complétala en <a href="RACI_Matrix.html">Matriz RACI ▸</a></div>
+  </aside>
+</div>
+
+<div class="statusbar">
+  <span id="statusLeft">Listo</span>
+  <span id="statusRight">Arrastra un puesto sobre otro para reasignarlo · Doble clic para editar el nombre</span>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-card">
+    <h3 id="modalTitle">Confirmar</h3>
+    <p id="modalMessage"></p>
+    <div class="modal-actions">
+      <button class="btn" id="modalCancelBtn">Cancelar</button>
+      <button class="btn danger" id="modalConfirmBtn">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   Equipo del Proyecto (OBS) — motor de datos, layout y render
+   Estructura Organizacional del Proyecto (OBS), adaptado del
+   mismo motor de árbol que WBS Builder, para que ambas
+   herramientas se vean y se comporten de forma consistente.
+   Cada puesto tiene: rol/título, persona asignada, tipo y
+   contacto. La intersección OBS × EDT se completa en la
+   herramienta Matriz RACI.
+   ========================================================= */
+
+(function () {
+  "use strict";
+
+  // ---------- CONFIG ----------
+  const NODE_W = 190;
+  const NODE_H = 100;
+  const GAP_X = 26;
+  const GAP_Y = 60;
+  const OBS_TYPES = [
+    { key: "patrocinio", label: "Patrocinio / Gobernanza", color: "var(--t-patrocinio)", hex: "#2e4374" },
+    { key: "direccion",  label: "Dirección de Proyecto",   color: "var(--t-direccion)",  hex: "#00b6ec" },
+    { key: "core",       label: "Equipo Core",             color: "var(--t-core)",       hex: "#6c5ce7" },
+    { key: "funcional",  label: "Área Funcional",          color: "var(--t-funcional)",  hex: "#00c2a8" },
+    { key: "externo",    label: "Externo / Proveedor",     color: "var(--t-externo)",    hex: "#ff9f1c" }
+  ];
+  function typeOf(key) { return OBS_TYPES.find(t => t.key === key) || OBS_TYPES[2]; }
+
+  // ---------- STATE ----------
+  let nodes = {};       // id -> node
+  let rootId = "root";
+  let selectedId = null;
+  let zoom = 1;
+  let draggedId = null;
+  let currentView = "tree";
+  let idCounter = 1;
+
+  function uid() { return "o" + (idCounter++); }
+
+  function newNode(parentId, role, overrides) {
+    const id = uid();
+    nodes[id] = Object.assign({
+      id, parentId, role: role || "Nuevo puesto", person: "", type: "funcional",
+      email: "", notes: "", children: [], collapsed: false, orientation: "spread"
+    }, overrides || {});
+    if (parentId && nodes[parentId]) nodes[parentId].children.push(id);
+    return id;
+  }
+
+  function blankProject(title) {
+    nodes = {};
+    idCounter = 1;
+    rootId = newNode(null, title || "Organización del Proyecto", { type: "root" });
+    selectedId = rootId;
+  }
+
+  // ---------- SAMPLE DATA: caso DISTRIB+ S.A. ----------
+  // Los nombres de "person" replican deliberadamente los mismos códigos usados
+  // como "Responsable" en el WBS de ejemplo (PM, Ing. Civil, Proveedor A, ...)
+  // para que la Matriz RACI de ejemplo pueda enlazar ambos de forma coherente.
+  function loadSample() {
+    blankProject("Organización del Proyecto — DISTRIB+ S.A.");
+    const root = rootId;
+
+    newNode(root, "Comité Directivo / Sponsor", { person: "Gerencia General DISTRIB+", type: "patrocinio", email: "gerencia@distribmas.pe" });
+    const pm = newNode(root, "Director de Proyecto", { person: "PM", type: "direccion", email: "pm@distribmas.pe" });
+
+    const ing = newNode(pm, "Jefe de Ingeniería", { person: "Ing. Civil", type: "core" });
+    newNode(ing, "Especialista en Geotecnia", { person: "Geotecnia", type: "funcional" });
+    newNode(ing, "Ingeniero Estructural", { person: "Ing. Estructural", type: "funcional" });
+    newNode(ing, "Ingeniero MEP", { person: "Ing. MEP", type: "funcional" });
+
+    const log = newNode(pm, "Jefe de Logística", { person: "Logística", type: "core" });
+    newNode(log, "Proveedor — Estructuras metálicas", { person: "Proveedor A", type: "externo" });
+    newNode(log, "Proveedor — Materiales de construcción", { person: "Proveedor B", type: "externo" });
+    newNode(log, "Proveedor — Equipos eléctricos", { person: "Proveedor C", type: "externo" });
+
+    const obra = newNode(pm, "Residente de Obra", { person: "Residente de Obra", type: "core" });
+    newNode(obra, "Cuadrilla A — Movimiento de tierras", { person: "Cuadrilla A", type: "funcional" });
+    newNode(obra, "Cuadrilla B — Cimentaciones", { person: "Cuadrilla B", type: "funcional" });
+    newNode(obra, "Cuadrilla C — Estructura y cobertura", { person: "Cuadrilla C", type: "funcional" });
+    newNode(obra, "Cuadrilla D — Acabados y cerramientos", { person: "Cuadrilla D", type: "funcional" });
+    newNode(obra, "Subcontrata MEP", { person: "Subcontrata MEP", type: "externo" });
+    nodes[obra].orientation = "stack";
+
+    newNode(pm, "Control de Calidad", { person: "QA/QC", type: "funcional" });
+    newNode(root, "Asesoría Legal", { person: "Legal", type: "externo" });
+
+    selectedId = root;
+  }
+
+  // ---------- HIERARCHY HELPERS ----------
+  function visibleChildren(id) { return nodes[id] && nodes[id].collapsed ? [] : (nodes[id] ? nodes[id].children : []); }
+  function countDescendants(id) {
+    let count = 0;
+    function walk(nid) { nodes[nid].children.forEach(cid => { count++; walk(cid); }); }
+    walk(id);
+    return count;
+  }
+  function isDescendant(ancestorId, candidateId) {
+    if (ancestorId === candidateId) return true;
+    let n = nodes[candidateId];
+    while (n && n.parentId) { if (n.parentId === ancestorId) return true; n = nodes[n.parentId]; }
+    return false;
+  }
+  function depthOf(id) { let d = 0, n = nodes[id]; while (n && n.parentId) { d++; n = nodes[n.parentId]; } return d; }
+  function deleteSubtree(id) {
+    const node = nodes[id]; if (!node) return;
+    [...node.children].forEach(deleteSubtree);
+    if (node.parentId && nodes[node.parentId]) {
+      const arr = nodes[node.parentId].children;
+      const idx = arr.indexOf(id);
+      if (idx > -1) arr.splice(idx, 1);
+    }
+    if (draggedId === id) draggedId = null;
+    delete nodes[id];
+  }
+
+  // ---------- CÓDIGO JERÁRQUICO ----------
+  function computeCodes() {
+    const codes = {};
+    function walk(id, prefix) {
+      codes[id] = prefix;
+      nodes[id].children.forEach((cid, i) => walk(cid, prefix ? `${prefix}.${i + 1}` : `${i + 1}`));
+    }
+    nodes[rootId].children.forEach((cid, i) => walk(cid, `${i + 1}`));
+    codes[rootId] = "0";
+    return codes;
+  }
+
+  // ---------- TREE LAYOUT (idéntico al de WBS Builder) ----------
+  const SPREAD_SIBLING_GAP = GAP_X;
+  const SPREAD_DEPTH_GAP = GAP_Y;
+  const STACK_SIBLING_GAP = 26;
+  const STACK_DEPTH_GAP = 32;
+  const STACK_INDENT = Math.round(NODE_W * 0.20);
+
+  function computeLayout() {
+    const sizes = {}, positions = {};
+    function computeSize(id) {
+      const node = nodes[id];
+      const kids = visibleChildren(id);
+      if (kids.length === 0) { sizes[id] = { w: NODE_W, h: NODE_H }; return sizes[id]; }
+      kids.forEach(computeSize);
+      const o = node.orientation || "spread";
+      if (o === "stack") {
+        const childrenW = Math.max(...kids.map(cid => sizes[cid].w));
+        const childrenH = kids.reduce((s, cid) => s + sizes[cid].h, 0) + STACK_SIBLING_GAP * (kids.length - 1);
+        sizes[id] = { w: Math.max(NODE_W, STACK_INDENT + childrenW), h: NODE_H + STACK_DEPTH_GAP + childrenH, childExtent: { w: childrenW, h: childrenH } };
+      } else {
+        const childrenW = kids.reduce((s, cid) => s + sizes[cid].w, 0) + SPREAD_SIBLING_GAP * (kids.length - 1);
+        const childrenH = Math.max(...kids.map(cid => sizes[cid].h));
+        sizes[id] = { w: Math.max(NODE_W, childrenW), h: NODE_H + SPREAD_DEPTH_GAP + childrenH, childExtent: { w: childrenW, h: childrenH } };
+      }
+      return sizes[id];
+    }
+    function assignPos(id, originX, originY) {
+      const node = nodes[id];
+      const kids = visibleChildren(id);
+      const size = sizes[id];
+      if (kids.length === 0) { positions[id] = { x: originX, y: originY }; return; }
+      const o = node.orientation || "spread";
+      if (o === "stack") {
+        positions[id] = { x: originX, y: originY };
+        const childX = originX + STACK_INDENT;
+        let cy = originY + NODE_H + STACK_DEPTH_GAP;
+        kids.forEach(cid => { assignPos(cid, childX, cy); cy += sizes[cid].h + STACK_SIBLING_GAP; });
+      } else {
+        positions[id] = { x: originX + (size.w - NODE_W) / 2, y: originY };
+        const childY = originY + NODE_H + SPREAD_DEPTH_GAP;
+        let cx = originX + (size.w - size.childExtent.w) / 2;
+        kids.forEach(cid => { assignPos(cid, cx, childY); cx += sizes[cid].w + SPREAD_SIBLING_GAP; });
+      }
+    }
+    computeSize(rootId);
+    assignPos(rootId, 0, 0);
+    return positions;
+  }
+
+  function setOrientationForBranch(targetId, o) {
+    function walk(id) { nodes[id].orientation = o; nodes[id].children.forEach(walk); }
+    walk(targetId);
+    render();
+    setTimeout(fitToScreen, 50);
+  }
+
+  // ---------- RENDER ----------
+  function render() {
+    const codes = computeCodes();
+    if (currentView === "tree") renderTree(codes); else renderTable(codes);
+    renderProps();
+    renderStats();
+    renderLegend();
+    updateOrientationUI();
+  }
+  function refreshValues() { renderStats(); const codes = computeCodes(); if (currentView === "tree") renderTree(codes); else renderTable(codes); }
+
+  function renderTree(codes) {
+    const canvas = document.getElementById("canvas");
+    const svg = document.getElementById("linksSvg");
+    canvas.querySelectorAll(".node").forEach(n => n.remove());
+    const positions = computeLayout();
+
+    let maxX = 0, maxY = 0;
+    Object.entries(positions).forEach(([id, pos]) => { maxX = Math.max(maxX, pos.x + NODE_W); maxY = Math.max(maxY, pos.y + NODE_H); });
+    canvas.style.width = (maxX + 120) + "px";
+    canvas.style.height = (maxY + 120) + "px";
+    svg.setAttribute("width", maxX + 120);
+    svg.setAttribute("height", maxY + 120);
+
+    let linkPaths = "";
+    Object.values(nodes).forEach(node => {
+      const o = node.orientation || "spread";
+      const kids = visibleChildren(node.id);
+      const p = positions[node.id];
+      if (!p || kids.length === 0) return;
+      const color = node.id === rootId ? "#2e4374" : typeOf(node.type).hex;
+      if (o === "stack") {
+        const trunkX = p.x + 14, y1 = p.y + NODE_H;
+        kids.forEach(cid => {
+          const c = positions[cid]; if (!c) return;
+          const y2 = c.y + NODE_H / 2, x2 = c.x;
+          linkPaths += `<path class="link" stroke="${color}" d="M${trunkX},${y1} L${trunkX},${y2} L${x2},${y2}" />`;
+        });
+      } else {
+        kids.forEach(cid => {
+          const c = positions[cid]; if (!c) return;
+          const x1 = p.x + NODE_W / 2, y1 = p.y + NODE_H, x2 = c.x + NODE_W / 2, y2 = c.y;
+          const midY = (y1 + y2) / 2;
+          linkPaths += `<path class="link" stroke="${color}" d="M${x1},${y1} L${x1},${midY} L${x2},${midY} L${x2},${y2}" />`;
+        });
+      }
+    });
+    svg.innerHTML = linkPaths;
+
+    Object.entries(positions).forEach(([id, pos]) => {
+      const node = nodes[id];
+      const isRoot = id === rootId;
+      const t = typeOf(node.type);
+      const color = isRoot ? "#2e4374" : t.hex;
+      const hasKids = node.children.length > 0;
+      const isCollapsed = !!node.collapsed;
+      const nodeOrient = node.orientation || "spread";
+
+      const el = document.createElement("div");
+      el.className = "node" + (id === selectedId ? " selected" : "") + (isRoot ? " is-root" : "") + (nodeOrient === "stack" ? " orient-stack" : "");
+      el.style.left = pos.x + "px"; el.style.top = pos.y + "px";
+      el.dataset.id = id; el.draggable = !isRoot;
+      if (!isRoot) el.style.borderLeftColor = color;
+
+      const personHtml = isRoot ? "" : (node.person
+        ? `<div class="person">👤 ${escapeHtml(node.person)}</div>`
+        : `<div class="person empty">Sin persona asignada</div>`);
+
+      el.innerHTML = `
+        <span class="code" style="background:${hexA(color, 0.18)};color:${color}">${codes[id]}</span>
+        ${hasKids ? `<span class="orient-flag" title="Esta rama está en orientación ${nodeOrient === "stack" ? "vertical" : "horizontal"}">${nodeOrient === "stack" ? "↕" : "↔"}</span>` : ""}
+        <span class="type-label">${isRoot ? "Organización" : t.label}</span>
+        <div class="role">${escapeHtml(node.role)}</div>
+        ${personHtml}
+        ${(!isRoot && node.email) ? `<div class="email">${escapeHtml(node.email)}</div>` : ""}
+        <div class="add-child-btn" title="Agregar subordinado">+</div>
+        ${hasKids ? `<div class="collapse-btn${isCollapsed ? " is-collapsed" : ""}" title="${isCollapsed ? "Expandir rama (" + countDescendants(id) + " ocultos)" : "Colapsar rama"}">${isCollapsed ? "+" + countDescendants(id) : "−"}</div>` : ""}
+      `;
+
+      el.addEventListener("click", (e) => { e.stopPropagation(); selectNode(id); });
+      el.addEventListener("dblclick", (e) => { e.stopPropagation(); selectNode(id); focusRoleField(); });
+      el.querySelector(".add-child-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        const newId = newNode(id, "Nuevo puesto");
+        selectedId = newId; render(); focusRoleField();
+      });
+      const collapseBtn = el.querySelector(".collapse-btn");
+      if (collapseBtn) collapseBtn.addEventListener("click", (e) => { e.stopPropagation(); node.collapsed = !node.collapsed; render(); });
+
+      if (!isRoot) {
+        el.addEventListener("dragstart", (e) => { draggedId = id; el.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", id); });
+        el.addEventListener("dragend", () => { el.classList.remove("dragging"); clearDropTargets(); draggedId = null; });
+      }
+      el.addEventListener("dragover", (e) => {
+        if (!draggedId || !nodes[draggedId] || draggedId === id) return;
+        if (isDescendant(draggedId, id)) return;
+        e.preventDefault(); el.classList.add("drop-target");
+      });
+      el.addEventListener("dragleave", () => el.classList.remove("drop-target"));
+      el.addEventListener("drop", (e) => {
+        e.preventDefault(); el.classList.remove("drop-target");
+        if (!draggedId || !nodes[draggedId] || draggedId === id || isDescendant(draggedId, id)) return;
+        reparent(draggedId, id);
+      });
+
+      canvas.appendChild(el);
+    });
+  }
+
+  function clearDropTargets() { document.querySelectorAll(".node.drop-target").forEach(n => n.classList.remove("drop-target")); }
+  function reparent(childId, newParentId) {
+    const child = nodes[childId], newParent = nodes[newParentId];
+    if (!child || !newParent) return;
+    const oldParent = nodes[child.parentId];
+    if (oldParent) { const idx = oldParent.children.indexOf(childId); if (idx > -1) oldParent.children.splice(idx, 1); }
+    child.parentId = newParentId; newParent.children.push(childId);
+    selectedId = childId; render();
+    setStatus(`"${child.role}" reasignado bajo "${newParent.role}"`);
+  }
+
+  // ---------- RENDER: TABLE (Directorio) ----------
+  function renderTable(codes) {
+    const wrap = document.getElementById("tableView");
+    const rows = [];
+    function walk(id, depth) { if (id !== rootId) rows.push({ id, depth }); nodes[id].children.forEach(cid => walk(cid, depth + 1)); }
+    walk(rootId, 0);
+
+    let html = `<table class="obs-table">
+      <thead><tr>
+        <th style="width:80px;">Código</th>
+        <th>Rol / Puesto</th>
+        <th style="width:170px;">Persona asignada</th>
+        <th style="width:160px;">Tipo</th>
+        <th style="width:170px;">Correo</th>
+        <th style="width:170px;">Reporta a</th>
+      </tr></thead><tbody>`;
+
+    rows.forEach(({ id, depth }) => {
+      const node = nodes[id];
+      const t = typeOf(node.type);
+      const parent = nodes[node.parentId];
+      const reportsTo = parent ? (parent.id === rootId ? escapeHtml(parent.role) : escapeHtml(parent.role)) : "—";
+      html += `<tr>
+        <td><span class="code-chip" style="background:${hexA(t.hex,0.18)};color:${t.hex}">${codes[id]}</span></td>
+        <td><div class="indent-name" style="padding-left:${(depth - 1) * 18}px;">${node.children.length ? "👥" : "●"} ${escapeHtml(node.role)}</div></td>
+        <td>${node.person ? escapeHtml(node.person) : '<span class="muted">— sin asignar —</span>'}</td>
+        <td><span class="type-chip" style="background:${hexA(t.hex,0.16)};color:${t.hex}">${t.label}</span></td>
+        <td class="muted">${node.email ? escapeHtml(node.email) : "—"}</td>
+        <td class="muted">${reportsTo}</td>
+      </tr>`;
+    });
+    html += "</tbody></table>";
+    wrap.innerHTML = html;
+  }
+
+  // ---------- PROPERTIES PANEL ----------
+  function renderProps() {
+    const panel = document.getElementById("propsPanel");
+    if (!selectedId || !nodes[selectedId]) { panel.innerHTML = `<div class="empty-hint">Selecciona un puesto del organigrama para editarlo.</div>`; return; }
+    const node = nodes[selectedId];
+    const isRoot = selectedId === rootId;
+
+    if (isRoot) {
+      panel.innerHTML = `
+        <div class="field"><label>Nombre de la organización / proyecto</label><input id="f_role" value="${escapeAttr(node.role)}" /></div>
+        <div class="field"><label>Notas</label><textarea id="f_notes">${escapeHtml(node.notes || "")}</textarea></div>
+        <div class="empty-hint">Este nodo raíz representa a toda la organización del proyecto. Cuelga de él los puestos de primer nivel (patrocinio, dirección, áreas).</div>
+      `;
+      bind("f_role", "role", false); bind("f_notes", "notes", false);
+      return;
+    }
+
+    panel.innerHTML = `
+      <div class="field"><label>Rol / Puesto</label><input id="f_role" value="${escapeAttr(node.role)}" /></div>
+      <div class="field"><label>Persona asignada</label><input id="f_person" list="gpi-stakeholders" value="${escapeAttr(node.person)}" placeholder="Nombre de la persona" /></div>
+      <div class="field-row">
+        <div class="field">
+          <label>Tipo de rol</label>
+          <select id="f_type">${OBS_TYPES.map(t => `<option value="${t.key}" ${t.key===node.type?"selected":""}>${t.label}</option>`).join("")}</select>
+        </div>
+        <div class="field"><label>Correo</label><input id="f_email" type="email" value="${escapeAttr(node.email)}" placeholder="opcional" /></div>
+      </div>
+      <div class="field"><label>Notas</label><textarea id="f_notes">${escapeHtml(node.notes || "")}</textarea></div>
+      <div class="danger-zone"><button class="btn danger" id="f_delete" style="width:100%;">🗑 Eliminar este puesto y sus subordinados</button></div>
+    `;
+    bind("f_role", "role", false);
+    bind("f_person", "person", false);
+    bind("f_email", "email", false);
+    bind("f_notes", "notes", false);
+    const typeEl = document.getElementById("f_type");
+    if (typeEl) typeEl.addEventListener("change", () => { node.type = typeEl.value; render(); });
+
+    const delBtn = document.getElementById("f_delete");
+    if (delBtn) delBtn.addEventListener("click", async () => {
+      const ok = await showConfirm(`¿Eliminar "${node.role}" y todos sus subordinados?`);
+      if (ok) { deleteSubtree(selectedId); selectedId = rootId; render(); }
+    });
+
+    function bind(id, key, isNum) {
+      const el = document.getElementById(id); if (!el) return;
+      el.addEventListener("input", () => { node[key] = isNum ? (parseFloat(el.value) || 0) : el.value; refreshValues(); });
+    }
+  }
+
+  function focusRoleField() { setTimeout(() => { const el = document.getElementById("f_role"); if (el) { el.focus(); el.select(); } }, 30); }
+
+  // ---------- STATS ----------
+  function renderStats() {
+    let total = 0, withPerson = 0, withoutPerson = 0, maxDepth = 0;
+    Object.keys(nodes).forEach(id => {
+      if (id !== rootId) {
+        total++;
+        if ((nodes[id].person || "").trim()) withPerson++; else withoutPerson++;
+        maxDepth = Math.max(maxDepth, depthOf(id));
+      }
+    });
+    document.getElementById("statGrid").innerHTML = `
+      <div class="stat"><div class="v">${total}</div><div class="l">Puestos totales</div></div>
+      <div class="stat"><div class="v">${withPerson}</div><div class="l">Con persona asignada</div></div>
+      <div class="stat"><div class="v">${maxDepth}</div><div class="l">Niveles jerárquicos</div></div>
+      <div class="stat"><div class="v">${withoutPerson}</div><div class="l">Puestos sin cubrir</div></div>
+    `;
+  }
+
+  function renderLegend() {
+    const counts = {};
+    OBS_TYPES.forEach(t => counts[t.key] = 0);
+    Object.keys(nodes).forEach(id => { if (id !== rootId) { const k = nodes[id].type; if (counts[k] !== undefined) counts[k]++; } });
+    document.getElementById("legendBox").innerHTML = OBS_TYPES.map(t =>
+      `<div class="legend-item"><span class="lname"><span class="legend-dot" style="background:${t.hex}"></span>${t.label}</span><span class="lcount">${counts[t.key]}</span></div>`
+    ).join("");
+  }
+
+  // ---------- UTIL ----------
+  function escapeHtml(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+  function escapeAttr(s) { return escapeHtml(s); }
+  function hexA(hex, alpha) { const h = hex.replace("#", ""); const r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16); return `rgba(${r},${g},${b},${alpha})`; }
+  function setStatus(msg) { document.getElementById("statusLeft").textContent = msg; }
+
+  // ---------- MODAL ----------
+  function showModal({ title, message, confirmText, cancelText, danger }) {
+    return new Promise(resolve => {
+      const overlay = document.getElementById("modalOverlay");
+      const confirmBtn = document.getElementById("modalConfirmBtn");
+      const cancelBtn = document.getElementById("modalCancelBtn");
+      document.getElementById("modalTitle").textContent = title || "Confirmar";
+      document.getElementById("modalMessage").textContent = message || "";
+      confirmBtn.textContent = confirmText || "Aceptar";
+      confirmBtn.className = "btn" + (danger ? " danger" : " primary");
+      cancelBtn.style.display = cancelText === null ? "none" : "";
+      cancelBtn.textContent = cancelText || "Cancelar";
+      const cleanup = (result) => { overlay.classList.remove("open"); confirmBtn.onclick=null; cancelBtn.onclick=null; overlay.onclick=null; document.removeEventListener("keydown", onKey); resolve(result); };
+      const onKey = (e) => { if (e.key === "Escape") cleanup(false); if (e.key === "Enter") cleanup(true); };
+      confirmBtn.onclick = () => cleanup(true);
+      cancelBtn.onclick = () => cleanup(false);
+      overlay.onclick = (e) => { if (e.target === overlay) cleanup(false); };
+      document.addEventListener("keydown", onKey);
+      overlay.classList.add("open"); confirmBtn.focus();
+    });
+  }
+  function showConfirm(message, title) { return showModal({ title: title || "Confirmar acción", message, confirmText: "Eliminar", cancelText: "Cancelar", danger: true }); }
+  function showAlert(message, title) { return showModal({ title: title || "Aviso", message, confirmText: "Entendido", cancelText: null, danger: false }); }
+
+  function selectNode(id) { selectedId = id; render(); }
+
+  // ---------- ZOOM ----------
+  function applyZoom() { document.getElementById("canvas").style.transform = `scale(${zoom})`; document.getElementById("zoomReadout").textContent = Math.round(zoom * 100) + "%"; }
+  function fitToScreen() {
+    const wrap = document.getElementById("canvasWrap"), canvas = document.getElementById("canvas");
+    const cw = canvas.scrollWidth || 800, ch = canvas.scrollHeight || 600;
+    const availW = wrap.clientWidth - 40, availH = wrap.clientHeight - 40;
+    zoom = Math.min(availW / cw, availH / ch, 1.1);
+    zoom = Math.max(zoom, 0.25);
+    applyZoom();
+  }
+
+  // ---------- SERIALIZATION ----------
+  function exportJson() {
+    const data = { kind: "gpi.obs/v1", title: document.getElementById("projectTitle").value, course: document.getElementById("courseTitle").value, rootId, idCounter, nodes };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const safeName = (data.title || "organizacion").replace(/[^a-z0-9_\-]+/gi, "_").toLowerCase();
+    a.href = url; a.download = `obs_${safeName}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    setStatus("Organigrama exportado como JSON.");
+  }
+  function importJson(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data.nodes || !data.rootId) throw new Error("Formato inválido");
+        nodes = data.nodes; rootId = data.rootId; idCounter = data.idCounter || 1;
+        selectedId = rootId;
+        document.getElementById("projectTitle").value = data.title || "Organización del Proyecto";
+        document.getElementById("courseTitle").value = data.course || "Gestión de Proyectos de Ingeniería";
+        render(); setTimeout(fitToScreen, 50);
+        setStatus("Organigrama cargado correctamente.");
+      } catch (err) { showAlert("No se pudo leer el archivo. Verifica que sea un JSON exportado por esta herramienta."); }
+    };
+    reader.readAsText(file);
+  }
+  function exportCsv() {
+    const codes = computeCodes();
+    const rows = [["Código","Rol/Puesto","Persona","Tipo","Correo","ReportaA"]];
+    function walk(id) {
+      if (id !== rootId) {
+        const n = nodes[id], parent = nodes[n.parentId];
+        rows.push([codes[id], n.role, n.person, typeOf(n.type).label, n.email, parent ? parent.role : ""]);
+      }
+      nodes[id].children.forEach(walk);
+    }
+    walk(rootId);
+    const csv = rows.map(r => r.map(v => `"${String(v==null?"":v).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF"+csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = "obs_directorio.csv"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    setStatus("Directorio exportado como CSV.");
+  }
+
+  // ---------- VIEW SWITCH ----------
+  function setView(v) {
+    currentView = v;
+    document.getElementById("canvasWrap").style.display = v === "tree" ? "block" : "none";
+    document.getElementById("tableView").style.display = v === "tree" ? "none" : "block";
+    document.getElementById("viewTreeBtn").classList.toggle("active", v === "tree");
+    document.getElementById("viewTableBtn").classList.toggle("active", v !== "tree");
+    render();
+  }
+  function setOrientation(o) { setOrientationForBranch(selectedId || rootId, o); }
+  function updateOrientationUI() {
+    const target = nodes[selectedId] || nodes[rootId]; if (!target) return;
+    const o = target.orientation || "spread";
+    document.getElementById("orientSpreadBtn").classList.toggle("active", o === "spread");
+    document.getElementById("orientStackBtn").classList.toggle("active", o === "stack");
+    const label = document.getElementById("orientTargetLabel");
+    if (label) label.textContent = (selectedId && selectedId !== rootId) ? `Rama: ${target.role}` : "Toda la organización";
+  }
+
+  // ---------- INIT / EVENTS ----------
+  function init() {
+    blankProject();
+    render();
+    setTimeout(fitToScreen, 50);
+
+    document.getElementById("btnAddTop").addEventListener("click", () => { const id = newNode(rootId, "Nuevo puesto"); selectedId = id; render(); focusRoleField(); });
+    document.getElementById("btnAddChild").addEventListener("click", () => { const parent = selectedId || rootId; const id = newNode(parent, "Nuevo subordinado"); selectedId = id; render(); focusRoleField(); });
+    document.getElementById("btnDelete").addEventListener("click", async () => {
+      if (!selectedId || selectedId === rootId) { await showAlert("Selecciona un puesto distinto de la organización raíz."); return; }
+      const ok = await showConfirm(`¿Eliminar "${nodes[selectedId].role}" y sus subordinados?`);
+      if (ok) { deleteSubtree(selectedId); selectedId = rootId; render(); }
+    });
+
+    document.getElementById("zoomIn").addEventListener("click", () => { zoom = Math.min(zoom + 0.1, 2); applyZoom(); });
+    document.getElementById("zoomOut").addEventListener("click", () => { zoom = Math.max(zoom - 0.1, 0.2); applyZoom(); });
+    document.getElementById("zoomFit").addEventListener("click", fitToScreen);
+
+    document.getElementById("viewTreeBtn").addEventListener("click", () => setView("tree"));
+    document.getElementById("viewTableBtn").addEventListener("click", () => setView("table"));
+    document.getElementById("orientSpreadBtn").addEventListener("click", () => setOrientation("spread"));
+    document.getElementById("orientStackBtn").addEventListener("click", () => setOrientation("stack"));
+
+    document.getElementById("btnCollapseAll").addEventListener("click", () => { Object.values(nodes).forEach(n => { if (n.children.length > 0) n.collapsed = true; }); render(); setTimeout(fitToScreen, 50); });
+    document.getElementById("btnExpandAll").addEventListener("click", () => { Object.values(nodes).forEach(n => { n.collapsed = false; }); render(); setTimeout(fitToScreen, 50); });
+
+    document.getElementById("btnExportJson").addEventListener("click", exportJson);
+    document.getElementById("btnImportJson").addEventListener("click", () => document.getElementById("fileInput").click());
+    document.getElementById("fileInput").addEventListener("change", (e) => { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ""; });
+    document.getElementById("btnExportCsv").addEventListener("click", exportCsv);
+    document.getElementById("btnPrint").addEventListener("click", () => window.print());
+
+    document.getElementById("btnSample").addEventListener("click", async () => {
+      const ok = await showConfirm("Esto reemplazará la organización actual por el ejemplo DISTRIB+ S.A. ¿Continuar?", "Cargar ejemplo");
+      if (ok) { loadSample(); render(); setTimeout(fitToScreen, 50); }
+    });
+    document.getElementById("btnReset").addEventListener("click", async () => {
+      const ok = await showConfirm("Esto borrará la organización actual. ¿Continuar?", "Nueva organización");
+      if (ok) { blankProject(); render(); setTimeout(fitToScreen, 50); }
+    });
+
+    document.getElementById("canvasWrap").addEventListener("click", () => { selectedId = rootId; render(); });
+
+    window.addEventListener("keydown", async (e) => {
+      const modalOpen = document.getElementById("modalOverlay").classList.contains("open");
+      if (modalOpen) return;
+      if (e.key === "Delete" && selectedId && selectedId !== rootId && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
+        const ok = await showConfirm(`¿Eliminar "${nodes[selectedId].role}"?`);
+        if (ok) { deleteSubtree(selectedId); selectedId = rootId; render(); }
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+
+  // ===== Puente con el Panel de Control (GPI) =====
+  document.addEventListener("DOMContentLoaded", function gpiBridge(){
+    if (typeof window.GPI === "undefined" || !window.GPI.available()) return;
+    var proj = window.GPI.active();
+    var titleEl = document.getElementById("projectTitle");
+    var courseEl = document.getElementById("courseTitle");
+    function refreshStakeholderList(){
+      var mod = window.GPI.getModule ? window.GPI.getModule("stakeholders") : null;
+      var names = (mod && mod.stakeholders || []).map(function(s){ return s.name; }).filter(Boolean);
+      var dl = document.getElementById("gpi-stakeholders");
+      if (!dl){ dl = document.createElement("datalist"); dl.id = "gpi-stakeholders"; document.body.appendChild(dl); }
+      dl.innerHTML = names.map(function(n){ return '<option value="' + String(n).replace(/"/g,"&quot;") + '">'; }).join("");
+    }
+    function pull(){
+      var p = window.GPI.active(); if (!p) return;
+      if (p.meta){ if (p.meta.name) titleEl.value = "Organización del Proyecto — " + p.meta.name; if (p.meta.course) courseEl.value = p.meta.course; }
+      var mod = p.modules && p.modules.obs;
+      if (mod && mod.nodes && mod.rootId){
+        nodes = mod.nodes; rootId = mod.rootId; idCounter = mod.idCounter || 1; selectedId = rootId;
+        render(); setTimeout(fitToScreen, 50);
+        setStatus && setStatus("Organigrama cargado desde el Panel de Control.");
+      } else {
+        // Primera conexión sin OBS aún: arranca EN BLANCO. El ejemplo DISTRIB+
+        // solo se carga con el botón "Cargar ejemplo" (acción explícita), para
+        // que el guardado automático no escriba datos de ejemplo en un
+        // proyecto nuevo del alumno.
+        blankProject((p.meta && p.meta.name) || "Proyecto sin título");
+        render(); setTimeout(fitToScreen, 50);
+        setStatus && setStatus("Proyecto sin organigrama todavía. Agrega puestos, o usa \u2318 Cargar ejemplo para explorar el caso DISTRIB+.");
+      }
+      refreshStakeholderList();
+    }
+    function push(){
+      if (!window.GPI.active()) return;
+      window.GPI.setModule("obs", { rootId: rootId, idCounter: idCounter, nodes: nodes });
+      window.GPI.patchMeta({ course: courseEl.value });
+    }
+    if (proj) pull(); else refreshStakeholderList();
+    window.addEventListener("beforeunload", push);
+    document.addEventListener("visibilitychange", function(){ if (document.hidden) push(); });
+    // Si Stakeholder Studio agrega interesados en otra pestaña, refresca el
+    // autocompletado de "Persona" sin tocar el organigrama que se está editando.
+    if (window.GPI.onChange) window.GPI.onChange(function(){ if (!document.hidden) refreshStakeholderList(); });
+    gpiBadge(proj ? (proj.meta && proj.meta.name) : "", push);
+  });
+
+  function gpiBadge(name, pushFn){
+    var css = document.createElement("style");
+    css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:42px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-dot{width:8px;height:8px;border-radius:50%;background:#00c2a8;box-shadow:0 0 0 3px rgba(0,194,168,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#0090c2;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#00b6ec;background:#fff}";
+    document.head.appendChild(css);
+    var bar = document.createElement("div");
+    bar.className = "gpi-badge";
+    bar.innerHTML = '<span class="gpi-dot"></span><span>Panel: <b>' + String(name||"—").replace(/</g,"&lt;") + '</b></span><button class="gpi-btn" id="gpiSyncBtn">☁ Sincronizar</button><a class="gpi-btn" href="Panel_Control.html">⌂ Panel</a>';
+    document.body.appendChild(bar);
+    bar.querySelector("#gpiSyncBtn").addEventListener("click", function(){
+      pushFn(); var b = bar.querySelector("#gpiSyncBtn"), t = b.textContent; b.textContent = "✓ Sincronizado";
+      setTimeout(function(){ b.textContent = t; }, 1400);
+    });
+  }
+
+  // ===== REPORTE IMPRIMIBLE (📄) =====
+  // Genera un documento formal dentro de #gpiReport y lo imprime en solitario:
+  // en @media print, body.report-mode oculta la aplicación y muestra solo el reporte.
+  function reportShell(docTitle, moduleName, bodyHtml) {
+    var el = document.getElementById("gpiReport");
+    if (!el) { el = document.createElement("div"); el.id = "gpiReport"; document.body.appendChild(el); }
+    var meta = {};
+    try { if (window.GPI && window.GPI.available() && window.GPI.meta()) meta = window.GPI.meta(); } catch (_) {}
+    var tEl = document.getElementById("projectTitle"), cEl = document.getElementById("courseTitle");
+    var pName = (tEl && tEl.value) || meta.name || "Proyecto";
+    var course = (cEl && cEl.value) || meta.course || "Gestión de Proyectos de Ingeniería";
+    var today = new Date().toLocaleDateString("es-PE", { year: "numeric", month: "long", day: "numeric" });
+    el.innerHTML =
+      '<div class="rep-head"><div><h1>' + escapeHtml(docTitle) + '</h1>'
+      + '<div class="sub">' + escapeHtml(pName) + (meta.code ? ' · ' + escapeHtml(meta.code) : '') + '</div>'
+      + '<div class="sub" style="font-weight:500">' + escapeHtml(course) + '</div></div>'
+      + '<div class="rep-meta">' + escapeHtml(moduleName) + '<br>Emitido: ' + escapeHtml(today)
+      + (meta.client ? '<br>Cliente: ' + escapeHtml(meta.client) : '')
+      + (meta.location ? '<br>' + escapeHtml(meta.location) : '') + '</div></div>'
+      + bodyHtml;
+    document.body.classList.add("report-mode");
+    function repDone() { document.body.classList.remove("report-mode"); window.removeEventListener("afterprint", repDone); }
+    window.addEventListener("afterprint", repDone);
+    // window.print() es bloqueante en la mayoría de navegadores; el timeout
+    // posterior actúa de respaldo donde afterprint no dispara.
+    setTimeout(function () { window.print(); setTimeout(repDone, 500); }, 60);
+  }
+  function repDate(s) { if (!s) return "—"; var p = String(s).split("-"); return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : s; }
+
+  function buildReport() {
+    var rowsHtml = "", counts = {}, total = 0, withPerson = 0;
+    OBS_TYPES.forEach(function (t) { counts[t.key] = 0; });
+    (function walk(id, code, depth) {
+      var n = nodes[id]; if (!n) return;
+      total++;
+      if ((n.person || "").trim()) withPerson++;
+      if (counts[n.type] != null) counts[n.type]++;
+      var t = typeOf(n.type);
+      var pad = 'style="padding-left:' + (6 + depth * 14) + 'px"';
+      rowsHtml += '<tr><td class="num">' + escapeHtml(code || "\u2014") + '</td>'
+        + '<td ' + pad + '><b>' + escapeHtml(n.role) + '</b></td>'
+        + '<td>' + escapeHtml(n.person || "\u2014") + '</td>'
+        + '<td>' + escapeHtml(t.label) + '</td>'
+        + '<td>' + escapeHtml(n.email || "\u2014") + '</td>'
+        + '<td>' + escapeHtml(n.notes || "\u2014") + '</td></tr>';
+      n.children.forEach(function (cid, i) { walk(cid, code ? code + "." + (i + 1) : String(i + 1), depth + 1); });
+    })(rootId, "", 0);
+    var body = '<h2>1. Resumen del equipo</h2><table class="rep-kv">'
+      + '<tr><td>Puestos en la estructura</td><td><b>' + total + '</b> (' + withPerson + ' con persona asignada)</td></tr>'
+      + '<tr><td>Por tipo de puesto</td><td>' + OBS_TYPES.map(function (t) { return escapeHtml(t.label) + ": <b>" + counts[t.key] + "</b>"; }).join(" \u00b7 ") + '</td></tr></table>'
+      + '<h2>2. Estructura de Desglose de la Organización (OBS)</h2>'
+      + '<table><tr><th style="width:7%">Código</th><th style="width:22%">Rol / puesto</th><th style="width:16%">Persona asignada</th><th style="width:15%">Tipo</th><th style="width:16%">Contacto</th><th>Notas</th></tr>'
+      + (rowsHtml || '<tr><td colspan="6" class="rep-note">— Estructura vacía —</td></tr>') + '</table>'
+      + '<p class="rep-note">Las asignaciones de responsabilidad por paquete de trabajo (R/A/C/I) se documentan en la Matriz RACI, que cruza esta OBS con la EDT del proyecto.</p>';
+    reportShell("Equipo del Proyecto (OBS)", "OBS Builder \u00b7 Organización del Proyecto", body);
+  }
+
+  (function () {
+    var b = document.getElementById("btnReport");
+    if (b) b.addEventListener("click", buildReport);
+  })();
+
+})();
+</script>
+</body>
+</html>

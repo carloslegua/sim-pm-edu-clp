@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Análisis PERT — Estimación probabilística de duraciones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#eef4f9; --bg-1:#ffffff; --bg-2:#f3f8fc;
+    --panel:#ffffff; --panel-border:#e0e8f0;
+    --ink-0:#1a2027; --ink-1:#4d5768; --ink-2:#8992a3;
+    --cyan:#00b6ec; --cyan-dark:#0090c2; --cyan-dim:rgba(0,182,236,0.13);
+    --black:#1a1a1c;
+    --pe-a:#b44be0; --pe-b:#8f2fd0; --pe-dim:rgba(143,47,208,0.10);
+    --danger:#ff5470; --good:#00c2a8; --warn:#ff9f1c;
+    --mono:'JetBrains Mono',monospace; --display:'Manrope',sans-serif; --body:'Manrope','Inter',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; color:var(--ink-0); font-family:var(--body);
+    background:radial-gradient(circle, rgba(0,182,236,0.06) 1px, transparent 1px) 0 0/26px 26px, var(--bg-0);
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+
+  header{ border-bottom:1px solid var(--panel-border); background:linear-gradient(180deg,#fff,#fbfdff); padding:12px 22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; position:relative; }
+  header::after{ content:''; position:absolute; left:0; right:0; bottom:-1px; height:3px; background:linear-gradient(90deg, var(--cyan), var(--pe-a) 45%, var(--pe-b)); }
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand h1{font-family:var(--display); font-size:19px; font-weight:800; margin:0; color:var(--black);}
+  .brand .tag{font-family:var(--mono); font-size:11px; font-weight:600; color:#fff; background:linear-gradient(135deg, var(--pe-a), var(--pe-b)); padding:3px 9px; border-radius:20px; letter-spacing:0.5px;}
+  .mode-chip{font-family:var(--mono); font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:20px; border:1.5px solid; letter-spacing:.3px;}
+  .mode-chip.live{color:#00967f; border-color:rgba(0,194,168,.5); background:rgba(0,194,168,.09);}
+  .mode-chip.sample{color:#7b1fa8; border-color:rgba(143,47,208,.45); background:var(--pe-dim);}
+  .project-title-input{background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--ink-0); font-family:var(--display); font-weight:600; font-size:13px; padding:2px 0; max-width:320px;}
+  .project-title-input:hover, .project-title-input:focus{border-bottom:1px dashed var(--cyan); outline:none;}
+  .course-title-input{background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--ink-2); font-family:var(--body); font-weight:600; font-size:12px; text-align:right; padding:2px 0; min-width:220px; max-width:320px;}
+  .course-title-input:hover, .course-title-input:focus{border-bottom:1px dashed var(--cyan); outline:none; color:var(--ink-0);}
+
+  .toolbar{display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:10px 22px; background:var(--bg-1); border-bottom:1px solid var(--panel-border);}
+  .btn{font-family:var(--body); font-size:12.5px; font-weight:600; color:var(--ink-1); background:var(--bg-2); border:1px solid var(--panel-border); padding:7px 13px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:border-color .12s,color .12s,background .12s; white-space:nowrap;}
+  .btn:hover{border-color:var(--cyan); color:var(--cyan-dark); background:#fff;}
+  .btn.primary{background:linear-gradient(135deg, var(--pe-a), var(--pe-b)); border-color:transparent; color:#fff;}
+  .btn.primary:hover{filter:brightness(1.06); color:#fff;}
+  .btn.danger{color:var(--danger);} .btn.danger:hover{border-color:var(--danger);}
+  .btn.sm{padding:5px 9px; font-size:11.5px;}
+  .btn:disabled{opacity:0.35; cursor:not-allowed;}
+  .sep{width:1px; height:22px; background:var(--panel-border); margin:0 4px;}
+  input[type=file]{display:none;}
+  .mode-select{display:inline-flex; align-items:center; gap:7px; font-size:12px; font-weight:700; color:var(--ink-1); background:var(--pe-dim); border:1.5px solid rgba(143,47,208,.3); padding:5px 10px; border-radius:8px;}
+  .mode-select select{font-family:var(--body); font-size:12px; font-weight:700; color:var(--pe-b); background:#fff; border:1px solid var(--panel-border); border-radius:6px; padding:3px 6px;}
+
+  .workspace{flex:1; display:flex; min-height:0;}
+  .main{flex:1; overflow-y:auto; padding:22px 24px 80px;}
+  .sidebar{width:300px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--panel-border); overflow-y:auto; padding:18px 18px 40px;}
+  .sidebar h2{font-family:var(--display); font-size:13px; font-weight:800; margin:0 0 12px; display:flex; align-items:center; gap:8px;}
+  .sidebar h2::before{content:''; width:4px; height:14px; background:linear-gradient(180deg, var(--pe-a), var(--pe-b)); display:inline-block; border-radius:3px;}
+
+  .banner{background:rgba(255,159,28,0.12); border:1px solid rgba(255,159,28,0.35); color:#8a5300; border-radius:10px; padding:10px 14px; font-size:12.5px; line-height:1.5; margin-bottom:14px; display:none;}
+  .banner.show{display:block;}
+  .banner b{color:#7a4a00;}
+  .banner .btn{margin-left:8px;}
+  .tip-box{background:var(--cyan-dim); border:1px solid rgba(0,182,236,0.25); border-radius:9px; padding:10px 12px; font-size:11.5px; color:var(--ink-1); line-height:1.55; margin-bottom:12px;}
+  .tip-box b{color:var(--cyan-dark);}
+
+  /* ===== GRILLA ESTILO EXCEL ===== */
+  .tbl-card{background:var(--panel); border:1px solid var(--panel-border); border-radius:13px; box-shadow:0 2px 12px rgba(20,30,60,0.05); overflow:hidden;}
+  .tbl-scroll{overflow-x:auto;}
+  table.acts{width:100%; border-collapse:collapse; font-size:13px; min-width:900px;}
+  table.acts thead th{
+    background:linear-gradient(180deg,#f7fafd,#eef4f9); font-family:var(--display); font-size:10.5px; font-weight:800;
+    text-transform:uppercase; letter-spacing:.4px; color:var(--ink-1); text-align:left; padding:10px 8px;
+    border-bottom:2px solid var(--panel-border); position:sticky; top:0; z-index:2; white-space:nowrap;
+  }
+  table.acts td{padding:5px 8px; border:1px solid #e4eaf1; vertical-align:middle;}
+  .col-item{width:52px; text-align:center;}
+  .col-code{width:88px;}
+  .col-dur{width:74px;}
+  .col-omp{width:92px;}
+  .col-der{width:80px;}
+
+  tr.proj-row td{ background:linear-gradient(90deg, rgba(0,182,236,.14), rgba(0,182,236,.03)); font-family:var(--display); font-weight:800; font-size:13.5px; border-bottom:2px solid var(--panel-border); padding:9px 10px; }
+  tr.proj-row .proj-hint{font-family:var(--mono); font-size:9.5px; font-weight:600; color:var(--ink-2); text-transform:uppercase; letter-spacing:.4px;}
+  .n-cell{font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--ink-1); text-align:center;}
+  tr.phase-row .n-cell, tr.pkg-row .n-cell{color:var(--ink-2);}
+  .code-cell{font-family:var(--mono); font-size:11px; font-weight:700; color:#6c5ce7;}
+  tr.phase-row td{ background:linear-gradient(90deg, rgba(108,92,231,.10), rgba(108,92,231,.02)); font-family:var(--display); font-weight:800; font-size:12.5px; color:#463a9e; padding:8px 10px; }
+  tr.pkg-row td{background:var(--bg-2);}
+  tr.pkg-row .pk-code{font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--pe-b);}
+  tr.pkg-row .pk-name{font-weight:800; font-size:13px;}
+  .pk-count{font-family:var(--mono); font-size:10px; font-weight:700; color:var(--ink-2); background:#fff; border:1px solid var(--panel-border); padding:1px 8px; border-radius:12px; margin-left:8px;}
+
+  tr.act-row td{background:#fff;}
+  tr.act-row:hover td{background:#fcfdff;}
+  .act-code{font-family:var(--mono); font-size:11.5px; color:var(--ink-2);}
+  .act-name{font-size:12.5px; font-weight:600;}
+  .act-unit{font-family:var(--mono); font-size:10px; color:var(--ink-2); margin-left:7px;}
+  td.durbase{font-family:var(--mono); font-size:12px; text-align:center; color:var(--ink-1); background:#f6f9fc;}
+  tr.act-row td.in-cell{padding:0; background:#fff;}
+  tr.act-row td.in-cell input{
+    display:block; width:100%; background:transparent; border:none; border-radius:0; color:var(--ink-0);
+    padding:7px 9px; font-family:var(--mono); font-size:12px; text-align:right; box-sizing:border-box;
+  }
+  tr.act-row td.in-cell input:focus{outline:2px solid var(--cyan); outline-offset:-2px; background:#fff; position:relative; z-index:1;}
+  tr.act-row td.in-cell input::placeholder{color:#c3ccd8; font-family:var(--body);}
+  tr.act-row td.in-cell input.m-auto{color:#00967f; font-style:italic;}
+  table.acts td.sel{background:rgba(0,182,236,.16) !important;}
+  table.acts td.sel input{background:transparent;}
+  td.der-cell{font-family:var(--mono); font-size:12px; font-weight:700; text-align:center; background:var(--pe-dim); border-radius:0;}
+  td.der-cell.empty{color:var(--ink-2); font-weight:500; background:transparent;}
+  /* terna inválida (O ≤ M ≤ P roto): línea en rojo tenue, como la regla 1R */
+  tr.act-row.row-invalid td{background:rgba(255,84,112,.08);}
+  tr.act-row.row-invalid td.in-cell, tr.act-row.row-invalid td.in-cell input{background:rgba(255,84,112,.06);}
+  tr.act-row.row-invalid td:first-child{box-shadow:inset 3px 0 0 var(--danger);}
+
+  .empty-state{padding:44px 26px; text-align:center; color:var(--ink-2); font-size:13.5px; line-height:1.7;}
+  .empty-state b{color:var(--ink-1);}
+  .empty-state .btn{margin:12px 4px 0;}
+
+  /* menú contextual */
+  .ctx-menu{position:fixed; z-index:1500; background:#fff; border:1px solid var(--panel-border); border-radius:10px; box-shadow:0 14px 40px rgba(10,16,28,.22); padding:5px; min-width:230px; display:none;}
+  .ctx-menu.open{display:block;}
+  .ctx-item{display:flex; gap:9px; align-items:center; font-size:12.5px; font-weight:600; color:var(--ink-1); padding:8px 11px; border-radius:7px; cursor:pointer; white-space:nowrap;}
+  .ctx-item:hover{background:var(--cyan-dim); color:var(--cyan-dark);}
+  .ctx-item.disabled{opacity:.4; cursor:default;}
+  .ctx-item.disabled:hover{background:transparent; color:var(--ink-1);}
+  .ctx-sep{height:1px; background:var(--panel-border); margin:4px 8px;}
+
+  /* sidebar widgets */
+  .sb-card{background:linear-gradient(145deg, var(--bg-2), #fff); border:1.5px solid var(--panel-border); border-radius:12px; padding:14px; margin-bottom:14px;}
+  .sb-big{font-family:var(--mono); font-size:30px; font-weight:800; line-height:1; color:var(--pe-b);}
+  .sb-sub{font-size:11.5px; color:var(--ink-1); font-weight:600; margin-top:3px;}
+  .sb-bar-track{height:8px; background:rgba(0,0,0,.06); border-radius:4px; overflow:hidden; margin:10px 0 5px;}
+  .sb-bar-fill{height:100%; border-radius:4px; transition:width .2s; width:0%;}
+  .sb-mini{display:flex; justify-content:space-between; font-size:11px; color:var(--ink-2); font-family:var(--mono);}
+  .sb-kv{display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px dashed var(--panel-border);}
+  .sb-kv:last-child{border-bottom:none;}
+  .sb-kv b{font-family:var(--mono);}
+  .sb-locked{opacity:.62; position:relative;}
+  .sb-locked .lock{font-family:var(--mono); font-size:10px; font-weight:700; color:#7b1fa8; background:var(--pe-dim); border:1px solid rgba(143,47,208,.3); border-radius:10px; padding:1px 8px; float:right;}
+  .sb-warn{font-size:11.5px; color:#c0273f; font-weight:700; background:rgba(255,84,112,.07); border:1px solid rgba(255,84,112,.3); border-radius:8px; padding:7px 10px; margin-top:8px;}
+
+  .statusbar{border-top:1px solid var(--panel-border); background:var(--bg-1); padding:7px 26px; font-size:11px; color:var(--ink-2); display:flex; justify-content:space-between; font-family:var(--mono); margin-top:auto;}
+  ::-webkit-scrollbar{width:10px;height:10px;} ::-webkit-scrollbar-track{background:var(--bg-0);} ::-webkit-scrollbar-thumb{background:#c7d3de;border-radius:5px;border:2px solid var(--bg-0);} ::-webkit-scrollbar-thumb:hover{background:var(--cyan);}
+
+  @media print{
+    header,.toolbar,.sidebar,.statusbar,.gpi-badge,.banner,.ctx-menu{display:none !important;}
+    body{background:#fff !important;}
+    .main{overflow:visible; padding:0;}
+    .tbl-card{box-shadow:none; border:none;}
+    table.acts thead th{position:static;}
+  }
+
+  /* ===== REPORTE IMPRIMIBLE (📄) ===== */
+  #gpiReport{display:none; font-family:var(--body); color:#1a2027; font-size:11.5px; line-height:1.5; background:#fff;}
+  @media print{
+    body.report-mode{display:block; background:#fff !important;}
+    body.report-mode > *:not(#gpiReport){display:none !important;}
+    body.report-mode #gpiReport{display:block !important;}
+  }
+  #gpiReport .rep-head{display:flex; justify-content:space-between; align-items:flex-start; gap:14px; border-bottom:3px solid #00b6ec; padding-bottom:10px; margin-bottom:14px;}
+  #gpiReport .rep-head h1{font-family:var(--display); font-size:19px; margin:0 0 3px; font-weight:800; color:#1a1a1c;}
+  #gpiReport .rep-head .sub{font-size:11.5px; color:#4d5768; font-weight:600;}
+  #gpiReport .rep-meta{font-family:var(--mono); font-size:10px; color:#4d5768; text-align:right; white-space:nowrap; line-height:1.7;}
+  #gpiReport h2{font-family:var(--display); font-size:13px; font-weight:800; margin:16px 0 6px; padding-bottom:3px; border-bottom:1px solid #e0e8f0; break-after:avoid;}
+  #gpiReport table{width:100%; border-collapse:collapse; margin:6px 0 10px; font-size:10.5px;}
+  #gpiReport th{background:#f3f8fc; text-align:left; font-weight:700; padding:5px 7px; border:1px solid #d5dee8;}
+  #gpiReport td{padding:4px 7px; border:1px solid #d5dee8; vertical-align:top;}
+  #gpiReport tr{break-inside:avoid;}
+  #gpiReport table.rep-kv td:first-child{width:30%; background:#f8fbfe; font-weight:700;}
+  #gpiReport p{margin:4px 0 10px;}
+  #gpiReport .rep-note{color:#4d5768; font-size:10px; margin:2px 0 8px;}
+  #gpiReport .num{font-family:var(--mono);}
+  #gpiReport td.rep-phase{background:#eef0fb; font-weight:800;}
+  #gpiReport td.rep-pkg{background:#f8fbfe; font-weight:700;}
+  #gpiReport td.rep-bad{background:#ffe9ed;}
+  @page{margin:15mm 13mm;}
+
+  .modal-overlay{position:fixed; inset:0; z-index:1000; background:rgba(10,16,28,0.5); display:none; align-items:center; justify-content:center; padding:20px;}
+  .modal-overlay.open{display:flex;}
+  .modal-card{background:#fff; border-radius:14px; padding:22px 24px; width:400px; max-width:100%; box-shadow:0 24px 60px rgba(10,16,28,0.35); border:1px solid var(--panel-border);}
+  .modal-card h3{margin:0 0 10px; font-family:var(--display); font-size:16px; font-weight:800;}
+  .modal-card p{margin:0 0 20px; font-size:13.5px; color:var(--ink-1); line-height:1.55;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:8px;}
+</style>
+<script src="gpi-core.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <h1>Análisis PERT</h1>
+        <span class="tag">EDU</span>
+        <span class="mode-chip live" id="modeChip">Actividades del proyecto</span>
+      </div>
+      <input id="projectTitle" class="project-title-input" value="Proyecto sin título" />
+    </div>
+  </div>
+  <input id="courseTitle" class="course-title-input" value="Gestión de Proyectos de Ingeniería" />
+</header>
+
+<div class="toolbar">
+  <button class="btn" id="btnExportJson">⭳ Guardar (.json)</button>
+  <button class="btn" id="btnImportJson">⭱ Abrir (.json)</button>
+  <input type="file" id="fileInput" accept=".json">
+  <div class="sep"></div>
+  <span class="mode-select" title="Cómo se ingresan Optimista y Pesimista: en días, o como porcentaje de la duración más probable M (p. ej. O=85 y P=140 significan 85% y 140% de M)">Ingreso O/P:
+    <select id="inputModeSel">
+      <option value="dias">Días</option>
+      <option value="pct">% de M</option>
+    </select>
+  </span>
+  <div class="sep"></div>
+  <button class="btn" id="btnCopyTable" title="Copia toda la tabla al portapapeles (con encabezados) para pegarla en Excel">⧉ Copiar tabla</button>
+  <button class="btn" id="btnReport">📄 Reporte</button>
+  <button class="btn" id="btnPrint">🖨 Imprimir / PDF</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnReload">⟳ Recargar actividades</button>
+  <button class="btn" id="btnSample">Modo ejemplo</button>
+  <button class="btn" id="btnLive" style="display:none">⌂ Usar datos del proyecto</button>
+  <button class="btn danger" id="btnClear">Limpiar análisis</button>
+</div>
+
+<div class="workspace">
+  <div class="main">
+    <div class="banner" id="banner"></div>
+    <div class="banner" id="orphanBanner"></div>
+    <div class="tbl-card">
+      <div class="tbl-scroll">
+        <table class="acts" id="actsTable">
+          <thead>
+            <tr>
+              <th class="col-item" title="Correlativo consecutivo, como el ID de MS Project: 0 = proyecto">N.º</th>
+              <th class="col-code">Código EDT</th>
+              <th>Actividad</th>
+              <th class="col-dur" title="Duración determinística del módulo Definir las Actividades: Met ÷ (#Eq × R), redondeada al entero superior. Solo lectura.">Dur base</th>
+              <th class="col-omp" id="thO">O</th>
+              <th class="col-omp" title="Más probable. En automático (verde cursiva) SIGUE a la Dur base: si cambian metrados o rendimientos, M se actualiza sola. Escribe un valor para fijarla; bórrala para volver al automático.">M (días)</th>
+              <th class="col-omp" id="thP">P</th>
+              <th class="col-der" title="Duración esperada TE = (O + 4M + P) / 6 — calculada">TE</th>
+              <th class="col-der" title="Desviación estándar σ = (P − O) / 6 — calculada">σ</th>
+              <th class="col-der" title="Varianza σ² = ((P − O)/6)² — lo que se suma a lo largo de una ruta. Calculada.">σ²</th>
+            </tr>
+          </thead>
+          <tbody id="actsBody"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="emptyState" style="display:none"></div>
+    </div>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sb-card">
+      <div class="sb-big" id="sbTotal">0</div>
+      <div class="sb-sub">actividades con terna O–M–P completa</div>
+      <div class="sb-bar-track"><div class="sb-bar-fill" id="sbBar"></div></div>
+      <div class="sb-mini"><span id="sbCov">0/0 actividades</span><span id="sbPct">0%</span></div>
+      <div class="sb-warn" id="sbInvalid" style="display:none"></div>
+    </div>
+
+    <div class="sb-card">
+      <h2 style="margin-bottom:8px">Totales (suma simple)</h2>
+      <div class="sb-kv"><span>Σ Dur base</span><b id="sbSumDur">—</b></div>
+      <div class="sb-kv"><span>Σ TE (esperada)</span><b id="sbSumTe">—</b></div>
+      <div class="sb-kv"><span>Σ σ² (varianza)</span><b id="sbSumVar">—</b></div>
+      <div style="font-size:10.5px;color:var(--ink-2);margin-top:7px;line-height:1.5">Suma de <b>todas</b> las actividades válidas — sirve para comparar TE contra la base determinística, no como duración del proyecto.</div>
+    </div>
+
+    <div class="sb-card">
+      <h2 style="margin-bottom:8px">Probabilidad de cumplimiento</h2>
+      <div class="sb-kv"><span>Plazo objetivo</span>
+        <input id="sbTarget" type="number" min="1" step="1" style="width:78px;text-align:right;font-family:var(--mono);font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink-0)">
+      </div>
+      <div class="sb-kv"><span>ΣTE ruta crítica</span><b id="sbCpTe">—</b></div>
+      <div class="sb-kv"><span>σ ruta crítica</span><b id="sbCpSd">—</b></div>
+      <div class="sb-kv"><span>Z</span><b id="sbCpZ">—</b></div>
+      <div class="sb-kv"><span>P(terminar ≤ plazo)</span><b id="sbCpProb">—</b></div>
+      <div id="sbCpPath" style="font-size:10.5px;color:var(--ink-2);margin-top:7px;line-height:1.5"></div>
+    </div>
+
+    <div class="tip-box"><b>PERT:</b> por cada actividad estima <b>O</b>ptimista, <b>M</b>ás probable y <b>P</b>esimista. TE = (O+4M+P)/6 pondera la incertidumbre: cuando P se aleja de M más que O (lo típico en construcción), <b>TE &gt; Dur base</b> — el riesgo alarga la esperanza. La regla <b>O ≤ M ≤ P</b> es obligatoria: las ternas rotas se pintan en rojo.</div>
+    <div class="tip-box"><b>Trabaja como en Excel:</b> <b>Ctrl+V</b> pega bloques (O, M, P se reparten hacia abajo y a la derecha), <b>Enter</b> y ↑ ↓ navegan la columna, <b>Shift+clic</b> selecciona un rango y <b>Ctrl+C</b> lo copia. <b>Clic derecho</b> abre el menú contextual para pegar desde Excel, copiar o volver M al modo automático.</div>
+  </aside>
+</div>
+
+<div class="statusbar">
+  <span id="statusLeft">Listo</span>
+  <span>Análisis PERT · TE = (O + 4M + P) / 6</span>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-card">
+    <h3 id="modalTitle">Título</h3>
+    <p id="modalMsg"></p>
+    <div class="modal-actions">
+      <button class="btn" id="modalCancel">Cancelar</button>
+      <button class="btn primary" id="modalOk">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<div class="ctx-menu" id="ctxMenu"></div>
+<div id="gpiReport"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- estado ----------
+  // Las ternas se guardan POR ACTIVIDAD (id del módulo Definir las Actividades):
+  // { o, m, mAuto, p }. Con mAuto=true, M SIGUE en vivo a la duración base
+  // Dur = Met/(#Eq×R) — si cambian metrados o rendimientos, M se actualiza sola.
+  // inputMode: "dias" (O/P en días) o "pct" (O/P como % de M).
+  var mode = "live";
+  var stateLive = { byActivity: {}, inputMode: "dias" };
+  var stateSample = null;
+  var wbsLive = null, actsLive = null;
+
+  function state() { return mode === "sample" ? stateSample : stateLive; }
+  function wbsData() { return mode === "sample" ? SAMPLE_WBS : wbsLive; }
+  function actsData() { return mode === "sample" ? SAMPLE_ACTS : actsLive; }
+  function pe(actId) {
+    var st = state();
+    if (!st.byActivity[actId]) st.byActivity[actId] = { o: "", m: "", mAuto: true, p: "" };
+    return st.byActivity[actId];
+  }
+
+  // ---------- utilidades ----------
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function setStatus(m) { document.getElementById("statusLeft").textContent = m; }
+  function normalizeState(obj) {
+    obj = obj || {};
+    var by = {}, src = obj.byActivity || {};
+    Object.keys(src).forEach(function (k) {
+      var e = src[k] || {};
+      by[k] = { o: e.o == null ? "" : e.o, m: e.m == null ? "" : e.m, mAuto: e.mAuto !== false, p: e.p == null ? "" : e.p };
+    });
+    return { byActivity: by, inputMode: obj.inputMode === "pct" ? "pct" : "dias" };
+  }
+  function fmt(v, dec) { return v == null || !isFinite(v) ? "—" : Number(v).toLocaleString("es-PE", { minimumFractionDigits: 0, maximumFractionDigits: dec }); }
+  function round2(v) { return Math.round(v * 100) / 100; }
+
+  // parser numérico tolerante (coma decimal y miles, como Excel)
+  function parseExcelNum(s) {
+    s = String(s == null ? "" : s).trim().replace(/[\s\u00a0]/g, "");
+    if (!s) return "";
+    var hasDot = s.indexOf(".") !== -1, hasComma = s.indexOf(",") !== -1;
+    if (hasDot && hasComma) {
+      if (s.lastIndexOf(".") > s.lastIndexOf(",")) s = s.replace(/,/g, "");
+      else s = s.replace(/\./g, "").replace(/,/g, ".");
+    } else if (hasComma) {
+      var parts = s.split(",");
+      var allThousands = parts.length >= 2 && parts.slice(1).every(function (p) { return p.length === 3 && /^\d+$/.test(p); });
+      s = allThousands ? parts.join("") : parts.join(".");
+    }
+    var n = Number(s);
+    return isFinite(n) ? String(n) : null;
+  }
+  function numVal(v) {
+    if (v === "" || v == null) return NaN;
+    var p = parseExcelNum(v);
+    return (p === null || p === "") ? NaN : Number(p);
+  }
+
+  // Duración base: misma fórmula que Definir las Actividades (fuente única)
+  function durActivity(a) {
+    var met = numVal(a.qty), r = numVal(a.perf), eq = numVal(a.teams);
+    if (!isFinite(met) || met <= 0 || !isFinite(r) || r <= 0) return null;
+    if (!isFinite(eq) || eq < 1) eq = 1;
+    return Math.ceil(met / (eq * r));
+  }
+
+  // ---------- modal ----------
+  function showModal(opts) {
+    return new Promise(function (resolve) {
+      var ov = document.getElementById("modalOverlay");
+      document.getElementById("modalTitle").textContent = opts.title || "";
+      document.getElementById("modalMsg").textContent = opts.message || "";
+      var ok = document.getElementById("modalOk"), cancel = document.getElementById("modalCancel");
+      ok.textContent = opts.confirmText || "Aceptar";
+      ok.className = "btn " + (opts.danger ? "danger" : "primary");
+      cancel.style.display = opts.cancelText === null ? "none" : "";
+      cancel.textContent = opts.cancelText || "Cancelar";
+      function done(v) { ov.classList.remove("open"); ok.onclick = cancel.onclick = ov.onclick = null; document.removeEventListener("keydown", key); resolve(v); }
+      function key(e) { if (e.key === "Escape") done(false); if (e.key === "Enter") done(true); }
+      ok.onclick = function () { done(true); };
+      cancel.onclick = function () { done(false); };
+      ov.onclick = function (e) { if (e.target === ov) done(false); };
+      document.addEventListener("keydown", key);
+      ov.classList.add("open"); ok.focus();
+    });
+  }
+  function showConfirm(m, t) { return showModal({ title: t || "Confirmar acción", message: m, confirmText: "Continuar", cancelText: "Cancelar" }); }
+  function showAlert(m, t) { return showModal({ title: t || "Aviso", message: m, confirmText: "Entendido", cancelText: null }); }
+
+  // ---------- modelo de filas (numeración consecutiva estilo MS Project) ----------
+  function treeRows() {
+    var w = wbsData(), out = [];
+    if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
+    (function walk(id, code, depth) {
+      var n = w.nodes[id]; if (!n) return;
+      var kids = n.children || [];
+      if (id !== w.rootId) out.push({ kind: kids.length ? "phase" : "package", id: id, code: code, name: n.name || "", depth: depth });
+      kids.forEach(function (cid, i) { walk(cid, code ? code + "." + (i + 1) : String(i + 1), depth + 1); });
+    })(w.rootId, "", 0);
+    return out;
+  }
+
+  // Cálculo por actividad: M efectiva (auto = Dur base), O/P en días según el
+  // modo de ingreso, TE/σ/σ² y validez (O ≤ M ≤ P).
+  function calc(a) {
+    var e = state().byActivity[a.id] || { o: "", m: "", mAuto: true, p: "" };
+    var dur = durActivity(a);
+    var m = (e.mAuto !== false && dur != null) ? dur : (isFinite(numVal(e.m)) ? numVal(e.m) : null);
+    var mAuto = e.mAuto !== false;
+    var oRaw = numVal(e.o), pRaw = numVal(e.p);
+    var pct = state().inputMode === "pct";
+    var o = isFinite(oRaw) ? (pct ? (m != null ? oRaw / 100 * m : null) : oRaw) : null;
+    var p = isFinite(pRaw) ? (pct ? (m != null ? pRaw / 100 * m : null) : pRaw) : null;
+    var complete = o != null && m != null && p != null && o > 0;
+    var valid = complete && o <= m && m <= p;
+    var te = null, sd = null, va = null;
+    if (complete) { te = (o + 4 * m + p) / 6; sd = (p - o) / 6; va = sd * sd; }
+    return { entry: e, dur: dur, m: m, mAuto: mAuto, oDays: o, pDays: p, te: te, sd: sd, va: va, complete: complete, valid: valid };
+  }
+
+  function fullRows() {
+    var acts = actsData(), out = [];
+    var w = wbsData();
+    if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
+    var byLeaf = (acts && acts.byLeaf) || {};
+    var n = 0;
+    var rootName = ((w.nodes[w.rootId].name || "").trim()) || document.getElementById("projectTitle").value || "Proyecto";
+    out.push({ kind: "project", n: n++, code: "0", name: rootName });
+    treeRows().forEach(function (r) {
+      if (r.kind === "phase") { out.push({ kind: "phase", n: n++, code: r.code, name: r.name, depth: r.depth }); return; }
+      var list = byLeaf[r.id] || [];
+      out.push({ kind: "package", n: n++, code: r.code, name: r.name, depth: r.depth, count: list.length });
+      list.forEach(function (a, i) {
+        out.push({ kind: "activity", n: n++, code: r.code + "." + (i + 1), a: a, c: calc(a) });
+      });
+    });
+    return out;
+  }
+  function activityCount() { return fullRows().filter(function (r) { return r.kind === "activity"; }).length; }
+
+  // ---------- render ----------
+  var actsCache = [];
+  var selAnchor = null, selEnd = null;
+  var PASTE_FIELDS = ["o", "m", "p"];
+
+  function render() {
+    var chip = document.getElementById("modeChip");
+    chip.textContent = mode === "sample" ? "MODO EJEMPLO" : "Actividades del proyecto";
+    chip.className = "mode-chip " + (mode === "sample" ? "sample" : "live");
+    document.getElementById("btnSample").style.display = mode === "sample" ? "none" : "";
+    document.getElementById("btnLive").style.display = mode === "sample" ? "" : "none";
+    document.getElementById("btnReload").disabled = mode === "sample";
+    document.getElementById("inputModeSel").value = state().inputMode;
+    var pctMode = state().inputMode === "pct";
+    document.getElementById("thO").textContent = pctMode ? "O (% M)" : "O (días)";
+    document.getElementById("thP").textContent = pctMode ? "P (% M)" : "P (días)";
+    document.getElementById("thO").title = pctMode ? "Optimista como porcentaje de M (85 = 85% de M)" : "Duración optimista, en días";
+    document.getElementById("thP").title = pctMode ? "Pesimista como porcentaje de M (140 = 140% de M)" : "Duración pesimista, en días";
+    renderTable();
+    renderSidebar();
+    renderProbability();
+    renderOrphans();
+  }
+
+  function renderTable() {
+    var tbody = document.getElementById("actsBody");
+    var empty = document.getElementById("emptyState");
+    var rows = fullRows();
+    actsCache = rows.filter(function (r) { return r.kind === "activity"; });
+    selAnchor = null; selEnd = null;
+
+    var hasActs = actsCache.length > 0;
+    if (!rows.length || !hasActs) {
+      tbody.innerHTML = "";
+      empty.style.display = "";
+      empty.innerHTML = mode === "live"
+        ? "<b>El proyecto aún no tiene actividades.</b><br>El análisis PERT trabaja sobre las actividades definidas (con sus metrados y rendimientos) en Definir las Actividades.<br><a class=\"btn\" href=\"Activity_Definition.html\">☰ Abrir Definir las Actividades</a><button class=\"btn primary\" id=\"btnSampleInner\">Explorar con el modo ejemplo</button>"
+        : "<b>Sin actividades de ejemplo.</b>";
+      var bi = document.getElementById("btnSampleInner");
+      if (bi) bi.addEventListener("click", enterSample);
+      return;
+    }
+    empty.style.display = "none";
+
+    var pct = state().inputMode === "pct";
+    var html = "";
+    rows.forEach(function (r) {
+      if (r.kind === "project") {
+        html += '<tr class="proj-row"><td class="n-cell">0</td><td class="code-cell" style="color:var(--ink-1)">0</td><td colspan="7">' + esc(r.name) + '</td><td style="text-align:center"><span class="proj-hint">Fila 0</span></td></tr>';
+      } else if (r.kind === "phase") {
+        html += '<tr class="phase-row"><td class="n-cell">' + r.n + '</td><td class="code-cell">' + esc(r.code) + '</td><td colspan="8" style="padding-left:' + (10 + Math.max(0, r.depth - 1) * 16) + 'px">' + esc(r.name) + '</td></tr>';
+      } else if (r.kind === "package") {
+        html += '<tr class="pkg-row"><td class="n-cell">' + r.n + '</td><td class="pk-code">' + esc(r.code) + '</td>'
+          + '<td colspan="8" style="padding-left:' + (8 + Math.max(0, r.depth - 1) * 16) + 'px"><span class="pk-name">' + esc(r.name) + '</span><span class="pk-count">' + r.count + ' act.</span></td></tr>';
+      } else {
+        var a = r.a, c = r.c, e = c.entry;
+        var mShown = c.mAuto ? (c.dur == null ? "" : c.dur) : e.m;
+        html += '<tr class="act-row' + (c.complete && !c.valid ? ' row-invalid" title="Terna inválida: debe cumplirse O ≤ M ≤ P (en días). Corrige los valores."' : '"') + ' data-act="' + esc(a.id) + '">'
+          + '<td class="n-cell">' + r.n + '</td>'
+          + '<td class="act-code">' + esc(r.code) + '</td>'
+          + '<td><span class="act-name">' + esc(a.name || "— sin nombre —") + '</span><span class="act-unit">' + esc(a.unit || "") + (a.qty ? " · " + esc(a.qty) : "") + '</span></td>'
+          + '<td class="durbase" title="Met ÷ (#Eq × R) del módulo Definir las Actividades">' + (c.dur == null ? "—" : c.dur) + '</td>'
+          + '<td class="in-cell"><input data-act="' + esc(a.id) + '" data-f="o" value="' + esc(e.o) + '" inputmode="decimal" placeholder="' + (pct ? "% M" : "días") + '"></td>'
+          + '<td class="in-cell"><input data-act="' + esc(a.id) + '" data-f="m" class="' + (c.mAuto ? "m-auto" : "") + '" value="' + esc(mShown) + '" inputmode="decimal" title="' + (c.mAuto ? "M automática: sigue a la Dur base. Escribe para fijarla; bórrala para volver al automático." : "M fijada a mano. Borra el valor para que vuelva a seguir a la Dur base.") + '"></td>'
+          + '<td class="in-cell"><input data-act="' + esc(a.id) + '" data-f="p" value="' + esc(e.p) + '" inputmode="decimal" placeholder="' + (pct ? "% M" : "días") + '"></td>'
+          + '<td class="der-cell' + (c.te == null ? ' empty' : '') + '" data-der="te">' + fmt(c.te, 1) + '</td>'
+          + '<td class="der-cell' + (c.sd == null ? ' empty' : '') + '" data-der="sd">' + fmt(c.sd, 2) + '</td>'
+          + '<td class="der-cell' + (c.va == null ? ' empty' : '') + '" data-der="va">' + fmt(c.va, 2) + '</td>'
+          + '</tr>';
+      }
+    });
+    tbody.innerHTML = html;
+  }
+
+  // refresco EN VIVO de una fila (sin re-render: no perder el foco)
+  function refreshRow(actId) {
+    var row = document.querySelector('#actsBody tr[data-act="' + actId + '"]');
+    if (!row) return;
+    var a = null;
+    for (var i = 0; i < actsCache.length; i++) if (actsCache[i].a.id === actId) { a = actsCache[i].a; actsCache[i].c = calc(a); break; }
+    if (!a) return;
+    var c = calc(a);
+    var set = function (key, val, dec) {
+      var td = row.querySelector('[data-der="' + key + '"]');
+      if (td) { td.textContent = fmt(val, dec); td.className = "der-cell" + (val == null ? " empty" : ""); }
+    };
+    set("te", c.te, 1); set("sd", c.sd, 2); set("va", c.va, 2);
+    row.classList.toggle("row-invalid", !!(c.complete && !c.valid));
+    row.title = c.complete && !c.valid ? "Terna inválida: debe cumplirse O ≤ M ≤ P (en días). Corrige los valores." : "";
+    var mInp = row.querySelector('input[data-f="m"]');
+    if (mInp) {
+      mInp.classList.toggle("m-auto", c.mAuto);
+      if (c.mAuto && document.activeElement !== mInp) mInp.value = c.dur == null ? "" : c.dur;
+    }
+  }
+
+  function stats() {
+    var complete = 0, invalid = 0, sumTe = 0, sumVar = 0, sumDur = 0;
+    actsCache.forEach(function (r) {
+      var c = calc(r.a);
+      if (c.dur != null) sumDur += c.dur;
+      if (c.complete) { complete++; if (!c.valid) invalid++; else { sumTe += c.te; sumVar += c.va; } }
+    });
+    return { total: actsCache.length, complete: complete, invalid: invalid, sumTe: sumTe, sumVar: sumVar, sumDur: sumDur };
+  }
+
+  function renderSidebar() {
+    var s = stats();
+    document.getElementById("sbTotal").textContent = s.complete;
+    document.getElementById("sbCov").textContent = s.complete + "/" + s.total + " actividades";
+    var pctv = s.total ? Math.round(s.complete / s.total * 100) : 0;
+    document.getElementById("sbPct").textContent = pctv + "%";
+    var bar = document.getElementById("sbBar");
+    bar.style.width = pctv + "%";
+    bar.style.background = s.invalid ? "var(--danger)" : (pctv >= 100 ? "var(--good)" : (pctv >= 50 ? "var(--warn)" : "var(--pe-a)"));
+    var inv = document.getElementById("sbInvalid");
+    if (s.invalid) { inv.style.display = ""; inv.textContent = "⚠ " + s.invalid + " terna(s) inválida(s): revisa que O ≤ M ≤ P (filas en rojo)."; }
+    else inv.style.display = "none";
+    document.getElementById("sbSumDur").textContent = s.sumDur ? fmt(s.sumDur, 0) + " d" : "—";
+    document.getElementById("sbSumTe").textContent = s.complete - s.invalid > 0 ? fmt(s.sumTe, 1) + " d" : "—";
+    document.getElementById("sbSumVar").textContent = s.complete - s.invalid > 0 ? fmt(s.sumVar, 2) : "—";
+  }
+
+  // ---------- PROBABILIDAD PERT SOBRE LA RUTA CRÍTICA ----------
+  // Metodológicamente la probabilidad NO se calcula con la suma de todas las
+  // actividades, sino con ΣTE y Σσ² de las actividades de la RUTA CRÍTICA.
+  // Aquí la ruta crítica se recalcula con las duraciones ESPERADAS (TE), no
+  // con las determinísticas: es el CPM probabilístico clásico del método PERT.
+  function scheduleLinks() {
+    if (mode === "sample") return SAMPLE_LINKS;
+    try {
+      var sc = (window.GPI && window.GPI.getModule) ? window.GPI.getModule("schedule") : null;
+      return (sc && Array.isArray(sc.links)) ? sc.links : [];
+    } catch (e) { return []; }
+  }
+  function criticalPathStats() {
+    if (!window.GPI || !window.GPI.util || !window.GPI.util.cpm) return null;
+    var links = scheduleLinks();
+    if (!links.length) return { reason: "no-links" };
+    // Toda actividad entra a la red para no romper la cadena de precedencias.
+    // Si su terna es inválida o está incompleta se usa la duración base
+    // determinística y su varianza cuenta como 0: se avisa al alumno, pero la
+    // ruta crítica sigue siendo la del cronograma real.
+    var byId = {}, nodes = [], anyInvalid = 0, missing = 0, teCount = 0;
+    actsCache.forEach(function (r) {
+      var c = r.c, useTe = c.complete && c.valid;
+      if (c.complete && !c.valid) anyInvalid++;
+      if (!c.complete) missing++;
+      var d = useTe ? c.te : (c.dur != null ? c.dur : (c.m != null ? c.m : 0));
+      byId[r.a.id] = { te: d, va: useTe ? c.va : 0, est: useTe };
+      if (useTe) teCount++;
+      nodes.push({ id: r.a.id, dur: d });
+    });
+    if (!teCount) return { reason: "no-te" };
+    var cal = null;
+    try { cal = window.GPI.util.projectCalendar(); } catch (e) {}
+    var res = window.GPI.util.cpm(nodes, links, cal, {});
+    if (!res || !res.ok) return { reason: "cycle" };
+    var ids = res.criticalIds || [];
+    if (!ids.length) return { reason: "no-path" };
+    var te = 0, va = 0, names = [], cpNoTe = 0;
+    ids.forEach(function (id) {
+      var c = byId[id]; if (!c) return;
+      te += c.te; va += c.va;
+      if (!c.est) cpNoTe++;
+      var row = actsCache.filter(function (r) { return r.a.id === id; })[0];
+      names.push((row ? row.a.name : id) + (c.est ? "" : " *"));
+    });
+    return { ids: ids, names: names, te: te, va: va, duration: res.projectDuration,
+             anyInvalid: anyInvalid, missing: missing, cpNoTe: cpNoTe };
+  }
+  var targetTouched = false;
+  function renderProbability() {
+    var elTe = document.getElementById("sbCpTe"), elSd = document.getElementById("sbCpSd"),
+        elZ = document.getElementById("sbCpZ"), elP = document.getElementById("sbCpProb"),
+        elPath = document.getElementById("sbCpPath"), elT = document.getElementById("sbTarget");
+    if (!elTe) return;
+    function clear(msg) {
+      elTe.textContent = elSd.textContent = elZ.textContent = elP.textContent = "—";
+      elPath.innerHTML = msg;
+    }
+    var cp = criticalPathStats();
+    if (!cp) { clear("Requiere <code>gpi-core.js</code>."); return; }
+    if (cp.reason === "no-links") { clear("Sin red de precedencias. Abre <b>Cronograma / CPM</b> y define las relaciones entre actividades para obtener la ruta crítica."); return; }
+    if (cp.reason === "no-te") { clear("Ninguna actividad tiene una terna O–M–P válida todavía."); return; }
+    if (cp.reason === "cycle") { clear("La red tiene un <b>ciclo</b>: el CPM no puede resolverse. Corrígelo en Cronograma / CPM."); return; }
+    if (cp.reason === "no-path") { clear("No se pudo determinar la ruta crítica."); return; }
+    if (!targetTouched && (!elT.value || +elT.value <= 0)) elT.value = Math.ceil(cp.te) + 3;
+    var target = +elT.value || Math.ceil(cp.te);
+    var r = window.GPI.util.pertProbability(cp.te, cp.va, target);
+    elTe.textContent = fmt(cp.te, 1) + " d";
+    if (!r) {
+      elSd.textContent = "0.0 d"; elZ.textContent = "—"; elP.textContent = "—";
+    } else {
+      elSd.textContent = fmt(r.sigma, 2) + " d";
+      elZ.textContent = fmt(r.z, 2);
+      var pc = r.prob * 100;
+      elP.textContent = pc.toFixed(1) + "%";
+      elP.style.color = pc >= 80 ? "var(--good)" : (pc >= 50 ? "var(--warn)" : "var(--danger)");
+    }
+    var warn = "";
+    if (cp.anyInvalid) warn += "<br>⚠ " + cp.anyInvalid + " terna(s) inválida(s) (debe cumplirse O ≤ M ≤ P).";
+    if (cp.missing) warn += "<br>⚠ " + cp.missing + " actividad(es) sin terna completa.";
+    if (cp.cpNoTe) warn += "<br>⚠ " + cp.cpNoTe + " actividad(es) de la ruta crítica (marcadas con *) entraron con su duración base y aportan σ² = 0: la probabilidad está <b>sobrestimada</b> hasta que completes su terna.";
+    elPath.innerHTML = "<b>Ruta crítica (" + cp.ids.length + " act.):</b> "
+      + cp.names.map(esc).join(" → ") + warn;
+  }
+
+  function renderOrphans() {
+    var st = state(), ids = {};
+    actsCache.forEach(function (r) { ids[r.a.id] = true; });
+    var orphan = Object.keys(st.byActivity).filter(function (k) {
+      var e = st.byActivity[k];
+      var hasData = (e.o !== "" || e.p !== "" || e.mAuto === false);
+      return hasData && !ids[k];
+    });
+    var bn = document.getElementById("orphanBanner");
+    if (!orphan.length) { bn.classList.remove("show"); bn.innerHTML = ""; return; }
+    bn.classList.add("show");
+    bn.innerHTML = "<b>⚠ " + orphan.length + " terna(s) huérfana(s):</b> su actividad ya no existe en Definir las Actividades. "
+      + '<button class="btn sm danger" id="btnOrphans">Eliminar huérfanas</button>';
+    document.getElementById("btnOrphans").addEventListener("click", async function () {
+      var ok = await showConfirm("Se eliminarán las " + orphan.length + " ternas huérfanas.", "Eliminar ternas huérfanas");
+      if (!ok) return;
+      orphan.forEach(function (k) { delete st.byActivity[k]; });
+      onDirty(true);
+    });
+  }
+
+  var dirtyTimer = null;
+  function onDirty(rerender) {
+    if (rerender) render(); else renderSidebar();
+    clearTimeout(dirtyTimer);
+    dirtyTimer = setTimeout(gpiPush, 800);
+    setStatus("Cambios sin exportar — se sincronizan solos con el Panel.");
+  }
+
+  // ---------- cambio de modo de ingreso (días ↔ % de M) ----------
+  async function switchInputMode(newMode) {
+    var st = state();
+    if (newMode === st.inputMode) return;
+    var label = newMode === "pct" ? "porcentaje de M" : "días";
+    var ok = await showConfirm("Los valores de O y P ya ingresados se CONVERTIRÁN a " + label + " usando la M de cada actividad, de modo que el análisis no cambia. En modo % de M, O y P escalan solos cuando la M automática cambia con los metrados. ¿Continuar?", "Cambiar el modo de ingreso");
+    if (!ok) { document.getElementById("inputModeSel").value = st.inputMode; return; }
+    actsCache.forEach(function (r) {
+      var e = st.byActivity[r.a.id];
+      if (!e) return;
+      var c = calc(r.a);
+      if (c.m == null || c.m <= 0) return;
+      ["o", "p"].forEach(function (f) {
+        var v = numVal(e[f]);
+        if (!isFinite(v)) return;
+        e[f] = String(newMode === "pct" ? round2(v / c.m * 100) : round2(v * c.m / 100));
+      });
+    });
+    st.inputMode = newMode;
+    onDirty(true);
+    setStatus("Modo de ingreso: " + (newMode === "pct" ? "O y P como % de M (escalan con la M automática)." : "O y P en días."));
+  }
+
+  // ---------- grilla: navegación, selección, copiado ----------
+  function cellCoord(el) {
+    var f = PASTE_FIELDS.indexOf(el.dataset.f);
+    if (f === -1) return null;
+    for (var r = 0; r < actsCache.length; r++) if (actsCache[r].a.id === el.dataset.act) return { r: r, f: f };
+    return null;
+  }
+  function cellInput(r, f) {
+    var it = actsCache[r];
+    if (!it || !PASTE_FIELDS[f]) return null;
+    return document.querySelector('input[data-act="' + it.a.id + '"][data-f="' + PASTE_FIELDS[f] + '"]');
+  }
+  function clearSelection() { selEnd = null; paintSelection(); }
+  function paintSelection() {
+    document.querySelectorAll("#actsBody td.sel").forEach(function (td) { td.classList.remove("sel"); });
+    if (!selAnchor || !selEnd) return;
+    var r1 = Math.min(selAnchor.r, selEnd.r), r2 = Math.max(selAnchor.r, selEnd.r);
+    var f1 = Math.min(selAnchor.f, selEnd.f), f2 = Math.max(selAnchor.f, selEnd.f);
+    for (var r = r1; r <= r2; r++) for (var f = f1; f <= f2; f++) {
+      var inp = cellInput(r, f);
+      if (inp) inp.closest("td").classList.add("sel");
+    }
+  }
+  function selectionTsv() {
+    if (!selAnchor || !selEnd) return null;
+    var r1 = Math.min(selAnchor.r, selEnd.r), r2 = Math.max(selAnchor.r, selEnd.r);
+    var f1 = Math.min(selAnchor.f, selEnd.f), f2 = Math.max(selAnchor.f, selEnd.f);
+    var lines = [];
+    for (var r = r1; r <= r2; r++) {
+      var it = actsCache[r], c = calc(it.a), e = state().byActivity[it.a.id] || { o: "", m: "", p: "", mAuto: true };
+      var cells = [];
+      for (var f = f1; f <= f2; f++) {
+        var fd = PASTE_FIELDS[f];
+        var v = fd === "m" ? (c.mAuto ? (c.dur == null ? "" : c.dur) : e.m) : e[fd];
+        cells.push(v == null ? "" : String(v));
+      }
+      lines.push(cells.join("\t"));
+    }
+    return lines.join("\n");
+  }
+  function moveTo(r, f) {
+    var inp = cellInput(r, f);
+    if (!inp) return false;
+    inp.focus();
+    try { inp.select(); } catch (_) {}
+    return true;
+  }
+  function caretAtStart(el) { try { return el.selectionStart === 0 && el.selectionEnd === 0; } catch (_) { return false; } }
+  function caretAtEnd(el) { try { return el.selectionStart === el.value.length && el.selectionEnd === el.value.length; } catch (_) { return false; } }
+
+  function setField(actId, f, rawVal) {
+    var e = pe(actId);
+    if (f === "m") {
+      if (String(rawVal).trim() === "") { e.m = ""; e.mAuto = true; }   // borrar M => vuelve al automático
+      else { e.m = rawVal; e.mAuto = false; }
+    } else {
+      e[f] = rawVal;
+    }
+  }
+
+  function wireGrid() {
+    var tbody = document.getElementById("actsBody");
+
+    tbody.addEventListener("input", function (ev) {
+      var el = ev.target.closest ? ev.target.closest("input[data-act]") : null;
+      if (!el) return;
+      setField(el.dataset.act, el.dataset.f, el.value);
+      refreshRow(el.dataset.act);
+      onDirty(false);
+    });
+
+    tbody.addEventListener("keydown", function (ev) {
+      var el = ev.target.closest ? ev.target.closest("input[data-act]") : null;
+      if (!el) return;
+      var c = cellCoord(el);
+      if (!c) return;
+      if (ev.key === "Enter") { ev.preventDefault(); moveTo(c.r + 1, c.f) || el.blur(); return; }
+      if (ev.key === "ArrowDown" && !ev.shiftKey) { ev.preventDefault(); moveTo(c.r + 1, c.f); return; }
+      if (ev.key === "ArrowUp" && !ev.shiftKey) { ev.preventDefault(); moveTo(c.r - 1, c.f); return; }
+      if (ev.key === "ArrowRight" && !ev.shiftKey && caretAtEnd(el)) { if (moveTo(c.r, c.f + 1)) ev.preventDefault(); return; }
+      if (ev.key === "ArrowLeft" && !ev.shiftKey && caretAtStart(el)) { if (moveTo(c.r, c.f - 1)) ev.preventDefault(); return; }
+      if (ev.key === "Escape") { clearSelection(); return; }
+    });
+
+    tbody.addEventListener("mousedown", function (ev) {
+      var el = ev.target.closest ? ev.target.closest("input[data-act]") : null;
+      if (!el) return;
+      if (ev.shiftKey && selAnchor) {
+        ev.preventDefault();
+        var c = cellCoord(el);
+        if (c) { selEnd = c; paintSelection(); }
+      }
+    });
+    tbody.addEventListener("focusin", function (ev) {
+      var el = ev.target.closest ? ev.target.closest("input[data-act]") : null;
+      if (!el) return;
+      var c = cellCoord(el);
+      if (c) { selAnchor = c; clearSelection(); }
+    });
+    tbody.addEventListener("copy", function (ev) {
+      var tsv = selectionTsv();
+      if (tsv == null || !ev.clipboardData) return;
+      ev.clipboardData.setData("text/plain", tsv);
+      ev.preventDefault();
+      setStatus("Rango copiado — pégalo en Excel o en otra parte de la tabla.");
+    });
+    tbody.addEventListener("paste", function (ev) {
+      var el = ev.target.closest ? ev.target.closest("input[data-act]") : null;
+      if (!el || !ev.clipboardData) return;
+      var text = ev.clipboardData.getData("text/plain") || "";
+      if (text.indexOf("\t") === -1 && !/\r?\n./.test(text)) return; // pegado nativo de una celda
+      ev.preventDefault();
+      applyGrid(text, el);
+    });
+    tbody.addEventListener("contextmenu", onContextMenu);
+  }
+
+  // Distribuye un bloque TSV (de Excel) desde la celda ancla hacia abajo y
+  // hacia la derecha (O → M → P). Celdas vacías o no numéricas no pisan datos.
+  function applyGrid(text, anchorEl) {
+    var grid = text.replace(/\r/g, "").split("\n");
+    while (grid.length && grid[grid.length - 1] === "") grid.pop();
+    if (!grid.length) return;
+    var start = cellCoord(anchorEl);
+    if (!start) return;
+    var applied = 0, skipped = 0;
+    grid.forEach(function (line, ri) {
+      var target = actsCache[start.r + ri];
+      if (!target) { skipped++; return; }
+      line.split("\t").forEach(function (raw, ci) {
+        var f = PASTE_FIELDS[start.f + ci];
+        if (!f) return;
+        var val = parseExcelNum(raw);
+        if (val === null) { if (String(raw).trim()) skipped++; return; }
+        if (val === "") return;
+        setField(target.a.id, f, val);
+        applied++;
+      });
+    });
+    onDirty(true);
+    setStatus("Pegado desde Excel: " + applied + " valor(es)" + (skipped ? " · " + skipped + " celda(s) omitida(s)" : "") + ".");
+  }
+
+  // ---------- MENÚ CONTEXTUAL (clic derecho sobre una celda O/M/P) ----------
+  function onContextMenu(ev) {
+    var el = ev.target.closest ? ev.target.closest("input[data-act]") : null;
+    if (!el) return; // fuera de celdas editables: menú nativo
+    ev.preventDefault();
+    el.focus();
+    var actId = el.dataset.act;
+    var e = state().byActivity[actId];
+    var menu = document.getElementById("ctxMenu");
+    var canRead = !!(navigator.clipboard && navigator.clipboard.readText);
+    var hasRange = !!(selAnchor && selEnd);
+    menu.innerHTML =
+      '<div class="ctx-item' + (canRead ? '' : ' disabled') + '" data-cmd="paste">📋 Pegar desde Excel aquí' + (canRead ? '' : ' <span style="font-weight:500">(usa Ctrl+V)</span>') + '</div>'
+      + '<div class="ctx-item' + (hasRange ? '' : ' disabled') + '" data-cmd="copyRange">⧉ Copiar rango seleccionado</div>'
+      + '<div class="ctx-item" data-cmd="copyTable">⧉ Copiar toda la tabla</div>'
+      + '<div class="ctx-sep"></div>'
+      + '<div class="ctx-item' + (e && e.mAuto === false ? '' : ' disabled') + '" data-cmd="mAuto">↺ M automática (volver a seguir la Dur)</div>'
+      + '<div class="ctx-item" data-cmd="clearRow">✕ Limpiar O/M/P de esta actividad</div>';
+    menu.classList.add("open");
+    var x = Math.min(ev.clientX, window.innerWidth - menu.offsetWidth - 8);
+    var y = Math.min(ev.clientY, window.innerHeight - menu.offsetHeight - 8);
+    menu.style.left = x + "px"; menu.style.top = y + "px";
+
+    menu.onclick = async function (me) {
+      var item = me.target.closest(".ctx-item");
+      if (!item || item.classList.contains("disabled")) return;
+      hideCtx();
+      var cmd = item.dataset.cmd;
+      if (cmd === "paste") {
+        try {
+          var text = await navigator.clipboard.readText();
+          if (!text || (text.indexOf("\t") === -1 && !/\r?\n./.test(text))) {
+            var v = parseExcelNum(text);
+            if (v !== null && v !== "") { setField(actId, el.dataset.f, v); onDirty(true); setStatus("Valor pegado."); }
+            else await showAlert("El portapapeles no contiene datos de celdas. Copia un bloque en Excel y vuelve a intentar (o usa Ctrl+V).");
+            return;
+          }
+          applyGrid(text, el);
+        } catch (_) {
+          await showAlert("El navegador no permitió leer el portapapeles desde el menú. Usa Ctrl+V directamente sobre la celda: funciona igual.");
+        }
+      } else if (cmd === "copyRange") {
+        copyText(selectionTsv(), "Rango copiado al portapapeles.");
+      } else if (cmd === "copyTable") {
+        copyWholeTable();
+      } else if (cmd === "mAuto") {
+        setField(actId, "m", "");
+        onDirty(true);
+        setStatus("M vuelve al modo automático: seguirá a la Dur base cuando cambien metrados o rendimientos.");
+      } else if (cmd === "clearRow") {
+        delete state().byActivity[actId];
+        onDirty(true);
+        setStatus("Terna O/M/P limpiada — M queda en automático.");
+      }
+    };
+  }
+  function hideCtx() { var m = document.getElementById("ctxMenu"); m.classList.remove("open"); m.onclick = null; }
+  document.addEventListener("click", function (e) { if (!e.target.closest || !e.target.closest("#ctxMenu")) hideCtx(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") hideCtx(); });
+  window.addEventListener("scroll", hideCtx, true);
+
+  function copyText(text, okMsg) {
+    if (text == null) return;
+    function done() { setStatus(okMsg); }
+    function legacy() {
+      var ta = document.createElement("textarea");
+      ta.value = text; ta.style.cssText = "position:fixed;opacity:0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch (_) { setStatus("No se pudo copiar al portapapeles."); }
+      ta.remove();
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, legacy);
+    else legacy();
+  }
+  function copyWholeTable() {
+    var rows = fullRows();
+    if (!rows.length) { setStatus("No hay tabla que copiar."); return; }
+    var pct = state().inputMode === "pct";
+    var lines = ["N.º\tEDT\tActividad\tDur base\tO" + (pct ? " (%M)" : " (días)") + "\tM (días)\tP" + (pct ? " (%M)" : " (días)") + "\tTE\tσ\tσ²"];
+    rows.forEach(function (r) {
+      if (r.kind === "activity") {
+        var c = r.c, e = c.entry;
+        lines.push([r.n, r.code, r.a.name || "", c.dur == null ? "" : c.dur,
+          e.o, c.mAuto ? (c.dur == null ? "" : c.dur) : e.m, e.p,
+          c.te == null ? "" : round2(c.te), c.sd == null ? "" : round2(c.sd), c.va == null ? "" : round2(c.va)].join("\t"));
+      } else {
+        lines.push([r.n, r.code, r.name, "", "", "", "", "", "", ""].join("\t"));
+      }
+    });
+    copyText(lines.join("\n"), "Tabla copiada al portapapeles (" + rows.length + " filas + encabezado): pégala en Excel con Ctrl+V.");
+  }
+
+  // ---------- export / import ----------
+  function exportJson() {
+    var data = { kind: "gpi.pert/v1", title: document.getElementById("projectTitle").value, course: document.getElementById("courseTitle").value, data: state() };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    var safe = (data.title || "pert").replace(/[^a-z0-9_\-]+/gi, "_").toLowerCase();
+    a.href = url; a.download = "pert_" + safe + ".json";
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    setStatus("Análisis PERT exportado como .json.");
+  }
+  function importJson(file) {
+    var r = new FileReader();
+    r.onload = function (e) {
+      var obj; try { obj = JSON.parse(e.target.result); } catch (_) { showAlert("El archivo no es un .json válido."); return; }
+      if (obj && obj.kind === "gpi.pert/v1" && obj.data) {
+        if (mode === "sample") stateSample = normalizeState(obj.data);
+        else stateLive = normalizeState(obj.data);
+        if (obj.title) document.getElementById("projectTitle").value = obj.title;
+        if (obj.course) document.getElementById("courseTitle").value = obj.course;
+        render(); gpiPush();
+        setStatus("Análisis PERT importado (las ternas se enlazan por el id de cada actividad).");
+      } else {
+        showAlert("No reconocí el formato: se esperaba una exportación de esta herramienta (gpi.pert/v1).");
+      }
+    };
+    r.readAsText(file);
+  }
+
+  // ---------- REPORTE ----------
+  function reportShell(docTitle, moduleName, bodyHtml) {
+    var el = document.getElementById("gpiReport");
+    var meta = {};
+    try { if (window.GPI && window.GPI.available() && window.GPI.meta()) meta = window.GPI.meta(); } catch (_) {}
+    var pName = document.getElementById("projectTitle").value || meta.name || "Proyecto";
+    var course = document.getElementById("courseTitle").value || meta.course || "Gestión de Proyectos de Ingeniería";
+    var today = new Date().toLocaleDateString("es-PE", { year: "numeric", month: "long", day: "numeric" });
+    el.innerHTML =
+      '<div class="rep-head"><div><h1>' + esc(docTitle) + '</h1>'
+      + '<div class="sub">' + esc(pName) + (meta.code ? ' · ' + esc(meta.code) : '') + '</div>'
+      + '<div class="sub" style="font-weight:500">' + esc(course) + '</div></div>'
+      + '<div class="rep-meta">' + esc(moduleName) + '<br>Emitido: ' + esc(today)
+      + (meta.client ? '<br>Cliente: ' + esc(meta.client) : '')
+      + (meta.location ? '<br>' + esc(meta.location) : '') + '</div></div>'
+      + bodyHtml;
+    document.body.classList.add("report-mode");
+    function repDone() { document.body.classList.remove("report-mode"); window.removeEventListener("afterprint", repDone); }
+    window.addEventListener("afterprint", repDone);
+    setTimeout(function () { window.print(); setTimeout(repDone, 500); }, 60);
+  }
+  function buildReport() {
+    var s = stats();
+    var pct = state().inputMode === "pct";
+    var body = (mode === "sample" ? '<p class="rep-note"><b>Modo ejemplo:</b> este análisis usa las actividades didácticas, no los datos del proyecto activo.</p>' : '')
+      + '<h2>1. Resumen del análisis</h2><table class="rep-kv">'
+      + '<tr><td>Actividades con terna O–M–P</td><td><b>' + s.complete + '</b> de ' + s.total + (s.invalid ? ' · <b style="color:#c0273f">' + s.invalid + ' inválida(s) (O ≤ M ≤ P roto)</b>' : '') + '</td></tr>'
+      + '<tr><td>Modo de ingreso de O y P</td><td>' + (pct ? "Porcentaje de M (escalan con la M automática)" : "Días") + '</td></tr>'
+      + '<tr><td>Σ Dur base (determinística)</td><td>' + fmt(s.sumDur, 0) + ' días</td></tr>'
+      + '<tr><td>Σ TE (esperada PERT)</td><td><b>' + fmt(s.sumTe, 1) + ' días</b> — suma simple de todas las actividades válidas</td></tr>'
+      + '<tr><td>Σ σ² (varianza)</td><td>' + fmt(s.sumVar, 2) + '</td></tr>'
+      + '<tr><td>Probabilidad de cumplimiento</td><td>Pendiente de la ruta crítica: se activa con el módulo Cronograma/CPM (Z = (plazo − ΣTE) / √Σσ² sobre la ruta).</td></tr>'
+      + '</table>'
+      + '<h2>2. Análisis por actividad</h2>'
+      + '<p class="rep-note">TE = (O + 4M + P) / 6 · σ = (P − O) / 6 · σ² = σ². La M automática sigue a la duración determinística Dur = Met ÷ (#Eq × R) del módulo Definir las Actividades; las M fijadas a mano se marcan con *. Valores de O/M/P mostrados en días.</p>'
+      + '<table><tr><th style="width:5%">N.º</th><th style="width:9%">EDT</th><th>Actividad</th><th style="width:7%">Dur</th><th style="width:7%">O</th><th style="width:7%">M</th><th style="width:7%">P</th><th style="width:7%">TE</th><th style="width:7%">σ</th><th style="width:7%">σ²</th></tr>';
+    fullRows().forEach(function (r) {
+      if (r.kind === "project") {
+        body += '<tr><td class="num rep-phase" style="text-align:center">0</td><td class="num rep-phase">0</td><td class="rep-phase" colspan="8">' + esc(r.name) + '</td></tr>';
+      } else if (r.kind === "phase") {
+        body += '<tr><td class="num rep-phase" style="text-align:center">' + r.n + '</td><td class="num rep-phase">' + esc(r.code) + '</td><td class="rep-phase" colspan="8">' + esc(r.name) + '</td></tr>';
+      } else if (r.kind === "package") {
+        body += '<tr><td class="num rep-pkg" style="text-align:center">' + r.n + '</td><td class="num rep-pkg">' + esc(r.code) + '</td><td class="rep-pkg" colspan="8">' + esc(r.name) + '</td></tr>';
+      } else {
+        var c = r.c;
+        var bad = c.complete && !c.valid;
+        var cls = bad ? ' class="rep-bad"' : '';
+        body += '<tr><td' + cls + ' style="text-align:center" class="num' + (bad ? ' rep-bad' : '') + '">' + r.n + '</td>'
+          + '<td class="num' + (bad ? ' rep-bad' : '') + '">' + esc(r.code) + '</td>'
+          + '<td' + cls + '>' + esc(r.a.name || "—") + (bad ? ' <b>⚠ O ≤ M ≤ P</b>' : '') + '</td>'
+          + '<td class="num' + (bad ? ' rep-bad' : '') + '" style="text-align:center">' + (c.dur == null ? "—" : c.dur) + '</td>'
+          + '<td class="num' + (bad ? ' rep-bad' : '') + '" style="text-align:center">' + fmt(c.oDays, 1) + '</td>'
+          + '<td class="num' + (bad ? ' rep-bad' : '') + '" style="text-align:center">' + fmt(c.m, 1) + (c.mAuto ? "" : "*") + '</td>'
+          + '<td class="num' + (bad ? ' rep-bad' : '') + '" style="text-align:center">' + fmt(c.pDays, 1) + '</td>'
+          + '<td class="num' + (bad ? ' rep-bad' : '') + '" style="text-align:center"><b>' + fmt(c.te, 1) + '</b></td>'
+          + '<td class="num' + (bad ? ' rep-bad' : '') + '" style="text-align:center">' + fmt(c.sd, 2) + '</td>'
+          + '<td class="num' + (bad ? ' rep-bad' : '') + '" style="text-align:center">' + fmt(c.va, 2) + '</td></tr>';
+      }
+    });
+    body += '</table>';
+    reportShell("Análisis PERT de Duraciones", "PERT · Gestión del Cronograma", body);
+  }
+
+  // ---------- EJEMPLO (autocontenido, nunca toca el proyecto) ----------
+  var SAMPLE_WBS = (function () {
+    var nodes = {}, k = 0;
+    function N(parentId, name) {
+      var id = "w" + (++k);
+      nodes[id] = { id: id, parentId: parentId, name: name, children: [] };
+      if (parentId) nodes[parentId].children.push(id);
+      return id;
+    }
+    var root = N(null, "Proyecto DISTRIB+ S.A. — Almacén Lurín");
+    var f2 = N(root, "Ingeniería y Diseño");
+    var p21 = N(f2, "Estudio de suelos"), p22 = N(f2, "Diseño estructural");
+    var f4 = N(root, "Construcción");
+    var p41 = N(f4, "Movimiento de tierras"), p42 = N(f4, "Cimentaciones"), p43 = N(f4, "Estructura y cobertura");
+    return { rootId: root, nodes: nodes, ids: { p21: p21, p22: p22, p41: p41, p42: p42, p43: p43 } };
+  })();
+  var SAMPLE_ACTS = (function () {
+    var I = SAMPLE_WBS.ids, by = {}, n = 0;
+    function A(name, unit, qty, perf, teams) { return { id: "a" + (++n), name: name, unit: unit, qty: qty, perf: perf == null ? "" : perf, teams: teams == null ? 1 : teams }; }
+    by[I.p21] = [A("Calicatas exploratorias", "und", 8, 2), A("Informe geotécnico", "doc", 1, 0.25)];
+    by[I.p22] = [A("Memoria de cálculo estructural", "doc", 1, 0.1), A("Planos estructurales", "lám", 24, 2)];
+    by[I.p41] = [A("Corte y excavación masiva", "m³", 4800, 320, 2), A("Relleno y compactación", "m³", 2100, 250), A("Eliminación de excedentes", "m³", 2700, 300)];
+    by[I.p42] = [A("Excavación de zanjas", "m³", 620, 60, 2), A("Acero de refuerzo", "kg", 38500, 2500, 2), A("Concreto f'c=280 en zapatas", "m³", 410, 45, 2)];
+    by[I.p43] = [A("Montaje de columnas metálicas", "und", 48, 6), A("Instalación de cobertura TR-4", "m²", 5200, 350, 2)];
+    return { byLeaf: by, idCounter: n + 1 };
+  })();
+  // Misma red de precedencias que el ejemplo del módulo Cronograma/CPM:
+  // permite calcular la RUTA CRÍTICA (y por tanto la probabilidad PERT)
+  // también en modo ejemplo, sin depender del proyecto activo.
+  var SAMPLE_LINKS = [
+      { id: "L1",  from: "a1",  to: "a2",  type: "FS", lag: 0, lagUnit: "d", source: "paste" },
+      { id: "L2",  from: "a2",  to: "a3",  type: "FS", lag: 0, lagUnit: "d", source: "paste" },
+      { id: "L3",  from: "a3",  to: "a4",  type: "SS", lag: 4, lagUnit: "d", source: "paste" },
+      { id: "L4",  from: "a2",  to: "a5",  type: "FS", lag: 0, lagUnit: "d", source: "paste" },
+      { id: "L5",  from: "a5",  to: "a6",  type: "SS", lag: 3, lagUnit: "d", source: "paste" },
+      { id: "L6",  from: "a5",  to: "a7",  type: "SS", lag: 2, lagUnit: "d", source: "paste" },
+      { id: "L7",  from: "a6",  to: "a8",  type: "FS", lag: 0, lagUnit: "d", source: "paste" },
+      { id: "L8",  from: "a7",  to: "a8",  type: "FS", lag: 0, lagUnit: "d", source: "paste" },
+      { id: "L9",  from: "a4",  to: "a8",  type: "FS", lag: 0, lagUnit: "d", source: "paste" },
+      { id: "L10", from: "a8",  to: "a9",  type: "FS", lag: 0, lagUnit: "d", source: "paste" },
+      { id: "L11", from: "a9",  to: "a10", type: "SS", lag: 2, lagUnit: "d", source: "paste" },
+      { id: "L12", from: "a10", to: "a11", type: "FS", lag: 3, lagUnit: "d", source: "paste" },
+      { id: "L13", from: "a11", to: "a12", type: "SS", lag: 5, lagUnit: "d", source: "paste" }
+    ];
+
+  function samplePert() {
+    // Durs base: a1=4 a2=4 a3=10 a4=12 a5=8 a6=9 a7=9 a8=6 a9=8 a10=5 a11=8 a12=8
+    return {
+      inputMode: "dias",
+      byActivity: {
+        a1:  { o: "3",  m: "",   mAuto: true,  p: "7"  },
+        a2:  { o: "3",  m: "",   mAuto: true,  p: "6"  },
+        a3:  { o: "8",  m: "",   mAuto: true,  p: "18" },
+        a4:  { o: "10", m: "",   mAuto: true,  p: "20" },
+        a5:  { o: "6",  m: "",   mAuto: true,  p: "14" },  // asimetría típica: TE > Dur
+        a6:  { o: "8",  m: "10", mAuto: false, p: "13" },  // M fijada a mano
+        a7:  { o: "7",  m: "",   mAuto: true,  p: "14" },
+        a8:  { o: "9",  m: "",   mAuto: true,  p: "5"  },  // TERNA INVÁLIDA deliberada: O > M > P
+        a9:  { o: "6",  m: "",   mAuto: true,  p: "12" },
+        a10: { o: "4",  m: "",   mAuto: true,  p: "9"  },
+        a11: { o: "6",  m: "",   mAuto: true,  p: "11" },
+        a12: { o: "7",  m: "",   mAuto: true,  p: "13" }
+      }
+    };
+  }
+  function enterSample() {
+    mode = "sample";
+    if (!stateSample) stateSample = samplePert();
+    render();
+    setStatus("Modo ejemplo: actividades y ternas didácticas (hay una terna inválida a propósito — encuéntrala).");
+  }
+  function enterLive() { mode = "live"; render(); setStatus("De vuelta a las actividades del proyecto."); }
+
+  // ---------- toolbar ----------
+  function wireToolbar() {
+    document.getElementById("btnExportJson").addEventListener("click", exportJson);
+    document.getElementById("btnImportJson").addEventListener("click", function () { document.getElementById("fileInput").click(); });
+    document.getElementById("fileInput").addEventListener("change", function (e) { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ""; });
+    document.getElementById("inputModeSel").addEventListener("change", function (e) { switchInputMode(e.target.value); });
+    document.getElementById("btnCopyTable").addEventListener("click", copyWholeTable);
+    document.getElementById("btnReport").addEventListener("click", buildReport);
+    document.getElementById("btnPrint").addEventListener("click", function () { window.print(); });
+    document.getElementById("btnReload").addEventListener("click", function () { gpiPull(); render(); setStatus("Actividades recargadas desde el proyecto."); });
+    document.getElementById("btnSample").addEventListener("click", enterSample);
+    document.getElementById("btnLive").addEventListener("click", enterLive);
+    document.getElementById("btnClear").addEventListener("click", async function () {
+      var ok = await showConfirm("Se eliminarán todas las ternas O/M/P del análisis actual" + (mode === "sample" ? " (modo ejemplo)" : "") + ". Las actividades no se tocan. ¿Continuar?", "Limpiar análisis");
+      if (!ok) return;
+      if (mode === "sample") stateSample = { byActivity: {}, inputMode: state().inputMode };
+      else stateLive = { byActivity: {}, inputMode: state().inputMode };
+      onDirty(true);
+      setStatus("Análisis PERT vacío — todas las M vuelven al modo automático.");
+    });
+  }
+
+  // ===== Puente GPI =====
+  function gpiPull() {
+    if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
+    wbsLive = window.GPI.getModule("wbs");
+    actsLive = window.GPI.getModule("activities");
+  }
+  function gpiPush() {
+    if (mode === "sample") return;
+    if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
+    window.GPI.setModule("pert", stateLive);
+    window.GPI.patchMeta({ name: document.getElementById("projectTitle").value, course: document.getElementById("courseTitle").value });
+  }
+
+  var initialized = false;
+  function init() {
+    if (initialized) return;
+    initialized = true;
+    wireToolbar();
+    wireGrid();
+
+    if (typeof window.GPI !== "undefined" && window.GPI.available()) {
+      var proj = window.GPI.active();
+      if (proj) {
+        if (proj.meta) {
+          if (proj.meta.name) document.getElementById("projectTitle").value = proj.meta.name;
+          if (proj.meta.course) document.getElementById("courseTitle").value = proj.meta.course;
+        }
+        gpiPull();
+        var modData = window.GPI.getModule("pert");
+        if (modData) stateLive = normalizeState(modData);
+        setStatus("Proyecto cargado desde el Panel de Control.");
+      }
+      window.addEventListener("beforeunload", gpiPush);
+      document.addEventListener("visibilitychange", function () { if (document.hidden) gpiPush(); });
+      if (window.GPI.onChange) window.GPI.onChange(function () {
+        // otra pestaña cambió metrados/rendimientos: la M automática debe seguir
+        if (mode === "live") { gpiPull(); render(); }
+      });
+      gpiBadge(proj ? (proj.meta && proj.meta.name) : "", gpiPush);
+    } else {
+      var bn = document.getElementById("banner");
+      bn.classList.add("show");
+      bn.innerHTML = "<b>Vista previa sin almacenamiento persistente.</b> Abre este archivo junto a <code>gpi-core.js</code> y los demás módulos para analizar las actividades reales del proyecto. Mientras tanto trabajas con el modo ejemplo.";
+      enterSample();
+      return;
+    }
+    render();
+  }
+
+  function gpiBadge(name, pushFn) {
+    var css = document.createElement("style");
+    css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:42px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-dot{width:8px;height:8px;border-radius:50%;background:#00c2a8;box-shadow:0 0 0 3px rgba(0,194,168,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#0090c2;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#00b6ec;background:#fff}";
+    document.head.appendChild(css);
+    var bar = document.createElement("div");
+    bar.className = "gpi-badge";
+    bar.innerHTML = '<span class="gpi-dot"></span><span>Panel: <b>' + String(name || "—").replace(/</g, "&lt;") + '</b></span><button class="gpi-btn" id="gpiSyncBtn">☁ Sincronizar</button><a class="gpi-btn" href="Panel_Control.html">⌂ Panel</a>';
+    document.body.appendChild(bar);
+    var sb = bar.querySelector("#gpiSyncBtn");
+    if (sb) sb.addEventListener("click", function () {
+      pushFn(); var t = sb.textContent; sb.textContent = "✓ Sincronizado";
+      setTimeout(function () { sb.textContent = t; }, 1400);
+    });
+  }
+
+  document.addEventListener("input", function (e) {
+    if (e.target && e.target.id === "sbTarget") { targetTouched = true; renderProbability(); }
+  });
+  document.addEventListener("DOMContentLoaded", init);
+})();
+</script>
+</body>
+</html>

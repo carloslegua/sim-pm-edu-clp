@@ -1,0 +1,1373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acta de Constitución del Proyecto — Project Charter (PMBOK)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#eef4f9; --bg-1:#ffffff; --bg-2:#f3f8fc;
+    --panel:#ffffff; --panel-border:#e0e8f0;
+    --ink-0:#1a2027; --ink-1:#4d5768; --ink-2:#8992a3;
+    --cyan:#00b6ec; --cyan-dark:#0090c2; --cyan-dim:rgba(0,182,236,0.13);
+    --black:#1a1a1c;
+    --ch-a:#00c2a8; --ch-b:#00967f; --ch-c:#3a86ff; --ch-d:#6c5ce7;
+    --danger:#ff5470; --good:#00c2a8; --warn:#ff9f1c;
+    --radius:10px;
+    --mono:'JetBrains Mono',monospace; --display:'Manrope',sans-serif; --body:'Manrope','Inter',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  html,body{height:100%;}
+  body{
+    margin:0; color:var(--ink-0); font-family:var(--body);
+    background:radial-gradient(circle, rgba(0,182,236,0.06) 1px, transparent 1px) 0 0/26px 26px, var(--bg-0);
+    display:flex; flex-direction:column; min-height:100vh;
+  }
+  a{color:inherit;}
+
+  /* ===== HEADER ===== */
+  header{ border-bottom:1px solid var(--panel-border); background:linear-gradient(180deg,#fff,#fbfdff); padding:12px 22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; position:relative; }
+  header::after{ content:''; position:absolute; left:0; right:0; bottom:-1px; height:3px; background:linear-gradient(90deg, var(--cyan), var(--ch-a) 40%, var(--ch-c) 70%, var(--ch-d)); }
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand h1{font-family:var(--display); font-size:19px; font-weight:800; margin:0; letter-spacing:0.1px; color:var(--black);}
+  .brand .tag{font-family:var(--mono); font-size:11px; font-weight:600; color:#fff; background:linear-gradient(135deg, var(--cyan), var(--ch-a)); padding:3px 9px; border-radius:20px; letter-spacing:0.5px;}
+  .project-title-input{background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--ink-0); font-family:var(--display); font-weight:600; font-size:13px; padding:2px 0; max-width:320px;}
+  .project-title-input:hover, .project-title-input:focus{border-bottom:1px dashed var(--cyan); outline:none;}
+  .course-title-input{background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--ink-2); font-family:var(--body); font-weight:600; font-size:12px; text-align:right; padding:2px 0; min-width:220px; max-width:320px;}
+  .course-title-input:hover, .course-title-input:focus{border-bottom:1px dashed var(--cyan); outline:none; color:var(--ink-0);}
+
+  /* ===== TOOLBAR ===== */
+  .toolbar{display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:10px 22px; background:var(--bg-1); border-bottom:1px solid var(--panel-border); box-shadow:0 1px 0 rgba(20,30,60,0.02);}
+  .btn{font-family:var(--body); font-size:12.5px; font-weight:600; color:var(--ink-1); background:var(--bg-2); border:1px solid var(--panel-border); padding:7px 13px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:border-color .12s,color .12s,background .12s,transform .08s,box-shadow .12s; white-space:nowrap;}
+  .btn:hover{border-color:var(--cyan); color:var(--cyan-dark); background:#fff; box-shadow:0 2px 6px rgba(0,182,236,0.15);}
+  .btn:active{transform:translateY(1px);}
+  .btn.primary{background:linear-gradient(135deg, var(--cyan), var(--cyan-dark)); border-color:transparent; color:#fff; box-shadow:0 2px 8px rgba(0,182,236,0.35);}
+  .btn.primary:hover{filter:brightness(1.06); color:#fff;}
+  .btn.danger{color:var(--danger);} .btn.danger:hover{border-color:var(--danger); color:var(--danger);}
+  .btn.sm{padding:5px 9px; font-size:11.5px;}
+  .btn:disabled{opacity:0.35; cursor:not-allowed;}
+  .sep{width:1px; height:22px; background:var(--panel-border); margin:0 4px;}
+  input[type=file]{display:none;}
+
+  /* ===== LAYOUT ===== */
+  .workspace{flex:1; display:flex; min-height:0;}
+  .doc-main{flex:1; overflow-y:auto; padding:24px 26px 80px; max-width:900px;}
+  .sidebar{width:308px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--panel-border); overflow-y:auto; padding:18px 18px 40px;}
+  .sidebar h2{font-family:var(--display); font-size:13px; font-weight:800; color:var(--ink-0); margin:0 0 12px; display:flex; align-items:center; gap:8px;}
+  .sidebar h2::before{content:''; width:4px; height:14px; background:linear-gradient(180deg, var(--cyan), var(--ch-a)); display:inline-block; border-radius:3px;}
+
+  .banner{background:rgba(255,159,28,0.12); border:1px solid rgba(255,159,28,0.35); color:#8a5300; border-radius:10px; padding:10px 14px; font-size:12.5px; line-height:1.5; margin-bottom:16px; display:none;}
+  .banner.show{display:block;}
+  .banner b{color:#7a4a00;}
+
+  /* TOC */
+  .toc{display:flex; flex-direction:column; gap:2px; margin-bottom:18px;}
+  .toc a{font-size:12px; color:var(--ink-1); text-decoration:none; padding:5px 8px; border-radius:7px; font-weight:600; display:block;}
+  .toc a:hover{background:var(--cyan-dim); color:var(--cyan-dark);}
+
+  /* COMPLETENESS WIDGET */
+  .sb-completeness{background:linear-gradient(145deg, var(--bg-2), #fff); border:1.5px solid var(--panel-border); border-radius:12px; padding:14px; margin-bottom:16px;}
+  .sb-pct{font-family:var(--mono); font-size:30px; font-weight:800; line-height:1;}
+  .sb-bar-track{height:8px; background:rgba(0,0,0,.06); border-radius:4px; overflow:hidden; margin:9px 0 6px;}
+  .sb-bar-fill{height:100%; border-radius:4px; transition:width .2s; width:0%;}
+  .sb-state-label{font-size:11.5px; color:var(--ink-1); font-weight:600;}
+  .chk-cat{margin-bottom:11px;}
+  .chk-cat-h{display:flex; justify-content:space-between; font-family:var(--display); font-size:10.5px; font-weight:800; color:var(--ink-0); text-transform:uppercase; letter-spacing:.3px; margin-bottom:4px;}
+  .chk-cat-h span{color:var(--ink-2); font-family:var(--mono); font-weight:700;}
+  .chk-item{display:flex; gap:6px; align-items:flex-start; font-size:11.3px; color:var(--ink-2); line-height:1.4; padding:2px 0;}
+  .chk-item.ok{color:var(--ink-1);}
+  .chk-dot{flex-shrink:0; font-weight:800; color:var(--panel-border); width:13px;}
+  .chk-item.ok .chk-dot{color:var(--good);}
+
+  .tip-box{background:var(--cyan-dim); border:1px solid rgba(0,182,236,0.25); border-radius:9px; padding:10px 12px; font-size:11.5px; color:var(--ink-1); line-height:1.55; margin-bottom:10px;}
+  .tip-box b{color:var(--cyan-dark);}
+
+  /* DOC CARDS */
+  .doc-card{background:var(--panel); border:1px solid var(--panel-border); border-radius:13px; padding:18px 20px; margin-bottom:18px; box-shadow:0 2px 12px rgba(20,30,60,0.05); scroll-margin-top:14px;}
+  .doc-card h3{display:flex; align-items:center; gap:10px; font-family:var(--display); font-size:15px; font-weight:800; color:var(--ink-0); margin:0 0 4px;}
+  .doc-card h3 .num{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--cyan),var(--ch-a));color:#fff;font-family:var(--mono);font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .doc-card .hint{font-size:12px; color:var(--ink-2); margin:2px 0 14px 36px; line-height:1.5;}
+
+  .field-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px 16px;}
+  .field label{display:block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-2); margin-bottom:5px;}
+  .field input, .field textarea, .field select{width:100%; background:var(--bg-2); border:1.5px solid var(--panel-border); border-radius:8px; color:var(--ink-0); padding:8px 10px; font-family:var(--body); font-size:13px;}
+  .field input:focus, .field textarea:focus, .field select:focus{outline:none; border-color:var(--cyan); background:#fff;}
+  .field.full{grid-column:1/-1;}
+  .field textarea{resize:vertical; min-height:64px; line-height:1.55;}
+
+  /* EDITABLE TABLES */
+  .rt-wrap{overflow-x:auto; border:1px solid var(--panel-border); border-radius:9px; margin-top:6px;}
+  table.rt-table{width:100%; border-collapse:collapse; font-size:12.5px; min-width:480px;}
+  table.rt-table th{background:var(--bg-2); text-align:left; padding:8px 10px; font-family:var(--display); font-weight:700; font-size:10px; text-transform:uppercase; letter-spacing:.3px; color:var(--ink-2); border-bottom:1px solid var(--panel-border); white-space:nowrap;}
+  table.rt-table td{padding:6px 8px; border-bottom:1px solid var(--panel-border); vertical-align:top;}
+  table.rt-table tr:last-child td{border-bottom:none;}
+  table.rt-table input, table.rt-table select, table.rt-table textarea{width:100%; background:#fff; border:1.5px solid var(--panel-border); border-radius:6px; padding:6px 8px; font-family:var(--body); font-size:12.5px;}
+  table.rt-table input:focus, table.rt-table select:focus, table.rt-table textarea:focus{outline:none; border-color:var(--cyan);}
+  table.rt-table textarea{min-height:34px; resize:vertical;}
+  .rt-del-h{width:34px;}
+  .rt-del{text-align:center;}
+  .rt-del button{border:none; background:transparent; color:var(--danger); cursor:pointer; font-size:14px; border-radius:6px; padding:4px 6px;}
+  .rt-del button:hover{background:rgba(255,84,112,0.1);}
+  .add-row-btn{margin-top:9px;}
+
+  /* SIMPLE LISTS */
+  .simple-list{display:flex; flex-direction:column; gap:8px; margin-bottom:2px;}
+  .sl-row{display:flex; gap:8px; align-items:center;}
+  .sl-row input{flex:1; background:var(--bg-2); border:1.5px solid var(--panel-border); border-radius:8px; padding:8px 10px; font-family:var(--body); font-size:13px;}
+  .sl-row input:focus{outline:none; border-color:var(--cyan); background:#fff;}
+  .sl-row .row-del{border:none; background:transparent; color:var(--danger); cursor:pointer; font-size:14px; border-radius:6px; padding:4px 6px;}
+  .sl-row .row-del:hover{background:rgba(255,84,112,0.1);}
+  .ran-code{flex:0 0 auto;font-family:var(--mono,'JetBrains Mono',monospace);font-size:11px;font-weight:700;color:var(--cyan);background:rgba(0,182,236,.08);border:1px solid rgba(0,182,236,.28);border-radius:7px;padding:6px 8px;letter-spacing:.02em;min-width:60px;text-align:center;}
+  .list-title{font-family:var(--display); font-size:12px; font-weight:800; color:var(--ink-0); margin:14px 0 8px; display:flex; align-items:center; gap:7px;}
+  .list-title:first-child{margin-top:0;}
+  .list-title .dot{width:9px; height:9px; border-radius:3px; display:inline-block;}
+
+  .info-panel{background:var(--bg-2); border:1px dashed var(--panel-border); border-radius:9px; padding:10px 12px; font-size:12px; color:var(--ink-1); line-height:1.6; margin-top:12px;}
+  .info-panel b{color:var(--ink-0);}
+
+  .two-col{display:grid; grid-template-columns:1fr 1fr; gap:22px;}
+  @media (max-width:760px){ .two-col{grid-template-columns:1fr;} }
+
+  .statusbar{border-top:1px solid var(--panel-border); background:var(--bg-1); padding:7px 26px; font-size:11px; color:var(--ink-2); display:flex; justify-content:space-between; font-family:var(--mono); margin-top:auto;}
+  ::-webkit-scrollbar{width:10px;height:10px;} ::-webkit-scrollbar-track{background:var(--bg-0);} ::-webkit-scrollbar-thumb{background:#c7d3de;border-radius:5px;border:2px solid var(--bg-0);} ::-webkit-scrollbar-thumb:hover{background:var(--cyan);}
+
+  @media print{
+    header,.toolbar,.sidebar,.statusbar,.gpi-badge{display:none !important;}
+    body{background:#fff !important;}
+    .doc-main{overflow:visible; max-width:none; padding:0;}
+    .doc-card{box-shadow:none; break-inside:avoid;}
+  }
+
+  /* ===== REPORTE IMPRIMIBLE (📄) ===== */
+  #gpiReport{display:none; font-family:var(--body); color:#1a2027; font-size:11.5px; line-height:1.5; background:#fff;}
+  @media print{
+    body.report-mode{display:block; background:#fff !important;}
+    body.report-mode > *:not(#gpiReport){display:none !important;}
+    body.report-mode #gpiReport{display:block !important;}
+  }
+  #gpiReport .rep-head{display:flex; justify-content:space-between; align-items:flex-start; gap:14px; border-bottom:3px solid #00b6ec; padding-bottom:10px; margin-bottom:14px;}
+  #gpiReport .rep-head h1{font-family:var(--display); font-size:19px; margin:0 0 3px; font-weight:800; color:#1a1a1c;}
+  #gpiReport .rep-head .sub{font-size:11.5px; color:#4d5768; font-weight:600;}
+  #gpiReport .rep-meta{font-family:var(--mono); font-size:10px; color:#4d5768; text-align:right; white-space:nowrap; line-height:1.7;}
+  #gpiReport h2{font-family:var(--display); font-size:13px; font-weight:800; margin:16px 0 6px; padding-bottom:3px; border-bottom:1px solid #e0e8f0; break-after:avoid;}
+  #gpiReport table{width:100%; border-collapse:collapse; margin:6px 0 10px; font-size:10.5px;}
+  #gpiReport th{background:#f3f8fc; text-align:left; font-weight:700; padding:5px 7px; border:1px solid #d5dee8;}
+  #gpiReport td{padding:4px 7px; border:1px solid #d5dee8; vertical-align:top;}
+  #gpiReport tr{break-inside:avoid;}
+  #gpiReport table.rep-kv td:first-child{width:30%; background:#f8fbfe; font-weight:700;}
+  #gpiReport ul{margin:4px 0 10px; padding-left:18px;}
+  #gpiReport li{margin:2px 0;}
+  #gpiReport p{margin:4px 0 10px; text-align:justify;}
+  #gpiReport .rep-note{color:#4d5768; font-size:10px; margin:2px 0 8px;}
+  #gpiReport .rep-sign{display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:46px;}
+  #gpiReport .rep-sign .box{border-top:1.5px solid #1a2027; padding-top:6px; font-size:10.5px; text-align:center; color:#1a2027;}
+  #gpiReport .rep-sign .box .r{color:#8992a3; font-size:9.5px;}
+  @page{margin:15mm 13mm;}
+
+  /* MODAL */
+  .modal-overlay{position:fixed; inset:0; z-index:1000; background:rgba(10,16,28,0.5); display:none; align-items:center; justify-content:center; padding:20px;}
+  .modal-overlay.open{display:flex;}
+  .modal-card{background:#fff; border-radius:14px; padding:22px 24px; width:400px; max-width:100%; box-shadow:0 24px 60px rgba(10,16,28,0.35); border:1px solid var(--panel-border);}
+  .modal-card h3{margin:0 0 10px; font-family:var(--display); font-size:16px; font-weight:800; color:var(--ink-0);}
+  .modal-card p{margin:0 0 20px; font-size:13.5px; color:var(--ink-1); line-height:1.55;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:8px;}
+</style>
+<script src="gpi-core.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <h1>Acta de Constitución</h1>
+        <span class="tag">EDU</span>
+      </div>
+      <input id="projectTitle" class="project-title-input" value="Proyecto sin título" />
+    </div>
+  </div>
+  <input id="courseTitle" class="course-title-input" value="Gestión de Proyectos de Ingeniería" />
+</header>
+
+<div class="toolbar">
+  <button class="btn" id="btnExportJson">⭳ Guardar (.json)</button>
+  <button class="btn" id="btnImportJson">⭱ Abrir (.json)</button>
+  <input type="file" id="fileInput" accept=".json">
+  <div class="sep"></div>
+  <button class="btn" id="btnImportMilestones">⇩ Importar hitos desde la EDT</button>
+  <button class="btn" id="btnImportStakeholders">⇩ Importar interesados clave</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnReport">📄 Reporte</button>
+  <button class="btn" id="btnPrint">🖨 Imprimir / PDF</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnSample">Cargar ejemplo</button>
+  <button class="btn danger" id="btnReset">Nueva acta</button>
+</div>
+
+<div class="workspace">
+  <div class="doc-main">
+    <div class="banner" id="banner"><b>Vista previa sin almacenamiento persistente.</b> Abre este archivo junto a <code>gpi-core.js</code> y los demás módulos desde un servidor local o GitHub Pages para compartir datos con el Panel de Control.</div>
+
+    <div class="tip-box"><b>PMBOK — Project Charter:</b> el acta de constitución autoriza formalmente la existencia del proyecto y confiere al Director de Proyecto la autoridad para aplicar recursos de la organización. Lo que declares aquí (patrocinador, director, cliente y presupuesto) alimenta los datos comunes del Panel de Control y sirve de punto de partida para la EDT, el cronograma y los costos.</div>
+
+    <!-- 1. IDENTIFICACIÓN -->
+    <section class="doc-card" id="s-id">
+      <h3><span class="num">1</span>Identificación del proyecto</h3>
+      <div class="hint">El título del proyecto se edita en el encabezado superior y se comparte con todas las herramientas. El patrocinador, el director y el cliente que declares aquí se sincronizan con los datos comunes del Panel de Control.</div>
+      <div class="field-grid">
+        <div class="field"><label>Fecha de preparación</label><input type="date" data-bind="identification.preparedDate"></div>
+        <div class="field"><label>Patrocinador (Sponsor)</label><input data-bind="identification.sponsor" placeholder="Quien autoriza y financia el proyecto"></div>
+        <div class="field"><label>Director de Proyecto</label><input data-bind="identification.manager" placeholder="Responsable integral del proyecto"></div>
+        <div class="field"><label>Director adjunto / coordinación técnica</label><input data-bind="identification.deputy" placeholder="Opcional: apoyo a la dirección, relación con el contratista"></div>
+        <div class="field"><label>Cliente del proyecto</label><input data-bind="identification.client" placeholder="Interno / externo"></div>
+        <div class="field"><label>Enfoque de desarrollo</label>
+          <select data-bind="identification.approach">
+            <option value="">— Seleccionar —</option>
+            <option value="Predictivo">Predictivo (cascada / waterfall)</option>
+            <option value="Ágil">Ágil (iterativo / incremental)</option>
+            <option value="Híbrido">Híbrido</option>
+          </select>
+        </div>
+        <div class="field"><label>Idioma del proyecto</label><input data-bind="identification.language" placeholder="Español"></div>
+        <div class="field full"><label>Nivel de autoridad del Director de Proyecto</label><textarea data-bind="identification.authority" placeholder="Qué decisiones puede tomar sin escalar: contrataciones, cambios de presupuesto hasta cierto monto, aprobación de entregables, etc."></textarea></div>
+      </div>
+      <div class="info-panel">El <b>enfoque de desarrollo</b> condiciona todo lo demás: en un proyecto predictivo las fases son secuenciales con puertas de etapa y los cambios pasan obligatoriamente por Control Integrado de Cambios; en uno ágil el alcance se refina por iteraciones.</div>
+    </section>
+
+    <!-- 2. PROPÓSITO -->
+    <section class="doc-card" id="s-purpose">
+      <h3><span class="num">2</span>Propósito o justificación</h3>
+      <div class="hint">Por qué se emprende el proyecto: la necesidad de negocio, el problema u oportunidad que atiende.</div>
+      <div class="field full"><textarea data-bind="purpose" placeholder="El propósito del proyecto es…"></textarea></div>
+    </section>
+
+    <!-- 3. CASO DE NEGOCIO -->
+    <section class="doc-card" id="s-bcase">
+      <h3><span class="num">3</span>Caso de negocio</h3>
+      <div class="hint">La justificación económica que sostiene la decisión de invertir. Mientras el propósito responde <i>por qué</i> se hace el proyecto, el caso de negocio responde <i>cuánto cuesta, cuánto retorna y en qué plazo</i>.</div>
+      <div class="field full"><label>Justificación económica y análisis</label><textarea data-bind="businessCase.justification" placeholder="Situación actual, costo de no hacer nada, alternativas evaluadas y por qué esta es la mejor opción…"></textarea></div>
+      <div class="field-grid">
+        <div class="field"><label>Inversión estimada</label><input data-bind="businessCase.investment" placeholder="Ej.: 3.8 M€ / USD 8.5 M"></div>
+        <div class="field"><label>Beneficio o ahorro anual esperado</label><input data-bind="businessCase.annualBenefit" placeholder="Ej.: 700 000 € / año"></div>
+        <div class="field"><label>Periodo de recuperación (payback)</label><input data-bind="businessCase.payback" placeholder="Ej.: ≈ 5.4 años"></div>
+        <div class="field"><label>Otros indicadores (VAN, TIR, ROI)</label><input data-bind="businessCase.indicators" placeholder="Opcional"></div>
+      </div>
+      <div class="field full"><label>Beneficios no monetarios</label><textarea data-bind="businessCase.intangibles" placeholder="Beneficios sociales, ambientales, reputacionales o estratégicos que no se reflejan en el payback…"></textarea></div>
+      <div class="info-panel">El payback por sí solo subestima el valor cuando existen beneficios sociales relevantes: decláralos aparte para que la decisión no se tome solo con el criterio financiero.</div>
+    </section>
+
+    <!-- 4. DESCRIPCIÓN -->
+    <section class="doc-card" id="s-desc">
+      <h3><span class="num">4</span>Descripción de alto nivel</h3>
+      <div class="hint">Qué se va a construir o entregar, descrito de forma agregada (sin descender al nivel de la EDT).</div>
+      <div class="field full"><textarea data-bind="description" placeholder="Descripción del producto, servicio o resultado del proyecto…"></textarea></div>
+    </section>
+
+    <!-- 4. LÍMITES -->
+    <section class="doc-card" id="s-bound">
+      <h3><span class="num">5</span>Límites del proyecto</h3>
+      <div class="hint">Dónde empieza y dónde termina el proyecto: qué incluye y qué queda explícitamente afuera del esfuerzo autorizado.</div>
+      <div class="field full"><textarea data-bind="boundaries" placeholder="El proyecto incluye… / El proyecto no incluye…"></textarea></div>
+    </section>
+
+    <!-- 5. OBJETIVOS -->
+    <section class="doc-card" id="s-obj">
+      <h3><span class="num">6</span>Objetivos y criterios de éxito</h3>
+      <div class="hint">Objetivos medibles por dimensión (la triple restricción como mínimo) y el criterio con el que se declarará el éxito de cada uno.</div>
+      <div class="rt-wrap">
+        <table class="rt-table" id="tblObjectives">
+          <thead><tr><th style="width:130px">Dimensión</th><th>Objetivo</th><th>Criterio de éxito</th><th class="rt-del-h"></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <button class="btn sm add-row-btn" id="btnAddObjective">+ Agregar objetivo</button>
+    </section>
+
+    <!-- 6. REQUISITOS -->
+    <section class="doc-card" id="s-req">
+      <h3><span class="num">7</span>Requisitos de alto nivel</h3>
+      <div class="hint">Condiciones o capacidades que el resultado del proyecto debe satisfacer, tal como las entienden los interesados en esta etapa. Cada uno se codifica <b>RAN.0X</b> (Requisito de Alto Nivel) y sirve de origen trazable en el módulo <b>Recopilar Requisitos</b>: todo RAN debería desarrollarse en al menos un REQ.00X.</div>
+      <div class="simple-list" id="listRequirements"></div>
+      <button class="btn sm add-row-btn" id="btnAddRequirement">+ Agregar requisito</button>
+    </section>
+
+    <!-- 7. ENTREGABLES -->
+    <section class="doc-card" id="s-del">
+      <h3><span class="num">8</span>Entregables clave</h3>
+      <div class="hint">Los productos principales que el proyecto se compromete a entregar. Luego se desglosan en la EDT (WBS Builder).</div>
+      <div class="simple-list" id="listDeliverables"></div>
+      <button class="btn sm add-row-btn" data-add-list="deliverables">+ Agregar entregable</button>
+    </section>
+
+    <!-- 8. HITOS -->
+    <section class="doc-card" id="s-mil">
+      <h3><span class="num">9</span>Resumen de hitos</h3>
+      <div class="hint">Los hitos mayores del proyecto con su fecha objetivo. Puedes importarlos automáticamente como "fin de fase" desde la EDT del proyecto activo.</div>
+      <div class="rt-wrap">
+        <table class="rt-table" id="tblMilestones">
+          <thead><tr><th>Hito</th><th style="width:150px">Fecha objetivo</th><th class="rt-del-h"></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <button class="btn sm add-row-btn" id="btnAddMilestone">+ Agregar hito</button>
+    </section>
+
+    <!-- 9. PRESUPUESTO -->
+    <section class="doc-card" id="s-budget">
+      <h3><span class="num">10</span>Presupuesto preasignado</h3>
+      <div class="hint">El monto que el patrocinador autoriza con esta acta (CAPEX). Se sincroniza con el presupuesto de los datos comunes del Panel de Control, contra el que luego se compara el costo desglosado de la EDT.</div>
+      <div class="field-grid">
+        <div class="field"><label>Monto autorizado</label><input type="number" min="0" step="1000" data-bind="budget.amount" placeholder="0"></div>
+        <div class="field"><label>Moneda</label>
+          <select data-bind="budget.currency">
+            <option value="USD">USD — Dólares</option>
+            <option value="PEN">PEN — Soles</option>
+            <option value="EUR">EUR — Euros</option>
+          </select>
+        </div>
+        <div class="field full"><label>Fuente de financiamiento / condiciones</label><textarea data-bind="budget.fundingNotes" placeholder="Recursos propios, financiamiento bancario, hitos de desembolso…"></textarea></div>
+      </div>
+    </section>
+
+    <!-- 11. RECURSOS PREASIGNADOS -->
+    <section class="doc-card" id="s-pre">
+      <h3><span class="num">11</span>Recursos preasignados</h3>
+      <div class="hint">Personas, equipos y áreas que la organización ya comprometió al proyecto <i>antes</i> de su planificación detallada. No es el organigrama completo (eso vive en el módulo de Equipo del Proyecto / OBS): es lo que el acta deja formalmente asignado.</div>
+      <div class="simple-list" id="listPreAssigned"></div>
+      <button class="btn sm add-row-btn" data-add-list="preAssignedResources">+ Agregar recurso preasignado</button>
+      <div class="info-panel">Declarar recursos aquí le da al Director de Proyecto respaldo formal para reclamarlos ante las gerencias funcionales. Lo que no quede escrito, después se negocia sin base.</div>
+    </section>
+
+    <!-- 12. RIESGO GENERAL -->
+    <section class="doc-card" id="s-risk">
+      <h3><span class="num">12</span>Riesgo general del proyecto</h3>
+      <div class="hint">Los riesgos de alto nivel visibles en la iniciación. El análisis detallado (RBS, PERT, Monte Carlo, VME) corresponde al módulo de Gestión de Riesgos.</div>
+      <div class="simple-list" id="listRisks"></div>
+      <button class="btn sm add-row-btn" data-add-list="risks">+ Agregar riesgo</button>
+    </section>
+
+    <!-- 13. SUPUESTOS / RESTRICCIONES / EXCLUSIONES -->
+    <section class="doc-card" id="s-sre">
+      <h3><span class="num">13</span>Supuestos, restricciones y exclusiones</h3>
+      <div class="hint">Los supuestos se asumen ciertos sin prueba (si fallan, se vuelven riesgos). Las restricciones limitan las opciones del equipo. Las exclusiones declaran lo que está fuera del alcance para evitar expectativas falsas.</div>
+
+      <div class="list-title"><span class="dot" style="background:var(--ch-c)"></span>Supuestos</div>
+      <div class="simple-list" id="listAssumptions"></div>
+      <button class="btn sm add-row-btn" data-add-list="assumptions">+ Agregar supuesto</button>
+
+      <div class="list-title"><span class="dot" style="background:var(--warn)"></span>Restricciones</div>
+      <div class="simple-list" id="listConstraints"></div>
+      <button class="btn sm add-row-btn" data-add-list="constraints">+ Agregar restricción</button>
+
+      <div class="list-title"><span class="dot" style="background:var(--danger)"></span>Exclusiones (fuera del alcance)</div>
+      <div class="simple-list" id="listExclusions"></div>
+      <button class="btn sm add-row-btn" data-add-list="exclusions">+ Agregar exclusión</button>
+    </section>
+
+    <!-- 14. INTERESADOS CLAVE -->
+    <section class="doc-card" id="s-stake">
+      <h3><span class="num">14</span>Interesados clave</h3>
+      <div class="hint">Los interesados críticos identificados en la iniciación. Puedes importar automáticamente los de mayor poder e interés desde Stakeholder Studio; el registro y análisis completos viven en esa herramienta.</div>
+      <div class="rt-wrap">
+        <table class="rt-table" id="tblStakeholders">
+          <thead><tr><th>Interesado</th><th>Rol / relación con el proyecto</th><th>Expectativa principal</th><th class="rt-del-h"></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <button class="btn sm add-row-btn" id="btnAddStakeholder">+ Agregar interesado</button>
+    </section>
+
+    <!-- 15. REQUISITOS PARA LA APROBACIÓN -->
+    <section class="doc-card" id="s-appreq">
+      <h3><span class="num">15</span>Requisitos para la aprobación del proyecto</h3>
+      <div class="hint">Qué debe aprobarse a lo largo del proyecto, <b>quién</b> lo aprueba y <b>cómo</b> se verifica. Define las puertas de etapa: sin estas aprobaciones el proyecto no avanza de fase.</div>
+      <div class="rt-wrap">
+        <table class="rt-table" id="tblApprovalReq">
+          <thead><tr><th>Qué se aprueba</th><th>Quién aprueba</th><th>Criterio / evidencia de aprobación</th><th class="rt-del-h"></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <button class="btn sm add-row-btn" id="btnAddApprovalReq">+ Agregar requisito de aprobación</button>
+    </section>
+
+    <!-- 16. CRITERIOS DE SALIDA -->
+    <section class="doc-card" id="s-exit">
+      <h3><span class="num">16</span>Criterios de salida del proyecto</h3>
+      <div class="hint">Qué debe cumplirse para cerrar formalmente el proyecto o una fase. Incluye también las condiciones de <b>cierre anticipado</b>: un proyecto puede terminar porque se logró el objetivo, o porque se demostró que no es alcanzable.</div>
+      <div class="simple-list" id="listExitCriteria"></div>
+      <button class="btn sm add-row-btn" data-add-list="exitCriteria">+ Agregar criterio de salida</button>
+      <div class="info-panel">Un acta madura contempla el cierre por <b>no viabilidad</b> o por aparición de una alternativa superior. Sin ese criterio escrito, los proyectos inviables tienden a continuar por inercia política.</div>
+    </section>
+
+    <!-- 17. APROBACIÓN -->
+    <section class="doc-card" id="s-approval">
+      <h3><span class="num">17</span>Aprobación del acta</h3>
+      <div class="hint">Con estas firmas el proyecto queda formalmente autorizado. Las líneas de firma físicas aparecen en el reporte imprimible (botón "📄 Reporte").</div>
+      <div class="two-col">
+        <div class="field-grid" style="grid-template-columns:1fr;">
+          <div class="field"><label>Patrocinador — nombre y cargo</label><input data-bind="approval.sponsorName"></div>
+          <div class="field"><label>Fecha de aprobación (Sponsor)</label><input type="date" data-bind="approval.sponsorDate"></div>
+        </div>
+        <div class="field-grid" style="grid-template-columns:1fr;">
+          <div class="field"><label>Director de Proyecto — nombre</label><input data-bind="approval.managerName"></div>
+          <div class="field"><label>Fecha de aceptación (Director)</label><input type="date" data-bind="approval.managerDate"></div>
+        </div>
+      </div>
+      <div class="list-title"><span class="dot" style="background:var(--ch-c)"></span>Patrocinadores que autorizan el proyecto</div>
+      <div class="hint">Además de la firma del patrocinador principal, registra aquí a todas las autoridades que respaldan formalmente el proyecto (patrocinio ejecutivo, direcciones involucradas, comité).</div>
+      <div class="rt-wrap">
+        <table class="rt-table" id="tblSponsors">
+          <thead><tr><th>Nombre</th><th>Cargo / rol en la autorización</th><th class="rt-del-h"></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <button class="btn sm add-row-btn" id="btnAddSponsor">+ Agregar patrocinador</button>
+
+      <div class="info-panel">Buena práctica: registra la <b>misma fecha</b> en el campo "Fecha de preparación" (sección 1) y en la aprobación solo cuando el acta esté realmente completa — el índice de completitud del panel lateral te dice cuándo.</div>
+    </section>
+  </div>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sb-completeness">
+      <div class="sb-pct" id="sbPct">0%</div>
+      <div class="sb-bar-track"><div class="sb-bar-fill" id="sbBar"></div></div>
+      <div class="sb-state-label" id="sbState">Acta vacía</div>
+    </div>
+
+    <h2>Checklist del acta</h2>
+    <div id="sbChecklist"></div>
+
+    <h2 style="margin-top:18px">Contenido</h2>
+    <div class="toc">
+      <a href="#s-id">1 · Identificación</a>
+      <a href="#s-purpose">2 · Propósito o justificación</a>
+      <a href="#s-desc">3 · Descripción de alto nivel</a>
+      <a href="#s-bound">4 · Límites del proyecto</a>
+      <a href="#s-obj">5 · Objetivos y criterios de éxito</a>
+      <a href="#s-req">6 · Requisitos de alto nivel</a>
+      <a href="#s-del">7 · Entregables clave</a>
+      <a href="#s-mil">8 · Resumen de hitos</a>
+      <a href="#s-budget">9 · Presupuesto preasignado</a>
+      <a href="#s-risk">10 · Riesgo general</a>
+      <a href="#s-sre">11 · Supuestos / restricciones / exclusiones</a>
+      <a href="#s-stake">12 · Interesados clave</a>
+      <a href="#s-approval">13 · Aprobación</a>
+    </div>
+
+    <div class="tip-box"><b>Flujo del curso:</b> Acta → Interesados (Stakeholder Studio) → EDT y diccionario (WBS Builder) → Equipo (OBS) → Matriz RACI → Plan y cronograma. Cada herramienta reutiliza lo que declares aquí.</div>
+  </aside>
+</div>
+
+<div class="statusbar">
+  <span id="statusLeft">Listo</span>
+  <span>Acta de Constitución · PMBOK — Develop Project Charter</span>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-card">
+    <h3 id="modalTitle">Título</h3>
+    <p id="modalMsg"></p>
+    <div class="modal-actions">
+      <button class="btn" id="modalCancel">Cancelar</button>
+      <button class="btn primary" id="modalOk">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<div id="gpiReport"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var OBJ_DIMS = ["Alcance", "Cronograma", "Costo", "Calidad", "Otro"];
+  var CUR = { USD: "USD $", PEN: "S/", EUR: "€" };
+
+  // ---------- estado ----------
+  function defaultState() {
+    return {
+      identification: { preparedDate: "", sponsor: "", manager: "", deputy: "", client: "", approach: "", language: "", authority: "" },
+      purpose: "",
+      businessCase: { justification: "", investment: "", annualBenefit: "", payback: "", indicators: "", intangibles: "" },
+      description: "",
+      boundaries: "",
+      objectives: [
+        { dim: "Alcance", objective: "", criteria: "" },
+        { dim: "Cronograma", objective: "", criteria: "" },
+        { dim: "Costo", objective: "", criteria: "" }
+      ],
+      requirements: [],
+      deliverables: [],
+      milestones: [],
+      budget: { amount: "", currency: "USD", fundingNotes: "" },
+      preAssignedResources: [],
+      risks: [],
+      assumptions: [],
+      constraints: [],
+      exclusions: [],
+      stakeholders: [],
+      approvalRequirements: [],
+      exitCriteria: [],
+      sponsors: [],
+      approval: { sponsorName: "", sponsorDate: "", managerName: "", managerDate: "" }
+    };
+  }
+
+  function sampleState() {
+    return {
+      identification: {
+        preparedDate: "2026-07-06",
+        sponsor: "Gerencia General DISTRIB+",
+        manager: "Director de Proyecto (por designar en el OBS)",
+        deputy: "Coordinador Técnico de Obra (por designar)",
+        client: "DISTRIB+ S.A. (uso interno — operación logística)",
+        approach: "Predictivo",
+        language: "Español",
+        authority: "El Director de Proyecto puede aprobar cambios de hasta el 2% del CAPEX sin escalar al Sponsor, contratar servicios menores dentro del presupuesto aprobado y aceptar entregables intermedios. Los cambios de alcance, plazo total o presupuesto por encima de ese umbral requieren aprobación del Comité de Control de Cambios y del Sponsor."
+      },
+      purpose: "DISTRIB+ S.A. necesita ampliar su capacidad de almacenamiento y despacho en Lima Sur para sostener el crecimiento de su cartera de distribución. El propósito del proyecto es construir y poner en marcha un almacén logístico en Lurín que permita consolidar operaciones hoy tercerizadas, reducir el costo logístico unitario y mejorar los tiempos de atención a los clientes de la zona sur.",
+      businessCase: {
+        justification: "Hoy DISTRIB+ terceriza el almacenamiento y despacho de la zona sur en operadores logísticos externos, con un costo aproximado de USD 2.6 millones al año y sin control sobre los tiempos de atención. Con almacén propio, el costo operativo anual estimado baja a USD 1.4 millones. Se evaluaron tres alternativas: (a) mantener la tercerización, (b) alquilar un almacén existente y (c) construir en terreno propio. La opción (c) es la de mayor inversión inicial pero la única que asegura la capacidad y el layout que exige la operación proyectada a 10 años.",
+        investment: "USD 8.5 millones (CAPEX)",
+        annualBenefit: "USD 1.2 millones / año (ahorro operativo)",
+        payback: "≈ 7.1 años (solo por ahorro operativo)",
+        indicators: "VAN positivo a 10 años con tasa de descuento del 12%; TIR estimada 14.5%",
+        intangibles: "Control directo sobre los niveles de servicio y los tiempos de despacho; capacidad de crecer sin renegociar con terceros; activo inmobiliario propio que revaloriza; menor exposición a la variación de tarifas del mercado logístico."
+      },
+      description: "El proyecto comprende la ingeniería, procura, construcción y puesta en marcha de un almacén logístico de estructura metálica prefabricada sobre un terreno propio en Lurín, incluyendo movimiento de tierras, cimentaciones, estructura y cobertura, acabados, instalaciones MEP, patio de maniobras y las pruebas de instalaciones previas a la entrega. La gestión sigue las buenas prácticas del PMBOK y los estándares de AACE International usados en el curso.",
+      boundaries: "El proyecto abarca desde la aprobación de esta acta hasta la firma del acta de entrega final (dossier de calidad incluido). Incluye la obtención de permisos y licencias municipales de construcción. No incluye la operación logística posterior, la contratación del personal de operación, ni la implementación del sistema de gestión de almacenes (WMS), que corresponden a la organización funcional de DISTRIB+ S.A.",
+      objectives: [
+        { dim: "Alcance", objective: "Entregar el almacén logístico completo y operativo según la ingeniería aprobada", criteria: "100% de los entregables de la EDT aceptados; dossier de calidad sin observaciones mayores" },
+        { dim: "Cronograma", objective: "Concluir el proyecto en 4 meses (julio–noviembre 2026)", criteria: "Entrega final a más tardar el 06/11/2026; SPI ≥ 0.95 en los cortes de control" },
+        { dim: "Costo", objective: "Ejecutar el proyecto dentro del CAPEX autorizado de USD 8.5 millones", criteria: "Costo final ≤ 100% del presupuesto (contingencia incluida); CPI ≥ 0.95" },
+        { dim: "Calidad", objective: "Construir conforme al Reglamento Nacional de Edificaciones y a las especificaciones técnicas", criteria: "Pruebas de instalaciones conformes; cero no conformidades abiertas al cierre" }
+      ],
+      requirements: [
+        { id: "ran1", code: "RAN.01", text: "Nave de almacenamiento con altura libre y capacidad de racks conforme a la ingeniería de detalle aprobada." },
+        { id: "ran2", code: "RAN.02", text: "Cumplimiento del Reglamento Nacional de Edificaciones y de la normativa de seguridad (INDECI)." },
+        { id: "ran3", code: "RAN.03", text: "Instalaciones eléctricas y sanitarias dimensionadas para la operación logística proyectada." },
+        { id: "ran4", code: "RAN.04", text: "Patio de maniobras apto para vehículos de carga pesada." }
+      ],
+      deliverables: [
+        "Expediente técnico de ingeniería (estudio de suelos, diseño estructural, diseño MEP).",
+        "Permisos y licencias municipales de construcción aprobados.",
+        "Obra civil y estructura del almacén concluidas (nave, cobertura, acabados).",
+        "Instalaciones MEP operativas y probadas.",
+        "Dossier de calidad y acta de entrega final firmada."
+      ],
+      milestones: [
+        { name: "Acta de constitución aprobada", date: "2026-07-08" },
+        { name: "Fin de Ingeniería y Diseño", date: "2026-08-14" },
+        { name: "Permisos y licencias municipales aprobados", date: "2026-08-21" },
+        { name: "Fin de Procura (estructuras metálicas en obra)", date: "2026-08-26" },
+        { name: "Fin de Construcción", date: "2026-10-23" },
+        { name: "Entrega final y acta de cierre", date: "2026-11-06" }
+      ],
+      budget: {
+        amount: "8500000",
+        currency: "USD",
+        fundingNotes: "70% financiamiento bancario (BCP) con desembolsos contra hitos de obra valorizados; 30% recursos propios de DISTRIB+ S.A. La contingencia de costo se gestiona según el plan de gestión de riesgos del curso."
+      },
+      preAssignedResources: [
+        "Jefatura de Proyectos e Infraestructura: 1 Director de Proyecto a dedicación completa.",
+        "Área de Ingeniería: 1 coordinador de diseño, 1 ingeniero estructural y 1 ingeniero MEP a media dedicación.",
+        "Supervisión de obra externa: 1 residente y 1 supervisor HSE (contratados para la etapa de construcción).",
+        "Área de Logística y Compras: apoyo en licitación, contratos y procura de equipos.",
+        "Asesoría Legal: gestión de permisos, licencias municipales y contratos con el contratista EPC.",
+        "Terreno propio de 12 000 m² en Lurín, ya saneado e inscrito a nombre de DISTRIB+ S.A."
+      ],
+      risks: [
+        "Condiciones geotécnicas desfavorables en cimentaciones que incrementen costo y plazo.",
+        "Demora en la aprobación de permisos y licencias municipales.",
+        "Variación del tipo de cambio y del precio del acero que erosione el presupuesto de procura.",
+        "Conflictos con la comunidad o paralizaciones sindicales durante la construcción."
+      ],
+      assumptions: [
+        "El terreno de Lurín está saneado legalmente y disponible desde el inicio del proyecto.",
+        "Los proveedores de estructuras metálicas cumplen los lead times contractuales.",
+        "La municipalidad de Lurín procesa la licencia de construcción dentro del plazo regular.",
+        "No se producen restricciones logísticas mayores en el corredor Lima Sur durante la obra."
+      ],
+      constraints: [
+        "CAPEX máximo autorizado: USD 8.5 millones (incluida contingencia).",
+        "Fecha límite de entrega: 06/11/2026, antes de la campaña logística de fin de año.",
+        "La obra debe ejecutarse sin interrumpir la operación del local vecino de DISTRIB+ S.A.",
+        "Cumplimiento obligatorio de la normativa ambiental (OEFA) y laboral (SUNAFIL)."
+      ],
+      exclusions: [
+        "Operación logística y contratación del personal del almacén.",
+        "Implementación del sistema de gestión de almacenes (WMS) y equipamiento de racks.",
+        "Proyectos paralelos de DISTRIB+ S.A. fuera del almacén de Lurín."
+      ],
+      stakeholders: [
+        { name: "Gerencia General DISTRIB+", role: "Patrocinador (Sponsor)", expectation: "Proyecto dentro del CAPEX y operativo antes de la campaña de fin de año." },
+        { name: "Banco financista (BCP)", role: "Financiamiento del proyecto", expectation: "Desembolsos contra avance verificable y control de costos riguroso." },
+        { name: "Constructora principal (Contratista EPC)", role: "Ejecución de obra", expectation: "Ingeniería aprobada a tiempo y frente de obra liberado según cronograma." },
+        { name: "Municipalidad de Lurín", role: "Licencias y permisos", expectation: "Expediente técnico completo y cumplimiento de la normativa municipal." },
+        { name: "Junta de vecinos de Lurín", role: "Comunidad del entorno", expectation: "Obra sin impactos de ruido, polvo ni tránsito fuera de horario permitido." }
+      ],
+      approvalRequirements: [
+        { item: "Ingeniería de detalle y especificaciones técnicas", approver: "Gerencia de Operaciones + Director de Proyecto", criteria: "Planos y memorias firmados por el proyectista; revisión sin observaciones mayores" },
+        { item: "Presupuesto y línea base de costos", approver: "Gerencia General (Sponsor)", criteria: "Estimado clase 3 (AACE 17R-97) aprobado con contingencia sustentada" },
+        { item: "Adjudicación del contrato de obra", approver: "Comité de Adquisiciones", criteria: "Acta de buena pro con evaluación técnico-económica documentada" },
+        { item: "Recepción de obra y puesta en marcha", approver: "Gerencia de Operaciones", criteria: "Pruebas de instalaciones conformes y dossier de calidad completo" }
+      ],
+      exitCriteria: [
+        "Almacén construido, con licencia de funcionamiento vigente y pruebas de instalaciones conformes.",
+        "Dossier de calidad, planos as-built y manuales de operación y mantenimiento entregados y aceptados.",
+        "Acta de entrega final firmada por la Gerencia de Operaciones, sin observaciones abiertas.",
+        "Objetivos de plazo, costo y calidad cumplidos dentro de los umbrales declarados en esta acta.",
+        "Cierre anticipado: si se demuestra que el proyecto no puede alcanzar el caso de negocio con un plan realista, se recomendará su cierre y la reevaluación de alternativas ante el Sponsor."
+      ],
+      sponsors: [
+        { name: "Gerencia General DISTRIB+ S.A.", role: "Patrocinador ejecutivo — autoriza el proyecto y el CAPEX" },
+        { name: "Gerencia de Operaciones y Logística", role: "Patrocinador funcional — define los requisitos operativos y recibe el activo" },
+        { name: "Gerencia de Administración y Finanzas", role: "Valida el caso de negocio y asegura el financiamiento" }
+      ],
+      approval: {
+        sponsorName: "Gerencia General DISTRIB+ (Sponsor)",
+        sponsorDate: "2026-07-08",
+        managerName: "Director de Proyecto — DPLU-2026",
+        managerDate: "2026-07-08"
+      }
+    };
+  }
+
+  // Migración de versiones anteriores del módulo (por si el esquema evoluciona).
+  function normalizeState(obj) {
+    var base = defaultState();
+    if (!obj || typeof obj !== "object") return base;
+    var out = base;
+    ["purpose", "description", "boundaries"].forEach(function (k) { if (typeof obj[k] === "string") out[k] = obj[k]; });
+    out.identification = Object.assign(out.identification, obj.identification || {});
+    out.budget = Object.assign(out.budget, obj.budget || {});
+    out.approval = Object.assign(out.approval, obj.approval || {});
+    // Caso de negocio: incorporado después del esquema original; las actas
+    // antiguas simplemente llegan sin esta rama y se quedan con los campos vacíos.
+    out.businessCase = Object.assign(out.businessCase, obj.businessCase || {});
+    ["objectives", "requirements", "deliverables", "milestones", "risks", "assumptions", "constraints", "exclusions", "stakeholders",
+     "preAssignedResources", "approvalRequirements", "exitCriteria", "sponsors"].forEach(function (k) {
+      if (Array.isArray(obj[k])) out[k] = obj[k];
+    });
+    out.requirements = migrateRequirements(out.requirements);
+    return out;
+  }
+
+  // Los requisitos de alto nivel pasaron de ser cadenas a objetos codificados
+  // {id, code:"RAN.0X", text}. Esta migración convierte proyectos antiguos y
+  // completa el código/ID de cualquier requisito que llegue sin ellos, sin
+  // renumerar los ya existentes (los códigos son identificadores permanentes:
+  // el módulo Recopilar Requisitos enlaza contra ellos).
+  function ranPad(n) { n = Number(n) || 0; return (n < 10 ? "0" : "") + n; }
+  function migrateRequirements(arr) {
+    arr = Array.isArray(arr) ? arr : [];
+    var maxNum = 0;
+    arr.forEach(function (r) {
+      if (r && typeof r === "object" && r.code) {
+        var m = /RAN\.0*(\d+)/.exec(r.code); if (m) maxNum = Math.max(maxNum, Number(m[1]));
+      }
+    });
+    return arr.map(function (r) {
+      if (r && typeof r === "object") {
+        if (!r.code) { maxNum++; r.code = "RAN." + ranPad(maxNum); }
+        if (!r.id) r.id = "ran" + (/RAN\.0*(\d+)/.exec(r.code) || [0, maxNum])[1];
+        if (typeof r.text !== "string") r.text = "";
+        return r;
+      }
+      maxNum++;
+      return { id: "ran" + maxNum, code: "RAN." + ranPad(maxNum), text: String(r == null ? "" : r) };
+    });
+  }
+  function nextRanCode() {
+    var maxNum = 0;
+    (state.requirements || []).forEach(function (r) {
+      var m = r && r.code && /RAN\.0*(\d+)/.exec(r.code); if (m) maxNum = Math.max(maxNum, Number(m[1]));
+    });
+    return { num: maxNum + 1, code: "RAN." + ranPad(maxNum + 1) };
+  }
+
+  var state = defaultState();
+
+  // ---------- utilidades ----------
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function setStatus(m) { document.getElementById("statusLeft").textContent = m; }
+  function repDate(s) { if (!s) return "—"; var p = String(s).split("-"); return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : s; }
+  function money(v, cur) { var n = Number(v); if (!isFinite(n) || (!v && v !== 0)) return "—"; return (CUR[cur] || "$") + " " + n.toLocaleString("es-PE"); }
+  function getPath(path) {
+    return path.split(".").reduce(function (o, k) { return o == null ? o : o[k]; }, state);
+  }
+  function setPath(path, val) {
+    var keys = path.split("."), o = state;
+    for (var i = 0; i < keys.length - 1; i++) { o = o[keys[i]] = o[keys[i]] || {}; }
+    o[keys[keys.length - 1]] = val;
+  }
+
+  // ---------- modal (los diálogos nativos se bloquean en iframes) ----------
+  function showModal(opts) {
+    return new Promise(function (resolve) {
+      var ov = document.getElementById("modalOverlay");
+      document.getElementById("modalTitle").textContent = opts.title || "";
+      document.getElementById("modalMsg").textContent = opts.message || "";
+      var ok = document.getElementById("modalOk"), cancel = document.getElementById("modalCancel");
+      ok.textContent = opts.confirmText || "Aceptar";
+      ok.className = "btn " + (opts.danger ? "danger" : "primary");
+      cancel.style.display = opts.cancelText === null ? "none" : "";
+      cancel.textContent = opts.cancelText || "Cancelar";
+      function done(v) { ov.classList.remove("open"); ok.onclick = cancel.onclick = ov.onclick = null; document.removeEventListener("keydown", key); resolve(v); }
+      function key(e) { if (e.key === "Escape") done(false); if (e.key === "Enter") done(true); }
+      ok.onclick = function () { done(true); };
+      cancel.onclick = function () { done(false); };
+      ov.onclick = function (e) { if (e.target === ov) done(false); };
+      document.addEventListener("keydown", key);
+      ov.classList.add("open"); ok.focus();
+    });
+  }
+  function showConfirm(message, title) { return showModal({ title: title || "Confirmar acción", message: message, confirmText: "Continuar", cancelText: "Cancelar" }); }
+  function showAlert(message, title) { return showModal({ title: title || "Aviso", message: message, confirmText: "Entendido", cancelText: null }); }
+
+  // ---------- auditoría (usa GPI.util.charterAudit si está; si no, copia local) ----------
+  function localAudit(ch) {
+    ch = ch || {};
+    var id = ch.identification || {}, bud = ch.budget || {}, ap = ch.approval || {}, bc = ch.businessCase || {};
+    var objs = ch.objectives || [], reqs = ch.requirements || [], dels = ch.deliverables || [],
+        mil = ch.milestones || [], risks = ch.risks || [], asum = ch.assumptions || [],
+        cons = ch.constraints || [], excl = ch.exclusions || [], sh = ch.stakeholders || [],
+        pre = ch.preAssignedResources || [], areq = ch.approvalRequirements || [],
+        exitc = ch.exitCriteria || [], spon = ch.sponsors || [];
+    function nz(s) { return !!(s && String(s).trim()); }
+    function hasObj(dim) { return objs.some(function (o) { return o && o.dim === dim && nz(o.objective) && nz(o.criteria); }); }
+    var items = [
+      { id: "roles", cat: "Identificación", label: "Patrocinador y Director de Proyecto declarados", ok: nz(id.sponsor) && nz(id.manager) },
+      { id: "contexto", cat: "Identificación", label: "Cliente y fecha de preparación registrados", ok: nz(id.client) && nz(id.preparedDate) },
+      { id: "autoridad", cat: "Identificación", label: "Nivel de autoridad del Director de Proyecto definido", ok: nz(id.authority) },
+      { id: "enfoque", cat: "Identificación", label: "Enfoque de desarrollo declarado (predictivo / ágil / híbrido)", ok: nz(id.approach) },
+      { id: "proposito", cat: "Justificación y alcance", label: "Propósito o justificación del proyecto", ok: nz(ch.purpose) },
+      { id: "casonegocio", cat: "Justificación y alcance", label: "Caso de negocio: justificación económica e inversión estimada", ok: nz(bc.justification) && nz(bc.investment) },
+      { id: "descripcion", cat: "Justificación y alcance", label: "Descripción de alto nivel del proyecto", ok: nz(ch.description) },
+      { id: "limites", cat: "Justificación y alcance", label: "Límites del proyecto declarados", ok: nz(ch.boundaries) },
+      { id: "requisitos", cat: "Justificación y alcance", label: "Requisitos de alto nivel registrados", ok: reqs.length > 0 },
+      { id: "entregables", cat: "Justificación y alcance", label: "Entregables clave registrados", ok: dels.length > 0 },
+      { id: "objetivos", cat: "Objetivos e hitos", label: "Objetivos con criterio de éxito en alcance, cronograma y costo", ok: hasObj("Alcance") && hasObj("Cronograma") && hasObj("Costo") },
+      { id: "hitos", cat: "Objetivos e hitos", label: "Al menos un hito del resumen con fecha", ok: mil.some(function (m) { return m && nz(m.name) && nz(m.date); }) },
+      { id: "presupuesto", cat: "Objetivos e hitos", label: "Presupuesto preasignado mayor que cero", ok: Number(bud.amount) > 0 },
+      { id: "riesgos", cat: "Riesgos, supuestos y restricciones", label: "Riesgo general del proyecto (alto nivel) registrado", ok: risks.length > 0 },
+      { id: "supuestos", cat: "Riesgos, supuestos y restricciones", label: "Supuestos del proyecto registrados", ok: asum.length > 0 },
+      { id: "restricciones", cat: "Riesgos, supuestos y restricciones", label: "Restricciones del proyecto registradas", ok: cons.length > 0 },
+      { id: "exclusiones", cat: "Riesgos, supuestos y restricciones", label: "Exclusiones (fuera del alcance) registradas", ok: excl.length > 0 },
+      { id: "interesados", cat: "Interesados y autorización", label: "Interesados clave identificados en el acta", ok: sh.length > 0 },
+      { id: "recursospre", cat: "Recursos y aprobación", label: "Recursos preasignados al proyecto declarados", ok: pre.length > 0 },
+      { id: "reqaprob", cat: "Recursos y aprobación", label: "Requisitos de aprobación con responsable definido", ok: areq.some(function (r) { return r && nz(r.item) && nz(r.approver); }) },
+      { id: "criteriossalida", cat: "Recursos y aprobación", label: "Criterios de salida / cierre del proyecto registrados", ok: exitc.length > 0 },
+      { id: "patrocinadores", cat: "Interesados y autorización", label: "Patrocinadores que autorizan el proyecto registrados", ok: spon.some(function (s) { return s && nz(s.name); }) },
+      { id: "aprobacion", cat: "Interesados y autorización", label: "Acta con firmas de Patrocinador y Director de Proyecto", ok: nz(ap.sponsorName) && nz(ap.managerName) }
+    ];
+    var okCount = items.filter(function (i) { return i.ok; }).length;
+    var total = items.length;
+    var pct = total ? Math.round((okCount / total) * 100) : 0;
+    var st = pct >= 80 ? "verde" : (pct >= 50 ? "ambar" : "rojo");
+    var cats = {};
+    items.forEach(function (i) { cats[i.cat] = cats[i.cat] || { total: 0, ok: 0 }; cats[i.cat].total++; if (i.ok) cats[i.cat].ok++; });
+    return { items: items, okCount: okCount, total: total, pct: pct, state: st, categories: cats };
+  }
+  function audit() {
+    if (typeof window.GPI !== "undefined" && window.GPI.util && window.GPI.util.charterAudit) return window.GPI.util.charterAudit(state);
+    return localAudit(state);
+  }
+
+  // ---------- render: campos estáticos ----------
+  function hydrateStatics() {
+    document.querySelectorAll("[data-bind]").forEach(function (el) {
+      var v = getPath(el.dataset.bind);
+      el.value = v == null ? "" : v;
+    });
+  }
+  function wireStatics() {
+    document.querySelectorAll("[data-bind]").forEach(function (el) {
+      el.addEventListener("input", function () {
+        setPath(el.dataset.bind, el.value);
+        onDirty();
+      });
+    });
+  }
+
+  // ---------- render: tabla de objetivos ----------
+  function renderObjectives() {
+    var tb = document.querySelector("#tblObjectives tbody");
+    tb.innerHTML = state.objectives.map(function (o, i) {
+      var opts = OBJ_DIMS.map(function (d) { return '<option value="' + d + '" ' + (o.dim === d ? "selected" : "") + '>' + d + '</option>'; }).join("");
+      return '<tr>'
+        + '<td><select data-obj="' + i + '" data-f="dim">' + opts + '</select></td>'
+        + '<td><textarea data-obj="' + i + '" data-f="objective" placeholder="Objetivo medible…">' + esc(o.objective) + '</textarea></td>'
+        + '<td><textarea data-obj="' + i + '" data-f="criteria" placeholder="Cómo se declara el éxito…">' + esc(o.criteria) + '</textarea></td>'
+        + '<td class="rt-del"><button data-del-obj="' + i + '" title="Eliminar">🗑</button></td></tr>';
+    }).join("");
+    tb.querySelectorAll("[data-obj]").forEach(function (el) {
+      el.addEventListener("input", function () {
+        state.objectives[Number(el.dataset.obj)][el.dataset.f] = el.value;
+        onDirty();
+      });
+    });
+    tb.querySelectorAll("[data-del-obj]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state.objectives.splice(Number(b.dataset.delObj), 1);
+        renderObjectives(); onDirty();
+      });
+    });
+  }
+
+  // ---------- render: tabla de hitos ----------
+  function renderMilestones() {
+    var tb = document.querySelector("#tblMilestones tbody");
+    tb.innerHTML = state.milestones.map(function (m, i) {
+      return '<tr>'
+        + '<td><input data-mil="' + i + '" data-f="name" value="' + esc(m.name) + '" placeholder="Nombre del hito"></td>'
+        + '<td><input type="date" data-mil="' + i + '" data-f="date" value="' + esc(m.date) + '"></td>'
+        + '<td class="rt-del"><button data-del-mil="' + i + '" title="Eliminar">🗑</button></td></tr>';
+    }).join("");
+    tb.querySelectorAll("[data-mil]").forEach(function (el) {
+      el.addEventListener("input", function () {
+        state.milestones[Number(el.dataset.mil)][el.dataset.f] = el.value;
+        onDirty();
+      });
+    });
+    tb.querySelectorAll("[data-del-mil]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state.milestones.splice(Number(b.dataset.delMil), 1);
+        renderMilestones(); onDirty();
+      });
+    });
+  }
+
+  // ---------- render: tabla de interesados clave ----------
+  function renderStakeTable() {
+    var tb = document.querySelector("#tblStakeholders tbody");
+    tb.innerHTML = state.stakeholders.map(function (s, i) {
+      return '<tr>'
+        + '<td><input data-st="' + i + '" data-f="name" value="' + esc(s.name) + '" placeholder="Nombre / grupo"></td>'
+        + '<td><input data-st="' + i + '" data-f="role" value="' + esc(s.role) + '" placeholder="Rol en el proyecto"></td>'
+        + '<td><textarea data-st="' + i + '" data-f="expectation" placeholder="Qué espera del proyecto…">' + esc(s.expectation) + '</textarea></td>'
+        + '<td class="rt-del"><button data-del-st="' + i + '" title="Eliminar">🗑</button></td></tr>';
+    }).join("");
+    tb.querySelectorAll("[data-st]").forEach(function (el) {
+      el.addEventListener("input", function () {
+        state.stakeholders[Number(el.dataset.st)][el.dataset.f] = el.value;
+        onDirty();
+      });
+    });
+    tb.querySelectorAll("[data-del-st]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state.stakeholders.splice(Number(b.dataset.delSt), 1);
+        renderStakeTable(); onDirty();
+      });
+    });
+  }
+
+  // ---------- render: requisitos para la aprobación del proyecto ----------
+  function renderApprovalReq() {
+    var tb = document.querySelector("#tblApprovalReq tbody");
+    if (!tb) return;
+    tb.innerHTML = state.approvalRequirements.map(function (r, i) {
+      return '<tr>'
+        + '<td><input data-ar="' + i + '" data-f="item" value="' + esc(r.item) + '" placeholder="Entregable, fase o decisión"></td>'
+        + '<td><input data-ar="' + i + '" data-f="approver" value="' + esc(r.approver) + '" placeholder="Rol / comité que aprueba"></td>'
+        + '<td><textarea data-ar="' + i + '" data-f="criteria" placeholder="Cómo se evidencia la aprobación…">' + esc(r.criteria) + '</textarea></td>'
+        + '<td class="rt-del"><button data-del-ar="' + i + '" title="Eliminar">🗑</button></td></tr>';
+    }).join("");
+    tb.querySelectorAll("[data-ar]").forEach(function (el) {
+      el.addEventListener("input", function () {
+        state.approvalRequirements[Number(el.dataset.ar)][el.dataset.f] = el.value;
+        onDirty();
+      });
+    });
+    tb.querySelectorAll("[data-del-ar]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state.approvalRequirements.splice(Number(b.dataset.delAr), 1);
+        renderApprovalReq(); onDirty();
+      });
+    });
+  }
+
+  // ---------- render: patrocinadores que autorizan ----------
+  function renderSponsors() {
+    var tb = document.querySelector("#tblSponsors tbody");
+    if (!tb) return;
+    tb.innerHTML = state.sponsors.map(function (s, i) {
+      return '<tr>'
+        + '<td><input data-sp="' + i + '" data-f="name" value="' + esc(s.name) + '" placeholder="Nombre y apellido"></td>'
+        + '<td><input data-sp="' + i + '" data-f="role" value="' + esc(s.role) + '" placeholder="Ej.: Patrocinador ejecutivo"></td>'
+        + '<td class="rt-del"><button data-del-sp="' + i + '" title="Eliminar">🗑</button></td></tr>';
+    }).join("");
+    tb.querySelectorAll("[data-sp]").forEach(function (el) {
+      el.addEventListener("input", function () {
+        state.sponsors[Number(el.dataset.sp)][el.dataset.f] = el.value;
+        onDirty();
+      });
+    });
+    tb.querySelectorAll("[data-del-sp]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state.sponsors.splice(Number(b.dataset.delSp), 1);
+        renderSponsors(); onDirty();
+      });
+    });
+  }
+
+  // ---------- render: listas simples ----------
+  var LISTS = {
+    deliverables: "listDeliverables",
+    preAssignedResources: "listPreAssigned",
+    risks: "listRisks",
+    assumptions: "listAssumptions",
+    constraints: "listConstraints",
+    exclusions: "listExclusions",
+    exitCriteria: "listExitCriteria"
+  };
+  function renderList(key) {
+    var host = document.getElementById(LISTS[key]);
+    host.innerHTML = state[key].map(function (txt, i) {
+      return '<div class="sl-row">'
+        + '<input data-list="' + key + '" data-i="' + i + '" value="' + esc(txt) + '">'
+        + '<button class="row-del" data-del-list="' + key + '" data-i="' + i + '" title="Eliminar">🗑</button></div>';
+    }).join("") || '<div style="font-size:12px;color:var(--ink-2);padding:2px 0;">Sin elementos aún.</div>';
+    host.querySelectorAll("[data-list]").forEach(function (el) {
+      el.addEventListener("input", function () {
+        state[el.dataset.list][Number(el.dataset.i)] = el.value;
+        onDirty();
+      });
+    });
+    host.querySelectorAll("[data-del-list]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state[b.dataset.delList].splice(Number(b.dataset.i), 1);
+        renderList(b.dataset.delList); onDirty();
+      });
+    });
+  }
+  function renderAllLists() { Object.keys(LISTS).forEach(renderList); renderRequirements(); }
+
+  // ---------- render: requisitos de alto nivel (codificados RAN.0X) ----------
+  function renderRequirements() {
+    var host = document.getElementById("listRequirements");
+    if (!host) return;
+    state.requirements = migrateRequirements(state.requirements);
+    host.innerHTML = state.requirements.map(function (r, i) {
+      return '<div class="sl-row">'
+        + '<span class="ran-code" title="Requisito de alto nivel — código de enlace">' + esc(r.code) + '</span>'
+        + '<input data-req-i="' + i + '" value="' + esc(r.text) + '" placeholder="Condición o capacidad que el resultado debe satisfacer…">'
+        + '<button class="row-del" data-del-req="' + i + '" title="Eliminar">🗑</button></div>';
+    }).join("") || '<div style="font-size:12px;color:var(--ink-2);padding:2px 0;">Sin requisitos aún.</div>';
+    host.querySelectorAll("[data-req-i]").forEach(function (el) {
+      el.addEventListener("input", function () {
+        state.requirements[Number(el.dataset.reqI)].text = el.value; onDirty();
+      });
+    });
+    host.querySelectorAll("[data-del-req]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state.requirements.splice(Number(b.dataset.delReq), 1);
+        renderRequirements(); onDirty();
+      });
+    });
+  }
+
+  // ---------- sidebar ----------
+  function updateSidebar() {
+    var a = audit();
+    var color = { verde: "var(--good)", ambar: "var(--warn)", rojo: "var(--danger)" }[a.state] || "var(--ink-2)";
+    var label = { verde: "Acta completa — lista para aprobar", ambar: "Acta en progreso", rojo: "Acta incompleta" }[a.state] || "—";
+    var pctEl = document.getElementById("sbPct");
+    pctEl.textContent = a.pct + "%"; pctEl.style.color = color;
+    var bar = document.getElementById("sbBar");
+    bar.style.width = a.pct + "%"; bar.style.background = color;
+    document.getElementById("sbState").textContent = label + " · " + a.okCount + "/" + a.total;
+
+    var cats = {};
+    a.items.forEach(function (i) { (cats[i.cat] = cats[i.cat] || []).push(i); });
+    document.getElementById("sbChecklist").innerHTML = Object.keys(cats).map(function (cat) {
+      var items = cats[cat], ok = items.filter(function (i) { return i.ok; }).length;
+      return '<div class="chk-cat"><div class="chk-cat-h">' + esc(cat) + '<span>' + ok + '/' + items.length + '</span></div>'
+        + items.map(function (i) { return '<div class="chk-item ' + (i.ok ? "ok" : "") + '"><span class="chk-dot">' + (i.ok ? "✓" : "○") + '</span>' + esc(i.label) + '</div>'; }).join("")
+        + '</div>';
+    }).join("");
+  }
+
+  function renderAll() {
+    hydrateStatics();
+    renderObjectives();
+    renderMilestones();
+    renderStakeTable();
+    renderApprovalReq();
+    renderSponsors();
+    renderAllLists();
+    updateSidebar();
+  }
+
+  var dirtyTimer = null;
+  function onDirty() {
+    updateSidebar();
+    clearTimeout(dirtyTimer);
+    dirtyTimer = setTimeout(gpiPush, 800); // persistencia inmediata (con debounce corto)
+    setStatus("Cambios sin exportar — se sincronizan solos con el Panel.");
+  }
+
+  // ---------- export / import ----------
+  function exportJson() {
+    var data = { kind: "gpi.charter/v1", title: document.getElementById("projectTitle").value, course: document.getElementById("courseTitle").value, data: state };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    var safe = (data.title || "acta").replace(/[^a-z0-9_\-]+/gi, "_").toLowerCase();
+    a.href = url; a.download = "acta_constitucion_" + safe + ".json";
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    setStatus("Acta exportada como .json.");
+  }
+  function importJson(file) {
+    var r = new FileReader();
+    r.onload = function (e) {
+      var obj; try { obj = JSON.parse(e.target.result); } catch (_) { showAlert("El archivo no es un .json válido."); return; }
+      if (obj && obj.kind === "gpi.charter/v1" && obj.data) {
+        state = normalizeState(obj.data);
+        if (obj.title) document.getElementById("projectTitle").value = obj.title;
+        if (obj.course) document.getElementById("courseTitle").value = obj.course;
+        renderAll(); gpiPush();
+        setStatus("Acta importada.");
+      } else {
+        showAlert("No reconocí el formato: se esperaba una exportación de esta herramienta (gpi.charter/v1).");
+      }
+    };
+    r.readAsText(file);
+  }
+
+  // ---------- importar hitos desde la EDT ----------
+  async function importMilestonesFromWbs() {
+    if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.util || !window.GPI.active()) {
+      await showAlert("Esta acción requiere un proyecto activo con una EDT cargada. Ábrelo desde el Panel de Control y completa WBS Builder primero.");
+      return;
+    }
+    var wbs = window.GPI.getModule("wbs");
+    var phases = window.GPI.util.wbsPhases(wbs || {});
+    if (!phases.length) {
+      await showAlert("El proyecto activo aún no tiene fases en la EDT. Complétala primero en WBS Builder.");
+      return;
+    }
+    var ok = await showConfirm("Se agregará un hito de \"fin de fase\" por cada una de las " + phases.length + " fases de la EDT actual (no se eliminan los hitos existentes). ¿Continuar?", "Importar hitos desde la EDT");
+    if (!ok) return;
+    var added = 0;
+    phases.forEach(function (p) {
+      if (!p.end) return;
+      var name = "Fin de " + p.name;
+      if (state.milestones.some(function (m) { return m.name === name; })) return;
+      state.milestones.push({ name: name, date: p.end });
+      added++;
+    });
+    renderMilestones(); onDirty();
+    setStatus(added ? ("Se importaron " + added + " hito(s) desde la EDT.") : "Los hitos de las fases actuales ya estaban registrados.");
+  }
+
+  // ---------- importar interesados clave desde Stakeholder Studio ----------
+  async function importKeyStakeholders() {
+    if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) {
+      await showAlert("Esta acción requiere un proyecto activo con interesados registrados. Ábrelo desde el Panel de Control y completa Stakeholder Studio primero.");
+      return;
+    }
+    var mod = window.GPI.getModule("stakeholders");
+    var all = (mod && mod.stakeholders) || [];
+    if (!all.length) {
+      await showAlert("El proyecto activo aún no tiene interesados. Regístralos primero en Stakeholder Studio.");
+      return;
+    }
+    // Clave = cuadrante "gestionar de cerca" (poder ≥ 50 e interés ≥ 50). Si nadie
+    // califica, se toman los 5 de mayor (poder + interés) para no dejar el acta vacía.
+    var key = all.filter(function (s) { return Number(s.power) >= 50 && Number(s.interest) >= 50; });
+    var basis = key.length ? "del cuadrante \"gestionar de cerca\" (poder e interés ≥ 50)" : "con mayor poder + interés";
+    if (!key.length) {
+      key = all.slice().sort(function (a, b) { return (Number(b.power) + Number(b.interest)) - (Number(a.power) + Number(a.interest)); }).slice(0, 5);
+    }
+    var ok = await showConfirm("Se agregarán " + key.length + " interesado(s) " + basis + " desde Stakeholder Studio (los ya presentes no se duplican). ¿Continuar?", "Importar interesados clave");
+    if (!ok) return;
+    var added = 0;
+    key.forEach(function (s) {
+      if (state.stakeholders.some(function (t) { return t.name === s.name; })) return;
+      state.stakeholders.push({ name: s.name || "", role: s.role || s.org || "", expectation: (s.notes || "").trim() });
+      added++;
+    });
+    renderStakeTable(); onDirty();
+    setStatus(added ? ("Se importaron " + added + " interesado(s) clave.") : "Los interesados clave ya estaban registrados en el acta.");
+  }
+
+  // ---------- REPORTE IMPRIMIBLE ----------
+  function reportShell(docTitle, moduleName, bodyHtml) {
+    var el = document.getElementById("gpiReport");
+    var meta = {};
+    try { if (window.GPI && window.GPI.available() && window.GPI.meta()) meta = window.GPI.meta(); } catch (_) {}
+    var pName = document.getElementById("projectTitle").value || meta.name || "Proyecto";
+    var course = document.getElementById("courseTitle").value || meta.course || "Gestión de Proyectos de Ingeniería";
+    var today = new Date().toLocaleDateString("es-PE", { year: "numeric", month: "long", day: "numeric" });
+    el.innerHTML =
+      '<div class="rep-head"><div><h1>' + esc(docTitle) + '</h1>'
+      + '<div class="sub">' + esc(pName) + (meta.code ? ' · ' + esc(meta.code) : '') + '</div>'
+      + '<div class="sub" style="font-weight:500">' + esc(course) + '</div></div>'
+      + '<div class="rep-meta">' + esc(moduleName) + '<br>Emitido: ' + esc(today)
+      + (meta.location ? '<br>' + esc(meta.location) : '') + '</div></div>'
+      + bodyHtml;
+    document.body.classList.add("report-mode");
+    function done() { document.body.classList.remove("report-mode"); window.removeEventListener("afterprint", done); }
+    window.addEventListener("afterprint", done);
+    setTimeout(function () { window.print(); setTimeout(done, 500); }, 60);
+  }
+  function repList(arr) {
+    var items = (arr || []).filter(function (t) { return t && String(t).trim(); });
+    if (!items.length) return '<p class="rep-note">— No registrado —</p>';
+    return '<ul>' + items.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join("") + '</ul>';
+  }
+  function repReqList(arr) {
+    var items = (arr || []).filter(function (r) { return r && String(r.text || "").trim(); });
+    if (!items.length) return '<p class="rep-note">— No registrado —</p>';
+    return '<ul>' + items.map(function (r) {
+      return '<li><b>' + esc(r.code) + '</b> — ' + esc(r.text) + '</li>';
+    }).join("") + '</ul>';
+  }
+  function buildReport() {
+    var id = state.identification, ap = state.approval, bud = state.budget, bc = state.businessCase || {};
+    var a = audit();
+    var body = "";
+
+    body += '<h2>1. Identificación del proyecto</h2>'
+      + '<table class="rep-kv">'
+      + '<tr><td>Título del proyecto</td><td>' + esc(document.getElementById("projectTitle").value) + '</td></tr>'
+      + '<tr><td>Patrocinador (Sponsor)</td><td>' + esc(id.sponsor || "—") + '</td></tr>'
+      + '<tr><td>Director de Proyecto</td><td>' + esc(id.manager || "—") + '</td></tr>'
+      + (id.deputy ? '<tr><td>Director adjunto</td><td>' + esc(id.deputy) + '</td></tr>' : '')
+      + '<tr><td>Cliente del proyecto</td><td>' + esc(id.client || "—") + '</td></tr>'
+      + '<tr><td>Enfoque de desarrollo</td><td>' + esc(id.approach || "—") + '</td></tr>'
+      + (id.language ? '<tr><td>Idioma del proyecto</td><td>' + esc(id.language) + '</td></tr>' : '')
+      + '<tr><td>Fecha de preparación</td><td>' + esc(repDate(id.preparedDate)) + '</td></tr>'
+      + '</table>';
+
+    body += '<h2>2. Propósito o justificación</h2><p>' + (state.purpose ? esc(state.purpose) : '<span class="rep-note">— No registrado —</span>') + '</p>';
+
+    body += '<h2>3. Caso de negocio</h2>';
+    body += bc.justification ? '<p>' + esc(bc.justification) + '</p>' : '<p class="rep-note">— No registrado —</p>';
+    if (bc.investment || bc.annualBenefit || bc.payback || bc.indicators) {
+      body += '<table class="rep-kv">'
+        + (bc.investment ? '<tr><td>Inversión estimada</td><td><b>' + esc(bc.investment) + '</b></td></tr>' : '')
+        + (bc.annualBenefit ? '<tr><td>Beneficio o ahorro anual</td><td>' + esc(bc.annualBenefit) + '</td></tr>' : '')
+        + (bc.payback ? '<tr><td>Periodo de recuperación</td><td>' + esc(bc.payback) + '</td></tr>' : '')
+        + (bc.indicators ? '<tr><td>Otros indicadores</td><td>' + esc(bc.indicators) + '</td></tr>' : '')
+        + '</table>';
+    }
+    if (bc.intangibles) body += '<p><b>Beneficios no monetarios:</b> ' + esc(bc.intangibles) + '</p>';
+
+    body += '<h2>4. Descripción de alto nivel</h2><p>' + (state.description ? esc(state.description) : '<span class="rep-note">— No registrado —</span>') + '</p>';
+    body += '<h2>5. Límites del proyecto</h2><p>' + (state.boundaries ? esc(state.boundaries) : '<span class="rep-note">— No registrado —</span>') + '</p>';
+
+    var objs = state.objectives.filter(function (o) { return (o.objective || "").trim() || (o.criteria || "").trim(); });
+    body += '<h2>6. Objetivos del proyecto y criterios de éxito</h2>';
+    body += objs.length
+      ? '<table><tr><th style="width:15%">Dimensión</th><th>Objetivo</th><th>Criterio de éxito</th></tr>'
+        + objs.map(function (o) { return '<tr><td><b>' + esc(o.dim) + '</b></td><td>' + esc(o.objective) + '</td><td>' + esc(o.criteria) + '</td></tr>'; }).join("")
+        + '</table>'
+      : '<p class="rep-note">— No registrado —</p>';
+
+    body += '<h2>7. Requisitos de alto nivel</h2>' + repReqList(state.requirements);
+    body += '<h2>8. Entregables clave</h2>' + repList(state.deliverables);
+
+    var mil = state.milestones.filter(function (m) { return (m.name || "").trim(); });
+    body += '<h2>9. Resumen de hitos</h2>';
+    body += mil.length
+      ? '<table><tr><th>Hito</th><th style="width:20%">Fecha objetivo</th></tr>'
+        + mil.map(function (m) { return '<tr><td>' + esc(m.name) + '</td><td>' + esc(repDate(m.date)) + '</td></tr>'; }).join("")
+        + '</table>'
+      : '<p class="rep-note">— No registrado —</p>';
+
+    body += '<h2>10. Presupuesto preasignado</h2>'
+      + '<table class="rep-kv">'
+      + '<tr><td>Monto autorizado (CAPEX)</td><td><b>' + esc(money(bud.amount, bud.currency)) + '</b></td></tr>'
+      + (bud.fundingNotes ? '<tr><td>Financiamiento / condiciones</td><td>' + esc(bud.fundingNotes) + '</td></tr>' : '')
+      + '</table>';
+
+    body += '<h2>11. Recursos preasignados</h2>' + repList(state.preAssignedResources);
+    body += '<h2>12. Riesgo general del proyecto</h2>' + repList(state.risks);
+    body += '<h2>13. Supuestos del proyecto</h2>' + repList(state.assumptions);
+    body += '<h2>14. Restricciones del proyecto</h2>' + repList(state.constraints);
+    body += '<h2>15. Exclusiones (fuera del alcance)</h2>' + repList(state.exclusions);
+
+    var sh = state.stakeholders.filter(function (s) { return (s.name || "").trim(); });
+    body += '<h2>16. Interesados clave</h2>';
+    body += sh.length
+      ? '<table><tr><th style="width:26%">Interesado</th><th style="width:28%">Rol / relación</th><th>Expectativa principal</th></tr>'
+        + sh.map(function (s) { return '<tr><td>' + esc(s.name) + '</td><td>' + esc(s.role) + '</td><td>' + esc(s.expectation) + '</td></tr>'; }).join("")
+        + '</table>'
+      : '<p class="rep-note">— No registrado —</p>';
+
+    var areq = (state.approvalRequirements || []).filter(function (r) { return (r.item || "").trim(); });
+    body += '<h2>17. Requisitos para la aprobación del proyecto</h2>';
+    body += areq.length
+      ? '<table><tr><th style="width:30%">Qué se aprueba</th><th style="width:28%">Quién aprueba</th><th>Criterio / evidencia</th></tr>'
+        + areq.map(function (r) { return '<tr><td>' + esc(r.item) + '</td><td>' + esc(r.approver) + '</td><td>' + esc(r.criteria) + '</td></tr>'; }).join("")
+        + '</table>'
+      : '<p class="rep-note">— No registrado —</p>';
+
+    body += '<h2>18. Criterios de salida del proyecto</h2>' + repList(state.exitCriteria);
+    body += '<h2>19. Nivel de autoridad del Director de Proyecto</h2><p>' + (id.authority ? esc(id.authority) : '<span class="rep-note">— No registrado —</span>') + '</p>';
+
+    var spon = (state.sponsors || []).filter(function (s) { return (s.name || "").trim(); });
+    body += '<h2>20. Patrocinadores que autorizan el proyecto</h2>';
+    body += spon.length
+      ? '<table><tr><th style="width:45%">Nombre</th><th>Cargo / rol en la autorización</th></tr>'
+        + spon.map(function (s) { return '<tr><td>' + esc(s.name) + '</td><td>' + esc(s.role) + '</td></tr>'; }).join("")
+        + '</table>'
+      : '<p class="rep-note">— No registrado —</p>';
+
+    body += '<p class="rep-note" style="margin-top:14px">Índice de completitud del acta al momento de emisión: <b>' + a.pct + '%</b> (' + a.okCount + '/' + a.total + ' elementos del checklist).</p>';
+
+    body += '<div class="rep-sign">'
+      + '<div class="box"><b>' + esc(ap.sponsorName || "Patrocinador (Sponsor)") + '</b><div class="r">Patrocinador — Fecha: ' + esc(repDate(ap.sponsorDate)) + '</div></div>'
+      + '<div class="box"><b>' + esc(ap.managerName || "Director de Proyecto") + '</b><div class="r">Director de Proyecto — Fecha: ' + esc(repDate(ap.managerDate)) + '</div></div>'
+      + '</div>';
+
+    reportShell("Acta de Constitución del Proyecto", "Project Charter · PMBOK", body);
+  }
+
+  // ---------- toolbar ----------
+  function wireToolbar() {
+    document.getElementById("btnExportJson").addEventListener("click", exportJson);
+    document.getElementById("btnImportJson").addEventListener("click", function () { document.getElementById("fileInput").click(); });
+    document.getElementById("fileInput").addEventListener("change", function (e) { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ""; });
+    document.getElementById("btnImportMilestones").addEventListener("click", importMilestonesFromWbs);
+    document.getElementById("btnImportStakeholders").addEventListener("click", importKeyStakeholders);
+    document.getElementById("btnReport").addEventListener("click", buildReport);
+    document.getElementById("btnPrint").addEventListener("click", function () { window.print(); });
+    document.getElementById("btnSample").addEventListener("click", async function () {
+      var ok = await showConfirm("Se reemplazará el contenido actual del acta por el caso de ejemplo DISTRIB+ S.A. ¿Continuar?", "Cargar ejemplo");
+      if (!ok) return;
+      state = sampleState(); renderAll(); gpiPush();
+      setStatus("Ejemplo DISTRIB+ S.A. cargado.");
+    });
+    document.getElementById("btnReset").addEventListener("click", async function () {
+      var ok = await showConfirm("Se vaciará el acta (los demás módulos del proyecto no se tocan). Esta acción no se puede deshacer. ¿Continuar?", "Nueva acta");
+      if (!ok) return;
+      state = defaultState(); renderAll(); gpiPush();
+      setStatus("Acta nueva.");
+    });
+    document.querySelectorAll("[data-add-list]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state[b.dataset.addList].push("");
+        renderList(b.dataset.addList); onDirty();
+        var host = document.getElementById(LISTS[b.dataset.addList]);
+        var inputs = host.querySelectorAll("input"); if (inputs.length) inputs[inputs.length - 1].focus();
+      });
+    });
+    document.getElementById("btnAddRequirement").addEventListener("click", function () {
+      var nx = nextRanCode();
+      state.requirements.push({ id: "ran" + nx.num, code: nx.code, text: "" });
+      renderRequirements(); onDirty();
+      var host = document.getElementById("listRequirements");
+      var inputs = host.querySelectorAll("input"); if (inputs.length) inputs[inputs.length - 1].focus();
+    });
+    document.getElementById("btnAddObjective").addEventListener("click", function () {
+      state.objectives.push({ dim: "Otro", objective: "", criteria: "" });
+      renderObjectives(); onDirty();
+    });
+    document.getElementById("btnAddMilestone").addEventListener("click", function () {
+      state.milestones.push({ name: "", date: "" });
+      renderMilestones(); onDirty();
+    });
+    // (corrección) este botón existía en el marcado pero nunca se enlazó:
+    // "+ Agregar interesado" no hacía nada al pulsarlo.
+    document.getElementById("btnAddStakeholder").addEventListener("click", function () {
+      state.stakeholders.push({ name: "", role: "", expectation: "" });
+      renderStakeTable(); onDirty();
+    });
+    document.getElementById("btnAddApprovalReq").addEventListener("click", function () {
+      state.approvalRequirements.push({ item: "", approver: "", criteria: "" });
+      renderApprovalReq(); onDirty();
+    });
+    document.getElementById("btnAddSponsor").addEventListener("click", function () {
+      state.sponsors.push({ name: "", role: "" });
+      renderSponsors(); onDirty();
+    });
+  }
+
+  // ===== Puente con el Panel de Control (GPI) =====
+  // El acta es la fuente formal del patrocinador, el director, el cliente y el
+  // presupuesto: al sincronizar, esos campos actualizan los datos comunes del
+  // proyecto (meta), que a su vez alimentan el encabezado de las demás
+  // herramientas. En sentido inverso, si el acta está vacía, se precarga desde
+  // los metadatos existentes para no partir de cero.
+  var gpiReady = false;
+  function gpiPush() {
+    if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
+    window.GPI.setModule("charter", state);
+    var patch = {
+      name: document.getElementById("projectTitle").value,
+      course: document.getElementById("courseTitle").value
+    };
+    if ((state.identification.sponsor || "").trim()) patch.sponsor = state.identification.sponsor;
+    if ((state.identification.manager || "").trim()) patch.manager = state.identification.manager;
+    if ((state.identification.client || "").trim()) patch.client = state.identification.client;
+    if (Number(state.budget.amount) > 0) { patch.capex = state.budget.amount; patch.currency = state.budget.currency; }
+    window.GPI.patchMeta(patch);
+  }
+
+  function init() {
+    wireStatics();
+    wireToolbar();
+
+    if (typeof window.GPI !== "undefined" && window.GPI.available()) {
+      var proj = window.GPI.active();
+      var titleEl = document.getElementById("projectTitle");
+      var courseEl = document.getElementById("courseTitle");
+      if (proj) {
+        if (proj.meta) {
+          if (proj.meta.name) titleEl.value = proj.meta.name;
+          if (proj.meta.course) courseEl.value = proj.meta.course;
+        }
+        var mod = window.GPI.getModule("charter");
+        if (mod) {
+          state = normalizeState(mod);
+        } else {
+          // Primera vez: precargar identificación y presupuesto desde los
+          // datos comunes del Panel para no arrancar de cero.
+          var m = proj.meta || {};
+          if (m.sponsor) state.identification.sponsor = m.sponsor;
+          if (m.manager) state.identification.manager = m.manager;
+          if (m.client) state.identification.client = m.client;
+          if (m.startDate) state.identification.preparedDate = m.startDate;
+          if (m.capex) state.budget.amount = m.capex;
+          if (m.currency) state.budget.currency = m.currency;
+          if (m.description && !state.description) state.description = m.description;
+        }
+        setStatus("Proyecto cargado desde el Panel de Control.");
+      }
+      gpiReady = true;
+      window.addEventListener("beforeunload", gpiPush);
+      document.addEventListener("visibilitychange", function () { if (document.hidden) gpiPush(); });
+      gpiBadge(proj ? (proj.meta && proj.meta.name) : "", gpiPush);
+    } else {
+      document.getElementById("banner").classList.add("show");
+    }
+
+    renderAll();
+  }
+
+  function gpiBadge(name, pushFn) {
+    var css = document.createElement("style");
+    css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:42px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-dot{width:8px;height:8px;border-radius:50%;background:#00c2a8;box-shadow:0 0 0 3px rgba(0,194,168,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#0090c2;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#00b6ec;background:#fff}";
+    document.head.appendChild(css);
+    var bar = document.createElement("div");
+    bar.className = "gpi-badge";
+    bar.innerHTML = '<span class="gpi-dot"></span><span>Panel: <b>' + String(name || "—").replace(/</g, "&lt;") + '</b></span><button class="gpi-btn" id="gpiSyncBtn">☁ Sincronizar</button><a class="gpi-btn" href="Panel_Control.html">⌂ Panel</a>';
+    document.body.appendChild(bar);
+    bar.querySelector("#gpiSyncBtn").addEventListener("click", function () {
+      pushFn(); var b = bar.querySelector("#gpiSyncBtn"), t = b.textContent; b.textContent = "✓ Sincronizado";
+      setTimeout(function () { b.textContent = t; }, 1400);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+})();
+</script>
+</body>
+</html>

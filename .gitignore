@@ -1,0 +1,5 @@
+node_modules/
+.vite/
+.build-tmp/
+*.log
+.DS_Store
