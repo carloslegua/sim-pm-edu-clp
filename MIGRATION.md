@@ -32,7 +32,7 @@ negociables mientras dure.
 | 2 | RACI | `RACI_Matrix.html` | ✅ Migrado |
 | 3 | Costos | `Cost-management.html` | ✅ Migrado |
 | 4 | Requisitos | `Recopilar_Requisitos.html` | ✅ Migrado |
-| 5 | Enunciado del Alcance | `Enunciado_del_Alcance.html` | Pendiente |
+| 5 | Enunciado del Alcance | `Enunciado_del_Alcance.html` | ✅ Migrado |
 | 6 | EDT | `WBS_Builder.html` | Pendiente |
 | 7 | Definir Actividades | `Activity_Definition.html` | Pendiente |
 | 8 | PERT | `Pert_Analysis.html` | Pendiente |
@@ -76,6 +76,26 @@ sostuvieron y se corrigieron:
   separado).
 
 ## Hallazgos de la Fase 4 (por módulo migrado)
+
+**Enunciado_del_Alcance.html (quinto módulo migrado):**
+
+- Vuelve al patrón `addEventListener`/`.onclick=` (como OBS/RACI, no
+  atributos inline), usa `window.GPI` explícito, y está envuelto en un
+  IIFE propio — sin necesidad de exponer nada en `window`.
+- Primer caso real de conflicto de márgenes con `gpi-shared.css`: el
+  `.modal-card h3` de este módulo tenía `margin:0 0 14px` (vs. 10px del
+  shared) y `.modal-actions` traía un `margin-top:6px` extra. Se armonizó
+  a favor del valor compartido (diferencia ≤6px, tratada como ruido
+  visual, no como decisión de diseño a preservar) — ver el comentario que
+  quedó en el CSS del módulo explicando la regla.
+- Es el módulo de solo-lectura más complejo del ecosistema: su pestaña
+  "Consistencia" consume `GPI.util.traceMatrix` (RAN→REQ→DEL→WP), la
+  función de integración vertical más elaborada del núcleo.
+- Verificado de punta a punta (servido por HTTP local): con un proyecto
+  activo con Acta/Requisitos/EDT reales pero sin `modules.scopeStatement`,
+  arranca en blanco (regla de oro); "↧ Sugerir desde el Acta" trae
+  correctamente el entregable declarado en `charter.deliverables` y lo
+  persiste en `GPI.getModule("scopeStatement")`.
 
 **Recopilar_Requisitos.html (cuarto módulo migrado):**
 
@@ -214,8 +234,8 @@ sostuvieron y se corrigieron:
   de Google Fonts siga igual entre módulos (ya encontró una divergencia
   preexistente, ver arriba).
 - **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. En
-  progreso: 4/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
-  `Recopilar_Requisitos.html`). Patrón establecido: `src/modules/<key>/main.ts`
+  progreso: 5/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
+  `Recopilar_Requisitos.html`, `Enunciado_del_Alcance.html`). Patrón establecido: `src/modules/<key>/main.ts`
   + `configs/<key>.vite.config.ts` (usa el helper `configs/lib.config.mjs`)
   + `npm run build:<key>` + `tests/smoke/<key>.smoke.test.ts`.
 - **Fase 5** — Verificación de despliegue (GitHub Pages y `file://`).
