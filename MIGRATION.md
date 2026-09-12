@@ -28,7 +28,7 @@ negociables mientras dure.
 | Orden | Módulo | Archivo | Estado |
 |---|---|---|---|
 | — | Núcleo | `gpi-core.js` → `src/core/gpi-core.ts` | ✅ Migrado (Fase 1) |
-| 1 | OBS | `OBS_Builder.html` | Pendiente |
+| 1 | OBS | `OBS_Builder.html` | ✅ Migrado |
 | 2 | RACI | `RACI_Matrix.html` | Pendiente |
 | 3 | Costos | `Cost-management.html` | Pendiente |
 | 4 | Requisitos | `Recopilar_Requisitos.html` | Pendiente |
@@ -75,6 +75,40 @@ sostuvieron y se corrigieron:
   dos módulos se migren en la Fase 4 (o antes, si se quiere corregir por
   separado).
 
+## Hallazgos de la Fase 4 (por módulo migrado)
+
+**OBS_Builder.html (piloto, primer módulo migrado):**
+
+- **No se tocó `escapeHtml`/`escapeAttr`** en el módulo: sigue 100% autocontenido,
+  sin depender de `GPI.ui.esc`. Las 12 herramientas (todas menos
+  `Panel_Control.html`) están diseñadas para seguir funcionando aunque
+  `gpi-core.js` no cargue ("modo independiente" del README); si el `esc()`
+  local dependiera de `window.GPI.ui`, un fallo de carga del núcleo
+  rompería el renderizado COMPLETO del módulo, no solo la sincronización
+  con el Panel. Decisión validada con el usuario: se deja el `esc()` local
+  tal cual en los 12 módulos, en todos los que sigan.
+- **Sí se adoptó `gpi-shared.css`** para el modal: si ese `<link>` fallara
+  al cargar, el modal se ve sin estilo pero sigue funcionando (degradación
+  visual, no funcional) — riesgo muy distinto al de una dependencia JS dura.
+- **Bug de build descubierto y corregido**: `configs/lib.config.mjs`
+  heredaba `rollupOptions.output.exports:"named"` de la config de
+  `gpi-core` (que sí tiene ~40 named exports). Los módulos de página no
+  exportan nada; con `exports:"named"` forzado y cero exports reales,
+  Rollup generaba un IIFE roto (`Object.defineProperty(exports, ...)` sin
+  el parámetro `exports` en la función envolvente) que tiraba
+  `ReferenceError: exports is not defined` apenas cargaba en el navegador.
+  Se corrigió quitando esa opción del helper compartido de módulos de
+  página (`gpi-core.js` conserva su propia config con named exports).
+- **Limitación de jsdom descubierta**: jsdom trata `file://` como origen
+  OPACO y bloquea `localStorage` por completo (`SecurityError`), a
+  diferencia de los navegadores reales (Chrome/Firefox sí permiten
+  localStorage en `file://` — así es como esta app funciona hoy). Bajo
+  `file://` en jsdom, `GPI.available()` da `false` y el puente con el
+  Panel no hace nada — no es un bug de la app, es una limitación del
+  entorno de prueba. Los smoke tests de módulos (`tests/smoke/*.smoke.test.ts`)
+  sirven el proyecto por HTTP local (servidor efímero en el propio test)
+  en vez de abrir el archivo directo, para evitar este falso negativo.
+
 ## Fases
 
 - **Fase 0** — Control de versiones. ✅ Hecho (`git init`, commit baseline,
@@ -103,7 +137,10 @@ sostuvieron y se corrigieron:
   Requisitos NO se tocan. `npm run check:snippets` audita que el `<link>`
   de Google Fonts siga igual entre módulos (ya encontró una divergencia
   preexistente, ver arriba).
-- **Fase 4** — Migración de los 13 módulos, en el orden de la tabla.
+- **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. En
+  progreso: 1/13 (`OBS_Builder.html`). Patrón establecido: `src/modules/<key>/main.ts`
+  + `configs/<key>.vite.config.ts` (usa el helper `configs/lib.config.mjs`)
+  + `npm run build:<key>` + `tests/smoke/<key>.smoke.test.ts`.
 - **Fase 5** — Verificación de despliegue (GitHub Pages y `file://`).
 
 Ver el plan completo en el historial de la conversación / plan aprobado para
