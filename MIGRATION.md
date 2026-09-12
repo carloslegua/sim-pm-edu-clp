@@ -27,7 +27,7 @@ negociables mientras dure.
 
 | Orden | Módulo | Archivo | Estado |
 |---|---|---|---|
-| — | Núcleo | `gpi-core.js` → `src/core/gpi-core.ts` | En progreso (Fase 1) |
+| — | Núcleo | `gpi-core.js` → `src/core/gpi-core.ts` | ✅ Migrado (Fase 1) |
 | 1 | OBS | `OBS_Builder.html` | Pendiente |
 | 2 | RACI | `RACI_Matrix.html` | Pendiente |
 | 3 | Costos | `Cost-management.html` | Pendiente |
@@ -46,8 +46,11 @@ negociables mientras dure.
 
 - **Fase 0** — Control de versiones. ✅ Hecho (`git init`, commit baseline,
   tag `baseline-pre-migracion`).
-- **Fase 1** — Bootstrap de Vite + TypeScript, port de `gpi-core.ts`. En
-  progreso.
+- **Fase 1** — Bootstrap de Vite + TypeScript, port de `gpi-core.ts`. ✅ Hecho.
+  `npm run build:core` compila `src/core/gpi-core.ts` → `gpi-core.js` (IIFE,
+  se commitea). `npm run typecheck` corre `tsc --noEmit`. `npm test` corre
+  Vitest (11 tests: fuente TS + artefacto compilado en jsdom). Ver el
+  commit `core: port gpi-core.js a TypeScript (Fase 1)`.
 - **Fase 2** — Vitest sobre `GPI.util`, priorizado por riesgo (`cpm`,
   `pertProbability`, parsers de predecesoras, audits, helpers de árbol,
   getters simples).
