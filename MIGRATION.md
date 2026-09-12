@@ -30,7 +30,7 @@ negociables mientras dure.
 | — | Núcleo | `gpi-core.js` → `src/core/gpi-core.ts` | ✅ Migrado (Fase 1) |
 | 1 | OBS | `OBS_Builder.html` | ✅ Migrado |
 | 2 | RACI | `RACI_Matrix.html` | ✅ Migrado |
-| 3 | Costos | `Cost-management.html` | Pendiente |
+| 3 | Costos | `Cost-management.html` | ✅ Migrado |
 | 4 | Requisitos | `Recopilar_Requisitos.html` | Pendiente |
 | 5 | Enunciado del Alcance | `Enunciado_del_Alcance.html` | Pendiente |
 | 6 | EDT | `WBS_Builder.html` | Pendiente |
@@ -76,6 +76,38 @@ sostuvieron y se corrigieron:
   separado).
 
 ## Hallazgos de la Fase 4 (por módulo migrado)
+
+**Cost-management.html (tercer módulo migrado):**
+
+- **Diferencia estructural importante**: a diferencia de OBS/RACI (que usan
+  `addEventListener` exclusivamente), el HTML de este módulo usa atributos
+  `onclick`/`onchange`/`oninput` **inline** (`onclick="exportJSON()"`, etc.)
+  para ~10 funciones, dos de ellas generadas dinámicamente en filas de
+  tabla (`coStatus(this)`, `delCO(i)`). Vite compila cada módulo en su
+  propio closure aislado: esas funciones dejan de ser accesibles por
+  nombre desde el HTML a menos que se expongan explícitamente. Solución:
+  `Object.assign(window, { exportJSON, importJSON, save, recalcCont,
+  onBaseInput, pullFromWBS, addCO, coStatus, delCO, buildDoc })` al final
+  de `main.ts`. El HTML **no** se reescribió a `addEventListener` — hubiera
+  sido un cambio de alcance mayor a "portar a TypeScript". Los próximos
+  módulos deben revisarse por este mismo patrón antes de asumir que
+  `addEventListener` es universal en el ecosistema.
+- Este módulo referencia `GPI` como identificador **global bare** (sin
+  `window.` prefijo) en todo el archivo, a diferencia de OBS/RACI que sí
+  usan `window.GPI`. Se declaró `declare global { var GPI: GpiApi |
+  undefined }` en vez de `interface Window { GPI }`, para tipar fielmente
+  el patrón real del archivo.
+- No usa modales (`.modal-overlay`/`.modal-card`): usa un toast propio. No
+  se agregó `<link rel="stylesheet" href="gpi-shared.css">` porque no
+  habría ninguna regla que aprovechar — no todos los módulos necesitan el
+  CSS compartido.
+- Verificado de punta a punta (servido por HTTP local): el ejemplo por
+  defecto calcula el BAC documentado en el README (base 7.100.000 → BAC
+  8.075.181, Clase 3/P70) exacto; el botón "+ Agregar" (onclick inline)
+  funciona a través del bundle; y la "regla de oro" de `Cost-management`
+  (no crear `modules.cost` hasta la primera edición real del alumno) se
+  comporta igual que antes: `save()` sin editar nada no persiste nada,
+  `pullFromWBS()` (una edición real) sí.
 
 **RACI_Matrix.html (segundo módulo migrado):**
 
@@ -159,7 +191,8 @@ sostuvieron y se corrigieron:
   de Google Fonts siga igual entre módulos (ya encontró una divergencia
   preexistente, ver arriba).
 - **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. En
-  progreso: 2/13 (`OBS_Builder.html`, `RACI_Matrix.html`). Patrón establecido: `src/modules/<key>/main.ts`
+  progreso: 3/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`).
+  Patrón establecido: `src/modules/<key>/main.ts`
   + `configs/<key>.vite.config.ts` (usa el helper `configs/lib.config.mjs`)
   + `npm run build:<key>` + `tests/smoke/<key>.smoke.test.ts`.
 - **Fase 5** — Verificación de despliegue (GitHub Pages y `file://`).
