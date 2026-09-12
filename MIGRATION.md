@@ -51,9 +51,17 @@ negociables mientras dure.
   se commitea). `npm run typecheck` corre `tsc --noEmit`. `npm test` corre
   Vitest (11 tests: fuente TS + artefacto compilado en jsdom). Ver el
   commit `core: port gpi-core.js a TypeScript (Fase 1)`.
-- **Fase 2** — Vitest sobre `GPI.util`, priorizado por riesgo (`cpm`,
-  `pertProbability`, parsers de predecesoras, audits, helpers de árbol,
-  getters simples).
+- **Fase 2** — Vitest sobre `GPI.util`, priorizado por riesgo. ✅ Hecho.
+  94 tests en 8 archivos (`tests/unit/`), incluyendo la regresión dorada
+  DISTRIB+ contra `cpm` (dataset real tomado de `Cronograma_CPM.html`:
+  53 días, fin 2026-09-16, ruta crítica `a1-a2-a3-a4-a8-a9-a10-a11-a12`,
+  verificado exacto contra el README). Cobertura: `cpm` (tipos de relación,
+  lags, ciclos), `pertProbability` (simetría, monotonicidad, valores de
+  referencia), parsers de predecesoras (`parsePredecessorCell`,
+  `buildScheduleLinks`, `scheduleValidate`), los 5 audits + `traceMatrix`
+  (incluido el "cruce fino" DEL↔WP que el README documenta como el bug más
+  sutil), helpers de árbol WBS/OBS, y los getters simples (con
+  compatibilidad de esquema antiguo en `charterRans`).
 - **Fase 3** — Extraer duplicados (`GPI.ui.esc/kpi/modal`, `gpi-shared.css`).
 - **Fase 4** — Migración de los 13 módulos, en el orden de la tabla.
 - **Fase 5** — Verificación de despliegue (GitHub Pages y `file://`).
