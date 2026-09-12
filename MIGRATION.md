@@ -29,7 +29,7 @@ negociables mientras dure.
 |---|---|---|---|
 | — | Núcleo | `gpi-core.js` → `src/core/gpi-core.ts` | ✅ Migrado (Fase 1) |
 | 1 | OBS | `OBS_Builder.html` | ✅ Migrado |
-| 2 | RACI | `RACI_Matrix.html` | Pendiente |
+| 2 | RACI | `RACI_Matrix.html` | ✅ Migrado |
 | 3 | Costos | `Cost-management.html` | Pendiente |
 | 4 | Requisitos | `Recopilar_Requisitos.html` | Pendiente |
 | 5 | Enunciado del Alcance | `Enunciado_del_Alcance.html` | Pendiente |
@@ -76,6 +76,27 @@ sostuvieron y se corrigieron:
   separado).
 
 ## Hallazgos de la Fase 4 (por módulo migrado)
+
+**RACI_Matrix.html (segundo módulo migrado):**
+
+- Este módulo SÍ depende de `window.GPI.util` para su propia lógica (no
+  solo para sincronizar con el Panel): `wbsLeaves`, `obsNodes`, `raciAudit`,
+  `applyRaciToWbs` en modo "live". El modo "sample" (ejemplo DISTRIB+
+  desconectado) sigue funcionando sin GPI, igual que OBS.
+- `GPI.util.raciAudit` espera `WbsLeafRow[]`/`ObsNodeRow[]` completos (con
+  `resource`/`email`); el estado local de este módulo no los necesita para
+  su propio render. Se adaptan solo en la frontera de esa llamada
+  (`rows.map(r => ({...r, resource: ""}))`) en vez de cargar esos campos
+  sin uso en todo el módulo.
+- Verificado con datos reales de principio a fin: al hacer clic en una
+  celda para asignar "R", `GPI.util.applyRaciToWbs` reescribe
+  `wbs.nodes.<leafId>.resource` correctamente y `GPI.setModule("raci", …)`
+  persiste la asignación — probado en `tests/smoke/raci-matrix.smoke.test.ts`.
+- El ejemplo DISTRIB+ (modo "sample") trae 7 errores deliberados a propósito
+  (documentados en el propio código): el test de humo verifica que el
+  Velocímetro de Gobernanza siga marcando "🔴 RECHAZADO", no "🟢 CERTIFICADO"
+  — si algún día cambia, es señal de que algo en `raciAudit` o en el dataset
+  de ejemplo se rompió.
 
 **OBS_Builder.html (piloto, primer módulo migrado):**
 
@@ -138,7 +159,7 @@ sostuvieron y se corrigieron:
   de Google Fonts siga igual entre módulos (ya encontró una divergencia
   preexistente, ver arriba).
 - **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. En
-  progreso: 1/13 (`OBS_Builder.html`). Patrón establecido: `src/modules/<key>/main.ts`
+  progreso: 2/13 (`OBS_Builder.html`, `RACI_Matrix.html`). Patrón establecido: `src/modules/<key>/main.ts`
   + `configs/<key>.vite.config.ts` (usa el helper `configs/lib.config.mjs`)
   + `npm run build:<key>` + `tests/smoke/<key>.smoke.test.ts`.
 - **Fase 5** — Verificación de despliegue (GitHub Pages y `file://`).
