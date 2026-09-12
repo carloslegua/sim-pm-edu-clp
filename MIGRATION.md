@@ -34,7 +34,7 @@ negociables mientras dure.
 | 4 | Requisitos | `Recopilar_Requisitos.html` | ✅ Migrado |
 | 5 | Enunciado del Alcance | `Enunciado_del_Alcance.html` | ✅ Migrado |
 | 6 | EDT | `WBS_Builder.html` | ✅ Migrado |
-| 7 | Definir Actividades | `Activity_Definition.html` | Pendiente |
+| 7 | Definir Actividades | `Activity_Definition.html` | ✅ Migrado |
 | 8 | PERT | `Pert_Analysis.html` | Pendiente |
 | 9 | Plan de Cronograma | `Schedule_Management_Plan.html` | Pendiente |
 | 10 | Cronograma / CPM | `Cronograma_CPM.html` | Pendiente |
@@ -76,6 +76,38 @@ sostuvieron y se corrigieron:
   separado).
 
 ## Hallazgos de la Fase 4 (por módulo migrado)
+
+**Activity_Definition.html (séptimo módulo migrado):**
+
+- Mismo patrón que OBS/RACI/Enunciado del Alcance/WBS: `addEventListener`
+  exclusivamente (`wireToolbar`, `wireTableDelegation`, `wireGridSelection`),
+  `window.GPI` explícito, IIFE propio — sin necesidad de `Object.assign(window,
+  {...})`. CSS del modal idéntica byte a byte a la de los otros 11 módulos
+  salvo el ancho (`width:400px`); se armonizó igual que WBS/OBS/RACI/Enunciado,
+  dejando solo el override de ancho y adoptando `gpi-shared.css`.
+- Único módulo hasta ahora que depende de una librería externa vía CDN
+  (`window.JSZip`, cargado desde cdnjs, para generar el `.xlsx` de
+  exportación a MS Project) además de `gpi-core.js`. Se tipó con una interfaz
+  mínima local (`JSZipLike`) en vez de instalar `@types/jszip`, ya que el
+  port es mecánico y solo usa `file()`/`generateAsync()`; si `JSZip` no
+  carga (offline), la propia lógica original ya cae a un CSV equivalente
+  (`buildCsv()`), comportamiento preservado sin cambios.
+- La EDT se **lee** en vivo desde `GPI.getModule("wbs")` (nunca se duplica):
+  las actividades se guardan en un módulo nuevo, `GPI.getModule("activities")`,
+  indexado por el id de cada paquete de trabajo (hoja de la EDT). La
+  numeración de filas replica el modelo de MS Project (`fullRows()`): fila 0
+  es siempre el proyecto, con un contador `n` consecutivo cruzando fases,
+  paquetes y actividades — se preservó igual, junto con el pegado tipo Excel
+  (TSV), la navegación de grilla con teclado y el cálculo de duración
+  derivado `Dur = Met / (#Eq × R)` redondeado con `Math.ceil`.
+- Verificado de punta a punta (servido por HTTP local): sin proyecto activo
+  (localStorage vacío vía HTTP) arranca en blanco, igual que WBS Builder —
+  no entra en modo ejemplo automáticamente porque `GPI.available()` es
+  verdadero aunque no haya proyecto activo (el "modo ejemplo" es una acción
+  explícita del botón, no un fallback). Con un proyecto real con EDT propia,
+  agregar una actividad con Metrado=100 y Rendimiento=25 calculó la
+  duración derivada en 4 días y persistió correctamente en
+  `gpi_db.projects.<id>.modules.activities`.
 
 **WBS_Builder.html (sexto módulo migrado, el de mayor fan-out):**
 
@@ -253,8 +285,9 @@ sostuvieron y se corrigieron:
   de Google Fonts siga igual entre módulos (ya encontró una divergencia
   preexistente, ver arriba).
 - **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. En
-  progreso: 6/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
-  `Recopilar_Requisitos.html`, `Enunciado_del_Alcance.html`, `WBS_Builder.html`).
+  progreso: 7/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
+  `Recopilar_Requisitos.html`, `Enunciado_del_Alcance.html`, `WBS_Builder.html`,
+  `Activity_Definition.html`).
   Patrón establecido: `src/modules/<key>/main.ts`
   + `configs/<key>.vite.config.ts` (usa el helper `configs/lib.config.mjs`)
   + `npm run build:<key>` + `tests/smoke/<key>.smoke.test.ts`.
