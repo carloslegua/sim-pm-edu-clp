@@ -9,6 +9,7 @@
     "build:obs": "vite build --config configs/obs.vite.config.ts && node scripts/sync-artifact.mjs obs.js",
     "build:raci": "vite build --config configs/raci.vite.config.ts && node scripts/sync-artifact.mjs raci.js",
     "build:cost": "vite build --config configs/cost.vite.config.ts && node scripts/sync-artifact.mjs cost.js",
+    "build:requirements": "vite build --config configs/requirements.vite.config.ts && node scripts/sync-artifact.mjs requirements.js",
     "check:snippets": "node scripts/check-shared-snippets.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

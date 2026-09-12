@@ -31,7 +31,7 @@ negociables mientras dure.
 | 1 | OBS | `OBS_Builder.html` | ✅ Migrado |
 | 2 | RACI | `RACI_Matrix.html` | ✅ Migrado |
 | 3 | Costos | `Cost-management.html` | ✅ Migrado |
-| 4 | Requisitos | `Recopilar_Requisitos.html` | Pendiente |
+| 4 | Requisitos | `Recopilar_Requisitos.html` | ✅ Migrado |
 | 5 | Enunciado del Alcance | `Enunciado_del_Alcance.html` | Pendiente |
 | 6 | EDT | `WBS_Builder.html` | Pendiente |
 | 7 | Definir Actividades | `Activity_Definition.html` | Pendiente |
@@ -76,6 +76,29 @@ sostuvieron y se corrigieron:
   separado).
 
 ## Hallazgos de la Fase 4 (por módulo migrado)
+
+**Recopilar_Requisitos.html (cuarto módulo migrado):**
+
+- El más grande hasta ahora (~800 líneas de lógica). Mismo patrón que
+  Cost-management: atributos `onclick`/`onchange` inline (13 funciones,
+  varias generadas dinámicamente en filas de la matriz, tarjetas de
+  modificación y celdas de tabla), `GPI` referenciado como global bare, y
+  `Object.assign(window, {...})` al final para exponerlas.
+- Usa **su propio modal** con clases `.ov`/`.modal` (no `.modal-overlay`/
+  `.modal-card` como los demás) — otra confirmación de que no hay un
+  único sistema de modales en el ecosistema. No se agregó `gpi-shared.css`
+  porque no habría ninguna clase que aprovechar.
+- Es el módulo con más lecturas cruzadas del ecosistema: lee `charter`
+  (RAN), `stakeholders` (origen del requisito) y `wbs` (trazabilidad hacia
+  la EDT) simultáneamente, con datos de demostración propios (`DEMO`) que
+  imitan esas tres estructuras para el modo suelto.
+- Verificado de punta a punta (servido por HTTP local): con un proyecto
+  activo con Acta/Interesados/EDT reales pero sin `modules.requirements`
+  aún, el módulo arranca **en blanco** (regla de oro, no carga DISTRIB+
+  encima); al abrir el editor de un requisito nuevo, los "picklists" de
+  RAN y de paquetes de la EDT muestran los datos reales del proyecto
+  (no la demo); y al guardar, el requisito queda enlazado correctamente
+  al RAN y al paquete de la EDT reales en `GPI.getModule("requirements")`.
 
 **Cost-management.html (tercer módulo migrado):**
 
@@ -191,8 +214,8 @@ sostuvieron y se corrigieron:
   de Google Fonts siga igual entre módulos (ya encontró una divergencia
   preexistente, ver arriba).
 - **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. En
-  progreso: 3/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`).
-  Patrón establecido: `src/modules/<key>/main.ts`
+  progreso: 4/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
+  `Recopilar_Requisitos.html`). Patrón establecido: `src/modules/<key>/main.ts`
   + `configs/<key>.vite.config.ts` (usa el helper `configs/lib.config.mjs`)
   + `npm run build:<key>` + `tests/smoke/<key>.smoke.test.ts`.
 - **Fase 5** — Verificación de despliegue (GitHub Pages y `file://`).
