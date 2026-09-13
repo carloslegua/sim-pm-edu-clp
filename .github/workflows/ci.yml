@@ -1,0 +1,43 @@
+name: CI
+
+# Gate de calidad del repo: corre en cada push y cada PR los mismos cuatro
+# comandos que hoy solo corríamos a mano localmente (typecheck, test,
+# build:all, verify:deploy). Sin esto, un push a master podía romper
+# cualquiera de las 5 fases de la migración sin que nadie se enterara hasta
+# que un alumno abriera la herramienta rota.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Debe coincidir con "engines" en package.json: Vitest 5 es la
+          # dependencia más estricta (^22.12.0 || ^24.0.0 || >=26.0.0).
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck (tsc --noEmit)
+        run: npm run typecheck
+
+      - name: Tests (Vitest — unidad + humo sobre los HTML reales)
+        run: npm test
+
+      # Reconstruye los 15 artefactos y falla si alguno quedó desfasado
+      # respecto de lo commiteado (ver MIGRATION.md, Fase 5).
+      - name: build:all
+        run: npm run build:all
+
+      # IIFE sin ESM, sin type="module", sin rutas absolutas, gpi-core.js
+      # presente en los 13 HTML (ver scripts/verify-deploy.mjs).
+      - name: verify:deploy
+        run: npm run verify:deploy

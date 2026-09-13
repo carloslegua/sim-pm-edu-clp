@@ -457,3 +457,11 @@ Claves de módulo para `build:<clave>`: `core` · `panel-control` ·
 `npm run verify:deploy` comprueba automáticamente 1 y 2 (más que cada HTML siga
 cargando `gpi-core.js`, que no quede lógica inline y que ninguna ruta sea
 absoluta). Conviene ejecutarlo antes de publicar.
+
+### Integración continua
+
+`.github/workflows/ci.yml` corre `typecheck` + `test` + `build:all` +
+`verify:deploy` en cada push y cada pull request a `master`. Un PR con la
+insignia en rojo significa que rompió alguna de las cuatro reglas de arriba
+antes de que llegue a nadie más — no hace falta correrlos a mano para
+confiar en que `master` sigue sano.
