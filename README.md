@@ -440,6 +440,7 @@ src/shared/styles/shared.css  → gpi-shared.css       (npm run build:shared)
 | `npm run lint` / `lint:fix` | ESLint sobre `src/`, `configs/`, `tests/` (falla en errores; `any` explícito queda en "warn", ver CLAUDE.md) |
 | `npm run format` / `format:check` | Prettier — configurado pero **no aplicado retroactivamente** al código existente (ver nota abajo) |
 | `npm test` | suite de Vitest (unidad + humo sobre los HTML reales) |
+| `npm run test:coverage` | igual, más un piso de cobertura sobre `src/core/**` (el resto se prueba vía los HTML compilados, que la cobertura no puede medir — ver CLAUDE.md) |
 | `npm run verify:deploy` | audita que el despliegue siga intacto (ver abajo) |
 
 Claves de módulo para `build:<clave>`: `core` · `panel-control` ·

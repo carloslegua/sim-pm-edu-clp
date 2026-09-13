@@ -50,6 +50,7 @@ npm run typecheck        # tsc --noEmit
 npm run lint             # ESLint (falla en errores; @typescript-eslint/no-explicit-any queda en "warn")
 npm run lint:fix         # ESLint con --fix para lo autocorregible
 npm test                 # Vitest (unidad + humo sobre los HTML reales)
+npm run test:coverage    # igual, + piso de cobertura sobre src/core/** (ver vitest.config.ts)
 npm run verify:deploy    # audita IIFE / rutas / gpi-core.js presente
 ```
 
@@ -145,6 +146,21 @@ tests/smoke/<clave>.smoke.test.ts → cada HTML real, servido por HTTP local
   typescript-eslint libera soporte para TS 7 (rastrear
   https://github.com/typescript-eslint/typescript-eslint/issues/10940),
   vale la pena reevaluar volver a la serie 7 nativa.
+- **La cobertura de tests solo mide `src/core/**`, a propósito**: Vitest
+  instrumenta el código que importa como módulo TS (`tests/unit/*` importa
+  `gpi-core.ts` directo), pero los smoke tests de los 13 módulos cargan el
+  `.js` YA COMPILADO dentro de un jsdom (`runScripts:"dangerously"`, igual
+  que un `<script>` clásico) — ese bundle no tiene sourcemap hacia el `.ts`
+  fuente, así que la cobertura v8 no puede atribuirle líneas y mostraría
+  "0%" de forma engañosa. Ver el comentario en `vitest.config.ts`.
+- **`@vitest/coverage-v8` + jsdom con una URL `file://` inventada rompe en
+  Windows**: `takeCoverage()` intenta convertir la URL de CADA script
+  ejecutado en el proceso (incluidos los que corre un test dentro de un
+  jsdom sandbox) a una ruta de archivo con `fileURLToPath`, que en Windows
+  exige una letra de unidad. Una URL de prueba como `file:///fake/x.html`
+  (válida en POSIX) tira `ERR_INVALID_FILE_URL_PATH` ahí. Fix: usar
+  `file:///C:/fake/x.html` en cualquier jsdom de prueba que necesite un
+  origen `file:` inventado (ver `tests/smoke/gpi-core.artifact.smoke.test.ts`).
 - `eslint.config.mjs` usa extensión `.mjs`, no `.js`: `scripts/verify-deploy.mjs`
   trata cualquier `*.js` en la raíz del repo como un artefacto IIFE
   compilado, y un archivo de config con `import`/`export` a nivel

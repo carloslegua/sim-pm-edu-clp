@@ -15,7 +15,16 @@ const ARTIFACT_PATH = resolve(__dirname, "../../gpi-core.js");
 function loadArtifact(): any {
   const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>", {
     runScripts: "dangerously",
-    url: "file:///fake/Panel_Control.html"
+    // Con letra de unidad (C:) a propósito: Node exige ese formato para
+    // convertir un file:// a ruta en Windows (fileURLToPath), y
+    // @vitest/coverage-v8 lo hace internamente al recolectar cobertura
+    // de TODO script ejecutado en el proceso, incluido este de prueba.
+    // Sin la unidad, `npm run test:coverage` fallaba solo en Windows con
+    // ERR_INVALID_FILE_URL_PATH. La ruta nunca se lee de disco: solo fija
+    // el origen "file:" para que jsdom bloquee localStorage (igual que un
+    // navegador real) y así este test ejercite el respaldo en memoria de
+    // gpi-core.ts, no localStorage real.
+    url: "file:///C:/fake/Panel_Control.html"
   });
   const src = readFileSync(ARTIFACT_PATH, "utf8");
   const scriptEl = dom.window.document.createElement("script");

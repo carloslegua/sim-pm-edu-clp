@@ -36,8 +36,12 @@ jobs:
       - name: Lint (ESLint)
         run: npm run lint
 
-      - name: Tests (Vitest — unidad + humo sobre los HTML reales)
-        run: npm test
+      # Corre los mismos 132 tests que `npm test` + reporta/aplica el
+      # piso de cobertura de src/core/** (el único código que Vitest
+      # transforma directamente; ver el comentario en vitest.config.ts
+      # sobre por qué los 13 src/modules/*/main.ts quedan fuera).
+      - name: Tests + cobertura (Vitest)
+        run: npm run test:coverage
 
       # Reconstruye los 15 artefactos y falla si alguno quedó desfasado
       # respecto de lo commiteado (ver MIGRATION.md, Fase 5).

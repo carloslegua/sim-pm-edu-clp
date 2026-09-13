@@ -1,6 +1,7 @@
 node_modules/
 .vite/
 .build-tmp/
+coverage/
 *.log
 .DS_Store
 .claude/settings.local.json
