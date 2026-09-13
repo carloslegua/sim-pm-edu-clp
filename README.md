@@ -9,7 +9,8 @@ misma carpeta** para que los enlaces relativos y el núcleo compartido funcionen
 > **Para quien mantiene el código:** desde 2026 la lógica se escribe en
 > TypeScript bajo `src/` y se compila a los `.js` que acompañan a cada HTML
 > (`npm run build:<módulo>`). Los `.js` de la raíz son **artefactos generados y
-> versionados**: no se editan a mano, se regeneran. Ver [MIGRATION.md](MIGRATION.md)
+> versionados**: no se editan a mano, se regeneran. Ver [ARCHITECTURE.md](ARCHITECTURE.md)
+> (patrones por módulo), [MIGRATION.md](MIGRATION.md) (crónica de la migración)
 > y la sección [Desarrollo](#desarrollo) al final.
 
 ## Punto de entrada

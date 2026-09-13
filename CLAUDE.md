@@ -1,9 +1,10 @@
 # CLAUDE.md
 
 Guía operativa para trabajar en este repo (humano o IA). Es el resumen
-accionable; la historia completa de cómo se llegó aquí (por qué cada
-módulo se migró como se migró, qué se comparó contra el baseline, los
-hallazgos por módulo) vive en `MIGRATION.md`.
+accionable; los patrones y particularidades permanentes de cada módulo
+(qué hace distinto y por qué) viven en [ARCHITECTURE.md](ARCHITECTURE.md);
+la crónica histórica de cómo se migró de JS suelto a TypeScript, con
+fecha y evidencia puntual de cada paso, vive en [MIGRATION.md](MIGRATION.md).
 
 ## Qué es esto
 

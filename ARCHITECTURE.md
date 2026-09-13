@@ -1,0 +1,233 @@
+# Arquitectura
+
+Referencia técnica permanente: qué patrón usa cada módulo, por qué varios
+se apartan del patrón común, y cómo verificar que un cambio no alteró el
+comportamiento observable. Este documento no se organiza cronológicamente
+ni se "cierra" — se actualiza cada vez que cambia algo real de cómo está
+construido el sistema.
+
+- Reglas operativas del día a día (comandos, qué no tocar, cómo agregar
+  un módulo nuevo): [CLAUDE.md](CLAUDE.md).
+- Documentación funcional de cara al alumno: [README.md](README.md).
+- Crónica histórica de cómo se migró de JS suelto a TypeScript + Vite
+  (con fecha y evidencia puntual de cada paso): [MIGRATION.md](MIGRATION.md).
+
+## Modelo general
+
+13 módulos HTML autocontenidos comparten un núcleo de datos
+(`gpi-core.js`, compilado desde `src/core/gpi-core.ts`) sobre
+`localStorage["gpi_db"]`. Sitio 100% estático: sin backend, sin paso de
+build en producción — GitHub Pages sirve la raíz tal cual, y cada HTML
+también debe poder abrirse suelto por doble clic (`file://`). Por eso
+todo build es IIFE (nunca `type="module"`, que `file://` bloquea por
+CORS) y los artefactos compilados se commitean junto a su fuente.
+
+Cada módulo puede funcionar en dos modos:
+
+- **Modo independiente** ("standalone"): sin proyecto activo en el
+  Panel, con datos de ejemplo propios o en blanco. Debe seguir
+  funcionando aunque `gpi-core.js` no cargue (de ahí que cada módulo
+  mantenga su propio `esc()` local en vez de depender de `GPI.ui.esc`).
+- **Modo integrado**: con un proyecto activo, lee/escribe su rebanada de
+  `gpi_db.projects.<id>.modules.<clave>` y puede leer en vivo módulos de
+  los que depende (p. ej. Definir Actividades lee la EDT).
+
+## Las tres formas de referenciar el núcleo
+
+Cada módulo referencia `GPI` de una de tres formas — no asumir que es
+uniforme antes de tocar un archivo:
+
+1. **`window.GPI` explícito** en cada llamada, con
+   `interface Window { GPI?: GpiApi }` — la mayoría de los módulos
+   (OBS, RACI, WBS, Activity Definition, PERT, Schedule Plan, Enunciado
+   del Alcance, Stakeholder Studio, Project Charter).
+2. **`GPI` como identificador global *ambiental* bare** (sin prefijo
+   `window.`), vía `declare global { var GPI: GpiApi | undefined }` —
+   `cost` y `requirements`. El script original ya lo escribía así.
+3. **`GPI` como variable de módulo local** que hace *shadow* del
+   global, capturada una vez de `window.GPI` — `cronograma-cpm` (`let
+   GPI`, reasignada dentro de `init()`) y `panel-control` (`const GPI`,
+   porque es el único módulo sin ningún modo "funciona sin el núcleo":
+   depende incondicionalmente de `gpi-core.js`, así que no necesita
+   `GPI?`/`GPI!` en cada uno de sus ~90 sitios de uso).
+
+## Patrones y particularidades por módulo
+
+Convenciones que comparten los 13 (no se repiten abajo salvo que un
+módulo se aparte): `addEventListener` para cablear la UI (no atributos
+`onclick` inline, salvo las dos excepciones marcadas abajo), IIFE
+propio, `<script src="gpi-core.js">` en la cabecera, CSS de modal
+basada en `gpi-shared.css` con overrides puntuales de ancho.
+
+**Panel_Control.html** — punto de entrada del ecosistema.
+- `MODULES`, `GROUPS`, `MODULOS_ENTREGADOS`, `MODULOS_EXTRA` y
+  `probeModules` son la única zona que edita el profesorado para
+  entregar módulos a los alumnos (ver CLAUDE.md, regla #4).
+- Único módulo sin modo "funciona sin el núcleo" — de ahí el patrón 3
+  de referenciar `GPI` (arriba).
+- El módulo con más lecturas cruzadas de todo el ecosistema:
+  `renderDashboard` combina `wbsRollup`, `requirementsAudit`,
+  `scopeAudit`, `activitiesStats`, `pertStats`, `obsNodes`,
+  `raciCoverage`, `charterAudit`, `schedulePlanAudit` y `scheduleStats`
+  en una sola vista — los 10 cálculos de auditoría/agregación del
+  núcleo, todos cubiertos por Vitest.
+
+**Project_Charter.html**
+- Único módulo con **binding genérico por ruta de puntos**: los campos
+  usan `data-bind="identification.sponsor"` resuelto en runtime vía
+  `getPath`/`setPath` sobre el estado completo (tipadas con `any` a
+  propósito en el cruce dinámico — no hay forma limpia de tipar un
+  accesor de ruta arbitraria sin maquinaria de tipos condicional que no
+  se justifica aquí).
+- Relación bidireccional con los metadatos comunes del proyecto: el
+  acta escribe sponsor/director/cliente/CAPEX en `GPI.patchMeta()` al
+  guardar, pero si el acta está vacía se precarga desde esos mismos
+  metadatos.
+- Lee `GPI.util.wbsPhases` (EDT) y `GPI.getModule("stakeholders")`
+  (filtrando el cuadrante "gestionar de cerca", poder e interés ≥ 50).
+
+**Stakeholder_Studio.html**
+- Escrito en JavaScript moderno (`const`/`let`, arrow functions,
+  template literals) a diferencia del resto (ES5, `var`/`function`).
+- **No espera `DOMContentLoaded`**: el `<script>` está al final de
+  `<body>`, así que ejecuta `loadSample(); wireToolbar(); render();` a
+  nivel de módulo apenas carga. No "corregir" a un listener explícito.
+- Poder e Interés son **campos derivados** de 5 criterios ponderados
+  cada uno (nunca editables directamente) — patrón de cálculo
+  multicriterio único en la suite.
+
+**Cronograma_CPM.html** — algorítmicamente el más crítico.
+- Único módulo que **depende duro de `gpi-core.js`** incluso para su
+  lógica local (no solo para sincronizar con el Panel): el cálculo CPM
+  vive únicamente en `GPI.util.cpm`, sin copia local. Si el núcleo no
+  carga, la herramienta queda inoperante más allá del cableado de
+  botones (comportamiento preexistente, no introducido por la
+  migración).
+- CSS del modal con más variaciones locales que el resto: ancho 420px,
+  `max-height:90vh`, variante `.wide` (760px) para el editor de enlaces
+  y la previsualización del pegado.
+
+**Schedule_Management_Plan.html**
+- Es un **documento vivo** de 15 secciones (checklist AACE RP 38R-06),
+  no un módulo de cálculo con "modo ejemplo" separado: `init()` carga
+  el ejemplo DISTRIB+ incondicionalmente, y un segundo listener
+  (`gpiBridge`) lo sobrescribe con un estado en blanco si hay un
+  proyecto activo sin plan guardado — así nunca graba el ejemplo encima
+  de un proyecto real por accidente al salir de la página.
+- El esquema completo (`ScheduleState`) se tipa **localmente en el
+  módulo**, no en `SchedulePlanModule` de `core/types.ts` (deliberadamente
+  laxo — varios campos `Record<string, unknown>` — porque el núcleo
+  solo necesita leer un puñado de sub-campos para `schedulePlanAudit`).
+  Este módulo es el dueño real del esquema completo.
+
+**Pert_Analysis.html**
+- Calcula la ruta crítica **probabilística**: recalcula el CPM con
+  duraciones esperadas (TE) de cada actividad — el "CPM sobre TE"
+  clásico del método PERT — a diferencia de Cronograma/CPM
+  (determinístico).
+- La M (más probable) tiene un modo "automático" que sigue en vivo la
+  duración `Dur = Met/(#Eq×R)` de Definir Actividades; escribir un
+  valor la fija manualmente, borrarlo la regresa a automático.
+- Grilla estilo Excel (pegado TSV, navegación de teclado, menú
+  contextual), compartida en espíritu con Cronograma/CPM.
+
+**Activity_Definition.html**
+- Único módulo que depende de una librería externa vía CDN
+  (`window.JSZip`, para exportar `.xlsx`), tipada con una interfaz
+  mínima local (`JSZipLike`) en vez de `@types/jszip`. Si `JSZip` no
+  carga, cae a un CSV equivalente (`buildCsv()`).
+- Lee la EDT en vivo desde `GPI.getModule("wbs")` (nunca la duplica);
+  las actividades viven en un módulo propio, `GPI.getModule("activities")`,
+  indexado por el id de cada paquete de trabajo. Numeración de filas al
+  estilo MS Project (`fullRows()`): fila 0 es siempre el proyecto.
+
+**WBS_Builder.html** — el de mayor fan-out.
+- Lee `raci` (bloquea "Responsable" si la RACI ya asignó un "R" —
+  `raciLocksResource`), `obs` (autocompletado de responsables) y
+  `scopeStatement` (siembra de entregables como ramas de nivel 1,
+  `seedFromScope`).
+
+**Enunciado_del_Alcance.html**
+- El módulo de solo-lectura más complejo: su pestaña "Consistencia"
+  consume `GPI.util.traceMatrix` (RAN→REQ→DEL→WP), la función de
+  integración vertical más elaborada del núcleo.
+
+**Recopilar_Requisitos.html**
+- Una de las dos excepciones que usan atributos `onclick`/`onchange`
+  inline (13 funciones expuestas vía `Object.assign(window, {...})`) en
+  vez de `addEventListener`, porque el HTML original ya estaba así y
+  reescribirlo habría sido un cambio de alcance mayor a "portar a
+  TypeScript".
+- Usa su propio modal (`.ov`/`.modal`), no `.modal-overlay`/`.modal-card`.
+- El módulo con más lecturas cruzadas: `charter` (RAN), `stakeholders`
+  (origen del requisito) y `wbs` (trazabilidad), con datos de
+  demostración propios (`DEMO`) para el modo suelto.
+
+**Cost-management.html**
+- La otra excepción con atributos `onclick`/`onchange`/`oninput`
+  inline (`Object.assign(window, { exportJSON, importJSON, save,
+  recalcCont, onBaseInput, pullFromWBS, addCO, coStatus, delCO,
+  buildDoc })`).
+- Referencia `GPI` como identificador global bare (patrón 2 de la
+  sección anterior).
+- No usa modales — usa un toast propio. No carga `gpi-shared.css`.
+- Regla de oro propia: no crea `modules.cost` hasta la primera edición
+  real del alumno (`save()` sin editar nada no persiste nada).
+
+**RACI_Matrix.html**
+- Depende de `window.GPI.util` para su propia lógica en modo "live"
+  (`wbsLeaves`, `obsNodes`, `raciAudit`, `applyRaciToWbs`), no solo para
+  sincronizar con el Panel. El modo "sample" sigue funcionando sin GPI.
+- `GPI.util.raciAudit` espera filas completas (`resource`/`email`); el
+  estado local no los necesita, así que se adaptan solo en la frontera
+  de esa llamada (`rows.map(r => ({...r, resource: ""}))`).
+- El ejemplo DISTRIB+ trae 7 errores deliberados: el Velocímetro de
+  Gobernanza debe marcar "🔴 RECHAZADO" — si algún día pasa a "🟢
+  CERTIFICADO", es señal de que `raciAudit` o el dataset se rompieron.
+
+**OBS_Builder.html**
+- Piloto de la migración: valida de punta a punta el patrón que
+  siguieron los demás (`addEventListener`, `window.GPI`, `esc()` local,
+  `gpi-shared.css` para el modal).
+
+## Cómo verificar equivalencia de comportamiento (metodología A/B)
+
+Técnica reutilizable para comprobar que un cambio (una migración, una
+subida de versión de Vite/TypeScript, un refactor grande) no alteró el
+comportamiento observable de la suite, comparando contra cualquier
+commit/tag de referencia:
+
+1. **Montar la versión de referencia en un `git worktree` aparte**
+   (p. ej. `git worktree add ../ref-check baseline-pre-migracion`), sin
+   tocar el checkout de trabajo.
+2. **Generar un fixture real**: recorrer la versión de referencia
+   cargando el ejemplo DISTRIB+ en cadena por las herramientas
+   relevantes, arrastrando el `localStorage` de una página a la
+   siguiente como haría un navegador (un script jsdom-sobre-HTTP-local,
+   no `file://` directo — ver la nota de jsdom en CLAUDE.md).
+3. **Servir ambas versiones por HTTP local** (nunca `file://` en el
+   harness: jsdom trata ese origen como opaco y bloquea `localStorage`,
+   cosa que los navegadores reales no hacen) y abrir cada página
+   relevante en ambas con el mismo `gpi_db` de partida.
+4. **Comparar dos cosas por página**: el texto renderizado del
+   `<body>` (excluyendo `<script>`/`<style>`) y el `gpi_db` resultante
+   tras disparar el guardado (`beforeunload`). Normalizar únicamente
+   las marcas de tiempo escritas en el momento de la corrida.
+5. Repetir el mismo recorrido abriendo cada página por `file://` en
+   ambas versiones, para validar el caso de uso de doble clic aparte
+   del servido por HTTP.
+
+Cualquier diferencia debe explicarse una por una (ruido temporal,
+cambio de configuración deliberado, etc.) antes de dar el cambio por
+equivalente — nunca descartarla sin más. El registro de la última
+corrida completa de esta metodología (13 módulos contra
+`baseline-pre-migracion`) vive en [MIGRATION.md](MIGRATION.md).
+
+## Dataset de referencia (DISTRIB+)
+
+El caso de ejemplo "DISTRIB+" es el dataset dorado de la suite: los
+tests unitarios de `GPI.util.cpm` y los smoke tests lo usan como
+regresión end-to-end. Resultado esperado del cronograma (12
+actividades, 13 enlaces): **53 días laborables, fin 2026-09-16, ruta
+crítica `a1-a2-a3-a4-a8-a9-a10-a11-a12`**. Si este número cambia sin un
+cambio deliberado en `cpm()` o en el dataset, algo se rompió.
