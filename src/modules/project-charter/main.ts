@@ -22,7 +22,7 @@
    el DOM/rutas dinámicas).
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
-import type { WbsModule } from "../../core/types";
+import type { CharterModule, ProjectMeta, WbsModule } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global { interface Window { GPI?: GpiApi; } }
@@ -354,7 +354,7 @@ function localAudit(ch: CharterState): AuditResultLocal {
   return { items, okCount, total, pct, state: st, categories: cats };
 }
 function audit(): AuditResultLocal {
-  if (typeof window.GPI !== "undefined" && window.GPI.util && window.GPI.util.charterAudit) return window.GPI.util.charterAudit(state as any) as AuditResultLocal;
+  if (typeof window.GPI !== "undefined" && window.GPI.util && window.GPI.util.charterAudit) return window.GPI.util.charterAudit(state as unknown as CharterModule) as AuditResultLocal;
   return localAudit(state);
 }
 
@@ -680,8 +680,8 @@ async function importKeyStakeholders(): Promise<void> {
 // ---------- REPORTE IMPRIMIBLE ----------
 function reportShell(docTitle: string, moduleName: string, bodyHtml: string): void {
   const el = document.getElementById("gpiReport") as HTMLElement;
-  let meta: any = {};
-  try { if (window.GPI && window.GPI.available() && window.GPI.meta()) meta = window.GPI.meta(); } catch (_) { /* noop */ }
+  let meta: Partial<ProjectMeta> = {};
+  try { const m = window.GPI && window.GPI.available() ? window.GPI.meta() : null; if (m) meta = m; } catch (_) { /* noop */ }
   const pName = (document.getElementById("projectTitle") as HTMLInputElement).value || meta.name || "Proyecto";
   const course = (document.getElementById("courseTitle") as HTMLInputElement).value || meta.course || "Gestión de Proyectos de Ingeniería";
   const today = new Date().toLocaleDateString("es-PE", { year: "numeric", month: "long", day: "numeric" });
