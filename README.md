@@ -434,6 +434,7 @@ src/shared/styles/shared.css  → gpi-shared.css       (npm run build:shared)
 |---|---|
 | `npm install` | dependencias de desarrollo (Vite, TypeScript, Vitest) |
 | `npm run build:<clave>` | recompila un módulo tras editar su `main.ts` |
+| `npm run build:all` | reconstruye los 15 artefactos y falla si alguno queda distinto del último commit — corre esto (no solo el `build:<clave>` puntual) antes de comitear, para no publicar un `.js` desactualizado en silencio |
 | `npm run typecheck` | `tsc --noEmit` sobre todo el proyecto |
 | `npm test` | suite de Vitest (unidad + humo sobre los HTML reales) |
 | `npm run verify:deploy` | audita que el despliegue siga intacto (ver abajo) |

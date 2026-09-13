@@ -556,6 +556,35 @@ sirven:
   compilado", que rompería GitHub Pages aunque los tests locales pasen.
 - Los 13 siguen cargando `gpi-core.js` y ninguno conserva lógica inline.
 
+### 1.b. Frescura de los artefactos — `npm run build:all` (post-Fase 5)
+
+`verify:deploy` audita que los artefactos publicados sean IIFE válidos,
+pero no puede saber si están **desactualizados**: si alguien edita un
+`.ts` y olvida (o no llega a) correr su `build:<clave>` antes de comitear,
+el `.js` publicado sigue siendo un IIFE perfectamente válido — solo que
+construido desde una versión anterior del código. `verify:deploy` no ve
+ese desfase porque no compara contra la fuente.
+
+`scripts/build-all.mjs` cierra ese hueco: reconstruye los 15 artefactos
+(deriva la lista de los propios scripts `build:*` de `package.json`, así
+que agregar un módulo nuevo no requiere tocar este script) y compara el
+resultado contra `git diff HEAD -- <artefactos>`. Si el rebuild produce
+contenido distinto al último commit, el artefacto publicado estaba
+desfasado: lo reporta archivo por archivo y termina con código de salida
+1 (apto como gate antes de publicar).
+
+**Detalle de Windows encontrado al construirlo**: la comparación NO usa
+`git status --porcelain`. Con `core.autocrlf=true` (el default de Git
+para Windows), un archivo recién escrito por Vite (LF puro) puede
+aparecer como "modificado" frente al índice por pura normalización de
+fin de línea, aunque el contenido real sea idéntico — falso positivo
+confirmado en este repo durante la prueba. `git diff` sí aplica el mismo
+filtro "clean" que usa `git add` antes de comparar, así que ve contenido
+real y no fin de línea. Verificado en ambas direcciones: un cambio
+funcional real (renombrar una función) se detecta correctamente como
+desfase; un cambio que no sobrevive la transpilación (un comentario,
+que esbuild descarta) correctamente no dispara falsa alarma.
+
 ### 2. Equivalencia A/B contra el baseline pre-migración
 
 Se comparó el comportamiento real contra el tag `baseline-pre-migracion`
