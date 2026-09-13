@@ -1109,11 +1109,11 @@
 	}
 	function updateMetaPanels() {
 		const hasGpi = typeof window.GPI !== "undefined" && !!window.GPI.available && window.GPI.available();
-		const meta = hasGpi ? window.GPI.meta() || {} : {};
+		const meta = hasGpi ? window.GPI.meta() : null;
 		const wbs = hasGpi ? window.GPI.getModule("wbs") ?? null : null;
 		const raci = hasGpi ? window.GPI.getModule("raci") ?? null : null;
 		const introPanel = document.getElementById("introMetaPanel");
-		if (hasGpi && window.GPI.active()) introPanel.innerHTML = "<b>Proyecto activo:</b> " + esc(meta.name || "—") + (meta.code ? " · " + esc(meta.code) : "") + "<br><b>Cliente:</b> " + esc(meta.client || "—") + " · <b>Ubicación:</b> " + esc(meta.location || "—") + "<br><b>Vigencia:</b> " + esc(meta.startDate || "—") + " → " + esc(meta.endDate || "—") + " · <b>CAPEX:</b> " + moneyFmt(meta.capex, meta.currency);
+		if (hasGpi && window.GPI.active()) introPanel.innerHTML = "<b>Proyecto activo:</b> " + esc(meta?.name || "—") + (meta?.code ? " · " + esc(meta.code) : "") + "<br><b>Cliente:</b> " + esc(meta?.client || "—") + " · <b>Ubicación:</b> " + esc(meta?.location || "—") + "<br><b>Vigencia:</b> " + esc(meta?.startDate || "—") + " → " + esc(meta?.endDate || "—") + " · <b>CAPEX:</b> " + moneyFmt(meta?.capex, meta?.currency);
 		else introPanel.innerHTML = "Sin proyecto activo vinculado. Los datos comunes (cliente, fechas, CAPEX) se completan automáticamente desde el Panel de Control.";
 		const lodPanel = document.getElementById("lodInfoPanel");
 		if (lodPanel) {
@@ -1137,7 +1137,7 @@
 		const wbsPanel = document.getElementById("wbsStatusPanel");
 		if (hasGpi && window.GPI.util && wbs && wbs.nodes) {
 			const roll = window.GPI.util.wbsRollup(wbs);
-			wbsPanel.innerHTML = "<b>EDT vinculada:</b> " + window.GPI.util.wbsPhases(wbs).length + " fase(s), " + roll.leafCount + " paquete(s) de trabajo.<div class=\"chips\"><span class=\"chip-stat\">" + esc(roll.minStart || "—") + " → " + esc(roll.maxEnd || "—") + "</span><span class=\"chip-stat\">" + moneyFmt(roll.cost, meta.currency) + "</span></div>";
+			wbsPanel.innerHTML = "<b>EDT vinculada:</b> " + window.GPI.util.wbsPhases(wbs).length + " fase(s), " + roll.leafCount + " paquete(s) de trabajo.<div class=\"chips\"><span class=\"chip-stat\">" + esc(roll.minStart || "—") + " → " + esc(roll.maxEnd || "—") + "</span><span class=\"chip-stat\">" + moneyFmt(roll.cost, meta?.currency) + "</span></div>";
 		} else wbsPanel.innerHTML = "Aún no hay una EDT vinculada. Completa WBS Builder para que el nivel de detalle y los hitos puedan referenciar fechas reales.";
 		const resPanel = document.getElementById("reserveComputedPanel");
 		if (hasGpi && window.GPI.util && wbs && wbs.nodes) {
@@ -1422,7 +1422,8 @@
 		}
 		let meta = {};
 		try {
-			if (window.GPI && window.GPI.available() && window.GPI.meta()) meta = window.GPI.meta();
+			const m = window.GPI && window.GPI.available() ? window.GPI.meta() : null;
+			if (m) meta = m;
 		} catch (_) {}
 		const tEl = document.getElementById("projectTitle"), cEl = document.getElementById("courseTitle");
 		const pName = tEl && tEl.value || meta.name || "Proyecto";

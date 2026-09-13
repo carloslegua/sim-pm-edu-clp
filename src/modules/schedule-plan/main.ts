@@ -23,7 +23,7 @@
    retorno estructuralmente compatible.
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
-import type { ObsModule, RaciModule, WbsModule } from "../../core/types";
+import type { ObsModule, ProjectMeta, RaciModule, SchedulePlanModule, WbsModule } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global { interface Window { GPI?: GpiApi; } }
@@ -229,7 +229,7 @@ function normalizeState(s: ScheduleState): ScheduleState {
   // Umbrales: migrar esquema antiguo (green/amber/red texto) a numérico y
   // garantizar la presencia de las filas fijas SV y SPI en la cabecera.
   let arr: Threshold[] = Array.isArray(s.controlThresholds) ? s.controlThresholds : [];
-  arr = arr.map((t: any) => {
+  arr = arr.map((t) => {
     if (t && (t.greenValue != null || t.redValue != null)) return t; // ya es numérico
     return { key: t && t.key, metric: (t && t.metric) || "Métrica", unit: (t && t.unit) || "", higherIsBetter: true, greenValue: 0, redValue: 0, action: (t && t.action) || "", fixed: false };
   });
@@ -620,17 +620,17 @@ function diffDaysIso(a: string, b: string): number {
 
 function updateMetaPanels(): void {
   const hasGpi = typeof window.GPI !== "undefined" && !!window.GPI.available && window.GPI.available();
-  const meta: any = hasGpi ? (window.GPI!.meta() || {}) : {};
+  const meta = hasGpi ? window.GPI!.meta() : null;
   const wbs: WbsModule | null = hasGpi ? (window.GPI!.getModule("wbs") ?? null) : null;
   const raci: RaciModule | null = hasGpi ? (window.GPI!.getModule("raci") ?? null) : null;
 
   // 1. Introducción — datos comunes del proyecto
   const introPanel = document.getElementById("introMetaPanel") as HTMLElement;
   if (hasGpi && window.GPI!.active()) {
-    introPanel.innerHTML = "<b>Proyecto activo:</b> " + esc(meta.name || "—") + (meta.code ? " · " + esc(meta.code) : "")
-      + "<br><b>Cliente:</b> " + esc(meta.client || "—") + " · <b>Ubicación:</b> " + esc(meta.location || "—")
-      + "<br><b>Vigencia:</b> " + esc(meta.startDate || "—") + " → " + esc(meta.endDate || "—")
-      + " · <b>CAPEX:</b> " + moneyFmt(meta.capex, meta.currency);
+    introPanel.innerHTML = "<b>Proyecto activo:</b> " + esc(meta?.name || "—") + (meta?.code ? " · " + esc(meta.code) : "")
+      + "<br><b>Cliente:</b> " + esc(meta?.client || "—") + " · <b>Ubicación:</b> " + esc(meta?.location || "—")
+      + "<br><b>Vigencia:</b> " + esc(meta?.startDate || "—") + " → " + esc(meta?.endDate || "—")
+      + " · <b>CAPEX:</b> " + moneyFmt(meta?.capex, meta?.currency);
   } else {
     introPanel.innerHTML = "Sin proyecto activo vinculado. Los datos comunes (cliente, fechas, CAPEX) se completan automáticamente desde el Panel de Control.";
   }
@@ -656,7 +656,7 @@ function updateMetaPanels(): void {
     wbsPanel.innerHTML = "<b>EDT vinculada:</b> " + phases.length + " fase(s), " + roll.leafCount + " paquete(s) de trabajo."
       + '<div class="chips">'
       + '<span class="chip-stat">' + esc(roll.minStart || "—") + " → " + esc(roll.maxEnd || "—") + '</span>'
-      + '<span class="chip-stat">' + moneyFmt(roll.cost, meta.currency) + '</span>'
+      + '<span class="chip-stat">' + moneyFmt(roll.cost, meta?.currency) + '</span>'
       + '</div>';
   } else {
     wbsPanel.innerHTML = "Aún no hay una EDT vinculada. Completa WBS Builder para que el nivel de detalle y los hitos puedan referenciar fechas reales.";
@@ -690,7 +690,7 @@ function updateMetaPanels(): void {
 // ---------- COMPLETITUD (GPI.util.schedulePlanAudit) ----------
 function currentAudit() {
   if (typeof window.GPI === "undefined" || !window.GPI.util) return null;
-  return window.GPI.util.schedulePlanAudit(state as any);
+  return window.GPI.util.schedulePlanAudit(state as unknown as SchedulePlanModule);
 }
 const STATE_COLORS: Record<string, string> = { verde: "#00c2a8", ambar: "#ff9f1c", rojo: "#ff5470" };
 const STATE_LABELS: Record<string, string> = { verde: "Plan completo", ambar: "En progreso", rojo: "Incompleto" };
@@ -835,7 +835,7 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
   function pull(): void {
     const p = window.GPI!.active(); if (!p) return;
     if (p.meta) { if (p.meta.name) titleEl.value = p.meta.name; if (p.meta.course) courseEl.value = p.meta.course; }
-    const mod = p.modules && (p.modules as any).schedulePlan;
+    const mod = p.modules && p.modules.schedulePlan;
     // Sin plan aún: arranca EN BLANCO (defaultState), no con el ejemplo,
     // para que el guardado automático al salir no escriba el plan DISTRIB+
     // en un proyecto nuevo. El ejemplo queda en el botón "Cargar ejemplo".
@@ -878,8 +878,8 @@ function gpiBadge(name: string | undefined, pushFn: () => void): void {
 function reportShell(docTitle: string, moduleName: string, bodyHtml: string): void {
   let el = document.getElementById("gpiReport");
   if (!el) { el = document.createElement("div"); el.id = "gpiReport"; document.body.appendChild(el); }
-  let meta: any = {};
-  try { if (window.GPI && window.GPI.available() && window.GPI.meta()) meta = window.GPI.meta(); } catch (_) { /* noop */ }
+  let meta: Partial<ProjectMeta> = {};
+  try { const m = window.GPI && window.GPI.available() ? window.GPI.meta() : null; if (m) meta = m; } catch (_) { /* noop */ }
   const tEl = document.getElementById("projectTitle") as HTMLInputElement | null, cEl = document.getElementById("courseTitle") as HTMLInputElement | null;
   const pName = (tEl && tEl.value) || meta.name || "Proyecto";
   const course = (cEl && cEl.value) || meta.course || "Gestión de Proyectos de Ingeniería";
