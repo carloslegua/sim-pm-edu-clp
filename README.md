@@ -465,3 +465,7 @@ absoluta). Conviene ejecutarlo antes de publicar.
 insignia en rojo significa que rompió alguna de las cuatro reglas de arriba
 antes de que llegue a nadie más — no hace falta correrlos a mano para
 confiar en que `master` sigue sano.
+
+## Licencia
+
+MIT — ver [LICENSE](LICENSE).
