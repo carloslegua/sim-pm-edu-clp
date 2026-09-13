@@ -39,7 +39,7 @@ negociables mientras dure.
 | 9 | Plan de Cronograma | `Schedule_Management_Plan.html` | ✅ Migrado |
 | 10 | Cronograma / CPM | `Cronograma_CPM.html` | ✅ Migrado |
 | 11 | Interesados | `Stakeholder_Studio.html` | ✅ Migrado |
-| 12 | Acta de Constitución | `Project_Charter.html` | Pendiente (entregado a alumnos — al final) |
+| 12 | Acta de Constitución | `Project_Charter.html` | ✅ Migrado |
 | 13 | Panel de Control | `Panel_Control.html` | Pendiente (punto de entrada — absolutamente al final) |
 
 ## Hallazgos de la Fase 3 (ajustan el alcance original)
@@ -76,6 +76,42 @@ sostuvieron y se corrigieron:
   separado).
 
 ## Hallazgos de la Fase 4 (por módulo migrado)
+
+**Project_Charter.html (duodécimo módulo migrado, el último de los 12 "de herramienta" — `Panel_Control.html` queda como único pendiente, el punto de entrada):**
+
+- Mismo patrón que la mayoría del ecosistema: `addEventListener`
+  exclusivamente, `window.GPI` explícito, IIFE propio, ES5 (`var`/
+  `function`, a diferencia de Stakeholder Studio). CSS del modal
+  armonizada con `gpi-shared.css` (solo override de ancho, 400px) — ya
+  estaba en la lista de módulos verificados idénticos en la Fase 3.
+- Único módulo del ecosistema con un **binding genérico por ruta de
+  puntos**: los campos estáticos usan `data-bind="identification.
+  sponsor"` resuelto en runtime vía `getPath`/`setPath` sobre el estado
+  completo, en vez de un `data-field` plano por campo como en los demás
+  módulos. Se preservó tal cual, tipando el cruce dinámico con `any`
+  (mismo criterio ya aplicado en otros módulos: no forzar `strict` al
+  100% en el borde con el DOM).
+- Es el módulo con más **integraciones de solo lectura hacia otros
+  módulos ya migrados**: "Importar hitos desde la EDT" lee
+  `GPI.util.wbsPhases` (WBS Builder) y "Importar interesados clave" lee
+  `GPI.getModule("stakeholders")` (Stakeholder Studio), filtrando por el
+  cuadrante "gestionar de cerca" (poder e interés ≥ 50) o, si nadie
+  califica, los 5 de mayor poder+interés — ambas verificadas de punta a
+  punta contra datos reales de esos dos módulos.
+- Relación bidireccional con los metadatos comunes del proyecto: el acta
+  es la fuente formal de sponsor/director/cliente/CAPEX y los escribe en
+  `GPI.patchMeta()` al guardar, pero si el acta está vacía (primera vez),
+  se **precarga** desde esos mismos metadatos para no partir de cero —
+  se verificó que un proyecto real con `meta.sponsor`/`meta.manager`/
+  `meta.capex` ya establecidos (p. ej. por otro módulo) los precarga
+  correctamente en los campos de identificación y presupuesto.
+- Verificado de punta a punta (servido por HTTP local): sin proyecto
+  activo arranca vacía (0% de completitud) y "Cargar ejemplo" lleva el
+  checklist del caso DISTRIB+ a 100% (23 ítems, 4 RAN, 4 objetivos); con
+  un proyecto real, precarga sponsor/director/CAPEX desde los metadatos,
+  importa un hito de EDT y un interesado clave (filtrando correctamente
+  al que sí califica en el cuadrante), y todo persiste en
+  `gpi_db.projects.<id>.modules.charter`.
 
 **Stakeholder_Studio.html (undécimo módulo migrado, primero del Nivel B — entregado hoy a alumnos):**
 
@@ -443,10 +479,11 @@ sostuvieron y se corrigieron:
   de Google Fonts siga igual entre módulos (ya encontró una divergencia
   preexistente, ver arriba).
 - **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. En
-  progreso: 11/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
+  progreso: 12/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
   `Recopilar_Requisitos.html`, `Enunciado_del_Alcance.html`, `WBS_Builder.html`,
   `Activity_Definition.html`, `Pert_Analysis.html`, `Schedule_Management_Plan.html`,
-  `Cronograma_CPM.html`, `Stakeholder_Studio.html`).
+  `Cronograma_CPM.html`, `Stakeholder_Studio.html`, `Project_Charter.html`). Solo
+  queda `Panel_Control.html` (punto de entrada, absolutamente al final).
   Patrón establecido: `src/modules/<key>/main.ts`
   + `configs/<key>.vite.config.ts` (usa el helper `configs/lib.config.mjs`)
   + `npm run build:<key>` + `tests/smoke/<key>.smoke.test.ts`.

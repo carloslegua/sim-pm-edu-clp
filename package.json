@@ -17,6 +17,7 @@
     "build:schedule-plan": "vite build --config configs/schedule-plan.vite.config.ts && node scripts/sync-artifact.mjs schedule-plan.js",
     "build:cronograma-cpm": "vite build --config configs/cronograma-cpm.vite.config.ts && node scripts/sync-artifact.mjs cronograma-cpm.js",
     "build:stakeholder-studio": "vite build --config configs/stakeholder-studio.vite.config.ts && node scripts/sync-artifact.mjs stakeholder-studio.js",
+    "build:project-charter": "vite build --config configs/project-charter.vite.config.ts && node scripts/sync-artifact.mjs project-charter.js",
     "check:snippets": "node scripts/check-shared-snippets.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
