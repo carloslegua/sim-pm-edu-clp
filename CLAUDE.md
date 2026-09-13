@@ -145,6 +145,17 @@ scripts/static-server.mjs        → servidor HTTP mínimo, usado por tests/e2e
   aparecer "modificado" sin que el contenido real haya cambiado. Usa
   `git diff` (aplica el filtro "clean"), no `git status`, para comparar
   contenido de artefactos — así lo hace `scripts/build-all.mjs`.
+- **`build:all` compara contra el ÍNDICE de git, no contra `HEAD`, y
+  es a propósito**: se cambió después de que el pre-commit hook
+  bloqueaba en seco el primer commit que tocaba a la vez un
+  `src/modules/*/main.ts` y su artefacto (el caso normal: editar un
+  módulo y comitear fuente+build juntos). Comparar contra `HEAD` ahí
+  SIEMPRE falla, porque el commit anterior nunca tuvo el contenido
+  nuevo — para eso es el commit que se está creando. Comparar contra
+  el índice (`git diff` sin argumento) solo falla cuando el rebuild no
+  coincide con lo que ya se preparó para comitear, que es el bug real
+  que el script busca atrapar. En CI no cambia nada (checkout limpio →
+  índice == `HEAD`).
 - **`rollupOptions.output.exports:"named"` rompe los módulos de página**:
   solo `gpi-core.ts` tiene named exports reales (~40). Forzar esa opción
   en un módulo sin exports produce `ReferenceError: exports is not
