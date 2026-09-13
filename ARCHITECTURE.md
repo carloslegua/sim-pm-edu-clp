@@ -65,6 +65,102 @@ Cada módulo puede funcionar en dos modos:
   `gpi_db.projects.<id>.modules.<clave>` y puede leer en vivo módulos de
   los que depende (p. ej. Definir Actividades lee la EDT).
 
+## Esquema de `localStorage["gpi_db"]`
+
+Referencia de orientación, no la fuente de verdad — los tipos reales
+(y los únicos que el compilador valida) viven en
+[`src/core/types.ts`](src/core/types.ts). Este apartado documenta la
+forma general y las reglas de compatibilidad para no tener que releer
+`gpi-core.ts` entero cada vez. **No se toca el esquema sin necesidad
+real** (CLAUDE.md, regla #3): hay `.json` exportados por alumnos reales
+que deben poder reabrirse.
+
+### Dónde vive y cómo se accede
+
+- Clave: `localStorage["gpi_db"]` (constante `KEY` en `gpi-core.ts`),
+  JSON serializado de un único objeto `GpiDb`.
+- **Respaldo en memoria**: si `localStorage` no está disponible (vista
+  en un iframe, cuota agotada al leer, modo privado restrictivo), el
+  núcleo cae a una variable de módulo (`mem`) y sigue funcionando
+  dentro de esa misma carga de página — se pierde al recargar, pero no
+  rompe la interfaz. Es el mismo mecanismo que ejercita
+  `tests/smoke/gpi-core.artifact.smoke.test.ts` bajo un origen `file:`
+  simulado (jsdom bloquea `localStorage` ahí, igual que lo haría un
+  navegador real en un caso extremo).
+- **Cuota llena**: si `localStorage.setItem` falla al guardar
+  (`QuotaExceededError` u otro), `gpi-core.ts` muestra un aviso visible
+  en pantalla (`showQuotaNotice`) en vez de perder cambios en silencio
+  — comportamiento agregado durante la migración, no estaba en el JS
+  original.
+
+### Forma general
+
+```
+GpiDb {
+  version: number                    // versión del contenedor, hoy siempre 1
+  activeId: string | null            // qué proyecto ve el Panel al abrir
+  projects: {
+    [id]: GpiProject {
+      schema: string                 // "gpi.project/v1" hoy — ver detectTool()
+      meta: ProjectMeta              // nombre, cliente, fechas, moneda, CAPEX...
+      modules: ProjectModules {      // una rebanada opcional por herramienta
+        charter, stakeholders, wbs, activities, pert, obs, raci,
+        schedulePlan, cost, requirements, scopeStatement, schedule
+      }
+    }
+  }
+}
+```
+
+Cada campo de `modules.*` es independiente y puede faltar (`undefined`)
+o venir `null` (un módulo "vaciado" explícitamente desde el Panel, ver
+`GPI.setModule(key, null)`) — ningún módulo asume que otro ya se llenó.
+
+### Los 12 tipos de módulo, uno por herramienta
+
+| Clave en `modules.*` | Tipo (en `core/types.ts`) | Lo escribe |
+|---|---|---|
+| `charter` | `CharterModule` | Project_Charter.html |
+| `stakeholders` | `StakeholdersModule` | Stakeholder_Studio.html |
+| `wbs` | `WbsModule` | WBS_Builder.html |
+| `activities` | `ActivitiesModule` | Activity_Definition.html |
+| `pert` | `PertModule` | Pert_Analysis.html |
+| `obs` | `ObsModule` | OBS_Builder.html |
+| `raci` | `RaciModule` | RACI_Matrix.html |
+| `schedulePlan` | `SchedulePlanModule` | Schedule_Management_Plan.html |
+| `cost` | `CostModule` | Cost-management.html |
+| `requirements` | `RequirementsModule` | Recopilar_Requisitos.html |
+| `scopeStatement` | `ScopeStatementModule` | Enunciado_del_Alcance.html |
+| `schedule` | `ScheduleModule` | Cronograma_CPM.html |
+
+`SchedulePlanModule` es deliberadamente laxo (varios campos
+`Record<string, unknown>`): el dueño real de ese esquema es
+`src/modules/schedule-plan/main.ts` (tipado localmente, con su propio
+`ScheduleState`), no el núcleo — ver ARCHITECTURE.md, sección de
+`Schedule_Management_Plan.html`, para el porqué.
+
+### Compatibilidad con datos antiguos
+
+`gpi-core.ts` tolera datos guardados por versiones anteriores del
+esquema en vez de rechazarlos — por diseño, no por descuido (regla #3
+de CLAUDE.md). Ejemplos reales en el código, buscar por nombre de
+función si hace falta tocar esa zona:
+
+- `normalizeToProject()` / `detectTool()`: reconocen e ingieren
+  exportaciones `.json` de versiones o herramientas anteriores.
+- `charterRans()`: acepta que `charter.requirements` sea un arreglo de
+  strings (esquema viejo) o de objetos `{id, code, text}` (esquema
+  actual), sin exigir migrar los datos guardados.
+- Los audits (`charterAudit`, `schedulePlanAudit`, etc.) leen cada
+  campo con `|| {}` / `|| []` defensivo, nunca asumen que un proyecto
+  guardado hace meses tiene todos los campos que el formulario de hoy
+  espera.
+
+Si TypeScript marca una de estas ramas como "código muerto" o
+"inalcanzable", **no se borra sin más**: casi siempre existe porque un
+`.json` real y antiguo todavía la necesita (ver la nota equivalente en
+MIGRATION.md, Fase 1).
+
 ## Las tres formas de referenciar el núcleo
 
 Cada módulo referencia `GPI` de una de tres formas — no asumir que es
