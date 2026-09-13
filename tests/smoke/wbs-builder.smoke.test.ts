@@ -84,4 +84,121 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
     expect(resourceInput.disabled).toBe(true);
     expect(resourceInput.value).toBe("Ana");
   });
+
+  it("sin RACI y sin OBS: el Responsable queda deshabilitado y pide crear la OBS primero", async () => {
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 2,
+              nodes: {
+                root: { id: "root", parentId: null, name: "P", children: ["w1"], duration: 0, cost: 0, resource: "", percent: 0, start: "", end: "", notes: "", collapsed: false, orientation: "spread" },
+                w1: { id: "w1", parentId: "root", name: "Paquete 1", duration: 5, cost: 1000, resource: "", percent: 0, start: "", end: "", notes: "", children: [], collapsed: false, orientation: "spread" }
+              }
+            }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "WBS_Builder.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    const node = Array.from(doc.querySelectorAll("#canvas .node")).find((n) => n.textContent?.includes("Paquete 1")) as HTMLElement;
+    node.dispatchEvent(new dom.window.Event("click", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 50));
+    const el = doc.getElementById("f_resource") as HTMLInputElement;
+    expect(el.tagName).toBe("INPUT");
+    expect(el.disabled).toBe(true);
+    expect(doc.getElementById("propsPanel")!.textContent).toMatch(/Aún no existe la OBS/);
+  });
+
+  it("sin RACI pero con OBS: el Responsable es una lista desplegable de \"Cargo — Persona\" del OBS", async () => {
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 2,
+              nodes: {
+                root: { id: "root", parentId: null, name: "P", children: ["w1"], duration: 0, cost: 0, resource: "", percent: 0, start: "", end: "", notes: "", collapsed: false, orientation: "spread" },
+                w1: { id: "w1", parentId: "root", name: "Paquete 1", duration: 5, cost: 1000, resource: "", percent: 0, start: "", end: "", notes: "", children: [], collapsed: false, orientation: "spread" }
+              }
+            },
+            obs: { rootId: "oroot", idCounter: 2, nodes: { oroot: { id: "oroot", name: "Equipo", children: ["o1"] }, o1: { id: "o1", parentId: "oroot", role: "Jefe de Ingeniería", person: "Ing. Civil", type: "core", children: [] } } }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "WBS_Builder.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    const node = Array.from(doc.querySelectorAll("#canvas .node")).find((n) => n.textContent?.includes("Paquete 1")) as HTMLElement;
+    node.dispatchEvent(new dom.window.Event("click", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 50));
+    const sel = doc.getElementById("f_resource") as HTMLSelectElement;
+    expect(sel.tagName).toBe("SELECT");
+    const labels = Array.from(sel.options).map((o) => o.textContent);
+    expect(labels).toContain("Jefe de Ingeniería — Ing. Civil");
+    sel.value = "Jefe de Ingeniería — Ing. Civil";
+    sel.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    // WBS Builder no autoguarda con debounce: persiste en beforeunload/visibilitychange.
+    dom.window.dispatchEvent(new dom.window.Event("beforeunload"));
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    expect(saved.projects.p1.modules.wbs.nodes.w1.resource).toBe("Jefe de Ingeniería — Ing. Civil");
+  });
+
+  it("con actividades y ruta crítica calculable: las fechas del paquete se toman del Cronograma CPM y quedan de solo lectura", async () => {
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1, startDate: "2026-01-05" },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 2,
+              nodes: {
+                root: { id: "root", parentId: null, name: "P", children: ["w1"], duration: 0, cost: 0, resource: "", percent: 0, start: "", end: "", notes: "", collapsed: false, orientation: "spread" },
+                w1: { id: "w1", parentId: "root", name: "Paquete 1", duration: 5, cost: 1000, resource: "", percent: 0, start: "2020-01-01", end: "2020-01-02", notes: "", children: [], collapsed: false, orientation: "spread" }
+              }
+            },
+            activities: { byLeaf: { w1: [{ id: "a1", name: "Excavar zanja", unit: "m³", qty: "100", perf: "25", teams: "1" }] }, idCounter: 2 }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "WBS_Builder.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    const node = Array.from(doc.querySelectorAll("#canvas .node")).find((n) => n.textContent?.includes("Paquete 1")) as HTMLElement;
+    node.dispatchEvent(new dom.window.Event("click", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 50));
+    const start = doc.getElementById("f_start") as HTMLInputElement;
+    const end = doc.getElementById("f_end") as HTMLInputElement;
+    const dur = doc.getElementById("f_duration") as HTMLInputElement;
+    expect(start.disabled).toBe(true);
+    expect(end.disabled).toBe(true);
+    expect(dur.disabled).toBe(true);
+    // Las fechas manuales sembradas (2020) quedan reemplazadas por las reales del CPM.
+    expect(start.value).not.toBe("2020-01-01");
+    expect(start.value).not.toBe("");
+    expect(doc.getElementById("propsPanel")!.textContent).toMatch(/Tomado del Cronograma \(CPM\)/);
+    expect(doc.getElementById("propsPanel")!.textContent).toMatch(/Estimado.*Este costo se ingresa aquí/);
+  });
 });

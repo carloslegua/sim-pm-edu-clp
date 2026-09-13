@@ -430,6 +430,48 @@ var GPI = (function(exports) {
 		});
 		return out;
 	}
+	function applyScheduleToWbs(wbs, activities, pert, schedule, schedulePlan, meta) {
+		const out = wbs ? JSON.parse(JSON.stringify(wbs)) : wbs;
+		if (!wbs || !wbs.nodes || !meta || !meta.startDate) return {
+			wbs: out,
+			lockedLeafIds: []
+		};
+		const byLeaf = activities && activities.byLeaf || {};
+		const nodes = pertStats(pert || null, activities || null, wbs).rows.map((r) => ({
+			id: r.id,
+			dur: r.dur || 0
+		}));
+		if (!nodes.length) return {
+			wbs: out,
+			lockedLeafIds: []
+		};
+		const result = cpm(nodes, schedule && Array.isArray(schedule.links) ? schedule.links : [], projectCalendar(schedulePlan), { startDate: meta.startDate });
+		if (!result.ok) return {
+			wbs: out,
+			lockedLeafIds: []
+		};
+		const lockedLeafIds = [];
+		Object.keys(byLeaf).forEach((leafId) => {
+			const acts = byLeaf[leafId];
+			if (!acts || !acts.length || !out.nodes[leafId]) return;
+			let start = null, end = null;
+			acts.forEach((a) => {
+				const row = result.rows[a.id];
+				if (!row || !row.startDate || !row.finishDate) return;
+				if (!start || row.startDate < start) start = row.startDate;
+				if (!end || row.finishDate > end) end = row.finishDate;
+			});
+			if (start && end) {
+				out.nodes[leafId].start = start;
+				out.nodes[leafId].end = end;
+				lockedLeafIds.push(leafId);
+			}
+		});
+		return {
+			wbs: out,
+			lockedLeafIds
+		};
+	}
 	function wbsPhases(wbs) {
 		if (!wbs || !wbs.nodes || !wbs.rootId || !wbs.nodes[wbs.rootId]) return [];
 		const nodes = wbs.nodes;
@@ -1936,6 +1978,7 @@ var GPI = (function(exports) {
 		obsLabel,
 		raciResponsibleIds,
 		applyRaciToWbs,
+		applyScheduleToWbs,
 		wbsPhases,
 		activitiesStats,
 		pertStats,
@@ -1995,6 +2038,7 @@ var GPI = (function(exports) {
 	exports.activitiesStats = activitiesStats;
 	exports.addWorkingDays = addWorkingDays;
 	exports.applyRaciToWbs = applyRaciToWbs;
+	exports.applyScheduleToWbs = applyScheduleToWbs;
 	exports.available = avail;
 	exports.buildScheduleLinks = buildScheduleLinks;
 	exports.charterAudit = charterAudit;

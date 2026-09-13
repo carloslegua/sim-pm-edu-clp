@@ -12,7 +12,10 @@
    DELIBERADAMENTE NO se usa GPI.ui.esc (modo suelto sin gpi-core.js).
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
-import type { ObsModule, ProjectMeta, RaciModule, ScopeStatementModule } from "../../core/types";
+import type {
+  ActivitiesModule, ObsModule, PertModule, ProjectMeta, RaciModule,
+  ScheduleModule, SchedulePlanModule, ScopeStatementModule, WbsModule, WbsNode
+} from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -38,6 +41,13 @@ let nodes: Record<string, WbsUiNode> = {};
 let gpiRaciModule: RaciModule | null = null;   // última matriz RACI conocida (vía Panel de Control)
 let gpiObsModule: ObsModule | null = null;     // último OBS conocido (vía Panel de Control)
 let gpiScopeModule: ScopeStatementModule | null = null; // último Enunciado del Alcance conocido
+let gpiActivitiesModule: ActivitiesModule | null = null; // últimas actividades conocidas (para enganchar fechas del CPM)
+let gpiPertModule: PertModule | null = null;
+let gpiScheduleModule: ScheduleModule | null = null;
+let gpiSchedulePlanModule: SchedulePlanModule | null = null;
+// Paquetes (hojas) cuya fecha inicio/fin quedó fijada por el Cronograma CPM en
+// la última sincronización -- ver applyScheduleToWbs en gpi-core.ts.
+let scheduleLockedLeafIds: Set<string> = new Set();
 let rootId = "root";
 let selectedId: string | null = null;
 let zoom = 1;
@@ -555,10 +565,15 @@ function renderProps(rolledAll: Record<string, RolledNode>): void {
   const isRoot = selectedId === rootId;
   const rolled = rolledAll[selectedId];
   const isLeaf = rolled.isLeaf;
-  // Si el paquete (hoja) tiene ambas fechas cargadas, la duración se calcula sola
-  // a partir de ellas y el campo numérico se bloquea para evitar inconsistencias.
-  const hasDates = isLeaf && daysBetween(node.start, node.end) != null;
-  const durationEditable = isLeaf && !hasDates;
+  const cpmLocked = cpmLocksDates(node);
+  // Si el paquete (hoja) tiene ambas fechas cargadas a mano, la duración se
+  // calcula sola a partir de ellas y el campo numérico se bloquea para evitar
+  // inconsistencias. Si además el Cronograma CPM ya fijó esas fechas (cpmLocked),
+  // el bloqueo es más fuerte: ni fechas ni duración se editan aquí.
+  const hasDates = isLeaf && !cpmLocked && daysBetween(node.start, node.end) != null;
+  const durationEditable = isLeaf && !cpmLocked && !hasDates;
+  const datesEditable = isLeaf && !cpmLocked;
+  const obsOptions = (gpiObsModule && window.GPI && window.GPI.util) ? window.GPI.util.obsNodes(gpiObsModule) : [];
 
   panel.innerHTML = `
     <div class="field">
@@ -568,11 +583,11 @@ function renderProps(rolledAll: Record<string, RolledNode>): void {
     <div class="field-row">
       <div class="field">
         <label>Fecha inicio</label>
-        <input id="f_start" type="date" value="${(isLeaf ? node.start : rolled.start) || ""}" ${isLeaf ? "" : "disabled"} />
+        <input id="f_start" type="date" value="${(isLeaf ? node.start : rolled.start) || ""}" ${datesEditable ? "" : "disabled"} />
       </div>
       <div class="field">
         <label>Fecha fin</label>
-        <input id="f_end" type="date" value="${(isLeaf ? node.end : rolled.end) || ""}" ${isLeaf ? "" : "disabled"} />
+        <input id="f_end" type="date" value="${(isLeaf ? node.end : rolled.end) || ""}" ${datesEditable ? "" : "disabled"} />
       </div>
     </div>
     <div class="field-row">
@@ -592,16 +607,24 @@ function renderProps(rolledAll: Record<string, RolledNode>): void {
       </div>
       <div class="field">
         <label>Responsable</label>
-        ${raciLocksResource(node) ? `<input id="f_resource" value="${escapeAttr(node.resource)}" disabled title="Definido por la Matriz RACI" />`
-      : `<input id="f_resource" list="gpi-obs-people" value="${escapeAttr(node.resource)}" />`}
+        ${raciLocksResource(node) ? `<input id="f_resource" value="${escapeAttr(node.resource)}" disabled title="Definido por la Matriz RACI" />` : resourceFieldHtml(node, obsOptions)}
       </div>
     </div>
-    ${raciLocksResource(node) ? `<div class="empty-hint">🔗 <b>Definido en la Matriz RACI</b> a partir del "R" (Responsable) asignado a este paquete. Para cambiarlo, abre <a href="RACI_Matrix.html" style="color:var(--cyan-dark); font-weight:700;">Matriz RACI ▸</a></div>` : (isLeaf ? `<div class="empty-hint">Sugerencia: define el responsable en la <a href="RACI_Matrix.html" style="color:var(--cyan-dark); font-weight:700;">Matriz RACI ▸</a> (rol "R") en vez de escribirlo aquí — así queda formalmente registrado en la RAM del proyecto.</div>` : "")}
+    ${raciLocksResource(node)
+      ? `<div class="empty-hint">🔗 <b>Definido en la Matriz RACI</b> a partir del "R" (Responsable) asignado a este paquete. Para cambiarlo, abre <a href="RACI_Matrix.html" style="color:var(--cyan-dark); font-weight:700;">Matriz RACI ▸</a></div>`
+      : (!obsOptions.length
+        ? `<div class="empty-hint">⚠ <b>Aún no existe la OBS de este proyecto.</b> Créala primero en <a href="OBS_Builder.html" style="color:var(--cyan-dark); font-weight:700;">OBS Builder ▸</a> para poder asignar responsables desde una lista.</div>`
+        : (isLeaf ? `<div class="empty-hint">Sugerencia: define el responsable en la <a href="RACI_Matrix.html" style="color:var(--cyan-dark); font-weight:700;">Matriz RACI ▸</a> (rol "R") en vez de elegirlo aquí — así queda formalmente registrado en la RAM del proyecto.</div>` : ""))}
     <div class="field">
       <label>Notas / Descripción</label>
       <textarea id="f_notes">${escapeHtml(node.notes || "")}</textarea>
     </div>
-    ${hasDates ? `<div class="empty-hint">Duración calculada automáticamente a partir de las fechas (${rolled.duration} d). Borra alguna fecha para editarla manualmente.</div>` : ""}
+    ${isLeaf ? `<div class="empty-hint">📐 <b>Estimado.</b> Este costo se ingresa aquí (bottom-up); hoy ningún otro módulo del curso calcula un costo real por paquete.</div>` : ""}
+    ${cpmLocked
+      ? `<div class="empty-hint">🔗 <b>Tomado del Cronograma (CPM)</b> a partir de las actividades y la ruta crítica calculadas para este paquete. Para cambiarlo, abre <a href="Cronograma_CPM.html" style="color:var(--cyan-dark); font-weight:700;">Cronograma CPM ▸</a></div>`
+      : (hasDates
+        ? `<div class="empty-hint">📐 <b>Estimado.</b> Duración calculada automáticamente a partir de las fechas (${rolled.duration} d). Borra alguna fecha para editarla manualmente.</div>`
+        : (isLeaf ? `<div class="empty-hint">📐 <b>Estimado.</b> Cuando definas las actividades de este paquete y calcules la ruta crítica en <a href="Cronograma_CPM.html" style="color:var(--cyan-dark); font-weight:700;">Cronograma CPM ▸</a>, la fecha real se toma automáticamente de ahí.</div>` : ""))}
     ${!isLeaf ? `<div class="empty-hint">Este paquete agrupa subtareas: el costo se suma (estimación bottom-up), pero <b>la duración se calcula como el tramo entre el inicio más temprano y el fin más tardío</b> de sus subtareas — no la suma, porque pueden ejecutarse en paralelo.</div>` : ""}
     ${!isRoot ? `<div class="danger-zone"><button class="btn danger" id="f_delete" style="width:100%;">🗑 Eliminar este nodo y sus subtareas</button></div>` : ""}
   `;
@@ -617,7 +640,7 @@ function renderProps(rolledAll: Record<string, RolledNode>): void {
   bind("f_name", "name", false);
   bind("f_cost", "cost", true);
   bind("f_percent", "percent", true);
-  if (!raciLocksResource(node)) bind("f_resource", "resource", false);
+  if (!raciLocksResource(node) && obsOptions.length) bind("f_resource", "resource", false);
   bind("f_notes", "notes", false);
   if (durationEditable) bind("f_duration", "duration", true);
 
@@ -625,7 +648,7 @@ function renderProps(rolledAll: Record<string, RolledNode>): void {
   // así que disparan un render() completo en vez del refresco liviano.
   const bindDate = (id: string, key: "start" | "end"): void => {
     const el = document.getElementById(id) as HTMLInputElement | null;
-    if (!el || !isLeaf) return;
+    if (!el || !datesEditable) return;
     el.addEventListener("change", () => { node[key] = el.value; render(); });
   };
   bindDate("f_start", "start");
@@ -687,6 +710,42 @@ function raciLocksResource(node: WbsUiNode | null | undefined): boolean {
   if (!node || node.children.length > 0) return false; // solo aplica a hojas (paquetes de trabajo)
   if (!gpiRaciModule || !window.GPI || !window.GPI.util) return false;
   return window.GPI.util.raciResponsibleIds(gpiRaciModule, node.id).length > 0;
+}
+
+// Un paquete (hoja) queda "bloqueado" en sus fechas cuando el Cronograma CPM ya
+// pudo calcular una ruta crítica real para sus actividades (ver
+// applyScheduleToWbs en gpi-core.ts, que ya dejó start/end fijados en el nodo
+// al sincronizar) -- mismo patrón que raciLocksResource.
+function cpmLocksDates(node: WbsUiNode | null | undefined): boolean {
+  if (!node || node.children.length > 0) return false;
+  return scheduleLockedLeafIds.has(node.id);
+}
+
+// Etiqueta de una opción del OBS en la lista desplegable de Responsable:
+// "Cargo — Persona" si hay persona asignada, o solo el Cargo si no.
+function obsOptionLabel(o: GpiCore.ObsNodeRow): string {
+  return o.person && o.person.trim() ? `${o.role} — ${o.person}` : (o.role || o.person || "");
+}
+
+// Campo Responsable cuando NO está bloqueado por RACI: una lista desplegable
+// restringida a los cargos del OBS (nunca texto libre). Si el proyecto
+// todavía no tiene OBS, se deja deshabilitado en vez de permitir escribir
+// cualquier cosa -- fuerza a crear la OBS primero. Un valor previo que ya no
+// coincide con ningún cargo actual del OBS (p. ej. se renombró el cargo) se
+// conserva como opción marcada "(valor anterior)" en vez de perderse en silencio.
+function resourceFieldHtml(node: WbsUiNode, options: GpiCore.ObsNodeRow[]): string {
+  if (!options.length) {
+    return `<input id="f_resource" value="${escapeAttr(node.resource)}" disabled title="Crea primero la OBS del proyecto" placeholder="— Crea la OBS primero —" />`;
+  }
+  const current = node.resource || "";
+  const known = options.some((o) => obsOptionLabel(o) === current);
+  let opts = `<option value="">— Selecciona del OBS —</option>`;
+  if (current && !known) opts += `<option value="${escapeAttr(current)}" selected>⚠ (valor anterior) ${escapeHtml(current)}</option>`;
+  opts += options.map((o) => {
+    const label = obsOptionLabel(o);
+    return `<option value="${escapeAttr(label)}"${label === current ? " selected" : ""}>${escapeHtml(label)}</option>`;
+  }).join("");
+  return `<select id="f_resource">${opts}</select>`;
 }
 
 // ---------- UTIL ----------
@@ -978,23 +1037,25 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
   const proj = GPI.active();
   const titleEl = document.getElementById("projectTitle") as HTMLInputElement;
   const courseEl = document.getElementById("courseTitle") as HTMLInputElement;
-  function refreshResourceList(): void {
-    const mod = GPI.getModule ? GPI.getModule("obs") : null;
-    const names = (mod && GPI.util ? GPI.util.obsNodes(mod) : []).map((n) => GPI.util.obsLabel(n)).filter(Boolean);
-    let dl = document.getElementById("gpi-obs-people") as HTMLDataListElement | null;
-    if (!dl) { dl = document.createElement("datalist"); dl.id = "gpi-obs-people"; document.body.appendChild(dl); }
-    dl.innerHTML = names.map((n) => '<option value="' + String(n).replace(/"/g, "&quot;") + '">').join("");
-  }
   function pull(): void {
     const p = GPI.active(); if (!p) return;
     if (p.meta) { if (p.meta.name) titleEl.value = p.meta.name; if (p.meta.course) courseEl.value = p.meta.course; }
     gpiRaciModule = (p.modules && p.modules.raci) || null;
     gpiObsModule = (p.modules && p.modules.obs) || null;
     gpiScopeModule = (p.modules && p.modules.scopeStatement) || null;
+    gpiActivitiesModule = (p.modules && p.modules.activities) || null;
+    gpiPertModule = (p.modules && p.modules.pert) || null;
+    gpiScheduleModule = (p.modules && p.modules.schedule) || null;
+    gpiSchedulePlanModule = (p.modules && p.modules.schedulePlan) || null;
     const mod = p.modules && p.modules.wbs;
     if (mod && mod.nodes && mod.rootId) {
       const synced = (gpiRaciModule && gpiObsModule && GPI.util) ? GPI.util.applyRaciToWbs(mod, gpiRaciModule, gpiObsModule) : mod;
-      nodes = (synced as typeof mod).nodes as unknown as Record<string, WbsUiNode>; rootId = (synced as typeof mod).rootId; idCounter = (synced as typeof mod).idCounter || 1; selectedId = rootId;
+      const modWbs = (synced as typeof mod) as WbsModule;
+      const schedSync = (GPI.util && GPI.util.applyScheduleToWbs)
+        ? GPI.util.applyScheduleToWbs(modWbs, gpiActivitiesModule, gpiPertModule, gpiScheduleModule, gpiSchedulePlanModule, p.meta)
+        : { wbs: modWbs, lockedLeafIds: [] };
+      nodes = schedSync.wbs.nodes as unknown as Record<string, WbsUiNode>; rootId = schedSync.wbs.rootId; idCounter = schedSync.wbs.idCounter || 1; selectedId = rootId;
+      scheduleLockedLeafIds = new Set(schedSync.lockedLeafIds);
       render(); setTimeout(fitToScreen, 50);
       setStatus("Proyecto cargado desde el Panel de Control.");
     } else {
@@ -1004,10 +1065,10 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
       // nuevo del alumno nunca se contamina con datos de ejemplo por el
       // guardado automático al salir.
       blankProject((p.meta && p.meta.name) || "Proyecto sin título");
+      scheduleLockedLeafIds = new Set();
       render(); setTimeout(fitToScreen, 50);
       setStatus("Proyecto sin EDT todavía. Agrega fases y paquetes, o usa ⌘ Cargar ejemplo para explorar el caso DISTRIB+.");
     }
-    refreshResourceList();
   }
   function push(): void {
     if (!GPI.active()) return;
@@ -1036,10 +1097,32 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
     });
     if (changed) { render(); setStatus("Responsables actualizados desde la Matriz RACI."); }
   }
-  if (proj) pull(); else refreshResourceList();
+  // Sincronización ligera análoga, pero para fechas: si el Cronograma CPM cambia
+  // en OTRA pestaña (nuevas actividades, enlaces o recálculo), refresca solo las
+  // fechas de los paquetes cuya ruta crítica ya es calculable.
+  function refreshScheduleSync(): void {
+    const p = GPI.active(); if (!p) return;
+    gpiActivitiesModule = (p.modules && p.modules.activities) || null;
+    gpiPertModule = (p.modules && p.modules.pert) || null;
+    gpiScheduleModule = (p.modules && p.modules.schedule) || null;
+    gpiSchedulePlanModule = (p.modules && p.modules.schedulePlan) || null;
+    if (!GPI.util || !GPI.util.applyScheduleToWbs) return;
+    const snapshot: WbsModule = { rootId, idCounter, nodes: nodes as unknown as Record<string, WbsNode> };
+    const schedSync = GPI.util.applyScheduleToWbs(snapshot, gpiActivitiesModule, gpiPertModule, gpiScheduleModule, gpiSchedulePlanModule, p.meta);
+    scheduleLockedLeafIds = new Set(schedSync.lockedLeafIds);
+    let changed = false;
+    schedSync.lockedLeafIds.forEach((id) => {
+      const n = nodes[id], sn = schedSync.wbs.nodes[id];
+      if (!n || !sn) return;
+      const s = sn.start || "", e = sn.end || "";
+      if (n.start !== s || n.end !== e) { n.start = s; n.end = e; changed = true; }
+    });
+    if (changed) { render(); setStatus("Fechas actualizadas desde el Cronograma CPM."); }
+  }
+  if (proj) pull();
   window.addEventListener("beforeunload", push);
-  document.addEventListener("visibilitychange", () => { if (document.hidden) push(); else refreshRaciSync(); });
-  GPI.onChange(() => { if (!document.hidden) refreshRaciSync(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) push(); else { refreshRaciSync(); refreshScheduleSync(); } });
+  GPI.onChange(() => { if (!document.hidden) { refreshRaciSync(); refreshScheduleSync(); } });
   gpiBadge(proj ? (proj.meta && proj.meta.name) : "", push);
 });
 
@@ -1122,10 +1205,11 @@ function buildReport(): void {
       + '<td class="num" style="text-align:right">' + (Number(n.percent) || 0) + '%</td></tr>';
     if (isLeaf) {
       leafCount++;
+      const fromCpm = scheduleLockedLeafIds.has(id);
       dictHtml += '<tr><td class="num">' + escapeHtml(code || "—") + '</td><td><b>' + escapeHtml(n.name) + '</b></td>'
         + '<td>' + escapeHtml(n.resource || "—") + '</td>'
         + '<td class="num" style="text-align:center">' + (Number(n.duration) || 0) + '</td>'
-        + '<td class="num">' + repDate(n.start) + '</td><td class="num">' + repDate(n.end) + '</td>'
+        + '<td class="num">' + repDate(n.start) + (fromCpm ? " ¹" : "") + '</td><td class="num">' + repDate(n.end) + (fromCpm ? " ¹" : "") + '</td>'
         + '<td class="num" style="text-align:right">' + m(n.cost) + '</td>'
         + '<td>' + escapeHtml(n.notes || "—") + '</td></tr>';
     }
@@ -1140,7 +1224,7 @@ function buildReport(): void {
     + '<h2>2. Diccionario de la EDT — paquetes de trabajo</h2>'
     + '<table><tr><th style="width:8%">Código</th><th style="width:17%">Paquete de trabajo</th><th style="width:12%">Responsable</th><th style="width:7%">Dur. (d)</th><th style="width:9%">Inicio</th><th style="width:9%">Fin</th><th style="width:11%">Costo</th><th>Descripción / notas</th></tr>'
     + (dictHtml || '<tr><td colspan="8" class="rep-note">— Sin paquetes de trabajo —</td></tr>') + '</table>'
-    + '<p class="rep-note">El responsable de cada paquete proviene de la Matriz RACI (rol marcado con "R"); no se edita manualmente en la EDT.</p>';
+    + '<p class="rep-note">El responsable de cada paquete proviene de la Matriz RACI (rol marcado con "R") o, si aún no la tiene, de una selección manual dentro del OBS del proyecto — nunca de texto libre. El costo es siempre una estimación bottom-up ingresada en esta EDT. Las fechas marcadas con ¹ provienen del Cronograma CPM (ruta crítica ya calculable para ese paquete); el resto son una estimación manual, sujeta a cambiar una vez definido el cronograma real.</p>';
   reportShell("EDT y Diccionario del Proyecto", "WBS Builder · Gestión del Alcance", body);
 }
 

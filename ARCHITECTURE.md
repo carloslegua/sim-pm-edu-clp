@@ -289,9 +289,36 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
 
 **WBS_Builder.html** — el de mayor fan-out.
 - Lee `raci` (bloquea "Responsable" si la RACI ya asignó un "R" —
-  `raciLocksResource`), `obs` (autocompletado de responsables) y
-  `scopeStatement` (siembra de entregables como ramas de nivel 1,
-  `seedFromScope`).
+  `raciLocksResource`), `obs` y `scopeStatement` (siembra de entregables
+  como ramas de nivel 1, `seedFromScope`).
+- **Coherencia de Costo/Fechas/Responsable**: al definir la EDT es
+  imposible conocer el costo, la duración o las fechas reales de un
+  paquete — son estimaciones. El WBS deja explícito cuándo un valor es
+  estimado y cuándo viene de otro módulo:
+  - **Responsable**: nunca texto libre. Si la RACI ya asignó un "R" para
+    el paquete, el campo es de solo lectura (`raciLocksResource`). Si no,
+    es una lista desplegable (`resourceFieldHtml`) restringida a los
+    cargos del OBS ("Cargo — Persona"); si el proyecto todavía no tiene
+    OBS, el campo queda deshabilitado con el aviso de crearla primero —
+    nunca permite escribir un nombre arbitrario. Un valor previo que ya
+    no coincide con ningún cargo actual del OBS se conserva como opción
+    "(valor anterior)" en vez de perderse.
+  - **Fechas/Duración**: si el paquete ya tiene actividades definidas
+    (`activities`) y una ruta crítica calculable (sin ciclos, con fecha
+    de inicio de proyecto en Metadatos), `GPI.util.applyScheduleToWbs`
+    (gpi-core.ts) recalcula el CPM con la misma duración determinística
+    (Metrado/Rendimiento) que usa Cronograma_CPM.html en su modo por
+    defecto, y fija start/end del paquete a esas fechas reales —
+    `cpmLocksDates` bloquea entonces los campos de fecha y duración en
+    la UI ("🔗 Tomado del Cronograma"). Sin esa ruta crítica calculable,
+    los campos siguen editables a mano y se etiquetan "📐 Estimado".
+    Mismo patrón que RACI→Responsable, pero para fechas.
+  - **Costo**: siempre una estimación bottom-up ingresada en la propia
+    EDT — hoy ningún otro módulo del curso calcula un costo real por
+    paquete de trabajo (el módulo `cost` hace lo opuesto: LEE el rollup
+    de costo del WBS como su "costo base" para calcular el BAC, no al
+    revés). El campo se etiqueta "📐 Estimado" en vez de dar a entender
+    que es un valor definitivo.
 
 **Enunciado_del_Alcance.html**
 - El módulo de solo-lectura más complejo: su pestaña "Consistencia"

@@ -11,6 +11,22 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Changed
 
+- **Coherencia Costo/Fechas/Responsable en la EDT (`WBS_Builder.html`)**:
+  al definir la EDT no se puede conocer el costo, la duración ni las
+  fechas reales de un paquete — ahora queda explícito en la UI cuándo un
+  valor es una estimación y cuándo viene de otro módulo.
+  - Responsable deja de ser texto libre con sugerencias: si la Matriz
+    RACI no le asignó un "R", ahora es una lista desplegable restringida
+    a los cargos del OBS ("Cargo — Persona"); si el proyecto todavía no
+    tiene OBS, el campo se deshabilita y pide crearla primero.
+  - Fecha inicio/fin y Duración se toman automáticamente del Cronograma
+    CPM (`GPI.util.applyScheduleToWbs`, nuevo en gpi-core.ts) una vez
+    que el paquete tiene actividades y una ruta crítica calculable —
+    mismo patrón de bloqueo que ya existía para Responsable↔RACI. Sin
+    eso, los campos siguen editables y se etiquetan "Estimado".
+  - Costo se etiqueta siempre "Estimado" (bottom-up): ningún otro
+    módulo del curso calcula hoy un costo real por paquete de trabajo.
+
 - **Rediseño de "Definir las Actividades" (`Activity_Definition.html`)**:
   la grilla interactiva editable (tipear/pegar celda por celda) se
   reemplaza por un flujo de exportar una plantilla `.xlsx` en blanco con

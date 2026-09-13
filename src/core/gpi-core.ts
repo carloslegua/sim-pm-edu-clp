@@ -391,6 +391,53 @@ export function applyRaciToWbs(wbs?: WbsModule | null, raci?: RaciModule | null,
   return out;
 }
 
+// Núcleo de la integración Cronograma (CPM) → WBS: análogo a applyRaciToWbs,
+// pero para fecha inicio/fin en vez de responsable. Devuelve un WBS clonado
+// donde las fechas de cada paquete de trabajo (hoja) que tiene actividades
+// definidas Y una red calculable (sin ciclos, con fecha de inicio del
+// proyecto en Metadatos) quedan fijadas a las fechas REALES que calcula el
+// CPM -- misma duración determinística (Metrado/Rendimiento) que usa
+// Cronograma_CPM.html en su modo por defecto ("det"), que es además el único
+// modo persistido (el alterno "pert" es una preferencia de sesión, nunca se
+// guarda). Los paquetes sin actividades, o mientras el CPM no pueda
+// calcularse (ciclo, o el proyecto no tiene fecha de inicio), conservan su
+// fecha manual/estimada actual: el WBS sigue siendo la fuente de la verdad
+// para esos casos. `lockedLeafIds` son los paquetes que quedaron fijados, para
+// que la UI del WBS los muestre de solo lectura (mismo patrón que RACI).
+export interface WbsScheduleSync { wbs: WbsModule; lockedLeafIds: string[]; }
+
+export function applyScheduleToWbs(
+  wbs?: WbsModule | null,
+  activities?: ActivitiesModule | null,
+  pert?: PertModule | null,
+  schedule?: ScheduleModule | null,
+  schedulePlan?: SchedulePlanModule | null,
+  meta?: ProjectMeta | null
+): WbsScheduleSync {
+  const out = wbs ? (JSON.parse(JSON.stringify(wbs)) as WbsModule) : (wbs as unknown as WbsModule);
+  if (!wbs || !wbs.nodes || !meta || !meta.startDate) return { wbs: out, lockedLeafIds: [] };
+  const byLeaf = (activities && activities.byLeaf) || {};
+  const nodes: CpmNode[] = pertStats(pert || null, activities || null, wbs).rows.map((r) => ({ id: r.id, dur: r.dur || 0 }));
+  if (!nodes.length) return { wbs: out, lockedLeafIds: [] };
+  const links = (schedule && Array.isArray(schedule.links)) ? schedule.links : [];
+  const result = cpm(nodes, links, projectCalendar(schedulePlan), { startDate: meta.startDate });
+  if (!result.ok) return { wbs: out, lockedLeafIds: [] };
+  const lockedLeafIds: string[] = [];
+  Object.keys(byLeaf).forEach((leafId) => {
+    const acts = byLeaf[leafId];
+    if (!acts || !acts.length || !out.nodes[leafId]) return;
+    let start: string | null = null, end: string | null = null;
+    acts.forEach((a) => {
+      const row = result.rows[a.id];
+      if (!row || !row.startDate || !row.finishDate) return;
+      if (!start || row.startDate < start) start = row.startDate;
+      if (!end || row.finishDate > end) end = row.finishDate;
+    });
+    if (start && end) { out.nodes[leafId].start = start; out.nodes[leafId].end = end; lockedLeafIds.push(leafId); }
+  });
+  return { wbs: out, lockedLeafIds };
+}
+
 export interface WbsPhaseRow { id: string; name: string; start: string; end: string; cost: number; }
 
 // Rollup por FASE (hijos directos de la raíz del WBS): a diferencia de wbsRollup
@@ -1620,7 +1667,7 @@ export const ui = { esc, kpi };
 
 export const util = {
   wbsRollup, wbsResources, wbsCodes, wbsLeaves, obsNodes, obsLabel,
-  raciResponsibleIds, applyRaciToWbs, wbsPhases, activitiesStats, pertStats,
+  raciResponsibleIds, applyRaciToWbs, applyScheduleToWbs, wbsPhases, activitiesStats, pertStats,
   pertProbability, charterAudit, schedulePlanAudit, raciCoverage, raciAudit,
   costSummary, pad2, charterRans, requirementsAudit, reqByWbsLeaf,
   scopeDeliverables, wbsDelIds, scopeAudit, traceMatrix,
