@@ -484,6 +484,10 @@ un `prettier --write` de prueba sobre un solo archivo reescribía miles de
 líneas. Úsalo para código nuevo; reformatear todo el repo es una decisión
 aparte que debe confirmarse explícitamente, no algo a hacer de pasada.
 
+## Changelog
+
+Ver [CHANGELOG.md](CHANGELOG.md) (formato Keep a Changelog).
+
 ## Licencia
 
 MIT — ver [LICENSE](LICENSE).
