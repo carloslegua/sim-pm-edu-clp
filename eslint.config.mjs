@@ -96,6 +96,15 @@ export default tseslint.config(
       globals: globals.node,
       sourceType: "module",
     },
+    rules: {
+      // Mismo criterio que en el bloque de TypeScript de arriba: un
+      // catch que descarta el error a propósito (p. ej. un 404 al
+      // servir un archivo) no es un error de "variable sin usar".
+      // tseslint.configs.recommended ya activa la versión
+      // @typescript-eslint/* (no la base no-unused-vars) incluso en
+      // archivos .mjs sin tipos, así que hay que sobreescribir esa.
+      "@typescript-eslint/no-unused-vars": ["error", { caughtErrors: "none" }],
+    },
   },
 
   // Prettier siempre al final: apaga las reglas de estilo de ESLint que

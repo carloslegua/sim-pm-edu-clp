@@ -9,6 +9,22 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ## [Unreleased]
 
+### Added
+
+- Tests E2E en navegador real (Playwright, `tests/e2e/`): cierran la
+  brecha de que Vitest+jsdom no puede probar `localStorage` bajo
+  `file://`. Un spec prueba que un cambio sobrevive una recarga real de
+  la página abierta por `file://`; otro prueba que dos módulos HTML
+  distintos comparten datos bajo el mismo origen HTTP.
+- `scripts/static-server.mjs`: servidor HTTP mínimo reutilizado por los
+  tests E2E.
+
+### Security
+
+- SRI (`integrity`/`crossorigin`) en el `<script>` de JSZip cargado por
+  CDN en `Activity_Definition.html` — única dependencia externa de todo
+  el ecosistema.
+
 ## [1.0.0] - 2026-09-13
 
 ### Added

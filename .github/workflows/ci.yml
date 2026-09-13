@@ -52,3 +52,10 @@ jobs:
       # presente en los 13 HTML (ver scripts/verify-deploy.mjs).
       - name: verify:deploy
         run: npm run verify:deploy
+
+      # E2E en Chrome real (Vitest+jsdom no puede probar esto: jsdom
+      # bloquea localStorage bajo file://). playwright.config.ts usa
+      # channel:"chrome" -- el Chrome que ya trae preinstalado el runner
+      # de GitHub Actions -- así que no hace falta `playwright install`.
+      - name: E2E (Playwright, navegador real)
+        run: npm run test:e2e

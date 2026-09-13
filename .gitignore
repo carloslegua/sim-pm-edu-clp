@@ -2,6 +2,9 @@ node_modules/
 .vite/
 .build-tmp/
 coverage/
+test-results/
+playwright-report/
+blob-report/
 *.log
 .DS_Store
 .claude/settings.local.json

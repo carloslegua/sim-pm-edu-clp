@@ -439,8 +439,9 @@ src/shared/styles/shared.css  → gpi-shared.css       (npm run build:shared)
 | `npm run typecheck` | `tsc --noEmit` sobre todo el proyecto |
 | `npm run lint` / `lint:fix` | ESLint sobre `src/`, `configs/`, `tests/` (falla en errores; `any` explícito queda en "warn", ver CLAUDE.md) |
 | `npm run format` / `format:check` | Prettier — configurado pero **no aplicado retroactivamente** al código existente (ver nota abajo) |
-| `npm test` | suite de Vitest (unidad + humo sobre los HTML reales) |
+| `npm test` | suite de Vitest (unidad + humo sobre los HTML reales, en jsdom) |
 | `npm run test:coverage` | igual, más un piso de cobertura sobre `src/core/**` (el resto se prueba vía los HTML compilados, que la cobertura no puede medir — ver CLAUDE.md) |
+| `npm run test:e2e` | Playwright en Chrome real: prueba `file://` + `localStorage` de punta a punta, algo que jsdom no puede simular (ver CLAUDE.md) |
 | `npm run verify:deploy` | audita que el despliegue siga intacto (ver abajo) |
 
 Claves de módulo para `build:<clave>`: `core` · `panel-control` ·
@@ -465,10 +466,10 @@ absoluta). Conviene ejecutarlo antes de publicar.
 ### Integración continua
 
 `.github/workflows/ci.yml` corre `typecheck` + `lint` + `test:coverage` +
-`build:all` + `verify:deploy` en cada push y cada pull request a `master`.
-Un PR con la insignia en rojo significa que rompió alguna de las reglas de
-arriba antes de que llegue a nadie más — no hace falta correrlos a mano
-para confiar en que `master` sigue sano.
+`build:all` + `verify:deploy` + `test:e2e` en cada push y cada pull
+request a `master`. Un PR con la insignia en rojo significa que rompió
+alguna de las reglas de arriba antes de que llegue a nadie más — no hace
+falta correrlos a mano para confiar en que `master` sigue sano.
 
 Además, un hook de pre-commit (husky + lint-staged, se instala solo con
 `npm install`) corre `eslint --fix` + `typecheck` + `build:all` en cada

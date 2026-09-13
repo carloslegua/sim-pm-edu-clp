@@ -51,11 +51,29 @@ npm run lint             # ESLint (falla en errores; @typescript-eslint/no-expli
 npm run lint:fix         # ESLint con --fix para lo autocorregible
 npm test                 # Vitest (unidad + humo sobre los HTML reales)
 npm run test:coverage    # igual, + piso de cobertura sobre src/core/** (ver vitest.config.ts)
+npm run test:e2e         # Playwright, navegador real (ver mas abajo)
 npm run verify:deploy    # audita IIFE / rutas / gpi-core.js presente
 ```
 
 `.github/workflows/ci.yml` corre typecheck + lint + test:coverage +
-build:all + verify:deploy en cada push/PR a `master`.
+build:all + verify:deploy + test:e2e en cada push/PR a `master`.
+
+**E2E en navegador real (Playwright, `tests/e2e/`):** Vitest + jsdom no
+puede probar `localStorage` bajo `file://` (jsdom lo bloquea por
+completo, ver "Trampas" más abajo) — así que la promesa central del
+proyecto ("abrir con doble clic, los datos sobreviven") nunca se había
+probado de forma automatizada, solo manualmente. `playwright.config.ts`
+usa `channel:"chrome"` (el Chrome ya instalado en la máquina/runner) en
+vez de que Playwright descargue su propio binario — evita una descarga
+de ~150 MB que puede fallar en redes restringidas (pasó en este mismo
+entorno de desarrollo). Dos specs:
+- `file-protocol.spec.ts`: abre `Panel_Control.html` por `file://`,
+  edita datos, **recarga la página de verdad** y confirma que
+  sobrevivieron — la prueba que jsdom no puede hacer.
+- `http-cross-module.spec.ts`: levanta `scripts/static-server.mjs` y
+  confirma que dos documentos HTML distintos comparten `localStorage`
+  bajo el mismo origen HTTP (el modo "confiable" que documenta
+  README.md, a diferencia de `file://` entre pestañas distintas).
 
 **Pre-commit hook (husky + lint-staged):** cada `git commit` corre
 automáticamente `eslint --fix` sobre los `.ts`/`.mjs` en stage, luego
@@ -92,7 +110,9 @@ scripts/sync-artifact.mjs        → copia .build-tmp/<clave>/* a la raíz
 scripts/build-all.mjs            → build:all (ver Regla #2)
 scripts/verify-deploy.mjs        → verify:deploy
 tests/unit/                      → GPI.util puro (cpm, pertProbability, audits…)
-tests/smoke/<clave>.smoke.test.ts → cada HTML real, servido por HTTP local
+tests/smoke/<clave>.smoke.test.ts → cada HTML real, servido por HTTP local (jsdom)
+tests/e2e/                       → mismo tipo de prueba, pero en Chrome real
+scripts/static-server.mjs        → servidor HTTP mínimo, usado por tests/e2e
 ```
 
 ## Cómo agregar un módulo nuevo (p. ej. Valor Ganado / EVM)
@@ -172,6 +192,23 @@ tests/smoke/<clave>.smoke.test.ts → cada HTML real, servido por HTTP local
   (válida en POSIX) tira `ERR_INVALID_FILE_URL_PATH` ahí. Fix: usar
   `file:///C:/fake/x.html` en cualquier jsdom de prueba que necesite un
   origen `file:` inventado (ver `tests/smoke/gpi-core.artifact.smoke.test.ts`).
+- **La descarga del navegador de Playwright puede fallar en redes
+  restringidas**: `npx playwright install chromium` descarga ~150 MB
+  desde `cdn.playwright.dev`, y esa descarga dio timeout en este mismo
+  entorno de desarrollo. `playwright.config.ts` evita el problema de
+  raíz usando `channel:"chrome"` (el Chrome ya instalado en la máquina o
+  en el runner de CI) en vez del binario propio de Playwright — no hace
+  falta `playwright install` en absoluto con esta config.
+- **`file://` no comparte `localStorage` de forma confiable entre
+  documentos HTML distintos** (dos módulos abiertos como pestañas
+  separadas por doble clic), aunque SÍ persiste de forma confiable
+  dentro del MISMO documento a través de una recarga (ver
+  `tests/e2e/file-protocol.spec.ts`, que prueba justamente eso). El
+  modo confiable para compartir datos entre módulos es servir los
+  archivos por HTTP (GitHub Pages o un servidor local) — ya documentado
+  en el README ("Nota") desde antes de la migración a TypeScript;
+  `tests/e2e/http-cross-module.spec.ts` lo prueba de punta a punta en
+  Chrome real.
 - `eslint.config.mjs` usa extensión `.mjs`, no `.js`: `scripts/verify-deploy.mjs`
   trata cualquier `*.js` en la raíz del repo como un artefacto IIFE
   compilado, y un archivo de config con `import`/`export` a nivel

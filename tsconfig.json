@@ -13,5 +13,5 @@
     "noEmit": true,
     "resolveJsonModule": true
   },
-  "include": ["src", "configs", "tests"]
+  "include": ["src", "configs", "tests", "vitest.config.ts", "playwright.config.ts"]
 }
