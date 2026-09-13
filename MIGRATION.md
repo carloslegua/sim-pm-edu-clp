@@ -37,7 +37,7 @@ negociables mientras dure.
 | 7 | Definir Actividades | `Activity_Definition.html` | ✅ Migrado |
 | 8 | PERT | `Pert_Analysis.html` | ✅ Migrado |
 | 9 | Plan de Cronograma | `Schedule_Management_Plan.html` | ✅ Migrado |
-| 10 | Cronograma / CPM | `Cronograma_CPM.html` | Pendiente |
+| 10 | Cronograma / CPM | `Cronograma_CPM.html` | ✅ Migrado |
 | 11 | Interesados | `Stakeholder_Studio.html` | Pendiente (entregado a alumnos — al final) |
 | 12 | Acta de Constitución | `Project_Charter.html` | Pendiente (entregado a alumnos — al final) |
 | 13 | Panel de Control | `Panel_Control.html` | Pendiente (punto de entrada — absolutamente al final) |
@@ -76,6 +76,48 @@ sostuvieron y se corrigieron:
   separado).
 
 ## Hallazgos de la Fase 4 (por módulo migrado)
+
+**Cronograma_CPM.html (décimo módulo migrado, el algorítmicamente más crítico):**
+
+- Mismo patrón que los anteriores: `addEventListener` exclusivamente, IIFE
+  propio. Particularidad única de este módulo: el original captura
+  `var GPI = window.GPI;` como **variable de módulo** (no llama
+  `window.GPI.xxx` en cada sitio, a diferencia de OBS/WBS/PERT/Schedule
+  Plan) y la reasigna dentro de `init()`. Se preservó ese mismo patrón
+  con una variable de módulo `let GPI: GpiApi | undefined`, en vez de
+  normalizarlo al patrón `window.GPI` explícito de los demás — cambiarlo
+  habría sido un refactor, no un port mecánico.
+- A diferencia de los otros 12 módulos, este **sí depende duro de
+  `gpi-core.js`** incluso para su lógica local, no solo para sincronizar
+  con el Panel: el cálculo CPM vive únicamente en `GPI.util.cpm` (ya
+  cubierto por Vitest desde la Fase 2 con el dataset dorado DISTRIB+), sin
+  una copia local como el `esc()` de los demás módulos. Si `gpi-core.js`
+  no carga, la herramienta queda inoperante más allá del cableado de
+  botones — comportamiento preexistente, documentado en el propio banner
+  de error del módulo, no introducido por este port.
+- CSS del modal: `.modal-overlay`/`.modal-card` base idénticos a
+  `gpi-shared.css`, pero con más variaciones locales que otros módulos:
+  ancho 420px (más grande, para el pegado de Excel/MS Project),
+  `max-height:90vh; overflow:auto` (modal más alto), una variante
+  `.modal-card.wide{width:760px}` para el editor de enlaces y la
+  previsualización del pegado, y `.modal-actions{margin-top:18px}`. El
+  `.modal-card p{margin:0 0 16px}` (vs. 20px del shared, diferencia de
+  4px) se armonizó igual que en Enunciado del Alcance/Schedule Plan
+  (ruido visual ≤6px); el resto de los overrides SÍ se conservaron porque
+  son adiciones reales (ancho, alto máximo, variante `.wide`, margen
+  superior de acciones), no diferencias menores de un valor ya presente
+  en el shared.
+- Verificado de punta a punta (servido por HTTP local): el modo ejemplo
+  DISTRIB+ reproduce **exactamente** el resultado dorado documentado en
+  el README (53 días laborables, fin 2026-09-16, 9 actividades críticas)
+  — el mismo dataset ya cubierto por el test de regresión de `cpm()` en
+  Vitest, ahora verificado también a través de la UI completa (tabla,
+  red AON en SVG, Gantt en SVG, sin errores al cambiar de pestaña). Con
+  un proyecto real con dos actividades sin enlazar, la duración del
+  proyecto es la de la actividad más larga (comportamiento correcto de
+  un grafo sin aristas); al agregar un enlace manual FS entre ambas
+  actividades, la duración se recalcula a la suma de ambas y el enlace
+  persiste correctamente en `gpi_db.projects.<id>.modules.schedule`.
 
 **Schedule_Management_Plan.html (noveno módulo migrado, el HTML más grande hasta ahora):**
 
@@ -362,9 +404,10 @@ sostuvieron y se corrigieron:
   de Google Fonts siga igual entre módulos (ya encontró una divergencia
   preexistente, ver arriba).
 - **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. En
-  progreso: 9/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
+  progreso: 10/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
   `Recopilar_Requisitos.html`, `Enunciado_del_Alcance.html`, `WBS_Builder.html`,
-  `Activity_Definition.html`, `Pert_Analysis.html`, `Schedule_Management_Plan.html`).
+  `Activity_Definition.html`, `Pert_Analysis.html`, `Schedule_Management_Plan.html`,
+  `Cronograma_CPM.html`).
   Patrón establecido: `src/modules/<key>/main.ts`
   + `configs/<key>.vite.config.ts` (usa el helper `configs/lib.config.mjs`)
   + `npm run build:<key>` + `tests/smoke/<key>.smoke.test.ts`.
