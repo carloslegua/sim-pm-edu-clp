@@ -36,7 +36,7 @@ negociables mientras dure.
 | 6 | EDT | `WBS_Builder.html` | ✅ Migrado |
 | 7 | Definir Actividades | `Activity_Definition.html` | ✅ Migrado |
 | 8 | PERT | `Pert_Analysis.html` | ✅ Migrado |
-| 9 | Plan de Cronograma | `Schedule_Management_Plan.html` | Pendiente |
+| 9 | Plan de Cronograma | `Schedule_Management_Plan.html` | ✅ Migrado |
 | 10 | Cronograma / CPM | `Cronograma_CPM.html` | Pendiente |
 | 11 | Interesados | `Stakeholder_Studio.html` | Pendiente (entregado a alumnos — al final) |
 | 12 | Acta de Constitución | `Project_Charter.html` | Pendiente (entregado a alumnos — al final) |
@@ -76,6 +76,49 @@ sostuvieron y se corrigieron:
   separado).
 
 ## Hallazgos de la Fase 4 (por módulo migrado)
+
+**Schedule_Management_Plan.html (noveno módulo migrado, el HTML más grande hasta ahora):**
+
+- Mismo patrón que los anteriores: `addEventListener` exclusivamente
+  (incluidas las tablas editables genéricas `renderEditableTable`/
+  `renderSimpleList`, componentes reutilizados internamente por 4 tablas
+  distintas del documento), `window.GPI` explícito, IIFE propio. CSS del
+  modal idéntica byte a byte a `gpi-shared.css` — solo override de ancho
+  (400px).
+- A diferencia de los módulos de cálculo (OBS, WBS, PERT...), este es un
+  **documento vivo** de 15 secciones (checklist AACE RP 38R-06 + salidas
+  de PMBOK "Plan Schedule Management"): no tiene "modo ejemplo" separado
+  de los datos reales. En su lugar, `init()` carga el ejemplo DISTRIB+
+  incondicionalmente al arrancar, y el puente con el Panel (`gpiBridge`,
+  un SEGUNDO listener de `DOMContentLoaded` independiente del de `init()`,
+  ambos preservados tal cual) lo **sobrescribe con un estado en blanco**
+  si hay un proyecto activo sin plan guardado — es la "regla de oro" de
+  este módulo: nunca graba el ejemplo DISTRIB+ encima de un proyecto real
+  por accidente al salir de la página.
+- El esquema del plan (`ScheduleState`, con 15 sub-objetos: intro,
+  methodology, calendar con horario tipo "Cambiar calendario laboral" de
+  MS Project, umbrales de control con banda ámbar derivada, hitos, roles,
+  etc.) se tipó **localmente en el módulo**, no en
+  `SchedulePlanModule` de `core/types.ts` (que es deliberadamente laxo —
+  varios campos `Record<string, unknown>` — porque `gpi-core.ts` solo
+  necesita leer un puñado de sub-campos para `schedulePlanAudit`). Este
+  módulo es el dueño real del esquema completo; `GPI.setModule`/
+  `getModule` aceptan el tipo local sin fricción porque sus firmas son
+  estructuralmente compatibles (`unknown` de entrada, tipos laxos de
+  salida).
+- Primer módulo migrado que consume `GPI.util.wbsRollup`, `wbsPhases` y
+  `raciCoverage` simultáneamente (para los 3 paneles informativos de
+  vínculo cruzado: datos comunes del proyecto, estado de la EDT vinculada,
+  cómputo automático de días de reserva, y cobertura RACI) — los tres ya
+  cubiertos por Vitest desde la Fase 2.
+- Verificado de punta a punta (servido por HTTP local): sin proyecto
+  activo, arranca con el ejemplo DISTRIB+ y el checklist de completitud
+  marca 100% (18 ítems); con un proyecto real con EDT+OBS+RACI, arranca
+  en blanco, el panel de EDT vinculada muestra correctamente "1 fase(s),
+  1 paquete(s) de trabajo" con su costo, el panel de cobertura RACI
+  reporta "1/1 con Responsable asignado", y "Importar hitos desde la EDT"
+  agrega correctamente un hito "Fin de Fase 1" que persiste en
+  `gpi_db.projects.<id>.modules.schedulePlan`.
 
 **Pert_Analysis.html (octavo módulo migrado):**
 
@@ -319,9 +362,9 @@ sostuvieron y se corrigieron:
   de Google Fonts siga igual entre módulos (ya encontró una divergencia
   preexistente, ver arriba).
 - **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. En
-  progreso: 8/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
+  progreso: 9/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
   `Recopilar_Requisitos.html`, `Enunciado_del_Alcance.html`, `WBS_Builder.html`,
-  `Activity_Definition.html`, `Pert_Analysis.html`).
+  `Activity_Definition.html`, `Pert_Analysis.html`, `Schedule_Management_Plan.html`).
   Patrón establecido: `src/modules/<key>/main.ts`
   + `configs/<key>.vite.config.ts` (usa el helper `configs/lib.config.mjs`)
   + `npm run build:<key>` + `tests/smoke/<key>.smoke.test.ts`.
