@@ -448,7 +448,7 @@ function renderSalience(): string {
 function bubbleNode(s: Stakeholder, x: number, y: number, rBase?: number): string {
   const r = rBase || 14;
   const sel = s.id === selectedId ? "selected" : "";
-  return `<g class="bubble ${sel}" data-id="${s.id}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})">
+  return `<g class="bubble ${sel}" data-id="${s.id}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})" role="button" tabindex="0" aria-label="${escapeHtml(s.name || "Interesado sin nombre")}">
     <circle r="${r}" fill="${catHex(s.category)}" stroke="#fff" stroke-width="2" opacity="0.92"/>
     <text text-anchor="middle" dy="3.5">${initials(s.name)}</text>
   </g>`;
@@ -611,6 +611,7 @@ function wireMainInteractions(): void {
   // Burbujas de los gráficos → seleccionar
   document.querySelectorAll<HTMLElement>(".bubble[data-id]").forEach((el) => {
     el.addEventListener("click", () => { selectedId = el.dataset.id as string; render(); });
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectedId = el.dataset.id as string; render(); } });
   });
   // Acordeón del registro: la cabecera despliega/colapsa
   document.querySelectorAll<HTMLElement>(".reg-header").forEach((h) => {
@@ -790,7 +791,18 @@ function showModal({ title, message, confirmText, cancelText, danger }: ShowModa
     cancelBtn.style.display = cancelText === null ? "none" : "";
     cancelBtn.textContent = cancelText || "Cancelar";
     const cleanup = (r: boolean) => { overlay.classList.remove("open"); confirmBtn.onclick = null; cancelBtn.onclick = null; overlay.onclick = null; document.removeEventListener("keydown", onKey); resolve(r); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") cleanup(false); if (e.key === "Enter") cleanup(true); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { cleanup(false); return; }
+      if (e.key === "Enter") { cleanup(true); return; }
+      if (e.key !== "Tab") return;
+      // Trap de foco: Tab no debe escapar del modal hacia el fondo de la página.
+      const card = overlay.querySelector(".modal-card") as HTMLElement;
+      const f = Array.from(card.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null);
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
     confirmBtn.onclick = () => cleanup(true);
     cancelBtn.onclick = () => cleanup(false);
     overlay.onclick = (e) => { if (e.target === overlay) cleanup(false); };

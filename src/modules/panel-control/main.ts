@@ -729,7 +729,18 @@ function baseModal(opts: BaseModalOpts): Promise<string | boolean | null> {
     const ok = document.getElementById("modalOk") as HTMLButtonElement, cancel = document.getElementById("modalCancel") as HTMLButtonElement;
     ok.textContent = opts.okText || "Aceptar"; ok.className = "btn " + (opts.danger ? "danger" : "primary");
     function done(v: string | boolean | null) { ov.classList.remove("open"); ok.onclick = cancel.onclick = null; ov.onclick = null; document.removeEventListener("keydown", key); resolve(v); }
-    function key(e: KeyboardEvent) { if (e.key === "Escape") done(null); if (e.key === "Enter") done(opts.prompt !== undefined ? inp.value : true); }
+    function key(e: KeyboardEvent) {
+      if (e.key === "Escape") { done(null); return; }
+      if (e.key === "Enter") { done(opts.prompt !== undefined ? inp.value : true); return; }
+      if (e.key !== "Tab") return;
+      // Trap de foco: Tab no debe escapar del modal hacia el fondo de la página.
+      const card = ov.querySelector(".modal-card") as HTMLElement;
+      const f = Array.from(card.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null);
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
     ok.onclick = () => { done(opts.prompt !== undefined ? inp.value : true); };
     cancel.onclick = () => { done(null); };
     ov.onclick = (e) => { if (e.target === ov) done(null); };

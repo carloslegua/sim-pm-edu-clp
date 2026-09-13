@@ -82,7 +82,16 @@ function showModalHTML(opts: ShowModalOpts): Promise<any> {
     cancel.style.display = opts.cancelText === null ? "none" : "";
     cancel.textContent = opts.cancelText || "Cancelar";
     function done(v: unknown) { ov.classList.remove("open"); ok.onclick = cancel.onclick = null; ov.onclick = null; document.removeEventListener("keydown", key); resolve(v); }
-    function key(e: KeyboardEvent) { if (e.key === "Escape") done(false); }
+    function key(e: KeyboardEvent) {
+      if (e.key === "Escape") { done(false); return; }
+      if (e.key !== "Tab") return;
+      // Trap de foco: Tab no debe escapar del modal hacia el fondo de la página.
+      const f = Array.from(card.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null);
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
     ok.onclick = () => { if (opts.collect) resolve(opts.collect()); else done(true); if (opts.collect) { ov.classList.remove("open"); document.removeEventListener("keydown", key); } };
     cancel.onclick = () => { done(false); };
     ov.onclick = (e) => { if (e.target === ov) done(false); };

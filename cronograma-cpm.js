@@ -91,7 +91,21 @@
 				resolve(v);
 			}
 			function key(e) {
-				if (e.key === "Escape") done(false);
+				if (e.key === "Escape") {
+					done(false);
+					return;
+				}
+				if (e.key !== "Tab") return;
+				const f = Array.from(card.querySelectorAll("button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])")).filter((el) => el.offsetParent !== null);
+				if (!f.length) return;
+				const first = f[0], last = f[f.length - 1];
+				if (e.shiftKey && document.activeElement === first) {
+					e.preventDefault();
+					last.focus();
+				} else if (!e.shiftKey && document.activeElement === last) {
+					e.preventDefault();
+					first.focus();
+				}
 			}
 			ok.onclick = () => {
 				if (opts.collect) resolve(opts.collect());

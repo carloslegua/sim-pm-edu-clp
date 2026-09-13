@@ -613,8 +613,26 @@
 				resolve(result);
 			};
 			const onKey = (e) => {
-				if (e.key === "Escape") cleanup(false);
-				if (e.key === "Enter") cleanup(true);
+				if (e.key === "Escape") {
+					cleanup(false);
+					return;
+				}
+				if (e.key === "Enter") {
+					cleanup(true);
+					return;
+				}
+				if (e.key !== "Tab") return;
+				const card = overlay.querySelector(".modal-card");
+				const f = Array.from(card.querySelectorAll("button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])")).filter((el) => el.offsetParent !== null);
+				if (!f.length) return;
+				const first = f[0], last = f[f.length - 1];
+				if (e.shiftKey && document.activeElement === first) {
+					e.preventDefault();
+					last.focus();
+				} else if (!e.shiftKey && document.activeElement === last) {
+					e.preventDefault();
+					first.focus();
+				}
 			};
 			confirmBtn.onclick = () => cleanup(true);
 			cancelBtn.onclick = () => cleanup(false);

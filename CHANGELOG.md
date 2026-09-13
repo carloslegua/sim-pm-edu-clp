@@ -25,9 +25,7 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Accessibility
 
-Primera tanda de una auditoría de accesibilidad (quedan pendientes: ARIA
-en los modales personalizados y el trap de foco, y hacer navegable por
-teclado el modelo de prominencia de `Stakeholder_Studio.html`):
+Auditoría de accesibilidad completa (dos tandas):
 
 - Contraste de texto: `--ink-2` (etiquetas de campo, pistas, texto de
   ayuda — el tono gris-azulado más reutilizado del design system) pasa
@@ -44,6 +42,17 @@ teclado el modelo de prominencia de `Stakeholder_Studio.html`):
 - `aria-label` en los 22 inputs de cabecera (`#projectTitle`,
   `#courseTitle`) de los 11 módulos que los tienen sin `<label>` — antes
   un lector de pantalla los anunciaba como campo de texto sin nombre.
+- `role="dialog"` + `aria-modal="true"` + `aria-labelledby` y un trap de
+  foco real (Tab/Shift+Tab ya no escapan hacia el fondo de la página) en
+  las 12 implementaciones de modal del ecosistema (no están unificadas
+  a propósito — ver ARCHITECTURE.md — así que se tocó cada una por
+  separado). Verificado en Chrome real con un test E2E nuevo
+  (`tests/e2e/modal-a11y.spec.ts`), no solo por lectura del código.
+- El modelo de prominencia de `Stakeholder_Studio.html` (burbujas SVG
+  con selección por clic) ahora es navegable por teclado:
+  `role="button"`, `tabindex="0"`, `aria-label` con el nombre del
+  interesado, y Enter/Espacio para seleccionar — mismo patrón ya usado
+  en el acordeón del registro del propio archivo.
 
 ### Security
 

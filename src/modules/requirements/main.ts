@@ -249,7 +249,17 @@ function ovConfirm(title: string, msg: string, okText?: string, danger?: boolean
     const ok = $("ovOk") as HTMLButtonElement, cancel = $("ovCancel") as HTMLButtonElement;
     ok.textContent = okText || "Continuar"; ok.className = "btn " + (danger ? "danger" : "primary"); cancel.style.display = ""; cancel.textContent = "Cancelar";
     function done(v: boolean) { $("ov").classList.remove("open"); ok.onclick = cancel.onclick = null; $("ov").onclick = null; document.removeEventListener("keydown", key); resolve(v); }
-    function key(e: KeyboardEvent) { if (e.key === "Escape") done(false); if (e.key === "Enter") done(true); }
+    function key(e: KeyboardEvent) {
+      if (e.key === "Escape") { done(false); return; }
+      if (e.key === "Enter") { done(true); return; }
+      if (e.key !== "Tab") return;
+      // Trap de foco: Tab no debe escapar del modal hacia el fondo de la página.
+      const f = Array.from($("ovModal").querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null);
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
     ok.onclick = () => done(true); cancel.onclick = () => done(false); $("ov").onclick = (e) => { if (e.target === $("ov")) done(false); };
     document.addEventListener("keydown", key); $("ov").classList.add("open"); ok.focus();
   });
@@ -260,7 +270,16 @@ function ovAlert(title: string, msg: string): Promise<void> {
     const body = $("ovBody"); body.style.display = "none"; body.innerHTML = ""; $("ovModal").classList.remove("wide");
     const ok = $("ovOk") as HTMLButtonElement, cancel = $("ovCancel") as HTMLButtonElement; ok.textContent = "Entendido"; ok.className = "btn primary"; cancel.style.display = "none";
     function done() { $("ov").classList.remove("open"); ok.onclick = null; $("ov").onclick = null; document.removeEventListener("keydown", key); resolve(); }
-    function key(e: KeyboardEvent) { if (e.key === "Escape" || e.key === "Enter") done(); }
+    function key(e: KeyboardEvent) {
+      if (e.key === "Escape" || e.key === "Enter") { done(); return; }
+      if (e.key !== "Tab") return;
+      // Trap de foco: Tab no debe escapar del modal hacia el fondo de la página.
+      const f = Array.from($("ovModal").querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null);
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
     ok.onclick = done; $("ov").onclick = (e) => { if (e.target === $("ov")) done(); };
     document.addEventListener("keydown", key); $("ov").classList.add("open"); ok.focus();
   });
@@ -272,7 +291,16 @@ function openFormModal(opts: FormModalOpts): Promise<boolean> {
     const body = $("ovBody"); body.style.display = ""; body.innerHTML = opts.bodyHTML || ""; $("ovModal").classList.toggle("wide", !!opts.wide);
     const ok = $("ovOk") as HTMLButtonElement, cancel = $("ovCancel") as HTMLButtonElement; ok.textContent = opts.okText || "Guardar"; ok.className = "btn primary"; cancel.style.display = ""; cancel.textContent = "Cancelar";
     function done(v: boolean) { $("ov").classList.remove("open"); ok.onclick = cancel.onclick = null; $("ov").onclick = null; document.removeEventListener("keydown", key); resolve(v); if (!v) { body.innerHTML = ""; body.style.display = "none"; } }
-    function key(e: KeyboardEvent) { if (e.key === "Escape") done(false); }
+    function key(e: KeyboardEvent) {
+      if (e.key === "Escape") { done(false); return; }
+      if (e.key !== "Tab") return;
+      // Trap de foco: Tab no debe escapar del modal hacia el fondo de la página.
+      const f = Array.from($("ovModal").querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null);
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
     ok.onclick = () => done(true); cancel.onclick = () => done(false); $("ov").onclick = (e) => { if (e.target === $("ov")) done(false); };
     document.addEventListener("keydown", key); $("ov").classList.add("open"); if (opts.onOpen) opts.onOpen(body);
   });

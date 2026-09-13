@@ -881,7 +881,7 @@
 	}
 	function bubbleNode(s, x, y, rBase) {
 		const r = rBase || 14;
-		return `<g class="bubble ${s.id === selectedId ? "selected" : ""}" data-id="${s.id}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})">
+		return `<g class="bubble ${s.id === selectedId ? "selected" : ""}" data-id="${s.id}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})" role="button" tabindex="0" aria-label="${escapeHtml(s.name || "Interesado sin nombre")}">
     <circle r="${r}" fill="${catHex(s.category)}" stroke="#fff" stroke-width="2" opacity="0.92"/>
     <text text-anchor="middle" dy="3.5">${initials(s.name)}</text>
   </g>`;
@@ -1053,6 +1053,13 @@
 			el.addEventListener("click", () => {
 				selectedId = el.dataset.id;
 				render();
+			});
+			el.addEventListener("keydown", (e) => {
+				if (e.key === "Enter" || e.key === " ") {
+					e.preventDefault();
+					selectedId = el.dataset.id;
+					render();
+				}
 			});
 		});
 		document.querySelectorAll(".reg-header").forEach((h) => {
@@ -1307,8 +1314,26 @@
 				resolve(r);
 			};
 			const onKey = (e) => {
-				if (e.key === "Escape") cleanup(false);
-				if (e.key === "Enter") cleanup(true);
+				if (e.key === "Escape") {
+					cleanup(false);
+					return;
+				}
+				if (e.key === "Enter") {
+					cleanup(true);
+					return;
+				}
+				if (e.key !== "Tab") return;
+				const card = overlay.querySelector(".modal-card");
+				const f = Array.from(card.querySelectorAll("button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])")).filter((el) => el.offsetParent !== null);
+				if (!f.length) return;
+				const first = f[0], last = f[f.length - 1];
+				if (e.shiftKey && document.activeElement === first) {
+					e.preventDefault();
+					last.focus();
+				} else if (!e.shiftKey && document.activeElement === last) {
+					e.preventDefault();
+					first.focus();
+				}
 			};
 			confirmBtn.onclick = () => cleanup(true);
 			cancelBtn.onclick = () => cleanup(false);

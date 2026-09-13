@@ -140,14 +140,28 @@
 		return new Promise((resolve) => {
 			const ov = $("modalOverlay"), card = $("modalCard");
 			card.className = "modal-card confirm-card";
-			card.innerHTML = "<h3>" + esc(title) + "</h3><p>" + esc(msg) + "</p><div class=\"modal-actions\"><button class=\"btn\" id=\"mCancel\">Cancelar</button><button class=\"btn " + (danger ? "danger" : "primary") + "\" id=\"mOk\">" + esc(okText || "Confirmar") + "</button></div>";
+			card.innerHTML = "<h3 id=\"modalCardTitle\">" + esc(title) + "</h3><p>" + esc(msg) + "</p><div class=\"modal-actions\"><button class=\"btn\" id=\"mCancel\">Cancelar</button><button class=\"btn " + (danger ? "danger" : "primary") + "\" id=\"mOk\">" + esc(okText || "Confirmar") + "</button></div>";
 			function done(v) {
 				ov.classList.remove("open");
 				document.removeEventListener("keydown", key);
 				resolve(v);
 			}
 			function key(e) {
-				if (e.key === "Escape") done(false);
+				if (e.key === "Escape") {
+					done(false);
+					return;
+				}
+				if (e.key !== "Tab") return;
+				const f = Array.from(card.querySelectorAll("button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])")).filter((el) => el.offsetParent !== null);
+				if (!f.length) return;
+				const first = f[0], last = f[f.length - 1];
+				if (e.shiftKey && document.activeElement === first) {
+					e.preventDefault();
+					last.focus();
+				} else if (!e.shiftKey && document.activeElement === last) {
+					e.preventDefault();
+					first.focus();
+				}
 			}
 			$("mOk").onclick = () => {
 				done(true);

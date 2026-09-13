@@ -423,7 +423,18 @@ function showModal({ title, message, confirmText, cancelText, danger }: ShowModa
     cancelBtn.style.display = cancelText === null ? "none" : "";
     cancelBtn.textContent = cancelText || "Cancelar";
     const cleanup = (result: boolean) => { overlay.classList.remove("open"); confirmBtn.onclick = null; cancelBtn.onclick = null; overlay.onclick = null; document.removeEventListener("keydown", onKey); resolve(result); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") cleanup(false); if (e.key === "Enter") cleanup(true); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { cleanup(false); return; }
+      if (e.key === "Enter") { cleanup(true); return; }
+      if (e.key !== "Tab") return;
+      // Trap de foco: Tab no debe escapar del modal hacia el fondo de la página.
+      const card = overlay.querySelector(".modal-card") as HTMLElement;
+      const f = Array.from(card.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null);
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
     confirmBtn.onclick = () => cleanup(true);
     cancelBtn.onclick = () => cleanup(false);
     overlay.onclick = (e) => { if (e.target === overlay) cleanup(false); };
