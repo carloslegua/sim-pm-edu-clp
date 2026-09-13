@@ -1,10 +1,16 @@
 # GPI — Plataforma de Gestión de Proyectos de Ingeniería
 
 Suite de módulos HTML independientes que comparten un único núcleo de datos
-(`gpi-core.js`, sobre `localStorage`). Sin frameworks, sin build. Se despliega
-copiando todos los archivos a un mismo directorio (GitHub Pages, servidor local,
-etc.). Todos deben quedar **en la misma carpeta** para que los enlaces relativos
-y el núcleo compartido funcionen.
+(`gpi-core.js`, sobre `localStorage`). Sin frameworks. **El despliegue sigue sin
+build**: se copian todos los archivos a un mismo directorio (GitHub Pages,
+servidor local, doble clic) y funcionan tal cual. Todos deben quedar **en la
+misma carpeta** para que los enlaces relativos y el núcleo compartido funcionen.
+
+> **Para quien mantiene el código:** desde 2026 la lógica se escribe en
+> TypeScript bajo `src/` y se compila a los `.js` que acompañan a cada HTML
+> (`npm run build:<módulo>`). Los `.js` de la raíz son **artefactos generados y
+> versionados**: no se editan a mano, se regeneran. Ver [MIGRATION.md](MIGRATION.md)
+> y la sección [Desarrollo](#desarrollo) al final.
 
 ## Punto de entrada
 
@@ -16,11 +22,13 @@ y el núcleo compartido funcionen.
 ## Entrega gradual de módulos (novedad)
 
 El Panel decide **qué herramientas puede abrir el alumno**. Se configura en un
-único bloque al inicio del `<script>` de `Panel_Control.html`, marcado como
-«① ENTREGA DE MÓDULOS»:
+único bloque al inicio de `src/modules/panel-control/main.ts`, marcado como
+«① ENTREGA DE MÓDULOS»; tras editarlo hay que recompilar el Panel con
+`npm run build:panel-control` (eso regenera `panel-control.js`, que es el
+archivo que el navegador carga y que **no debe editarse a mano**):
 
-```js
-var MODULOS_ENTREGADOS = ["charter", "stakeholders"];
+```ts
+const MODULOS_ENTREGADOS: "*" | "auto" | string[] = ["charter", "stakeholders"];
 ```
 
 | Valor | Efecto |
@@ -41,11 +49,13 @@ Claves disponibles: `charter` · `stakeholders` · `requirements` ·
 
 ### Agregar módulos nuevos
 
-El bloque «② MÓDULOS PROPIOS» (`MODULOS_EXTRA`) permite registrar herramientas
-nuevas sin tocar la tabla `MODULES` original:
+El bloque «② MÓDULOS PROPIOS» (`MODULOS_EXTRA`), en el mismo
+`src/modules/panel-control/main.ts`, permite registrar herramientas nuevas sin
+tocar la tabla `MODULES` original (recompilar igual con
+`npm run build:panel-control`):
 
-```js
-var MODULOS_EXTRA = [
+```ts
+const MODULOS_EXTRA: ModuleDef[] = [
   { key:"riesgos", group:"risk", name:"Gestión de Riesgos",
     file:"Risk_Register.html", icon:"⚠", color:"#ff9f1c",
     desc:"Registro de riesgos, matriz probabilidad–impacto y plan de respuesta." }
@@ -61,6 +71,7 @@ var MODULOS_EXTRA = [
 
 - **`gpi-core.js`** — capa de datos compartida. Un proyecto vive en
   `localStorage["gpi_db"]` con una rebanada `modules.<clave>` por herramienta.
+  Se genera desde `src/core/gpi-core.ts` con `npm run build:core`.
 
 ## Regla de oro del ecosistema (datos de ejemplo)
 
@@ -404,3 +415,44 @@ que la probabilidad queda **sobrestimada**.
   `a9→a10 (SS+2)`, `a10→a11 (FS+3)`, `a11→a12 (SS+5)`.
   Resultado verificado: duración 53 días laborables, fin 16/09/2026, ruta
   crítica `a1-a2-a3-a4-a8-a9-a10-a11-a12`.
+
+---
+
+## Desarrollo
+
+La lógica de los 13 módulos y del núcleo vive en `src/` (TypeScript) y se
+compila a los `.js` que carga cada HTML. **Los `.js` de la raíz son artefactos
+generados y versionados**: se regeneran, no se editan.
+
+```
+src/core/gpi-core.ts          → gpi-core.js          (npm run build:core)
+src/modules/<clave>/main.ts   → <clave>.js           (npm run build:<clave>)
+src/shared/styles/shared.css  → gpi-shared.css       (npm run build:shared)
+```
+
+| Comando | Para qué |
+|---|---|
+| `npm install` | dependencias de desarrollo (Vite, TypeScript, Vitest) |
+| `npm run build:<clave>` | recompila un módulo tras editar su `main.ts` |
+| `npm run typecheck` | `tsc --noEmit` sobre todo el proyecto |
+| `npm test` | suite de Vitest (unidad + humo sobre los HTML reales) |
+| `npm run verify:deploy` | audita que el despliegue siga intacto (ver abajo) |
+
+Claves de módulo para `build:<clave>`: `core` · `panel-control` ·
+`project-charter` · `stakeholder-studio` · `requirements` · `scope-statement` ·
+`wbs` · `activities` · `pert` · `schedule-plan` · `cronograma-cpm` · `cost` ·
+`obs` · `raci` · `shared`.
+
+### Reglas que no se deben romper
+
+1. **Todo build es IIFE clásico**, nunca módulo ES: `file://` bloquea por CORS
+   los `<script type="module">`, y abrir una herramienta con doble clic es un
+   caso de uso soportado.
+2. **Los artefactos se commitean.** GitHub Pages sirve la raíz sin paso de
+   build; si un `.js` no está en el repositorio, la herramienta no carga.
+3. **El esquema de `localStorage["gpi_db"]` y sus ramas de compatibilidad no se
+   tocan**: hay `.json` exportados por alumnos que deben seguir abriendo.
+
+`npm run verify:deploy` comprueba automáticamente 1 y 2 (más que cada HTML siga
+cargando `gpi-core.js`, que no quede lógica inline y que ninguna ruta sea
+absoluta). Conviene ejecutarlo antes de publicar.

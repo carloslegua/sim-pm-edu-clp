@@ -533,7 +533,84 @@ sostuvieron y se corrigieron:
   helper `configs/lib.config.mjs`) + `npm run build:<key>` +
   `tests/smoke/<key>.smoke.test.ts`. 132 tests en verde, `tsc --noEmit`
   limpio en todo el proyecto.
-- **Fase 5** — Verificación de despliegue (GitHub Pages y `file://`).
+- **Fase 5** — Verificación de despliegue (GitHub Pages y `file://`). ✅ Hecha.
+  Ver "Resultados de la Fase 5" abajo.
+
+## Resultados de la Fase 5 (verificación de despliegue)
+
+### 1. Auditoría estática — `npm run verify:deploy`
+
+`scripts/verify-deploy.mjs` queda en el repositorio como comprobación
+permanente antes de publicar. Verifica, sobre los archivos tal como se
+sirven:
+
+- **14 artefactos** (`gpi-core.js` + 13 bundles) son IIFE clásicos: cero
+  `import`/`export`/`import.meta` en el nivel superior. Es la regla que
+  mantiene vivo el modo `file://` (doble clic), porque el navegador
+  bloquea por CORS los `<script type="module">` en ese protocolo.
+  Incluye además la comprobación específica del bug que apareció en el
+  piloto de la Fase 4 (`exports` referenciado sin ser parámetro del IIFE).
+- **13 HTML** sin `type="module"`, sin rutas absolutas, y con todos sus
+  `<script src>`/`<link href>` locales efectivamente presentes en el
+  repositorio — esto último atrapa el caso "olvidé commitear el `.js`
+  compilado", que rompería GitHub Pages aunque los tests locales pasen.
+- Los 13 siguen cargando `gpi-core.js` y ninguno conserva lógica inline.
+
+### 2. Equivalencia A/B contra el baseline pre-migración
+
+Se comparó el comportamiento real contra el tag `baseline-pre-migracion`
+(código original, pre-TypeScript) montado en un *worktree* aparte:
+
+1. **Fixture de referencia generado por el código ORIGINAL**: se recorrió
+   el baseline cargando el ejemplo DISTRIB+ en cadena (Acta → Interesados
+   → OBS → EDT → Enunciado del Alcance → Plan de Cronograma → Costos),
+   arrastrando el `localStorage` de una página a la siguiente como haría
+   un navegador. Resultado: un `gpi_db` real de ~35 kB con 7 rebanadas de
+   módulo.
+2. **Las 13 páginas se abrieron en ambas versiones con ese mismo
+   `gpi_db`**, y de cada una se capturó (a) el texto renderizado del
+   `<body>` —excluyendo `<script>`/`<style>`, porque en el baseline el
+   código inline vive dentro del `<body>` y contaría como texto— y (b) el
+   `gpi_db` resultante tras disparar el guardado (`beforeunload`).
+
+**Resultado: las 13 páginas producen el mismo texto renderizado y el
+mismo `gpi_db`**, normalizando únicamente las marcas de tiempo escritas
+en el momento de la corrida (p. ej. el campo `updated` del BOE de
+Costos, que las dos corridas escriben con segundos de diferencia).
+
+Dos diferencias aparecieron en la primera pasada y ambas quedaron
+explicadas, ninguna atribuible al port:
+
+- **`Cost-management.html`**: solo el `updated` del BOE (ISO 8601) —
+  ruido temporal, no de datos.
+- **`Panel_Control.html`**: el baseline mostraba "🔒 Se habilita más
+  adelante" en 10 de las 12 herramientas porque su
+  `MODULOS_ENTREGADOS` era `["charter","stakeholders"]`. Al igualar esa
+  configuración a `"*"` en el worktree del baseline, el texto pasó a ser
+  **idéntico**. Confirma que el cambio de entrega solicitado a mitad de
+  la migración es la única causa, y que el port del Panel no alteró nada.
+
+### 3. Modo `file://` (doble clic)
+
+Las 13 páginas se abrieron por `file://` en ambas versiones: **texto
+renderizado idéntico y cero errores reales** en las dos. Es la prueba
+directa de que los bundles IIFE cargan y ejecutan sin servidor, que era
+el riesgo principal de introducir un empaquetador.
+
+> Nota metodológica: jsdom trata `file://` como origen opaco y puede
+> bloquear `localStorage`, cosa que los navegadores reales no hacen (así
+> es como esta suite funciona hoy con doble clic). Ese ruido se filtra
+> aparte de los errores reales; los smoke tests permanentes sirven el
+> proyecto por HTTP justamente para evitar ese falso negativo.
+
+### 4. Documentación alineada
+
+`README.md` se actualizó donde la migración lo dejó obsoleto — en
+particular la instrucción de configurar la entrega de módulos "en el
+`<script>` de `Panel_Control.html`", que ya no existe: ahora es
+`src/modules/panel-control/main.ts` + `npm run build:panel-control`. Se
+añadió una sección **Desarrollo** con los comandos, el mapa
+`src/ → artefacto` y las tres reglas que no se deben romper.
 
 Ver el plan completo en el historial de la conversación / plan aprobado para
 el detalle de cada fase.
