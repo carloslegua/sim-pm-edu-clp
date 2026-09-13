@@ -227,6 +227,21 @@ scripts/static-server.mjs        → servidor HTTP mínimo, usado por tests/e2e
   GitHub Pages en producción — ya documentado en el README ("Nota")
   desde antes de la migración a TypeScript; `tests/e2e/http-cross-module.spec.ts`
   lo prueba de punta a punta en Chrome real.
+- **`JSZip` nunca resuelve (ni rechaza) sus operaciones de CONTENIDO
+  dentro de jsdom**: `generateAsync(...)` y `zip.file(name).async("string")`
+  cuelgan indefinidamente en un `JSDOM` con `runScripts:"dangerously"`,
+  verificado con diagnósticos aislados — pasa incluso sin compresión
+  (método `STORE`), aunque `JSZip.loadAsync()` (que solo valida la
+  ESTRUCTURA del zip) sí funciona y rechaza rápido ante datos inválidos.
+  Es una limitación del entorno, no del código de la app: análoga al
+  bloqueo de `localStorage` bajo `file://` de más abajo. Por eso el
+  import de `.xlsx` real de `activities` (Activity_Definition.html) se
+  prueba en `tests/e2e/activity-definition-import.spec.ts` (Chrome real
+  vía Playwright) y NO en el smoke test jsdom — que solo cubre el caso
+  rápido de "archivo inválido" (falla en `loadAsync`, antes de tocar la
+  parte que cuelga). El fixture `.xlsx` de ese E2E se arma con el paquete
+  `jszip` de npm en Node puro (no con `window.JSZip` del navegador), para
+  no depender en absoluto de la ruta rota.
 - `eslint.config.mjs` usa extensión `.mjs`, no `.js`: `scripts/verify-deploy.mjs`
   trata cualquier `*.js` en la raíz del repo como un artefacto IIFE
   compilado, y un archivo de config con `import`/`export` a nivel

@@ -9,6 +9,20 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ## [Unreleased]
 
+### Changed
+
+- **Rediseño de "Definir las Actividades" (`Activity_Definition.html`)**:
+  la grilla interactiva editable (tipear/pegar celda por celda) se
+  reemplaza por un flujo de exportar una plantilla `.xlsx` en blanco con
+  los paquetes de la EDT, completarla afuera en Excel o MS Project (el
+  cronograma real del curso se trabaja ahí), y volver a importarla —
+  la tabla en pantalla pasa a ser de solo lectura. El import reemplaza
+  `byLeaf` por completo (no hace merge), emparejando filas por código
+  EDT y columnas por el texto del encabezado (no por posición). El
+  esquema de datos `ActivitiesModule` y el cálculo de duración
+  (nunca persistida) no cambiaron — `pert`/`cronograma-cpm` siguen
+  consumiéndolo igual.
+
 ### Added
 
 - Tests E2E en navegador real (Playwright, `tests/e2e/`): cierran la

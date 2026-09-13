@@ -262,13 +262,30 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
 
 **Activity_Definition.html**
 - Único módulo que depende de una librería externa vía CDN
-  (`window.JSZip`, para exportar `.xlsx`), tipada con una interfaz
-  mínima local (`JSZipLike`) en vez de `@types/jszip`. Si `JSZip` no
-  carga, cae a un CSV equivalente (`buildCsv()`).
+  (`window.JSZip`, para exportar/importar `.xlsx`), tipada con una
+  interfaz mínima local (`JSZipInstance`/`JSZipCtor`) en vez de
+  `@types/jszip`. Si `JSZip` no carga, la exportación cae a un CSV
+  equivalente (`buildTemplateCsv()`).
 - Lee la EDT en vivo desde `GPI.getModule("wbs")` (nunca la duplica);
   las actividades viven en un módulo propio, `GPI.getModule("activities")`,
   indexado por el id de cada paquete de trabajo. Numeración de filas al
   estilo MS Project (`fullRows()`): fila 0 es siempre el proyecto.
+- **Rediseñado de grilla interactiva a import/export de plantilla
+  Excel** (el cronograma real del curso se trabaja en MS Project, no en
+  el simulador): la tabla es de solo lectura; "⇩ Descargar plantilla
+  EDT" genera un `.xlsx` con una fila por paquete de trabajo (código +
+  nombre pre-llenados), y "⇧ Importar actividades desde Excel" lee el
+  archivo completado afuera y **reemplaza** `byLeaf` entero (no hace
+  merge — la plantilla no lleva id de actividad estable, así que un
+  merge sería ambiguo). El emparejamiento de filas importadas usa el
+  código EDT (vía `leafRows()`) y el de columnas usa el TEXTO del
+  encabezado normalizado (no la posición), así que reordenar columnas en
+  Excel no rompe el import. El parser de `.xlsx` es hand-rolled: resuelve
+  la hoja de datos real vía `xl/workbook.xml` + sus `_rels` (nunca asume
+  `sheet1.xml`), y soporta tanto `xl/sharedStrings.xml` (formato real de
+  Excel) como `t="inlineStr"` (el propio formato de exportación de este
+  proyecto). La duración sigue sin persistirse: se recalcula en pantalla
+  igual que en `pert`/`cronograma-cpm`.
 
 **WBS_Builder.html** — el de mayor fan-out.
 - Lee `raci` (bloquea "Responsable" si la RACI ya asignó un "R" —

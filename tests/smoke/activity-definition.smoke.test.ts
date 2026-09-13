@@ -1,6 +1,17 @@
-// Smoke test del módulo Activity_Definition.html migrado a build TS (Fase 4).
-// Servido por HTTP local (no file://): ver el comentario en
-// tests/smoke/obs-builder.smoke.test.ts sobre por qué.
+// Smoke test del módulo Activity_Definition.html migrado a build TS (Fase 4)
+// y luego rediseñado: la grilla interactiva se reemplazó por un flujo de
+// exportar plantilla .xlsx → completar afuera (Excel o MS Project) →
+// importar el archivo terminado (a pedido del usuario: el cronograma real
+// del curso se trabaja en MS Project). Servido por HTTP local (no file://):
+// ver el comentario en tests/smoke/obs-builder.smoke.test.ts sobre por qué.
+//
+// El caso "importar un .xlsx real y verificar que puebla las actividades"
+// NO vive aquí: JSZip nunca resuelve su lectura de contenido (.async(...))
+// dentro de jsdom (verificado con un diagnóstico aislado -- cuelga incluso
+// sin compresión, aunque loadAsync() sí procesa la estructura del zip). Esa
+// prueba vive en tests/e2e/activity-definition-import.spec.ts, en Chrome
+// real, donde JSZip funciona igual que para un alumno de verdad. Ver
+// CLAUDE.md, "Trampas ya encontradas".
 import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { extname, join } from "node:path";
@@ -30,6 +41,26 @@ beforeAll(async () => {
 
 afterAll(() => { server.close(); });
 
+const seedDb = {
+  version: 1, activeId: "p1",
+  projects: {
+    p1: {
+      schema: "gpi.project/v1",
+      meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+      modules: {
+        wbs: {
+          rootId: "root", idCounter: 3,
+          nodes: {
+            root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] },
+            w1: { id: "w1", parentId: "root", name: "Fase 1", children: ["w2"] },
+            w2: { id: "w2", parentId: "w1", name: "Paquete A", children: [] }
+          }
+        }
+      }
+    }
+  }
+};
+
 describe("Activity_Definition.html (migrado a activities.js)", () => {
   it("sin proyecto activo (localStorage vacío vía HTTP): arranca en blanco, sin errores", async () => {
     const dom = await JSDOM.fromURL(base + "Activity_Definition.html", { runScripts: "dangerously", resources: "usable" });
@@ -50,26 +81,7 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
     expect(doc.querySelectorAll(".act-row").length).toBeGreaterThan(5);
   });
 
-  it("con proyecto activo real: agregar una actividad calcula la duración (Met/(#Eq×R)) y persiste en GPI.getModule('activities')", async () => {
-    const seedDb = {
-      version: 1, activeId: "p1",
-      projects: {
-        p1: {
-          schema: "gpi.project/v1",
-          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
-          modules: {
-            wbs: {
-              rootId: "root", idCounter: 3,
-              nodes: {
-                root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] },
-                w1: { id: "w1", parentId: "root", name: "Fase 1", children: ["w2"] },
-                w2: { id: "w2", parentId: "w1", name: "Paquete A", children: [] }
-              }
-            }
-          }
-        }
-      }
-    };
+  it("con proyecto activo real: la tabla muestra los paquetes de la EDT en modo solo lectura", async () => {
     const dom = await JSDOM.fromURL(base + "Activity_Definition.html", {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
@@ -77,24 +89,33 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
     await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(doc.querySelectorAll(".pkg-row").length).toBe(1);
+    // Ya no hay inputs de edición por celda ni botón "+ Actividad": el
+    // módulo pasó a ser de solo lectura (las actividades entran por import).
+    expect(doc.querySelectorAll("#actsBody input").length).toBe(0);
+    expect(doc.querySelectorAll(".btn-add-act").length).toBe(0);
+  });
 
-    (doc.querySelector('[data-add="w2"]') as HTMLElement).dispatchEvent(new dom.window.Event("click", { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 50));
-    const nameInput = doc.querySelector('input[data-leaf="w2"][data-i="0"][data-f="name"]') as HTMLInputElement;
-    const qtyInput = doc.querySelector('input[data-leaf="w2"][data-i="0"][data-f="qty"]') as HTMLInputElement;
-    const perfInput = doc.querySelector('input[data-leaf="w2"][data-i="0"][data-f="perf"]') as HTMLInputElement;
-    nameInput.value = "Excavar zanja"; nameInput.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
-    qtyInput.value = "100"; qtyInput.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
-    perfInput.value = "25"; perfInput.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 900));
+  it("archivo inválido (no es un .xlsx real): avisa con el modal y no toca las actividades existentes", async () => {
+    const dom = await JSDOM.fromURL(base + "Activity_Definition.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    const win = dom.window as any;
 
-    const durCell = qtyInput.closest("tr")!.querySelector(".dur-cell") as HTMLElement;
-    expect(durCell.textContent).toBe("4");
+    // JSZip.loadAsync() SÍ resuelve rápido sobre datos no-zip (rechaza por
+    // firma inválida antes de intentar leer contenido) -- esto no depende
+    // de la parte de JSZip que cuelga en jsdom (ver comentario del archivo).
+    const badFile = new win.File(["esto no es un zip"], "actividades.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const input = doc.getElementById("xlsxFileInput") as HTMLInputElement;
+    Object.defineProperty(input, "files", { value: [badFile], writable: false, configurable: true });
+    input.dispatchEvent(new win.Event("change", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
 
+    expect((doc.getElementById("modalOverlay") as HTMLElement).classList.contains("open")).toBe(true);
+    expect((doc.getElementById("modalMsg") as HTMLElement).textContent).toMatch(/no parece ser un \.xlsx válido/);
     const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
-    const acts = saved.projects.p1.modules.activities;
-    expect(acts.byLeaf.w2[0].name).toBe("Excavar zanja");
-    expect(acts.byLeaf.w2[0].qty).toBe("100");
-    expect(acts.byLeaf.w2[0].perf).toBe("25");
+    expect(saved.projects.p1.modules.activities).toBeUndefined();
   });
 });

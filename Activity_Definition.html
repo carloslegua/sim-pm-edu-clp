@@ -227,7 +227,9 @@
   <input type="file" id="fileInput" accept=".json">
   <div class="sep"></div>
   <button class="btn" id="btnCopyTable" title="Copia toda la tabla al portapapeles (con encabezados) para pegarla en Excel">⧉ Copiar tabla</button>
-  <button class="btn" id="btnExcel">⇪ Excel → MS Project</button>
+  <button class="btn" id="btnDownloadTemplate" title="Genera un .xlsx con los paquetes de trabajo de la EDT, listo para completar en Excel o MS Project">⇩ Descargar plantilla EDT</button>
+  <button class="btn primary" id="btnImportExcel" title="Sube el .xlsx completado: reemplaza la lista de actividades actual">⇧ Importar actividades desde Excel</button>
+  <input type="file" id="xlsxFileInput" accept=".xlsx">
   <div class="sep"></div>
   <button class="btn" id="btnReload">⟳ Recargar EDT</button>
   <div class="sep"></div>
@@ -255,8 +257,7 @@
               <th class="col-qty" title="Met: cantidad de unidades a ejecutar en la partida">Metrado (Met)</th>
               <th class="col-perf" title="R: rendimiento de UN equipo de trabajo — cuánto metrado ejecuta por día, en la misma unidad de la partida (p. ej. 25 m³/día). Se ingresa a mano.">Rend. (R)</th>
               <th class="col-eq" title="#Eq: número de equipos (cuadrillas) trabajando en paralelo en la actividad. Por defecto 1. Se ingresa a mano.">#Eq</th>
-              <th class="col-dur" title="Duración calculada: Dur = Met ÷ (#Eq × R), redondeada al ENTERO SUPERIOR. No editable — cambia sola al modificar Met, R o #Eq.">Dur. (d)</th>
-              <th class="col-del"></th>
+              <th class="col-dur" title="Duración calculada: Dur = Met ÷ (#Eq × R), redondeada al ENTERO SUPERIOR.">Dur. (d)</th>
             </tr>
           </thead>
           <tbody id="actsBody"></tbody>
@@ -279,9 +280,9 @@
     <div class="miss-list" id="missList"></div>
 
     <div class="tip-box"><b>PMBOK — Definir las Actividades:</b> cada paquete de trabajo (hoja de la EDT) se descompone en las actividades necesarias para producir su entregable. El <b>metrado</b> (unidad de medida × cantidad) es la base con la que luego estimarás duraciones, recursos y costos de cada actividad en el cronograma.</div>
-    <div class="tip-box"><b>Trabaja como en Excel:</b> <b>Ctrl+V</b> pega bloques copiados de una hoja (se reparten hacia abajo y hacia la derecha: Nombre → Unidad → Metrado → Rend. → #Eq, con limpieza automática de formatos como 4,800.50 · 4.800,50 · 12,5). <b>Enter</b> y las flechas ↑ ↓ bajan y suben por la columna; ← → cruzan de celda en los bordes del texto; <b>Tab</b> avanza de celda en celda. <b>Shift+clic</b> selecciona un rango y <b>Ctrl+C</b> lo copia listo para Excel (Esc lo limpia). El botón <b>⧉ Copiar tabla</b> lleva toda la tabla con encabezados al portapapeles.</div>
-    <div class="tip-box"><b>Duración por rendimiento de cuadrillas:</b> Dur = Met ÷ (#Eq × R), redondeada al entero superior. <b>R</b> es el rendimiento diario de UN equipo en la unidad del metrado (p. ej. 25 m³/día) y <b>#Eq</b> las cuadrillas en paralelo (1 por defecto). La duración es un valor derivado: se recalcula solo y no se edita.</div>
-    <div class="tip-box">Como en MS Project: la fila <b>0</b> es la tarea resumen del proyecto (EDT <b>0</b>) y la columna <b>N.º</b> numera consecutivamente todas las filas — fases, paquetes y actividades — renumerándose sola al agregar o eliminar. Cada actividad hereda el código EDT de su paquete más un correlativo (el paquete <b>4.2</b> genera <b>4.2.1</b>, <b>4.2.2</b>…).</div>
+    <div class="tip-box"><b>Cómo se cargan las actividades:</b> <b>⇩ Descargar plantilla EDT</b> genera un .xlsx con un renglón por paquete de trabajo (código EDT + nombre, de referencia). Complétalo en Excel o en MS Project — es el mismo archivo para ambos — agregando el nombre de cada actividad, unidad, metrado, rendimiento y n.º de equipos; para más de una actividad por paquete, copia la fila y repite el mismo código EDT. Guarda y vuelve a subirlo con <b>⇧ Importar actividades desde Excel</b>: reemplaza la lista actual, emparejando cada fila por su código EDT.</div>
+    <div class="tip-box"><b>Duración por rendimiento de cuadrillas:</b> Dur = Met ÷ (#Eq × R), redondeada al entero superior. <b>R</b> es el rendimiento diario de UN equipo en la unidad del metrado (p. ej. 25 m³/día) y <b>#Eq</b> las cuadrillas en paralelo (1 por defecto). La duración es un valor derivado: se calcula sola al importar, no se ingresa en el archivo.</div>
+    <div class="tip-box">Como en MS Project: la fila <b>0</b> es la tarea resumen del proyecto (EDT <b>0</b>) y la columna <b>N.º</b> numera consecutivamente todas las filas — fases, paquetes y actividades. Cada actividad hereda el código EDT de su paquete más un correlativo (el paquete <b>4.2</b> genera <b>4.2.1</b>, <b>4.2.2</b>…).</div>
   </aside>
 </div>
 
@@ -300,12 +301,6 @@
     </div>
   </div>
 </div>
-
-<datalist id="unitList">
-  <option value="glb"><option value="und"><option value="m"><option value="m²"><option value="m³">
-  <option value="kg"><option value="ton"><option value="ml"><option value="pto"><option value="pza">
-  <option value="doc"><option value="lám"><option value="hh"><option value="mes"><option value="%">
-</datalist>
 
 <div id="gpiReport"></div>
 

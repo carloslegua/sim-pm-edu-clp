@@ -13,10 +13,6 @@
 	function wbsData() {
 		return mode === "sample" ? SAMPLE_WBS : wbsLive;
 	}
-	function uid() {
-		const st = state();
-		return "a" + st.idCounter++;
-	}
 	function esc(s) {
 		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
 			"&": "&amp;",
@@ -243,9 +239,6 @@
 		const empty = document.getElementById("emptyState");
 		const rows = fullRows();
 		if (!rows.length) {
-			actsCache = [];
-			selAnchor = null;
-			selEnd = null;
 			tbody.innerHTML = "";
 			empty.style.display = "";
 			empty.innerHTML = mode === "live" ? "<b>La EDT del proyecto activo está vacía.</b><br>Construye primero la estructura de desglose del trabajo en WBS Builder; este módulo descompone sus paquetes de trabajo en actividades.<br><a class=\"btn\" href=\"WBS_Builder.html\">▦ Abrir WBS Builder</a><button class=\"btn primary\" id=\"btnSampleInner\">Explorar con el modo ejemplo</button>" : "<b>Sin EDT de ejemplo.</b>";
@@ -254,27 +247,17 @@
 			return;
 		}
 		empty.style.display = "none";
-		actsCache = rows.filter((r) => r.kind === "activity");
-		selAnchor = null;
-		selEnd = null;
 		let html = "";
 		rows.forEach((r) => {
-			if (r.kind === "project") html += "<tr class=\"proj-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"code-cell\" style=\"color:var(--ink-1)\">0</td><td colspan=\"6\">" + esc(r.name) + "</td><td style=\"text-align:center\"><span class=\"proj-hint\">Fila 0</span></td></tr>";
-			else if (r.kind === "phase") html += "<tr class=\"phase-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"code-cell\">" + esc(r.code) + "</td><td colspan=\"7\" style=\"padding-left:" + (10 + Math.max(0, r.level - 2) * 16) + "px\">" + esc(r.name) + "</td></tr>";
-			else if (r.kind === "package") html += "<tr class=\"pkg-row\" id=\"pkg-" + esc(r.id) + "\"><td class=\"n-cell\">" + r.n + "</td><td class=\"pk-code\">" + esc(r.code) + "</td><td style=\"padding-left:" + (8 + Math.max(0, r.level - 2) * 16) + "px\"><span class=\"pk-name\">" + esc(r.name) + "</span><span class=\"pk-count" + (r.count ? "" : " zero") + "\">" + r.count + " act.</span></td><td colspan=\"5\"></td><td style=\"text-align:center\"><button class=\"btn-add-act\" tabindex=\"-1\" data-add=\"" + esc(r.id) + "\" title=\"Agregar actividad a este paquete\">+ Actividad</button></td></tr>";
-			else html += "<tr class=\"act-row\"><td class=\"n-cell act-item\">" + r.n + "</td><td class=\"act-code\">" + esc(r.code) + "</td><td class=\"in-cell\"><input data-leaf=\"" + esc(r.leafId) + "\" data-i=\"" + r.actIndex + "\" data-f=\"name\" value=\"" + esc(r.name) + "\" placeholder=\"Nombre de la actividad…\"></td><td class=\"in-cell\"><input data-leaf=\"" + esc(r.leafId) + "\" data-i=\"" + r.actIndex + "\" data-f=\"unit\" value=\"" + esc(r.unit) + "\" list=\"unitList\" placeholder=\"m³, kg…\"></td><td class=\"in-cell\"><input class=\"qty\" type=\"text\" inputmode=\"decimal\" data-leaf=\"" + esc(r.leafId) + "\" data-i=\"" + r.actIndex + "\" data-f=\"qty\" value=\"" + esc(r.qty) + "\" placeholder=\"0.00\"></td><td class=\"in-cell\"><input class=\"qty\" type=\"text\" inputmode=\"decimal\" data-leaf=\"" + esc(r.leafId) + "\" data-i=\"" + r.actIndex + "\" data-f=\"perf\" value=\"" + esc(r.perf) + "\" placeholder=\"p. ej. 25\" title=\"Rendimiento de un equipo por día\"></td><td class=\"in-cell\"><input class=\"qty\" type=\"text\" inputmode=\"numeric\" data-leaf=\"" + esc(r.leafId) + "\" data-i=\"" + r.actIndex + "\" data-f=\"teams\" value=\"" + esc(r.teams) + "\" title=\"Número de equipos en paralelo (1 por defecto)\"></td>" + (r.dur == null ? "<td class=\"dur-cell empty\" title=\"Falta el metrado o el rendimiento para calcular la duración\">—</td>" : "<td class=\"dur-cell\" title=\"Dur = " + esc(r.qty) + " ÷ (" + esc(String(Math.max(1, numVal(r.teams) || 1))) + " × " + esc(r.perf) + "), redondeada al entero superior\">" + r.dur + "</td>") + "<td style=\"text-align:center\"><button class=\"act-del\" tabindex=\"-1\" data-del-leaf=\"" + esc(r.leafId) + "\" data-i=\"" + r.actIndex + "\" title=\"Eliminar actividad\" aria-label=\"Eliminar actividad\">🗑</button></td></tr>";
+			if (r.kind === "project") html += "<tr class=\"proj-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"code-cell\" style=\"color:var(--ink-1)\">0</td><td colspan=\"6\">" + esc(r.name) + " <span class=\"proj-hint\">Fila 0</span></td></tr>";
+			else if (r.kind === "phase") html += "<tr class=\"phase-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"code-cell\">" + esc(r.code) + "</td><td colspan=\"6\" style=\"padding-left:" + (10 + Math.max(0, r.level - 2) * 16) + "px\">" + esc(r.name) + "</td></tr>";
+			else if (r.kind === "package") html += "<tr class=\"pkg-row\" id=\"pkg-" + esc(r.id) + "\"><td class=\"n-cell\">" + r.n + "</td><td class=\"pk-code\">" + esc(r.code) + "</td><td colspan=\"6\" style=\"padding-left:" + (8 + Math.max(0, r.level - 2) * 16) + "px\"><span class=\"pk-name\">" + esc(r.name) + "</span><span class=\"pk-count" + (r.count ? "" : " zero") + "\">" + r.count + " act.</span></td></tr>";
+			else html += "<tr class=\"act-row\"><td class=\"n-cell act-item\">" + r.n + "</td><td class=\"act-code\">" + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "</td><td>" + esc(r.unit || "—") + "</td><td class=\"num\">" + fmtQty(r.qty) + "</td><td class=\"num\">" + fmtQty(r.perf) + "</td><td class=\"num\" style=\"text-align:center\">" + esc(String(Math.max(1, numVal(r.teams) || 1))) + "</td>" + (r.dur == null ? "<td class=\"dur-cell empty\" title=\"Falta el metrado o el rendimiento para calcular la duración\">—</td>" : "<td class=\"dur-cell\" title=\"Dur = " + esc(r.qty) + " ÷ (" + esc(String(Math.max(1, numVal(r.teams) || 1))) + " × " + esc(r.perf) + "), redondeada al entero superior\">" + r.dur + "</td>") + "</tr>";
 		});
 		tbody.innerHTML = html;
 	}
-	var PASTE_FIELDS = [
-		"name",
-		"unit",
-		"qty",
-		"perf",
-		"teams"
-	];
 	function parseExcelNum(s) {
-		let str = String(s == null ? "" : s).trim().replace(/[\s ]/g, "");
+		let str = String(s == null ? "" : s).trim().replace(/[\s ]/g, "");
 		if (!str) return "";
 		const hasDot = str.indexOf(".") !== -1, hasComma = str.indexOf(",") !== -1;
 		if (hasDot && hasComma) {
@@ -286,203 +269,6 @@
 		}
 		const n = Number(str);
 		return isFinite(n) ? String(n) : null;
-	}
-	function handleTablePaste(e) {
-		const el = e.target.closest ? e.target.closest("input[data-leaf]") : null;
-		if (!el || !e.clipboardData) return;
-		const text = e.clipboardData.getData("text/plain") || "";
-		if (text.indexOf("	") === -1 && !/\r?\n./.test(text)) return;
-		e.preventDefault();
-		const grid = text.replace(/\r/g, "").split("\n");
-		while (grid.length && grid[grid.length - 1] === "") grid.pop();
-		if (!grid.length) return;
-		const actsList = fullRows().filter((r) => r.kind === "activity");
-		const startField = PASTE_FIELDS.indexOf(el.dataset.f);
-		let start = -1;
-		for (let i = 0; i < actsList.length; i++) if (actsList[i].leafId === el.dataset.leaf && actsList[i].actIndex === Number(el.dataset.i)) {
-			start = i;
-			break;
-		}
-		if (start === -1 || startField === -1) return;
-		let applied = 0, skipped = 0;
-		const fieldsTouched = {};
-		grid.forEach((line, ri) => {
-			const target = actsList[start + ri];
-			if (!target) {
-				skipped++;
-				return;
-			}
-			const act = state().byLeaf[target.leafId] && state().byLeaf[target.leafId][target.actIndex];
-			if (!act) {
-				skipped++;
-				return;
-			}
-			line.split("	").forEach((raw, ci) => {
-				const f = PASTE_FIELDS[startField + ci];
-				if (!f) return;
-				let val;
-				if (f === "qty" || f === "perf" || f === "teams") {
-					val = parseExcelNum(raw);
-					if (val === null) {
-						if (String(raw).trim()) skipped++;
-						return;
-					}
-					if (val === "") return;
-				} else {
-					val = String(raw).trim();
-					if (!val) return;
-				}
-				act[f] = val;
-				applied++;
-				fieldsTouched[f] = true;
-			});
-		});
-		onDirty(true);
-		const LBL = {
-			name: "Actividad",
-			unit: "Unidad",
-			qty: "Metrado",
-			perf: "Rend. (R)",
-			teams: "#Eq"
-		};
-		const names = Object.keys(fieldsTouched).map((f) => LBL[f]).join(", ");
-		setStatus("Pegado desde Excel: " + applied + " valor(es) en " + Math.min(grid.length, actsList.length - start) + " fila(s)" + (names ? " — " + names : "") + (skipped ? " · " + skipped + " celda(s) omitida(s)" : "") + ".");
-	}
-	var actsCache = [];
-	var selAnchor = null;
-	var selEnd = null;
-	function cellCoord(el) {
-		const f = PASTE_FIELDS.indexOf(el.dataset.f);
-		if (f === -1) return null;
-		for (let r = 0; r < actsCache.length; r++) if (actsCache[r].leafId === el.dataset.leaf && actsCache[r].actIndex === Number(el.dataset.i)) return {
-			r,
-			f
-		};
-		return null;
-	}
-	function cellInput(r, f) {
-		const a = actsCache[r];
-		if (!a || !PASTE_FIELDS[f]) return null;
-		return document.querySelector("input[data-leaf=\"" + a.leafId + "\"][data-i=\"" + a.actIndex + "\"][data-f=\"" + PASTE_FIELDS[f] + "\"]");
-	}
-	function clearSelection() {
-		selEnd = null;
-		paintSelection();
-	}
-	function paintSelection() {
-		document.querySelectorAll("#actsBody td.sel").forEach((td) => td.classList.remove("sel"));
-		if (!selAnchor || !selEnd) return;
-		const r1 = Math.min(selAnchor.r, selEnd.r), r2 = Math.max(selAnchor.r, selEnd.r);
-		const f1 = Math.min(selAnchor.f, selEnd.f), f2 = Math.max(selAnchor.f, selEnd.f);
-		for (let r = r1; r <= r2; r++) for (let f = f1; f <= f2; f++) {
-			const inp = cellInput(r, f);
-			if (inp) inp.closest("td").classList.add("sel");
-		}
-	}
-	function selectionTsv() {
-		if (!selAnchor || !selEnd) return null;
-		const r1 = Math.min(selAnchor.r, selEnd.r), r2 = Math.max(selAnchor.r, selEnd.r);
-		const f1 = Math.min(selAnchor.f, selEnd.f), f2 = Math.max(selAnchor.f, selEnd.f);
-		const lines = [];
-		for (let r = r1; r <= r2; r++) {
-			const a = actsCache[r];
-			const act = state().byLeaf[a.leafId] && state().byLeaf[a.leafId][a.actIndex];
-			const cells = [];
-			for (let f = f1; f <= f2; f++) {
-				const v = act ? act[PASTE_FIELDS[f]] : "";
-				cells.push(v == null ? "" : String(v));
-			}
-			lines.push(cells.join("	"));
-		}
-		return lines.join("\n");
-	}
-	function moveTo(r, f, keepCaret) {
-		const inp = cellInput(r, f);
-		if (!inp) return false;
-		inp.focus();
-		if (!keepCaret) try {
-			inp.select();
-		} catch (_) {}
-		return true;
-	}
-	function caretAtStart(el) {
-		try {
-			return el.selectionStart === 0 && el.selectionEnd === 0;
-		} catch (_) {
-			return false;
-		}
-	}
-	function caretAtEnd(el) {
-		try {
-			return el.selectionStart === el.value.length && el.selectionEnd === el.value.length;
-		} catch (_) {
-			return false;
-		}
-	}
-	function handleGridKeys(e) {
-		const el = e.target.closest ? e.target.closest("input[data-leaf]") : null;
-		if (!el) return;
-		const c = cellCoord(el);
-		if (!c) return;
-		if (e.key === "Enter") {
-			e.preventDefault();
-			moveTo(c.r + 1, c.f) || el.blur();
-			return;
-		}
-		if (e.key === "ArrowDown" && !e.shiftKey) {
-			e.preventDefault();
-			moveTo(c.r + 1, c.f);
-			return;
-		}
-		if (e.key === "ArrowUp" && !e.shiftKey) {
-			e.preventDefault();
-			moveTo(c.r - 1, c.f);
-			return;
-		}
-		if (e.key === "ArrowRight" && !e.shiftKey && caretAtEnd(el)) {
-			if (moveTo(c.r, c.f + 1)) e.preventDefault();
-			return;
-		}
-		if (e.key === "ArrowLeft" && !e.shiftKey && caretAtStart(el)) {
-			if (moveTo(c.r, c.f - 1)) e.preventDefault();
-			return;
-		}
-		if (e.key === "Escape") {
-			clearSelection();
-			return;
-		}
-	}
-	function wireGridSelection(tbody) {
-		tbody.addEventListener("mousedown", (e) => {
-			const el = e.target.closest ? e.target.closest("input[data-leaf]") : null;
-			if (!el) return;
-			if (e.shiftKey && selAnchor) {
-				e.preventDefault();
-				const c = cellCoord(el);
-				if (c) {
-					selEnd = c;
-					paintSelection();
-				}
-			}
-		});
-		tbody.addEventListener("focusin", (e) => {
-			const el = e.target.closest ? e.target.closest("input[data-leaf]") : null;
-			if (!el) return;
-			const c = cellCoord(el);
-			if (c) {
-				selAnchor = c;
-				clearSelection();
-			}
-		});
-		tbody.addEventListener("copy", (e) => {
-			const tsv = selectionTsv();
-			if (tsv == null || !e.clipboardData) return;
-			e.clipboardData.setData("text/plain", tsv);
-			e.preventDefault();
-			const r1 = Math.min(selAnchor.r, selEnd.r);
-			setStatus("Rango copiado: " + (Math.max(selAnchor.r, selEnd.r) - r1 + 1) + " fila(s) — pégalo en Excel o en otra parte de la tabla.");
-		});
-		tbody.addEventListener("keydown", handleGridKeys);
 	}
 	function copyWholeTable() {
 		const rows = fullRows();
@@ -524,79 +310,6 @@
 		}
 		if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, legacy);
 		else legacy();
-	}
-	function wireTableDelegation() {
-		const tbody = document.getElementById("actsBody");
-		tbody.addEventListener("paste", handleTablePaste);
-		wireGridSelection(tbody);
-		tbody.addEventListener("input", (e) => {
-			const el = e.target.closest ? e.target.closest("input[data-leaf]") : null;
-			if (!el) return;
-			const arr = state().byLeaf[el.dataset.leaf];
-			if (arr && arr[Number(el.dataset.i)]) {
-				const act = arr[Number(el.dataset.i)];
-				act[el.dataset.f] = el.value;
-				if (el.dataset.f === "qty" || el.dataset.f === "perf" || el.dataset.f === "teams") {
-					const tr = el.closest("tr");
-					const durCell = tr && tr.querySelector(".dur-cell");
-					if (durCell) {
-						const dv = durActivity(act);
-						durCell.textContent = dv == null ? "—" : String(dv);
-						durCell.className = "dur-cell" + (dv == null ? " empty" : "");
-					}
-				}
-				onDirty(false);
-			}
-		});
-		tbody.addEventListener("click", async (e) => {
-			const add = e.target.closest ? e.target.closest("[data-add]") : null;
-			if (add) {
-				addActivity(add.dataset.add);
-				return;
-			}
-			const del = e.target.closest ? e.target.closest("[data-del-leaf]") : null;
-			if (!del) return;
-			const arr = state().byLeaf[del.dataset.delLeaf];
-			const a = arr && arr[Number(del.dataset.i)];
-			if (!a) return;
-			if ((a.name || "").trim()) {
-				if (!await showConfirm("Se eliminará la actividad \"" + a.name + "\". El resto de la tabla se renumera automáticamente.", "Eliminar actividad")) return;
-			}
-			arr.splice(Number(del.dataset.i), 1);
-			if (!arr.length) delete state().byLeaf[del.dataset.delLeaf];
-			onDirty(true);
-			setStatus("Actividad eliminada — numeración actualizada.");
-		});
-	}
-	function addActivity(leafId) {
-		const st = state();
-		if (!st.byLeaf[leafId]) st.byLeaf[leafId] = [];
-		st.byLeaf[leafId].push({
-			id: uid(),
-			name: "",
-			unit: "",
-			qty: "",
-			perf: "",
-			teams: 1
-		});
-		onDirty(true);
-		const pkgRow = document.getElementById("pkg-" + leafId);
-		if (pkgRow) {
-			let row = pkgRow;
-			const count = st.byLeaf[leafId].length;
-			let seen = 0;
-			while (row && row.nextElementSibling) {
-				row = row.nextElementSibling;
-				if (!row.classList.contains("act-row")) break;
-				seen++;
-				if (seen === count) {
-					const inp = row.querySelector("input[data-f=\"name\"]");
-					if (inp) inp.focus();
-					break;
-				}
-			}
-		}
-		setStatus("Actividad agregada — completa nombre, unidad y metrado.");
 	}
 	function renderSidebar() {
 		const s = stats();
@@ -850,6 +563,15 @@
 	function xmlEsc(s) {
 		return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 	}
+	var TEMPLATE_HEADERS = [
+		"Código EDT",
+		"Paquete de trabajo",
+		"Nombre de la actividad",
+		"Unidad",
+		"Metrado",
+		"Rendimiento (R)",
+		"N.º de equipos"
+	];
 	function xlsxStylesXml() {
 		const xfs = [
 			"<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/>",
@@ -877,98 +599,44 @@
 		}).join("");
 		return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">" + (freezeTop ? "<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>" : "") + "<cols>" + cols + "</cols><sheetData>" + body + "</sheetData></worksheet>";
 	}
-	function excelRowModel() {
-		const out = [[
-			"N.º",
-			"EDT",
-			"Nivel de esquema",
-			"Nombre",
-			"Unidad",
-			"Metrado",
-			"Rendimiento (R)",
-			"N.º de equipos",
-			"Duración (días)"
-		].map((h) => ({
+	function templateRowModel() {
+		const out = [TEMPLATE_HEADERS.map((h) => ({
 			v: h,
 			t: "s",
 			s: 1
 		}))];
-		fullRows().forEach((r) => {
-			const ind = Math.min(9, r.level - 1);
-			const nameStyle = r.kind === "project" ? 25 : r.kind === "activity" ? 5 + ind : 15 + ind;
-			const qtyNum = numVal(r.qty);
+		leafRows().forEach((l) => {
 			out.push([
 				{
-					v: r.n,
-					t: "n",
-					s: 2
-				},
-				{
-					v: r.code,
+					v: l.code,
 					t: "s",
 					s: 2
 				},
 				{
-					v: r.level,
-					t: "n",
-					s: 2
-				},
-				{
-					v: r.name || "",
+					v: l.name || "",
 					t: "s",
-					s: nameStyle
+					s: 0
 				},
-				{
-					v: r.kind === "activity" ? r.unit || "" : "",
-					t: "s",
-					s: 2
-				},
-				r.kind === "activity" && r.qty !== "" && isFinite(qtyNum) ? {
-					v: qtyNum,
-					t: "n",
-					s: 3
-				} : null,
-				r.kind === "activity" && r.perf !== "" && isFinite(numVal(r.perf)) ? {
-					v: numVal(r.perf),
-					t: "n",
-					s: 3
-				} : null,
-				r.kind === "activity" ? {
-					v: Math.max(1, numVal(r.teams) || 1),
-					t: "n",
-					s: 2
-				} : null,
-				r.kind === "activity" && r.dur != null ? {
-					v: r.dur,
-					t: "n",
-					s: 2
-				} : null
+				null,
+				null,
+				null,
+				null,
+				null
 			]);
 		});
 		return out;
 	}
-	function excelInstructions() {
+	function templateInstructions() {
 		return [
-			["Cómo llevar esta tabla a MS Project", 25],
+			["Cómo completar esta plantilla", 25],
 			["", 0],
-			["RUTA A — Importar con jerarquía automática (recomendada)", 15],
-			["1. En MS Project: Archivo > Abrir > Examinar. En el tipo de archivo elige “Libro de Excel (*.xlsx)” y abre este archivo.", 4],
-			["2. En el Asistente para importación: Nueva asignación > Importar como proyecto nuevo > marca “Tareas” y “La importación incluye encabezados”.", 4],
-			["3. Elige la hoja “EDT y Actividades” y asigna los campos: Nombre → Nombre · Nivel de esquema → Nivel de esquema.", 4],
-			["   Muy recomendado: Duración (días) → Duración — las actividades entran ya con su duración calculada (Met ÷ (#Eq × R), redondeada al entero superior) y Project resume solo las fases.", 4],
-			["   Opcional: Unidad → Texto1 · Metrado → Número1 · Rendimiento → Número2 · N.º de equipos → Número3 · EDT → Texto2 (la columna N.º puedes omitirla).", 4],
-			["4. Finalizar. MS Project reconstruye toda la jerarquía usando el Nivel de esquema y el orden de las filas: el proyecto (nivel 1) queda como tarea resumen y bajo él las fases, paquetes y actividades.", 4],
-			["   Nota: la numeración EDT que genera Project coincidirá con la columna EDT de este libro porque el orden es el mismo.", 4],
+			["1. Cada fila es un paquete de trabajo de la EDT. Las columnas “Código EDT” y “Paquete de trabajo” son de referencia — no las edites ni las borres: son la clave con la que este simulador reconoce a qué paquete pertenece cada actividad al importar el archivo de vuelta.", 4],
+			["2. Completa “Nombre de la actividad”, “Unidad”, “Metrado”, “Rendimiento (R)” y “N.º de equipos” para cada actividad del paquete.", 4],
+			["3. ¿Más de una actividad por el mismo paquete? Copia la fila completa (Ctrl+D en Excel) y repite el mismo “Código EDT” en la copia, cambiando el nombre de la actividad.", 4],
+			["4. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
+			["5. Guarda el archivo y vuelve a “Definir las Actividades” > botón “⇧ Importar actividades desde Excel” para subirlo.", 4],
 			["", 0],
-			["RUTA B — Copiar y pegar", 15],
-			["1. Copia SOLO las celdas de la columna “Nombre” (sin el encabezado).", 4],
-			["2. En MS Project, haz clic en la primera celda de “Nombre de tarea” y pega (Ctrl+V).", 4],
-			["3. Importante: al pegar desde Excel las tareas entran en lista PLANA (Project solo conserva el esquema al pegar desde Word). Usa la columna “Nivel de esquema” como guía y aplica sangría con Alt+Mayús+→ (nivel 2 = una sangría bajo el proyecto, nivel 3 = dos, etc.).", 4],
-			["", 0],
-			["Después de importar", 15],
-			["• Si mapeaste “Duración (días)”, las actividades ya llegan con su duración calculada por rendimiento de cuadrillas; ajusta R y #Eq en el simulador si necesitas otra duración.", 4],
-			["• Vincula las actividades (predecesoras) para construir la red del cronograma y obtener la ruta crítica.", 4],
-			["• La Unidad y el Metrado (Texto1 / Número1 si los importaste) son la base para estimar duraciones y recursos de cada partida.", 4],
+			["La duración de cada actividad (Metrado ÷ (N.º de equipos × Rendimiento), redondeada al entero superior) se calcula sola al importar — no hace falta traerla en este archivo.", 4],
 			["", 0],
 			["Generado por el simulador GPI — módulo Definir las Actividades.", 4]
 		].map((row) => [{
@@ -977,58 +645,43 @@
 			s: row[1] === 25 ? 25 : row[1] === 15 ? 16 : 4
 		}]);
 	}
-	async function buildXlsxBlob() {
+	async function buildTemplateXlsxBlob() {
 		const zip = new window.JSZip();
 		zip.file("[Content_Types].xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>");
 		zip.file("_rels/.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>");
-		zip.file("xl/workbook.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"EDT y Actividades\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"Instrucciones\" sheetId=\"2\" r:id=\"rId2\"/></sheets></workbook>");
+		zip.file("xl/workbook.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"EDT\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"Instrucciones\" sheetId=\"2\" r:id=\"rId2\"/></sheets></workbook>");
 		zip.file("xl/_rels/workbook.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>");
 		zip.file("xl/styles.xml", xlsxStylesXml());
-		zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(excelRowModel(), [
-			6,
+		zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(templateRowModel(), [
 			10,
-			15,
-			58,
-			9,
+			30,
+			30,
+			10,
 			11,
 			14,
-			12,
-			13
+			12
 		], true));
-		zip.file("xl/worksheets/sheet2.xml", xlsxSheetXml(excelInstructions(), [115], false));
+		zip.file("xl/worksheets/sheet2.xml", xlsxSheetXml(templateInstructions(), [115], false));
 		return zip.generateAsync({
 			type: "blob",
 			mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 		});
 	}
-	function buildCsv() {
+	function buildTemplateCsv() {
 		function cell(v) {
 			const s = String(v == null ? "" : v);
 			return /[";\n]/.test(s) ? "\"" + s.replace(/"/g, "\"\"") + "\"" : s;
 		}
-		const lines = [[
-			"N.º",
-			"EDT",
-			"Nivel de esquema",
-			"Nombre",
-			"Unidad",
-			"Metrado",
-			"Rendimiento (R)",
-			"N.º de equipos",
-			"Duración (días)"
-		].join(";")];
-		fullRows().forEach((r) => {
-			const isAct = r.kind === "activity";
+		const lines = [TEMPLATE_HEADERS.join(";")];
+		leafRows().forEach((l) => {
 			lines.push([
-				r.n,
-				r.code,
-				r.level,
-				cell(r.name || ""),
-				isAct ? cell(r.unit || "") : "",
-				isAct ? isFinite(numVal(r.qty)) ? numVal(r.qty) : "" : "",
-				isAct ? isFinite(numVal(r.perf)) ? numVal(r.perf) : "" : "",
-				isAct ? Math.max(1, numVal(r.teams) || 1) : "",
-				isAct && r.dur != null ? r.dur : ""
+				cell(l.code),
+				cell(l.name || ""),
+				"",
+				"",
+				"",
+				"",
+				""
 			].join(";"));
 		});
 		return lines.join("\r\n");
@@ -1042,19 +695,198 @@
 		a.remove();
 		URL.revokeObjectURL(url);
 	}
-	async function exportExcel() {
-		if (!fullRows().length) {
-			await showAlert("No hay EDT cargada: construye la estructura en WBS Builder (o entra al modo ejemplo) antes de exportar.");
+	async function downloadTemplate() {
+		if (!leafRows().length) {
+			await showAlert("No hay EDT cargada: construye la estructura en WBS Builder (o entra al modo ejemplo) antes de descargar la plantilla.");
 			return;
 		}
 		const safe = (document.getElementById("projectTitle").value || "proyecto").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
 		if (window.JSZip) try {
-			downloadBlob(await buildXlsxBlob(), "actividades_msproject_" + safe + ".xlsx");
-			setStatus("Excel exportado. En MS Project: Archivo > Abrir > este libro (la hoja Instrucciones trae el paso a paso).");
+			downloadBlob(await buildTemplateXlsxBlob(), "plantilla_actividades_" + safe + ".xlsx");
+			setStatus("Plantilla descargada. Complétala en Excel o MS Project y vuelve a subirla con «⇧ Importar actividades».");
 			return;
-		} catch (e) {}
-		downloadBlob(new Blob(["﻿" + buildCsv()], { type: "text/csv;charset=utf-8" }), "actividades_msproject_" + safe + ".csv");
-		setStatus("No se pudo cargar la librería de Excel (¿sin conexión?): exporté un CSV equivalente (separado por «;») que MS Project también importa con el mismo mapa de campos.");
+		} catch (_) {}
+		downloadBlob(new Blob(["﻿" + buildTemplateCsv()], { type: "text/csv;charset=utf-8" }), "plantilla_actividades_" + safe + ".csv");
+		setStatus("No se pudo cargar la librería de Excel (¿sin conexión?): descargué un CSV equivalente.");
+	}
+	function colIndexFromRef(ref) {
+		const m = /^([A-Z]+)/.exec(ref);
+		if (!m) return 0;
+		let n = 0;
+		for (const ch of m[1]) n = n * 26 + (ch.charCodeAt(0) - 64);
+		return n - 1;
+	}
+	async function resolveFirstSheetPath(zip) {
+		const wbEntry = zip.file("xl/workbook.xml");
+		if (!wbEntry) return null;
+		const sheetEl = new DOMParser().parseFromString(await wbEntry.async("string"), "application/xml").getElementsByTagName("sheet")[0];
+		const rId = sheetEl ? sheetEl.getAttribute("r:id") : null;
+		const relsEntry = zip.file("xl/_rels/workbook.xml.rels");
+		if (!rId || !relsEntry) return null;
+		const relsDoc = new DOMParser().parseFromString(await relsEntry.async("string"), "application/xml");
+		const rel = Array.from(relsDoc.getElementsByTagName("Relationship")).find((r) => r.getAttribute("Id") === rId);
+		const target = rel ? rel.getAttribute("Target") || "" : "";
+		if (!target) return null;
+		return target.startsWith("/") ? target.slice(1) : "xl/" + target;
+	}
+	async function loadSharedStrings(zip) {
+		const entry = zip.file("xl/sharedStrings.xml");
+		if (!entry) return [];
+		const doc = new DOMParser().parseFromString(await entry.async("string"), "application/xml");
+		return Array.from(doc.getElementsByTagName("si")).map((si) => Array.from(si.getElementsByTagName("t")).map((t) => t.textContent || "").join(""));
+	}
+	function parseSheetRows(xmlText, sharedStrings) {
+		const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+		return Array.from(doc.getElementsByTagName("row")).map((rowEl) => {
+			const row = [];
+			Array.from(rowEl.getElementsByTagName("c")).forEach((c) => {
+				const idx = colIndexFromRef(c.getAttribute("r") || "");
+				const t = c.getAttribute("t");
+				let val;
+				if (t === "inlineStr") {
+					const isEl = c.getElementsByTagName("is")[0];
+					const tEl = isEl ? isEl.getElementsByTagName("t")[0] : null;
+					val = tEl ? tEl.textContent || "" : "";
+				} else {
+					const vEl = c.getElementsByTagName("v")[0];
+					const raw = vEl ? vEl.textContent || "" : "";
+					val = t === "s" ? sharedStrings[Number(raw)] || "" : raw;
+				}
+				row[idx] = val;
+			});
+			for (let i = 0; i < row.length; i++) if (row[i] == null) row[i] = "";
+			return row;
+		});
+	}
+	async function parseActivitiesXlsx(file) {
+		const buf = await file.arrayBuffer();
+		const zip = await window.JSZip.loadAsync(buf);
+		const sheetPath = await resolveFirstSheetPath(zip);
+		if (!sheetPath) return null;
+		const sheetEntry = zip.file(sheetPath);
+		if (!sheetEntry) return null;
+		const [sheetXml, sharedStrings] = await Promise.all([sheetEntry.async("string"), loadSharedStrings(zip)]);
+		const allRows = parseSheetRows(sheetXml, sharedStrings);
+		if (!allRows.length) return null;
+		return {
+			headers: allRows[0],
+			rows: allRows.slice(1)
+		};
+	}
+	var HEADER_KEYWORDS = [
+		{
+			field: "code",
+			keywords: ["codigo edt", "edt"]
+		},
+		{
+			field: "name",
+			keywords: ["nombre de la actividad", "actividad"]
+		},
+		{
+			field: "unit",
+			keywords: ["unidad"]
+		},
+		{
+			field: "qty",
+			keywords: ["metrado"]
+		},
+		{
+			field: "perf",
+			keywords: ["rendimiento"]
+		},
+		{
+			field: "teams",
+			keywords: ["equipos"]
+		}
+	];
+	function normalizeHeader(s) {
+		return String(s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+	}
+	function mapHeaderColumns(headerRow) {
+		const norm = headerRow.map(normalizeHeader);
+		const map = {};
+		HEADER_KEYWORDS.forEach(({ field, keywords }) => {
+			const idx = norm.findIndex((h) => keywords.some((kw) => h.indexOf(kw) !== -1));
+			if (idx !== -1) map[field] = idx;
+		});
+		if (map.code == null || map.name == null) return null;
+		return map;
+	}
+	function reconcileImportRows(rows, colMap) {
+		const codeToId = {};
+		leafRows().forEach((l) => {
+			codeToId[l.code] = l.id;
+		});
+		const byLeaf = {};
+		let n = 0, matched = 0;
+		const unmatched = /* @__PURE__ */ new Set();
+		rows.forEach((row) => {
+			const code = String(row[colMap.code] || "").trim();
+			const name = String(row[colMap.name] || "").trim();
+			if (!code || !name) return;
+			const leafId = codeToId[code];
+			if (!leafId) {
+				unmatched.add(code);
+				return;
+			}
+			const unit = colMap.unit != null ? String(row[colMap.unit] || "").trim() : "";
+			const qty = colMap.qty != null ? parseExcelNum(row[colMap.qty]) || "" : "";
+			const perf = colMap.perf != null ? parseExcelNum(row[colMap.perf]) || "" : "";
+			const teams = colMap.teams != null ? parseExcelNum(row[colMap.teams]) || "" : "";
+			if (!byLeaf[leafId]) byLeaf[leafId] = [];
+			byLeaf[leafId].push({
+				id: "a" + ++n,
+				name,
+				unit,
+				qty,
+				perf,
+				teams: teams || 1
+			});
+			matched++;
+		});
+		return {
+			byLeaf,
+			idCounter: n + 1,
+			matched,
+			unmatchedCodes: Array.from(unmatched)
+		};
+	}
+	async function importActivitiesExcel(file) {
+		let parsed;
+		try {
+			parsed = await parseActivitiesXlsx(file);
+		} catch (_) {
+			await showAlert("El archivo no parece ser un .xlsx válido (¿se guardó bien o se cambió la extensión?).");
+			return;
+		}
+		if (!parsed) {
+			await showAlert("El archivo no contiene datos reconocibles.");
+			return;
+		}
+		const colMap = mapHeaderColumns(parsed.headers);
+		if (!colMap) {
+			await showAlert("No reconocí las columnas del archivo. Se esperan al menos «Código EDT» y «Nombre de la actividad» — no renombres esas columnas de la plantilla.");
+			return;
+		}
+		const result = reconcileImportRows(parsed.rows, colMap);
+		if (!result.matched) {
+			await showAlert("No se encontró ninguna fila válida para importar: revisa que los códigos EDT del archivo coincidan con la EDT actual y que la columna de nombre de actividad esté completa.");
+			return;
+		}
+		const s = stats();
+		let msg = "Se reemplazarán las " + (s.total + s.orphans) + " actividades de la lista actual por " + result.matched + " actividad(es) importada(s) del archivo" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT no se toca.";
+		if (result.unmatchedCodes.length) msg += " " + result.unmatchedCodes.length + " fila(s) no se importaron por no coincidir con ningún código EDT actual: " + result.unmatchedCodes.slice(0, 8).join(", ") + (result.unmatchedCodes.length > 8 ? "…" : "") + ".";
+		if (!await showConfirm(msg, "Importar actividades desde Excel")) return;
+		if (mode === "sample") stateSample = {
+			byLeaf: result.byLeaf,
+			idCounter: result.idCounter
+		};
+		else stateLive = {
+			byLeaf: result.byLeaf,
+			idCounter: result.idCounter
+		};
+		onDirty(true);
+		setStatus(result.matched + " actividad(es) importada(s) desde Excel" + (result.unmatchedCodes.length ? " · " + result.unmatchedCodes.length + " fila(s) no reconciliada(s)" : "") + ".");
 	}
 	function wireToolbar() {
 		document.getElementById("btnExportJson").addEventListener("click", exportJson);
@@ -1072,7 +904,15 @@
 			setStatus("EDT recargada desde el proyecto activo.");
 		});
 		document.getElementById("btnCopyTable").addEventListener("click", copyWholeTable);
-		document.getElementById("btnExcel").addEventListener("click", exportExcel);
+		document.getElementById("btnDownloadTemplate").addEventListener("click", downloadTemplate);
+		document.getElementById("btnImportExcel").addEventListener("click", () => {
+			document.getElementById("xlsxFileInput").click();
+		});
+		document.getElementById("xlsxFileInput").addEventListener("change", (e) => {
+			const files = e.target.files;
+			if (files && files[0]) importActivitiesExcel(files[0]);
+			e.target.value = "";
+		});
 		document.getElementById("btnReport").addEventListener("click", buildReport);
 		document.getElementById("btnPrint").addEventListener("click", () => {
 			window.print();
@@ -1112,7 +952,6 @@
 		if (initialized) return;
 		initialized = true;
 		wireToolbar();
-		wireTableDelegation();
 		if (typeof window.GPI !== "undefined" && window.GPI.available()) {
 			const proj = window.GPI.active();
 			if (proj) {
