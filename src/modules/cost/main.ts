@@ -170,7 +170,7 @@ function renderCO(): void {
       <td><span class="pill ${r.fund === "Contingencia" ? "ok" : "warn"}">${esc(r.fund)}</span></td>
       <td><select class="mono" style="padding:5px 8px" data-i="${i}" onchange="coStatus(this)">
         ${["Pendiente", "Aprobada", "Rechazada"].map((s) => `<option ${s === r.status ? "selected" : ""}>${s}</option>`).join("")}</select></td>
-      <td><button class="btn ghost sm" onclick="delCO(${i})">✕</button></td>`;
+      <td><button class="btn ghost sm" onclick="delCO(${i})" title="Eliminar orden de cambio" aria-label="Eliminar orden de cambio">✕</button></td>`;
     tb.appendChild(tr);
   });
   // totales

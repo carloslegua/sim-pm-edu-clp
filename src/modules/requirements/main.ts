@@ -373,8 +373,8 @@ function renderMatrix(): void {
       + '<td><span class="ver-dot ' + esc(it.verificationStatus) + '"></span>' + esc(lab(METHODS, it.verificationMethod) || "—") + '</td>'
       + '<td><span class="st ' + esc(it.status) + '">' + esc(lab(STATUS, it.status)) + '</span></td>'
       + '<td>' + originBadge(it) + '</td>'
-      + '<td><div class="mini-actions"><button class="icon-btn" title="Editar" onclick="openItemEditor(\'' + it.id + '\')">✎</button>'
-      + '<button class="icon-btn danger" title="Eliminar" onclick="removeItem(\'' + it.id + '\')">🗑</button></div></td>'
+      + '<td><div class="mini-actions"><button class="icon-btn" title="Editar" aria-label="Editar requisito" onclick="openItemEditor(\'' + it.id + '\')">✎</button>'
+      + '<button class="icon-btn danger" title="Eliminar" aria-label="Eliminar requisito" onclick="removeItem(\'' + it.id + '\')">🗑</button></div></td>'
       + '</tr>';
   });
   h += '</tbody></table></div></div>';
@@ -657,8 +657,8 @@ function renderMods(): void {
         + '<div class="meta">' + repDate(m.date) + (m.requestedBy ? (' · solicita: ' + esc(m.requestedBy)) : "") + (m.approver ? (' · aprueba: ' + esc(m.approver)) : "") + '</div></div>'
         + '<div class="mini-actions">'
         + '<button class="btn sm ' + (isActive ? 'primary' : '') + '" onclick="setActiveMod(\'' + m.id + '\')">' + (isActive ? '✓ Activa' : 'Activar') + '</button>'
-        + '<button class="icon-btn" title="Editar" onclick="openModEditor(\'' + m.id + '\')">✎</button>'
-        + '<button class="icon-btn danger" title="Eliminar" onclick="removeMod(\'' + m.id + '\')">🗑</button>'
+        + '<button class="icon-btn" title="Editar" aria-label="Editar modificación" onclick="openModEditor(\'' + m.id + '\')">✎</button>'
+        + '<button class="icon-btn danger" title="Eliminar" aria-label="Eliminar modificación" onclick="removeMod(\'' + m.id + '\')">🗑</button>'
         + '</div></div>'
         + (m.summary ? '<div style="font-size:12.5px;margin-top:8px"><b>' + esc(m.summary) + '</b></div>' : '')
         + (m.justification ? '<div class="muted" style="font-size:12px;margin-top:3px">' + esc(m.justification) + '</div>' : '')

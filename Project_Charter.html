@@ -11,7 +11,7 @@
   :root{
     --bg-0:#eef4f9; --bg-1:#ffffff; --bg-2:#f3f8fc;
     --panel:#ffffff; --panel-border:#e0e8f0;
-    --ink-0:#1a2027; --ink-1:#4d5768; --ink-2:#8992a3;
+    --ink-0:#1a2027; --ink-1:#4d5768; --ink-2:#5b6472;
     --cyan:#00b6ec; --cyan-dark:#0090c2; --cyan-dim:rgba(0,182,236,0.13);
     --black:#1a1a1c;
     --ch-a:#00c2a8; --ch-b:#00967f; --ch-c:#3a86ff; --ch-d:#6c5ce7;
@@ -165,7 +165,7 @@
   #gpiReport .rep-note{color:#4d5768; font-size:10px; margin:2px 0 8px;}
   #gpiReport .rep-sign{display:grid; grid-template-columns:1fr 1fr; gap:40px; margin-top:46px;}
   #gpiReport .rep-sign .box{border-top:1.5px solid #1a2027; padding-top:6px; font-size:10.5px; text-align:center; color:#1a2027;}
-  #gpiReport .rep-sign .box .r{color:#8992a3; font-size:9.5px;}
+  #gpiReport .rep-sign .box .r{color:#5b6472; font-size:9.5px;}
   @page{margin:15mm 13mm;}
 
   /* MODAL: contenedor común en gpi-shared.css; aquí solo el ancho propio */
@@ -183,10 +183,10 @@
         <h1>Acta de Constitución</h1>
         <span class="tag">EDU</span>
       </div>
-      <input id="projectTitle" class="project-title-input" value="Proyecto sin título" />
+      <input id="projectTitle" class="project-title-input" value="Proyecto sin título" aria-label="Nombre del proyecto" />
     </div>
   </div>
-  <input id="courseTitle" class="course-title-input" value="Gestión de Proyectos de Ingeniería" />
+  <input id="courseTitle" class="course-title-input" value="Gestión de Proyectos de Ingeniería" aria-label="Curso" />
 </header>
 
 <div class="toolbar">

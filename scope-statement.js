@@ -194,7 +194,7 @@
 			const brokenReq = d.reqIds.filter((id) => !reqById[id]).length;
 			if (!ranChips && !reqChips) reqChips = "<span class=\"chip none\">sin trazar</span>";
 			const dec = decomposed[d.id];
-			return "<tr><td><span class=\"code-badge\">" + esc(d.code) + "</span></td><td><div class=\"del-name\">" + esc(d.name || "(sin nombre)") + "</div>" + (d.description ? "<div class=\"del-desc\">" + esc(d.description) + "</div>" : "") + (d.acceptanceCriteria ? "<div class=\"del-desc\"><b>Aceptación:</b> " + esc(d.acceptanceCriteria) + "</div>" : "<div class=\"del-desc\" style=\"color:var(--warn)\">Sin criterio de aceptación</div>") + "</td><td>" + ranChips + reqChips + (brokenReq ? " <span class=\"chip req\" style=\"background:rgba(255,84,112,.15);color:#c0304a\">" + brokenReq + " rota(s)</span>" : "") + "</td><td>" + (dec ? "<span class=\"flag ok\">✓ en la EDT</span>" : "<span class=\"flag no\">pendiente EDT</span>") + "</td><td><div class=\"row-actions\"><button class=\"btn sm\" data-edit=\"" + i + "\">✎</button><button class=\"btn sm danger\" data-del=\"" + i + "\">🗑</button></div></td></tr>";
+			return "<tr><td><span class=\"code-badge\">" + esc(d.code) + "</span></td><td><div class=\"del-name\">" + esc(d.name || "(sin nombre)") + "</div>" + (d.description ? "<div class=\"del-desc\">" + esc(d.description) + "</div>" : "") + (d.acceptanceCriteria ? "<div class=\"del-desc\"><b>Aceptación:</b> " + esc(d.acceptanceCriteria) + "</div>" : "<div class=\"del-desc\" style=\"color:var(--warn)\">Sin criterio de aceptación</div>") + "</td><td>" + ranChips + reqChips + (brokenReq ? " <span class=\"chip req\" style=\"background:rgba(255,84,112,.15);color:#c0304a\">" + brokenReq + " rota(s)</span>" : "") + "</td><td>" + (dec ? "<span class=\"flag ok\">✓ en la EDT</span>" : "<span class=\"flag no\">pendiente EDT</span>") + "</td><td><div class=\"row-actions\"><button class=\"btn sm\" data-edit=\"" + i + "\" title=\"Editar\" aria-label=\"Editar entregable\">✎</button><button class=\"btn sm danger\" data-del=\"" + i + "\" title=\"Eliminar\" aria-label=\"Eliminar entregable\">🗑</button></div></td></tr>";
 		}).join("") + "</tbody></table>";
 		host.querySelectorAll("[data-edit]").forEach((b) => {
 			b.onclick = () => {
@@ -320,7 +320,7 @@
 			const host = $(k + "Host"), arr = state[k];
 			if (!arr.length) host.innerHTML = "<div class=\"empty-note\">Sin elementos.</div>";
 			else host.innerHTML = arr.map((it, i) => {
-				return "<div class=\"list-item\"><textarea data-k=\"" + k + "\" data-i=\"" + i + "\">" + esc(it.text) + "</textarea><button class=\"btn sm danger del-x\" data-rm=\"" + k + "\" data-ri=\"" + i + "\">🗑</button></div>";
+				return "<div class=\"list-item\"><textarea data-k=\"" + k + "\" data-i=\"" + i + "\">" + esc(it.text) + "</textarea><button class=\"btn sm danger del-x\" data-rm=\"" + k + "\" data-ri=\"" + i + "\" title=\"Eliminar elemento\" aria-label=\"Eliminar elemento\">🗑</button></div>";
 			}).join("");
 		});
 		document.querySelectorAll("#view-sre textarea[data-k]").forEach((t) => {

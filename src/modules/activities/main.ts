@@ -246,7 +246,7 @@ function renderTable(): void {
         + (r.dur == null
           ? '<td class="dur-cell empty" title="Falta el metrado o el rendimiento para calcular la duración">—</td>'
           : '<td class="dur-cell" title="Dur = ' + esc(r.qty) + ' ÷ (' + esc(String(Math.max(1, numVal(r.teams) || 1))) + ' × ' + esc(r.perf) + '), redondeada al entero superior">' + r.dur + '</td>')
-        + '<td style="text-align:center"><button class="act-del" tabindex="-1" data-del-leaf="' + esc(r.leafId) + '" data-i="' + r.actIndex + '" title="Eliminar actividad">🗑</button></td>'
+        + '<td style="text-align:center"><button class="act-del" tabindex="-1" data-del-leaf="' + esc(r.leafId) + '" data-i="' + r.actIndex + '" title="Eliminar actividad" aria-label="Eliminar actividad">🗑</button></td>'
         + '</tr>';
     }
   });

@@ -313,7 +313,7 @@ function renderEditableTable<T extends Record<string, any>>(container: HTMLEleme
           html += '<td><input data-idx="' + idx + '" data-key="' + c.key + '" type="' + (c.type || "text") + '" value="' + esc(val) + '" placeholder="' + esc(c.placeholder || "") + '"' + (c.list ? ' list="' + c.list + '"' : '') + '></td>';
         }
       });
-      html += '<td class="rt-del"><button class="btn sm danger" data-del="' + idx + '" title="Eliminar fila">🗑</button></td></tr>';
+      html += '<td class="rt-del"><button class="btn sm danger" data-del="' + idx + '" title="Eliminar fila" aria-label="Eliminar fila">🗑</button></td></tr>';
     });
     html += '</tbody></table></div><button class="btn sm add-row-btn" data-add="1">' + esc(opts!.addLabel || "+ Agregar fila") + '</button>';
     container.innerHTML = html;
@@ -342,7 +342,7 @@ function renderSimpleList(container: HTMLElement, arr: string[], opts?: SimpleLi
     let html = '<div class="simple-list">';
     if (!arr.length) html += '<div style="color:var(--ink-2); font-size:12px; padding:2px 0 6px;">Sin elementos todavía.</div>';
     arr.forEach((v, idx) => {
-      html += '<div class="sl-row"><input data-idx="' + idx + '" type="text" value="' + esc(v) + '" placeholder="' + esc(opts!.placeholder || "") + '"><button class="btn sm danger" data-del="' + idx + '">🗑</button></div>';
+      html += '<div class="sl-row"><input data-idx="' + idx + '" type="text" value="' + esc(v) + '" placeholder="' + esc(opts!.placeholder || "") + '"><button class="btn sm danger" data-del="' + idx + '" title="Eliminar elemento" aria-label="Eliminar elemento">🗑</button></div>';
     });
     html += '</div><button class="btn sm add-row-btn" data-add="1">' + esc(opts!.addLabel || "+ Agregar") + '</button>';
     container.innerHTML = html;
@@ -515,7 +515,7 @@ function renderWorkingTimes(): void {
       + '<div class="tc"><input type="time" data-wt="' + idx + '" data-k="from" value="' + esc(p.from || "") + '"></div>'
       + '<div class="tc"><span class="dash">→</span></div>'
       + '<div class="tc"><input type="time" data-wt="' + idx + '" data-k="to" value="' + esc(p.to || "") + '"></div>'
-      + '<div class="tc"><button class="row-del" data-wtdel="' + idx + '" title="Quitar período">✕</button></div>';
+      + '<div class="tc"><button class="row-del" data-wtdel="' + idx + '" title="Quitar período" aria-label="Quitar período">✕</button></div>';
   });
   box.innerHTML = html;
 
@@ -566,7 +566,7 @@ function renderThresholds(): void {
       ? '<span class="thr-name">' + esc(t.metric) + '</span>' + (unit ? '<span class="thr-unit">' + esc(unit) + '</span>' : '') + '<span class="thr-fixed-flag">Fijo</span>'
       : '<input class="band-val" style="max-width:280px" data-thr="' + idx + '" data-k="metric" type="text" value="' + esc(t.metric) + '" placeholder="Nombre de la métrica">'
         + '<input class="band-val" style="max-width:64px" data-thr="' + idx + '" data-k="unit" type="text" value="' + esc(unit) + '" placeholder="Unid." title="Unidad (p. ej. %)">'
-        + '<button class="btn sm danger thr-del" data-thrdel="' + idx + '">🗑</button>';
+        + '<button class="btn sm danger thr-del" data-thrdel="' + idx + '" title="Eliminar umbral" aria-label="Eliminar umbral">🗑</button>';
     return '<div class="thr-block' + (t.fixed ? ' fixed' : '') + '">'
       + '<div class="thr-head">' + nameCell + '</div>'
       + '<div class="thr-bands">'

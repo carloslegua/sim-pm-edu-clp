@@ -23,6 +23,28 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
   entre módulos abiertos como documentos distintos (limitación real del
   navegador, no de la app; ver CLAUDE.md).
 
+### Accessibility
+
+Primera tanda de una auditoría de accesibilidad (quedan pendientes: ARIA
+en los modales personalizados y el trap de foco, y hacer navegable por
+teclado el modelo de prominencia de `Stakeholder_Studio.html`):
+
+- Contraste de texto: `--ink-2` (etiquetas de campo, pistas, texto de
+  ayuda — el tono gris-azulado más reutilizado del design system) pasa
+  de `#8992a3` (~3.1:1 contra blanco, bajo el mínimo WCAG AA de 4.5:1)
+  a `#5b6472` (~6:1) en los 11 HTML que lo declaran. Incluye dos usos
+  adicionales del mismo color encontrados al verificar (el texto de la
+  casilla de firma del reporte imprimible en 6 módulos, y `--i-color`
+  del badge "I" de RACI_Matrix.html, que tenía texto blanco encima con
+  el mismo problema de contraste).
+- `aria-label` en 21 botones que solo mostraban un emoji (🗑 ✎ ✕) sin
+  texto visible, en 7 módulos — antes, un lector de pantalla anunciaba
+  el glifo Unicode en vez de la acción ("Eliminar fila", "Editar
+  objetivo", etc.).
+- `aria-label` en los 22 inputs de cabecera (`#projectTitle`,
+  `#courseTitle`) de los 11 módulos que los tienen sin `<label>` — antes
+  un lector de pantalla los anunciaba como campo de texto sin nombre.
+
 ### Security
 
 - SRI (`integrity`/`crossorigin`) en el `<script>` de JSZip cargado por

@@ -206,7 +206,7 @@
 				"Aprobada",
 				"Rechazada"
 			].map((s) => `<option ${s === r.status ? "selected" : ""}>${s}</option>`).join("")}</select></td>
-      <td><button class="btn ghost sm" onclick="delCO(${i})">✕</button></td>`;
+      <td><button class="btn ghost sm" onclick="delCO(${i})" title="Eliminar orden de cambio" aria-label="Eliminar orden de cambio">✕</button></td>`;
 			tb.appendChild(tr);
 		});
 		let apr = 0, cCont = 0, cMgmt = 0;

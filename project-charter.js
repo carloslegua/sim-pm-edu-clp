@@ -645,7 +645,7 @@
 		const tb = document.querySelector("#tblObjectives tbody");
 		tb.innerHTML = state.objectives.map((o, i) => {
 			const opts = OBJ_DIMS.map((d) => "<option value=\"" + d + "\" " + (o.dim === d ? "selected" : "") + ">" + d + "</option>").join("");
-			return "<tr><td><select data-obj=\"" + i + "\" data-f=\"dim\">" + opts + "</select></td><td><textarea data-obj=\"" + i + "\" data-f=\"objective\" placeholder=\"Objetivo medible…\">" + esc(o.objective) + "</textarea></td><td><textarea data-obj=\"" + i + "\" data-f=\"criteria\" placeholder=\"Cómo se declara el éxito…\">" + esc(o.criteria) + "</textarea></td><td class=\"rt-del\"><button data-del-obj=\"" + i + "\" title=\"Eliminar\">🗑</button></td></tr>";
+			return "<tr><td><select data-obj=\"" + i + "\" data-f=\"dim\">" + opts + "</select></td><td><textarea data-obj=\"" + i + "\" data-f=\"objective\" placeholder=\"Objetivo medible…\">" + esc(o.objective) + "</textarea></td><td><textarea data-obj=\"" + i + "\" data-f=\"criteria\" placeholder=\"Cómo se declara el éxito…\">" + esc(o.criteria) + "</textarea></td><td class=\"rt-del\"><button data-del-obj=\"" + i + "\" title=\"Eliminar\" aria-label=\"Eliminar objetivo\">🗑</button></td></tr>";
 		}).join("");
 		tb.querySelectorAll("[data-obj]").forEach((el) => {
 			el.addEventListener("input", () => {
@@ -664,7 +664,7 @@
 	function renderMilestones() {
 		const tb = document.querySelector("#tblMilestones tbody");
 		tb.innerHTML = state.milestones.map((m, i) => {
-			return "<tr><td><input data-mil=\"" + i + "\" data-f=\"name\" value=\"" + esc(m.name) + "\" placeholder=\"Nombre del hito\"></td><td><input type=\"date\" data-mil=\"" + i + "\" data-f=\"date\" value=\"" + esc(m.date) + "\"></td><td class=\"rt-del\"><button data-del-mil=\"" + i + "\" title=\"Eliminar\">🗑</button></td></tr>";
+			return "<tr><td><input data-mil=\"" + i + "\" data-f=\"name\" value=\"" + esc(m.name) + "\" placeholder=\"Nombre del hito\"></td><td><input type=\"date\" data-mil=\"" + i + "\" data-f=\"date\" value=\"" + esc(m.date) + "\"></td><td class=\"rt-del\"><button data-del-mil=\"" + i + "\" title=\"Eliminar\" aria-label=\"Eliminar hito\">🗑</button></td></tr>";
 		}).join("");
 		tb.querySelectorAll("[data-mil]").forEach((el) => {
 			el.addEventListener("input", () => {
@@ -683,7 +683,7 @@
 	function renderStakeTable() {
 		const tb = document.querySelector("#tblStakeholders tbody");
 		tb.innerHTML = state.stakeholders.map((s, i) => {
-			return "<tr><td><input data-st=\"" + i + "\" data-f=\"name\" value=\"" + esc(s.name) + "\" placeholder=\"Nombre / grupo\"></td><td><input data-st=\"" + i + "\" data-f=\"role\" value=\"" + esc(s.role) + "\" placeholder=\"Rol en el proyecto\"></td><td><textarea data-st=\"" + i + "\" data-f=\"expectation\" placeholder=\"Qué espera del proyecto…\">" + esc(s.expectation) + "</textarea></td><td class=\"rt-del\"><button data-del-st=\"" + i + "\" title=\"Eliminar\">🗑</button></td></tr>";
+			return "<tr><td><input data-st=\"" + i + "\" data-f=\"name\" value=\"" + esc(s.name) + "\" placeholder=\"Nombre / grupo\"></td><td><input data-st=\"" + i + "\" data-f=\"role\" value=\"" + esc(s.role) + "\" placeholder=\"Rol en el proyecto\"></td><td><textarea data-st=\"" + i + "\" data-f=\"expectation\" placeholder=\"Qué espera del proyecto…\">" + esc(s.expectation) + "</textarea></td><td class=\"rt-del\"><button data-del-st=\"" + i + "\" title=\"Eliminar\" aria-label=\"Eliminar interesado\">🗑</button></td></tr>";
 		}).join("");
 		tb.querySelectorAll("[data-st]").forEach((el) => {
 			el.addEventListener("input", () => {
@@ -703,7 +703,7 @@
 		const tb = document.querySelector("#tblApprovalReq tbody");
 		if (!tb) return;
 		tb.innerHTML = state.approvalRequirements.map((r, i) => {
-			return "<tr><td><input data-ar=\"" + i + "\" data-f=\"item\" value=\"" + esc(r.item) + "\" placeholder=\"Entregable, fase o decisión\"></td><td><input data-ar=\"" + i + "\" data-f=\"approver\" value=\"" + esc(r.approver) + "\" placeholder=\"Rol / comité que aprueba\"></td><td><textarea data-ar=\"" + i + "\" data-f=\"criteria\" placeholder=\"Cómo se evidencia la aprobación…\">" + esc(r.criteria) + "</textarea></td><td class=\"rt-del\"><button data-del-ar=\"" + i + "\" title=\"Eliminar\">🗑</button></td></tr>";
+			return "<tr><td><input data-ar=\"" + i + "\" data-f=\"item\" value=\"" + esc(r.item) + "\" placeholder=\"Entregable, fase o decisión\"></td><td><input data-ar=\"" + i + "\" data-f=\"approver\" value=\"" + esc(r.approver) + "\" placeholder=\"Rol / comité que aprueba\"></td><td><textarea data-ar=\"" + i + "\" data-f=\"criteria\" placeholder=\"Cómo se evidencia la aprobación…\">" + esc(r.criteria) + "</textarea></td><td class=\"rt-del\"><button data-del-ar=\"" + i + "\" title=\"Eliminar\" aria-label=\"Eliminar requisito de aprobación\">🗑</button></td></tr>";
 		}).join("");
 		tb.querySelectorAll("[data-ar]").forEach((el) => {
 			el.addEventListener("input", () => {
@@ -723,7 +723,7 @@
 		const tb = document.querySelector("#tblSponsors tbody");
 		if (!tb) return;
 		tb.innerHTML = state.sponsors.map((s, i) => {
-			return "<tr><td><input data-sp=\"" + i + "\" data-f=\"name\" value=\"" + esc(s.name) + "\" placeholder=\"Nombre y apellido\"></td><td><input data-sp=\"" + i + "\" data-f=\"role\" value=\"" + esc(s.role) + "\" placeholder=\"Ej.: Patrocinador ejecutivo\"></td><td class=\"rt-del\"><button data-del-sp=\"" + i + "\" title=\"Eliminar\">🗑</button></td></tr>";
+			return "<tr><td><input data-sp=\"" + i + "\" data-f=\"name\" value=\"" + esc(s.name) + "\" placeholder=\"Nombre y apellido\"></td><td><input data-sp=\"" + i + "\" data-f=\"role\" value=\"" + esc(s.role) + "\" placeholder=\"Ej.: Patrocinador ejecutivo\"></td><td class=\"rt-del\"><button data-del-sp=\"" + i + "\" title=\"Eliminar\" aria-label=\"Eliminar patrocinador\">🗑</button></td></tr>";
 		}).join("");
 		tb.querySelectorAll("[data-sp]").forEach((el) => {
 			el.addEventListener("input", () => {
@@ -751,7 +751,7 @@
 	function renderList(key) {
 		const host = document.getElementById(LISTS[key]);
 		host.innerHTML = state[key].map((txt, i) => {
-			return "<div class=\"sl-row\"><input data-list=\"" + key + "\" data-i=\"" + i + "\" value=\"" + esc(txt) + "\"><button class=\"row-del\" data-del-list=\"" + key + "\" data-i=\"" + i + "\" title=\"Eliminar\">🗑</button></div>";
+			return "<div class=\"sl-row\"><input data-list=\"" + key + "\" data-i=\"" + i + "\" value=\"" + esc(txt) + "\"><button class=\"row-del\" data-del-list=\"" + key + "\" data-i=\"" + i + "\" title=\"Eliminar\" aria-label=\"Eliminar elemento\">🗑</button></div>";
 		}).join("") || "<div style=\"font-size:12px;color:var(--ink-2);padding:2px 0;\">Sin elementos aún.</div>";
 		host.querySelectorAll("[data-list]").forEach((el) => {
 			el.addEventListener("input", () => {
@@ -776,7 +776,7 @@
 		if (!host) return;
 		state.requirements = migrateRequirements(state.requirements);
 		host.innerHTML = state.requirements.map((r, i) => {
-			return "<div class=\"sl-row\"><span class=\"ran-code\" title=\"Requisito de alto nivel — código de enlace\">" + esc(r.code) + "</span><input data-req-i=\"" + i + "\" value=\"" + esc(r.text) + "\" placeholder=\"Condición o capacidad que el resultado debe satisfacer…\"><button class=\"row-del\" data-del-req=\"" + i + "\" title=\"Eliminar\">🗑</button></div>";
+			return "<div class=\"sl-row\"><span class=\"ran-code\" title=\"Requisito de alto nivel — código de enlace\">" + esc(r.code) + "</span><input data-req-i=\"" + i + "\" value=\"" + esc(r.text) + "\" placeholder=\"Condición o capacidad que el resultado debe satisfacer…\"><button class=\"row-del\" data-del-req=\"" + i + "\" title=\"Eliminar\" aria-label=\"Eliminar requisito\">🗑</button></div>";
 		}).join("") || "<div style=\"font-size:12px;color:var(--ink-2);padding:2px 0;\">Sin requisitos aún.</div>";
 		host.querySelectorAll("[data-req-i]").forEach((el) => {
 			el.addEventListener("input", () => {
