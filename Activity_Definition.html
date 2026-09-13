@@ -196,8 +196,14 @@
 </style>
 <link rel="stylesheet" href="gpi-shared.css">
 <script src="gpi-core.js"></script>
-<!-- JSZip: generación de .xlsx en el navegador (si no carga, se exporta CSV equivalente) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<!-- JSZip: generación de .xlsx en el navegador (si no carga, se exporta CSV equivalente).
+     integrity: hash SRI oficial de cdnjs para esta versión exacta -- si el CDN
+     sirviera contenido distinto (comprometido o corrupto), el navegador
+     rechaza el script en vez de ejecutarlo, y la app cae al CSV de todas
+     formas (mismo camino que "JSZip no cargó"). -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+        integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
 
