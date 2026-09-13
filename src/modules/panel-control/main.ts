@@ -30,8 +30,14 @@
    liga una constante de módulo no-nula una sola vez.
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
+import type { ProjectModules } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
+// MODULES.key es un string suelto (incluye claves de MODULOS_EXTRA que el
+// profesorado puede inventar y que ProjectModules no puede conocer de
+// antemano); este alias documenta exactamente qué se está afirmando al
+// pasarlo a GPI.getModule, en vez de silenciar el chequeo con `any`.
+type ModuleKey = keyof ProjectModules;
 declare global { interface Window { GPI?: GpiApi; } }
 const GPI: GpiApi = window.GPI as GpiApi;
 
@@ -292,67 +298,71 @@ function renderMeta(): void {
 }
 
 interface StatChip { v: string | number; l: string; }
+// Nota de tipado: las funciones GPI.util.* de abajo ya aceptan
+// `T | null | undefined` y hacen internamente el mismo `|| {}` que antes
+// se repetía en cada sitio de llamada -- por eso se les pasa el resultado
+// de GPI.getModule(...) directo, sin ningún `|| ({} as any)` de por medio.
 function statChips(key: string): StatChip[] | null {
   if (key === "charter") {
     const ch = GPI.getModule("charter");
-    const a = GPI.util.charterAudit(ch || ({} as any));
-    const milC = ((ch && (ch as any).milestones) || []).filter((m: any) => m && (m.name || "").trim()).length;
+    const a = GPI.util.charterAudit(ch);
+    const milC = (ch?.milestones || []).filter((m) => m && (m.name || "").trim()).length;
     return [{ v: a.pct + "%", l: "completitud del acta" }, { v: milC, l: "hitos declarados" }];
   }
   if (key === "stakeholders") {
-    const mod = GPI.getModule("stakeholders") as any;
-    const arr = (mod && mod.stakeholders) || [];
-    const close = arr.filter((s: any) => (s.power >= 50) && (s.interest >= 50)).length;
+    const mod = GPI.getModule("stakeholders");
+    const arr = mod?.stakeholders || [];
+    const close = arr.filter((s) => (s.power ?? 0) >= 50 && (s.interest ?? 0) >= 50).length;
     return [{ v: arr.length, l: "interesados" }, { v: close, l: "gestionar de cerca" }];
   }
   if (key === "requirements") {
     const rq = GPI.getModule("requirements");
-    const ra = GPI.util.requirementsAudit(rq || ({} as any), GPI.getModule("charter") || ({} as any), GPI.getModule("wbs") || ({} as any));
+    const ra = GPI.util.requirementsAudit(rq, GPI.getModule("charter"), GPI.getModule("wbs"));
     const ver = ra.baselineFrozen ? ("LB " + (ra.baselineVersion || "1.0")) : "sin LB";
     return [{ v: ra.total, l: "requisitos (REQ)" }, { v: ra.tracePct + "%", l: "trazados a la EDT · " + ver }];
   }
   if (key === "scopeStatement") {
     const sc = GPI.getModule("scopeStatement");
-    const sa = GPI.util.scopeAudit(sc || ({} as any), GPI.getModule("requirements") || ({} as any), GPI.getModule("charter") || ({} as any), GPI.getModule("wbs") || ({} as any));
+    const sa = GPI.util.scopeAudit(sc, GPI.getModule("requirements"), GPI.getModule("charter"), GPI.getModule("wbs"));
     const lbS = sa.baselineFrozen ? ("LB v" + (sa.baselineVersion || "1.0")) : "sin LB";
     return [{ v: sa.total, l: "entregables (DEL)" }, { v: sa.decompPct + "%", l: "descompuestos en EDT · " + lbS }];
   }
   if (key === "wbs") {
-    const w = GPI.getModule("wbs"); const r = GPI.util.wbsRollup(w || ({} as any));
-    return [{ v: r.leafCount, l: "paquetes (hojas)" }, { v: money(r.cost, (GPI.meta() || ({} as any)).currency).replace(/^\S+\s/, ''), l: "costo hoja" }];
+    const w = GPI.getModule("wbs"); const r = GPI.util.wbsRollup(w);
+    return [{ v: r.leafCount, l: "paquetes (hojas)" }, { v: money(r.cost, GPI.meta()?.currency).replace(/^\S+\s/, ''), l: "costo hoja" }];
   }
   if (key === "activities") {
     const act = GPI.getModule("activities");
-    const as = GPI.util.activitiesStats(act || ({} as any), GPI.getModule("wbs") || ({} as any));
+    const as = GPI.util.activitiesStats(act, GPI.getModule("wbs"));
     return [{ v: as.total, l: "actividades" }, { v: as.covered + "/" + as.leaves, l: "paquetes cubiertos" }];
   }
   if (key === "pert") {
     const pertMod = GPI.getModule("pert");
-    const ps = GPI.util.pertStats(pertMod || ({} as any), GPI.getModule("activities") || ({} as any), GPI.getModule("wbs") || ({} as any));
+    const ps = GPI.util.pertStats(pertMod, GPI.getModule("activities"), GPI.getModule("wbs"));
     return [{ v: ps.complete + "/" + ps.total, l: "ternas O-M-P" }, { v: ps.invalid, l: "ternas inválidas" }];
   }
   if (key === "obs") {
-    const o = GPI.getModule("obs"); const roles = GPI.util.obsNodes(o || ({} as any));
+    const o = GPI.getModule("obs"); const roles = GPI.util.obsNodes(o);
     const covered = roles.filter((n) => (n.person || "").trim()).length;
     return [{ v: roles.length, l: "puestos" }, { v: covered, l: "con persona" }];
   }
   if (key === "raci") {
     const raci = GPI.getModule("raci"); const wbs = GPI.getModule("wbs");
-    const cov = GPI.util.raciCoverage(raci || ({} as any), wbs || ({} as any));
+    const cov = GPI.util.raciCoverage(raci, wbs);
     return [{ v: cov.withR + "/" + cov.total, l: "paquetes con R" }, { v: cov.withoutA.length, l: "sin aprobador" }];
   }
   if (key === "schedulePlan") {
     const sp = GPI.getModule("schedulePlan");
-    const audit = GPI.util.schedulePlanAudit(sp || ({} as any));
-    const milCount = ((sp && (sp as any).milestones) || []).length;
+    const audit = GPI.util.schedulePlanAudit(sp);
+    const milCount = (sp?.milestones || []).length;
     return [{ v: audit.pct + "%", l: "completitud del plan" }, { v: milCount, l: "hitos definidos" }];
   }
   if (key === "cost") {
     const cm = GPI.getModule("cost");
-    const cs = GPI.util.costSummary(cm || ({} as any));
-    const cur = (GPI.meta() || ({} as any)).currency;
+    const cs = GPI.util.costSummary(cm);
+    const cur = GPI.meta()?.currency;
     const bacTxt = cs.bac ? money(cs.bac, cur).replace(/^\S+\s/, '') : "—";
-    return [{ v: bacTxt, l: "BAC (" + (CUR[cur] || "$").replace(/\s.*/, '') + ")" }, { v: cs.changeOrders, l: "órdenes de cambio" }];
+    return [{ v: bacTxt, l: "BAC (" + (CUR[cur || ""] || "$").replace(/\s.*/, '') + ")" }, { v: cs.changeOrders, l: "órdenes de cambio" }];
   }
   return null;
 }
@@ -362,7 +372,7 @@ function moduleCard(mod: ModuleDef): string {
   const open = isDelivered(mod);         // además está entregado al alumno
   const locked = built && !open;         // construido pero aún no entregado
   const stats = open ? statChips(mod.key) : null;
-  const hasData = open && !!GPI.getModule(mod.key as any);
+  const hasData = open && !!GPI.getModule(mod.key as ModuleKey);
   const pill = !built ? '<span class="pill soon">próximamente</span>'
     : locked ? '<span class="pill locked">no entregado aún</span>'
       : (hasData ? '<span class="pill on">con datos</span>' : '<span class="pill off">vacío</span>');
@@ -419,33 +429,33 @@ function renderLauncher(): void {
 }
 
 function renderDashboard(): void {
-  const meta: any = GPI.meta() || {};
-  const sh: any[] = ((GPI.getModule("stakeholders") as any) || {}).stakeholders || [];
+  const meta = GPI.meta();
+  const sh = GPI.getModule("stakeholders")?.stakeholders || [];
   const wbs = GPI.getModule("wbs");
-  const roll = GPI.util.wbsRollup(wbs || ({} as any));
+  const roll = GPI.util.wbsRollup(wbs);
   const cards: string[] = [];
 
   // KPIs
   cards.push('<div class="dash-card"><h4>Resumen</h4>'
     + kpi(sh.length, "", "interesados registrados")
     + kpi(roll.leafCount, "", "paquetes de trabajo (hojas de la EDT)")
-    + kpi(money(roll.cost, meta.currency), "", "costo estimado (suma de hojas)")
+    + kpi(money(roll.cost, meta?.currency), "", "costo estimado (suma de hojas)")
     + '</div>');
 
   // CAPEX vs WBS
-  const capex = Number(meta.capex) || 0;
+  const capex = Number(meta?.capex) || 0;
   const pct = capex > 0 ? Math.min(100, Math.round(roll.cost / capex * 100)) : 0;
   const capBody = capex > 0
     ? '<div class="kpi"><span class="v">' + pct + '%</span><span class="l">del CAPEX presupuestado está desglosado en el WBS</span></div>'
     + '<div class="bar-track" style="margin:4px 0 10px"><div class="bar-fill" style="width:' + pct + '%;background:' + (pct > 100 ? 'var(--danger)' : 'var(--cyan)') + '"></div></div>'
-    + '<div class="empty">CAPEX meta: <b>' + money(capex, meta.currency) + '</b> · WBS: <b>' + money(roll.cost, meta.currency) + '</b></div>'
+    + '<div class="empty">CAPEX meta: <b>' + money(capex, meta?.currency) + '</b> · WBS: <b>' + money(roll.cost, meta?.currency) + '</b></div>'
     : '<div class="empty">Define el CAPEX en los datos comunes para comparar contra el costo desglosado en el WBS.</div>';
   cards.push('<div class="dash-card"><h4>Presupuesto vs. WBS</h4>' + capBody + '</div>');
 
   // Recopilar Requisitos: cobertura RAN→REQ y trazabilidad REQ→EDT
   const reqMod = GPI.getModule("requirements");
   const chMod = GPI.getModule("charter");
-  const ra = GPI.util.requirementsAudit(reqMod || ({} as any), chMod || ({} as any), wbs || ({} as any));
+  const ra = GPI.util.requirementsAudit(reqMod, chMod, wbs);
   if (ra.total > 0 || ra.rans > 0) {
     const rColor = ra.state === "verde" ? "var(--good)" : (ra.state === "ambar" ? "var(--warn)" : "var(--danger)");
     const lbTxt = ra.baselineFrozen ? ('línea base <b>v' + esc(ra.baselineVersion || "1.0") + '</b> congelada' + (ra.changes ? ' · <b>' + ra.changes + '</b> modificación(es) de alcance' : '')) : 'línea base <b>aún no congelada</b>';
@@ -467,7 +477,7 @@ function renderDashboard(): void {
 
   // Enunciado del Alcance: coherencia Requisitos ↔ Entregables ↔ EDT
   const scMod = GPI.getModule("scopeStatement");
-  const sca = GPI.util.scopeAudit(scMod || ({} as any), reqMod || ({} as any), chMod || ({} as any), wbs || ({} as any));
+  const sca = GPI.util.scopeAudit(scMod, reqMod, chMod, wbs);
   if (sca.total > 0 || sca.reqTotal > 0) {
     const sColor = sca.state === "verde" ? "var(--good)" : (sca.state === "ambar" ? "var(--warn)" : "var(--danger)");
     const lbS = sca.baselineFrozen ? ('línea base <b>v' + esc(sca.baselineVersion || "1.0") + '</b> congelada') : 'línea base <b>aún no congelada</b>';
@@ -491,7 +501,7 @@ function renderDashboard(): void {
   // Definir las Actividades: cobertura de paquetes de trabajo con actividades
   const actMod = GPI.getModule("activities");
   if (roll.leafCount > 0) {
-    const as = GPI.util.activitiesStats(actMod || ({} as any), wbs || ({} as any));
+    const as = GPI.util.activitiesStats(actMod, wbs);
     const actColor = as.pct >= 100 ? "var(--good)" : (as.pct >= 50 ? "var(--warn)" : "var(--danger)");
     let actBody = '<div class="kpi"><span class="v" style="color:' + actColor + '">' + as.pct + '%</span><span class="l">de los paquetes de trabajo ya tienen actividades definidas (' + as.covered + '/' + as.leaves + ') · <b>' + as.total + '</b> actividades en total</span></div>'
       + '<div class="bar-track" style="margin:4px 0 10px"><div class="bar-fill" style="width:' + as.pct + '%;background:' + actColor + '"></div></div>';
@@ -507,7 +517,7 @@ function renderDashboard(): void {
     // Análisis PERT: cobertura de ternas y comparación TE vs Dur base
     const pertMod = GPI.getModule("pert");
     if (pertMod || as.total > 0) {
-      const ps = GPI.util.pertStats(pertMod || ({} as any), actMod || ({} as any), wbs || ({} as any));
+      const ps = GPI.util.pertStats(pertMod, actMod, wbs);
       if (ps.total > 0) {
         const pePct = ps.pct;
         const peColor = ps.invalid ? "var(--danger)" : (pePct >= 100 ? "var(--good)" : (pePct >= 50 ? "var(--warn)" : "var(--ink-2)"));
@@ -528,7 +538,10 @@ function renderDashboard(): void {
 
   // Stakeholders by category
   if (sh.length) {
-    const byCat: Record<string, number> = {}; sh.forEach((s) => { byCat[s.category] = (byCat[s.category] || 0) + 1; });
+    // String(...) preserva el comportamiento original: en JS, indexar con
+    // `s.category` undefined ya usaba la clave "undefined" (coerción
+    // implícita a string); esto es lo mismo pero explícito y sin `any`.
+    const byCat: Record<string, number> = {}; sh.forEach((s) => { const cat = String(s.category); byCat[cat] = (byCat[cat] || 0) + 1; });
     const max = Math.max.apply(null, Object.keys(byCat).map((k) => byCat[k]));
     const rows = Object.keys(byCat).map((k) => {
       return '<div class="bar-row"><span class="nm">' + esc(k) + '</span><span class="bar-track"><span class="bar-fill" style="width:' + Math.round(byCat[k] / max * 100) + '%;background:' + (CAT_COLORS[k] || '#8992a3') + '"></span></span><span class="n">' + byCat[k] + '</span></div>';
@@ -540,7 +553,7 @@ function renderDashboard(): void {
 
   // OBS: organigrama por tipo de rol
   const obs = GPI.getModule("obs");
-  const roles = GPI.util.obsNodes(obs || ({} as any));
+  const roles = GPI.util.obsNodes(obs);
   if (roles.length) {
     const byType: Record<string, number> = {}; roles.forEach((r) => { byType[r.type] = (byType[r.type] || 0) + 1; });
     const maxT = Math.max.apply(null, Object.keys(byType).map((k) => byType[k]));
@@ -554,9 +567,9 @@ function renderDashboard(): void {
 
   // Cross-check: responsables del WBS deben provenir de la Matriz RACI (no de interesados)
   const raci = GPI.getModule("raci");
-  const leaves = GPI.util.wbsLeaves(wbs || ({} as any));
+  const leaves = GPI.util.wbsLeaves(wbs);
   if (leaves.length) {
-    const cov = GPI.util.raciCoverage(raci || ({} as any), wbs || ({} as any));
+    const cov = GPI.util.raciCoverage(raci, wbs);
     let body: string;
     if (!raci || !raci.assignments || Object.keys(raci.assignments).length === 0) {
       body = '<div class="empty">Completa la Matriz RACI para asignar el Responsable ("R") de cada paquete de trabajo. Esa asignación es la que alimenta el campo "Responsable" del WBS — ya no la lista de interesados.</div>';
@@ -574,7 +587,7 @@ function renderDashboard(): void {
   }
 
   // Acta de Constitución: índice de completitud (checklist PMBOK)
-  const ch: any = GPI.getModule("charter");
+  const ch = GPI.getModule("charter");
   if (ch) {
     const chAudit = GPI.util.charterAudit(ch);
     const chColor = ({ verde: "var(--good)", ambar: "var(--warn)", rojo: "var(--danger)" } as Record<string, string>)[chAudit.state] || "var(--ink-2)";
@@ -588,10 +601,15 @@ function renderDashboard(): void {
     } else {
       chBody += '<div class="ok-note">✓ Los ' + chAudit.total + ' elementos del acta están cubiertos. Emite el reporte para la firma.</div>';
     }
-    // Coherencia: el CAPEX de los datos comunes debe coincidir con el presupuesto autorizado en el acta
-    const chBud = Number((ch.budget || {}).amount) || 0;
+    // Coherencia: el CAPEX de los datos comunes debe coincidir con el presupuesto autorizado en el acta.
+    // ch.budget es Record<string, unknown> en el tipo del núcleo (CharterModule
+    // lo deja genérico a propósito); Project_Charter.html sí conoce su forma
+    // real ({amount, currency}), así que se castea solo este par de campos en
+    // vez de todo `ch`.
+    const chBudget = ch.budget as { amount?: unknown; currency?: string } | undefined;
+    const chBud = Number(chBudget?.amount) || 0;
     if (chBud > 0 && capex > 0 && chBud !== capex) {
-      chBody += '<div class="empty" style="margin-top:8px">⚠ El presupuesto del acta (' + money(chBud, (ch.budget || {}).currency || meta.currency) + ') difiere del CAPEX de los datos comunes (' + money(capex, meta.currency) + '). Sincroniza desde el Acta de Constitución.</div>';
+      chBody += '<div class="empty" style="margin-top:8px">⚠ El presupuesto del acta (' + money(chBud, chBudget?.currency || meta?.currency) + ') difiere del CAPEX de los datos comunes (' + money(capex, meta?.currency) + '). Sincroniza desde el Acta de Constitución.</div>';
     }
     cards.push('<div class="dash-card"><h4>Acta de Constitución</h4>' + chBody + '</div>');
   } else {
@@ -619,7 +637,7 @@ function renderDashboard(): void {
   }
 
   // Cronograma / CPM: duración del proyecto, ruta crítica y enlaces
-  const sch: any = GPI.getModule("schedule");
+  const sch = GPI.getModule("schedule");
   if (sch && (sch.links || []).length) {
     const ss = GPI.util.scheduleStats();
     let scBody: string;
@@ -772,15 +790,15 @@ GPI.onChange(() => { render(); }); // sincronía entre pestañas
 function reportShell(docTitle: string, moduleName: string, bodyHtml: string): void {
   let el = document.getElementById("gpiReport");
   if (!el) { el = document.createElement("div"); el.id = "gpiReport"; document.body.appendChild(el); }
-  const meta: any = GPI.meta() || {};
+  const meta = GPI.meta();
   const today = new Date().toLocaleDateString("es-PE", { year: "numeric", month: "long", day: "numeric" });
   el.innerHTML =
     '<div class="rep-head"><div><h1>' + esc(docTitle) + '</h1>'
-    + '<div class="sub">' + esc(meta.name || "Proyecto") + (meta.code ? ' · ' + esc(meta.code) : '') + '</div>'
-    + '<div class="sub" style="font-weight:500">' + esc(meta.course || "Gestión de Proyectos de Ingeniería") + '</div></div>'
+    + '<div class="sub">' + esc(meta?.name || "Proyecto") + (meta?.code ? ' · ' + esc(meta.code) : '') + '</div>'
+    + '<div class="sub" style="font-weight:500">' + esc(meta?.course || "Gestión de Proyectos de Ingeniería") + '</div></div>'
     + '<div class="rep-meta">' + esc(moduleName) + '<br>Emitido: ' + esc(today)
-    + (meta.client ? '<br>Cliente: ' + esc(meta.client) : '')
-    + (meta.location ? '<br>' + esc(meta.location) : '') + '</div></div>'
+    + (meta?.client ? '<br>Cliente: ' + esc(meta.client) : '')
+    + (meta?.location ? '<br>' + esc(meta.location) : '') + '</div></div>'
     + bodyHtml;
   document.body.classList.add("report-mode");
   function repDone() { document.body.classList.remove("report-mode"); window.removeEventListener("afterprint", repDone); }
@@ -790,7 +808,7 @@ function reportShell(docTitle: string, moduleName: string, bodyHtml: string): vo
 function repDate(s: string): string { if (!s) return "—"; const p = String(s).split("-"); return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : s; }
 
 function buildReport(): void {
-  const meta: any = GPI.meta();
+  const meta = GPI.meta();
   if (!meta) { toast("No hay un proyecto activo para reportar"); return; }
   let body = "";
 
@@ -805,17 +823,17 @@ function buildReport(): void {
     + '<tr><td>Descripción</td><td>' + esc(meta.description || "—") + '</td></tr></table>';
 
   // Indicadores integrados (mismas fuentes que el tablero del Panel)
-  const stk: any = GPI.getModule("stakeholders"), wbs = GPI.getModule("wbs"), raci = GPI.getModule("raci");
+  const stk = GPI.getModule("stakeholders"), wbs = GPI.getModule("wbs"), raci = GPI.getModule("raci");
   const charter = GPI.getModule("charter"), plan = GPI.getModule("schedulePlan");
-  const roll = GPI.util.wbsRollup(wbs || ({} as any));
-  const cov = GPI.util.raciCoverage(raci || ({} as any), wbs || ({} as any));
-  const actStats = GPI.util.activitiesStats(GPI.getModule("activities") || ({} as any), wbs || ({} as any));
-  const chA = GPI.util.charterAudit(charter || ({} as any));
-  const spA = GPI.util.schedulePlanAudit(plan || ({} as any));
+  const roll = GPI.util.wbsRollup(wbs);
+  const cov = GPI.util.raciCoverage(raci, wbs);
+  const actStats = GPI.util.activitiesStats(GPI.getModule("activities"), wbs);
+  const chA = GPI.util.charterAudit(charter);
+  const spA = GPI.util.schedulePlanAudit(plan);
   const capex = Number(meta.capex) || 0;
   const capexPct = capex > 0 ? Math.round(roll.cost / capex * 100) : null;
   body += '<h2>2. Indicadores integrados</h2><table class="rep-kv">'
-    + '<tr><td>Interesados registrados</td><td>' + ((stk && stk.stakeholders || []).length) + '</td></tr>'
+    + '<tr><td>Interesados registrados</td><td>' + ((stk?.stakeholders || []).length) + '</td></tr>'
     + '<tr><td>Paquetes de trabajo (EDT)</td><td>' + roll.leafCount + ' hojas · ' + roll.count + ' elementos</td></tr>'
     + '<tr><td>Actividades definidas</td><td>' + actStats.total + ' · cobertura de paquetes: ' + actStats.covered + '/' + actStats.leaves + ' (' + actStats.pct + '%)</td></tr>'
     + '<tr><td>Costo desglosado (rollup EDT)</td><td>' + money(roll.cost, meta.currency) + (capexPct != null ? ' — <b>' + capexPct + '%</b> del CAPEX autorizado' : '') + '</td></tr>'
@@ -829,7 +847,7 @@ function buildReport(): void {
     + MODULES.map((mod) => {
       if (!mod.file) return '<tr><td>' + esc(mod.name) + '</td><td>Próximamente</td><td class="rep-note">Módulo en desarrollo</td></tr>';
       if (!isDelivered(mod)) return '<tr><td>' + esc(mod.name) + '</td><td>No entregado</td><td class="rep-note">Se habilitará más adelante en el curso</td></tr>';
-      const has = !!GPI.getModule(mod.key as any);
+      const has = !!GPI.getModule(mod.key as ModuleKey);
       const stats = has ? statChips(mod.key) : null;
       const statTxt = stats ? stats.map((s) => "<b>" + esc(String(s.v)) + "</b> " + esc(s.l)).join(" · ") : "—";
       return '<tr><td>' + esc(mod.name) + '</td><td>' + (has ? "Con datos" : "Vacío") + '</td><td>' + statTxt + '</td></tr>';
