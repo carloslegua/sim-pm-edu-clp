@@ -1402,7 +1402,8 @@ var GPI = (function(exports) {
 			}
 			const netId = parseInt(s.slice(a, i), 10);
 			ws();
-			let type = "FS", b = i, buf = "";
+			let type = "FS", buf = "";
+			const b = i;
 			while (i < n && LET.test(s.charAt(i)) && buf.length < 2) {
 				buf += s.charAt(i);
 				i++;
@@ -1614,7 +1615,7 @@ var GPI = (function(exports) {
 			outdeg[l.from]++;
 			indeg[l.to]++;
 		});
-		let q = [];
+		const q = [];
 		const order = [];
 		const deg = {};
 		ids.forEach((id) => {
@@ -1738,7 +1739,7 @@ var GPI = (function(exports) {
 			indeg[l.to]++;
 			outdeg[l.from]++;
 		});
-		let q = [];
+		const q = [];
 		const order = [];
 		const deg = {};
 		ids.forEach((id) => {

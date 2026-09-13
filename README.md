@@ -436,6 +436,8 @@ src/shared/styles/shared.css  → gpi-shared.css       (npm run build:shared)
 | `npm run build:<clave>` | recompila un módulo tras editar su `main.ts` |
 | `npm run build:all` | reconstruye los 15 artefactos y falla si alguno queda distinto del último commit — corre esto (no solo el `build:<clave>` puntual) antes de comitear, para no publicar un `.js` desactualizado en silencio |
 | `npm run typecheck` | `tsc --noEmit` sobre todo el proyecto |
+| `npm run lint` / `lint:fix` | ESLint sobre `src/`, `configs/`, `tests/` (falla en errores; `any` explícito queda en "warn", ver CLAUDE.md) |
+| `npm run format` / `format:check` | Prettier — configurado pero **no aplicado retroactivamente** al código existente (ver nota abajo) |
 | `npm test` | suite de Vitest (unidad + humo sobre los HTML reales) |
 | `npm run verify:deploy` | audita que el despliegue siga intacto (ver abajo) |
 
@@ -460,11 +462,21 @@ absoluta). Conviene ejecutarlo antes de publicar.
 
 ### Integración continua
 
-`.github/workflows/ci.yml` corre `typecheck` + `test` + `build:all` +
+`.github/workflows/ci.yml` corre `typecheck` + `lint` + `test` + `build:all` +
 `verify:deploy` en cada push y cada pull request a `master`. Un PR con la
-insignia en rojo significa que rompió alguna de las cuatro reglas de arriba
-antes de que llegue a nadie más — no hace falta correrlos a mano para
-confiar en que `master` sigue sano.
+insignia en rojo significa que rompió alguna de las reglas de arriba antes
+de que llegue a nadie más — no hace falta correrlos a mano para confiar en
+que `master` sigue sano.
+
+### Nota sobre Prettier y el estilo del código
+
+El estilo actual (funciones e `if`/`try` condensados en una sola línea) es
+deliberado: así se portó mecánicamente el JS original y así se pudo
+comparar línea por línea contra el baseline pre-migración. `npm run format`
+existe y está configurado, pero no se corrió sobre el código existente —
+un `prettier --write` de prueba sobre un solo archivo reescribía miles de
+líneas. Úsalo para código nuevo; reformatear todo el repo es una decisión
+aparte que debe confirmarse explícitamente, no algo a hacer de pasada.
 
 ## Licencia
 

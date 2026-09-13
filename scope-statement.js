@@ -189,7 +189,7 @@
 			return;
 		}
 		host.innerHTML = "<table class=\"del\"><thead><tr><th>Código</th><th>Entregable · criterio de aceptación</th><th>Trazabilidad (RAN · REQ)</th><th>EDT</th><th></th></tr></thead><tbody>" + state.deliverables.map((d, i) => {
-			let ranChips = d.ranIds.filter((id) => ranById[id]).map((id) => "<span class=\"chip ran\">" + esc(ranById[id].code) + "</span>").join("");
+			const ranChips = d.ranIds.filter((id) => ranById[id]).map((id) => "<span class=\"chip ran\">" + esc(ranById[id].code) + "</span>").join("");
 			let reqChips = d.reqIds.filter((id) => reqById[id]).map((id) => "<span class=\"chip req\">" + esc(reqById[id].code) + "</span>").join("");
 			const brokenReq = d.reqIds.filter((id) => !reqById[id]).length;
 			if (!ranChips && !reqChips) reqChips = "<span class=\"chip none\">sin trazar</span>";

@@ -417,7 +417,7 @@ function renderLauncher(): void {
   (document.getElementById("launchGrid") as HTMLElement).innerHTML = html;
 
   document.querySelectorAll<HTMLElement>("#launchGrid [data-import]").forEach((b) => {
-    b.addEventListener("click", () => { importToolInto(b.dataset.import as string); });
+    b.addEventListener("click", () => { importToolInto(); });
   });
   document.querySelectorAll<HTMLElement>("#launchGrid [data-clear]").forEach((b) => {
     b.addEventListener("click", () => {
@@ -698,9 +698,7 @@ function renderInteg(): void {
 }
 
 // ---------- import helpers ----------
-let pendingModuleKey: string | null = null;
-function importToolInto(key: string): void {
-  pendingModuleKey = key;
+function importToolInto(): void {
   const fi = document.getElementById("fileProject") as HTMLInputElement & { _mode?: string };
   fi.value = ""; fi._mode = "module"; fi.click();
 }

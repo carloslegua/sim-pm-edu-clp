@@ -46,12 +46,25 @@ npm install              # una vez
 npm run build:<clave>    # recompila un módulo tras editar su main.ts
 npm run build:all        # reconstruye TODO y falla si algo quedó desfasado
 npm run typecheck        # tsc --noEmit
+npm run lint             # ESLint (falla en errores; @typescript-eslint/no-explicit-any queda en "warn")
+npm run lint:fix         # ESLint con --fix para lo autocorregible
 npm test                 # Vitest (unidad + humo sobre los HTML reales)
 npm run verify:deploy    # audita IIFE / rutas / gpi-core.js presente
 ```
 
-`.github/workflows/ci.yml` corre los últimos cuatro en cada push/PR a
-`master`.
+`.github/workflows/ci.yml` corre typecheck + lint + test + build:all +
+verify:deploy en cada push/PR a `master`.
+
+`npm run format` / `npm run format:check` (Prettier) también existen,
+pero **no están wireados a CI ni se corrieron sobre el código existente**:
+el estilo actual —funciones y `if`/`try` condensados en una sola línea—
+es deliberado (facilita comparar línea por línea contra el baseline
+pre-migración y refleja el JS original). Un `prettier --write .` de
+prueba sobre un solo archivo (`gpi-core.ts`) reescribía ~2000 de sus
+~1650 líneas; se decidió con el usuario dejar Prettier disponible para
+código nuevo, sin reformatear en bloque lo existente. Si en el futuro se
+decide reformatear todo, es una decisión aparte (y grande) a confirmar
+explícitamente, no algo a hacer de pasada.
 
 ## Mapa: dónde vive cada cosa
 
@@ -123,6 +136,34 @@ tests/smoke/<clave>.smoke.test.ts → cada HTML real, servido por HTTP local
   `esc()` local): así siguen funcionando aunque `gpi-core.js` no cargue.
   No es una inconsistencia a "corregir" — es la decisión documentada en
   `MIGRATION.md` (Fase 3).
+- **typescript-eslint rechaza correr sobre TypeScript ≥7** (`throw`
+  incondicional en su propio código, no un simple warning de
+  peerDependency). Por eso `package.json` fija `typescript` en `^6.0.3`
+  en vez de la serie 7 nativa que trajo el bootstrap inicial del repo —
+  no es un downgrade accidental, es lo que exige el linter hoy. Si
+  typescript-eslint libera soporte para TS 7 (rastrear
+  https://github.com/typescript-eslint/typescript-eslint/issues/10940),
+  vale la pena reevaluar volver a la serie 7 nativa.
+- `eslint.config.mjs` usa extensión `.mjs`, no `.js`: `scripts/verify-deploy.mjs`
+  trata cualquier `*.js` en la raíz del repo como un artefacto IIFE
+  compilado, y un archivo de config con `import`/`export` a nivel
+  superior lo haría fallar en falso.
+- `eslint.config.mjs` relaja a propósito tres reglas del set
+  "recommended" frente a convenciones ya establecidas del port, en vez
+  de forzar un cambio de código en decenas de sitios:
+  1. `no-unused-vars` con `caughtErrors: "none"` — `catch (e) { }` /
+     `catch (err) { }` sin usar el error aparece en los 13 módulos para
+     descartar fallos silenciosos de APIs (localStorage en iframes,
+     clipboard, FileReader).
+  2. `no-unused-expressions` con `allowShortCircuit: true` — el idioma
+     `condicion() || fallback();` como sentencia suelta (mover foco a la
+     siguiente celda o hacer `blur()` si `moveTo()` falla) aparece en
+     varios módulos.
+  3. `no-irregular-whitespace` con `skipRegExps: true` — los parsers
+     "a la Excel" (`cost`, `activities`, `pert`, `cronograma-cpm`) usan
+     `/[\s ]/` a propósito: el espacio literal dentro de la clase de
+     caracteres es un NBSP real (separador de miles que a veces pega
+     Excel), no un error de tipeo.
 
 ## Filosofía al tocar un módulo existente
 

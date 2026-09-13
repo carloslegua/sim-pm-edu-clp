@@ -17,8 +17,8 @@
    ============================================================ */
 import type {
   GpiDb, GpiProject, ProjectMeta, ProjectModules,
-  WbsModule, WbsNode, ObsModule, ObsNode, RaciModule,
-  StakeholdersModule, ActivitiesModule, ActivityItem, PertModule, PertEntry,
+  WbsModule, ObsModule, ObsNode, RaciModule,
+  ActivitiesModule, ActivityItem, PertModule,
   ScheduleModule, ScheduleLink, ScheduleLinkType, ScheduleLagUnit,
   RequirementsModule, RequirementItem, ScopeStatementModule, ScopeDeliverable,
   CharterModule, CharterRequirement, CostModule,
@@ -1236,7 +1236,7 @@ export function parsePredecessorCell(cell: unknown): ParsePredecessorResult {
     }
     const netId = parseInt(s.slice(a, i), 10);
     // 2) tipo (hasta 2 letras) — opcional
-    ws(); let type: ScheduleLinkType = "FS", b = i, buf = "";
+    ws(); let type: ScheduleLinkType = "FS", buf = ""; const b = i;
     while (i < n && LET.test(s.charAt(i)) && buf.length < 2) { buf += s.charAt(i); i++; }
     if (buf && TYPE[buf.toUpperCase()]) type = TYPE[buf.toUpperCase()];
     else i = b; // no era un tipo válido: retroceder
@@ -1361,7 +1361,7 @@ export function scheduleValidate(activityIds?: string[] | null, links?: Schedule
     adj[l.from].push(l.to); outdeg[l.from]++; indeg[l.to]++;
   });
   // Kahn
-  let q: string[] = []; const order: string[] = []; const deg: Record<string, number> = {};
+  const q: string[] = []; const order: string[] = []; const deg: Record<string, number> = {};
   ids.forEach((id) => { deg[id] = indeg[id]; if (indeg[id] === 0) q.push(id); });
   while (q.length) {
     const u = q.shift() as string; order.push(u);
@@ -1447,7 +1447,7 @@ export function cpm(nodes?: CpmNode[] | null, links?: ScheduleLink[] | null, cal
     out[l.from].push(l); inc[l.to].push(l); indeg[l.to]++; outdeg[l.from]++;
   });
   // orden topológico (Kahn)
-  let q: string[] = []; const order: string[] = []; const deg: Record<string, number> = {};
+  const q: string[] = []; const order: string[] = []; const deg: Record<string, number> = {};
   ids.forEach((id) => { deg[id] = indeg[id]; if (!indeg[id]) q.push(id); });
   while (q.length) { const u = q.shift() as string; order.push(u); out[u].forEach((l) => { if (--deg[l.to] === 0) q.push(l.to); }); }
   if (order.length !== ids.length) {

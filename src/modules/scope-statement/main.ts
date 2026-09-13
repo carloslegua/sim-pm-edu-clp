@@ -13,7 +13,7 @@
    DELIBERADAMENTE NO se usa GPI.ui.esc (modo suelto sin gpi-core.js).
    ============================================================ */
 import type * as GpiCore from "../../core/gpi-core";
-import type { GpiProject, ProjectMeta, ProjectModules, RequirementItem, ScopeStatementModule, WbsModule } from "../../core/types";
+import type { GpiProject, ProjectMeta, ProjectModules, RequirementItem, ScopeStatementModule } from "../../core/types";
 
 type ModuleKey = keyof ProjectModules;
 
@@ -21,8 +21,6 @@ type GpiApi = typeof GpiCore.GPI;
 declare global {
   interface Window { GPI?: GpiApi; }
 }
-
-const CUR: Record<string, string> = { USD: "USD $", PEN: "S/", EUR: "€" };
 
 /* ---------- estado ---------- */
 interface DeliverableUi { id: string; code: string; name: string; description: string; acceptanceCriteria: string; ranIds: string[]; reqIds: string[]; }
@@ -143,7 +141,7 @@ function renderDeliverables(): void {
     return;
   }
   const rows = state.deliverables.map((d, i) => {
-    let ranChips = d.ranIds.filter((id) => ranById[id]).map((id) => '<span class="chip ran">' + esc(ranById[id].code) + '</span>').join("");
+    const ranChips = d.ranIds.filter((id) => ranById[id]).map((id) => '<span class="chip ran">' + esc(ranById[id].code) + '</span>').join("");
     let reqChips = d.reqIds.filter((id) => reqById[id]).map((id) => '<span class="chip req">' + esc(reqById[id].code) + '</span>').join("");
     const brokenReq = d.reqIds.filter((id) => !reqById[id]).length;
     if (!ranChips && !reqChips) reqChips = '<span class="chip none">sin trazar</span>';

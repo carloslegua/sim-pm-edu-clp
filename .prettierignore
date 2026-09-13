@@ -1,0 +1,14 @@
+# Artefactos compilados (IIFE) en la raíz: generados por `npm run
+# build:<clave>`, nunca se editan/formatean a mano (CLAUDE.md, regla #2).
+*.js
+*.css
+!src/shared/styles/shared.css
+
+# Los 13 HTML son el "puerto mecánico" original: fuera de alcance de un
+# reformateo (ver CLAUDE.md, "port mecánico, no refactor").
+*.html
+
+node_modules/
+.build-tmp/
+.vite/
+package-lock.json

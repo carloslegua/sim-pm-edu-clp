@@ -18,7 +18,6 @@ import type { CharterModule, RequirementItem, RequirementsModule, Stakeholder, W
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
-  // eslint-disable-next-line no-var
   var GPI: GpiApi | undefined;
 }
 
@@ -59,8 +58,6 @@ interface ReqState {
 
 let state: ReqState = { baseline: { frozen: false, version: "1.0", date: "", approver: "", snapshot: [] }, items: [], changes: [], activeChangeId: null, idCounter: 1, changeCounter: 1 };
 let userEdited = false;
-let editingId: string | null = null;      // REQ en edición en el modal
-let editingModId: string | null = null;   // MOD en edición
 
 function $(id: string): HTMLElement { return document.getElementById(id) as HTMLElement; }
 function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)); }
@@ -438,7 +435,6 @@ function openItemEditor(id: string | null): void {
     });
     return;
   }
-  editingId = id;
   const it = id ? state.items.filter((x) => x.id === id)[0] : null;
   const cur: ReqUi = it || ({ text: "", type: "funcional", priority: "should", sourceRanIds: [], stakeholderId: "", wbsNodeIds: [], acceptanceCriteria: "", verificationMethod: "", verificationStatus: "pendiente", status: "propuesto", normativeBasis: "" } as unknown as ReqUi);
   const ranSet: Record<string, boolean> = {}; (cur.sourceRanIds || []).forEach((r) => { ranSet[r] = true; });
@@ -480,7 +476,7 @@ function openItemEditor(id: string | null): void {
 
   openFormModal({ title: id ? ("Editar " + esc((it as ReqUi).code)) : "Nuevo requisito", msg: subt, bodyHTML: body, okText: id ? "Guardar cambios" : "Agregar requisito", wide: true })
     .then((ok) => {
-      if (!ok) { editingId = null; return; }
+      if (!ok) { return; }
       const text = ($("e_text") as HTMLTextAreaElement).value.trim();
       if (!text) { clearOvBody(); ovAlert("Falta el requisito", "Escribe el texto del requisito antes de guardar."); return; }
       const picked: { ran: string[]; wbs: string[] } = { ran: [], wbs: [] };
@@ -500,7 +496,7 @@ function openItemEditor(id: string | null): void {
         ni.changeId = state.baseline.frozen ? state.activeChangeId : null;
         state.items.push(ni);
       }
-      clearOvBody(); editingId = null; touch();
+      clearOvBody(); touch();
       showToast(id ? "Requisito actualizado." : "Requisito agregado.");
     });
 }
@@ -698,7 +694,6 @@ function removeMod(id: string): void {
   });
 }
 function openModEditor(id: string | null): void {
-  editingModId = id;
   const m = id ? modById(id) : null;
   const cur: ModUi = m || ({ date: todayISO(), requestedBy: "", approver: "", status: "propuesto", summary: "", justification: "", impact: { scope: "", schedule: "", cost: "", wbs: "" }, ccrRef: "" } as unknown as ModUi);
   const body = ''
@@ -721,14 +716,14 @@ function openModEditor(id: string | null): void {
     + '<label class="f"><span>Aprueba</span><input id="m_appr" value="' + esc(cur.approver) + '" placeholder="CCB / patrocinador"></label>';
   openFormModal({ title: id ? ("Editar " + esc((m as ModUi).code)) : "Nueva modificación de alcance", msg: "Se numerará " + (id ? esc((m as ModUi).code) : modCode(nextModNum())) + ".", bodyHTML: body, okText: id ? "Guardar" : "Crear modificación", wide: true })
     .then((ok) => {
-      if (!ok) { editingModId = null; return; }
+      if (!ok) { return; }
       const data = {
         summary: ($("m_sum") as HTMLInputElement).value.trim(), justification: ($("m_just") as HTMLTextAreaElement).value.trim(), date: ($("m_date") as HTMLInputElement).value || todayISO(),
         requestedBy: ($("m_req") as HTMLInputElement).value.trim(), approver: ($("m_appr") as HTMLInputElement).value.trim(), status: ($("m_status") as HTMLSelectElement).value,
         impact: { scope: ($("m_iscope") as HTMLInputElement).value.trim(), schedule: ($("m_isched") as HTMLInputElement).value.trim(), cost: ($("m_icost") as HTMLInputElement).value.trim(), wbs: ($("m_iwbs") as HTMLInputElement).value.trim() }
       };
       if (id) { Object.assign(m as ModUi, data); } else { const nm = normalizeMod(Object.assign({ id: "m" + (state.changeCounter++), code: modCode(nextModNum()) }, data)); state.changes.push(nm); state.activeChangeId = nm.id; }
-      clearOvBody(); editingModId = null; touch(); showToast(id ? "Modificación actualizada." : "Modificación creada y activada.");
+      clearOvBody(); touch(); showToast(id ? "Modificación actualizada." : "Modificación creada y activada.");
     });
 }
 function nextModNum(): number { let mx = 0; state.changes.forEach((m) => { const x = /MOD\.0*(\d+)/.exec(m.code || ""); if (x) mx = Math.max(mx, Number(x[1])); }); return mx + 1; }

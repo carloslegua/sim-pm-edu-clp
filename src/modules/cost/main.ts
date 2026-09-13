@@ -31,7 +31,6 @@ declare global {
   // Este módulo referencia GPI como identificador global bare (no
   // window.GPI), igual que el original: var GPI de gpi-core.js crea una
   // propiedad real de window, accesible por nombre en cualquier scope.
-  // eslint-disable-next-line no-var
   var GPI: GpiApi | undefined;
 }
 
@@ -72,7 +71,7 @@ interface CostState {
   _coTotals?: ChangeTotals;
 }
 
-let state: CostState = {
+const state: CostState = {
   curClass: 3,
   co: []
 };

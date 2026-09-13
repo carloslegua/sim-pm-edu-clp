@@ -39,8 +39,6 @@ let stateLive: ScheduleState = { links: [], linkCounter: 1, import: null, baseli
 let stateSample: ScheduleState | null = null;
 let wbsLive: WbsModule | null = null, actsLive: ActivitiesModule | null = null, pertLive: PertModule | null = null, spLive: SchedulePlanModule | null = null;
 let durMode: "det" | "pert" = "det";
-let curView = "tabla";
-let lastCpm: CpmResult | null = null; // último resultado de GPI.util.cpm
 
 function state(): ScheduleState { return (mode === "sample" ? stateSample : stateLive) as ScheduleState; }
 function wbsData(): WbsModule | null { return mode === "sample" ? SAMPLE.wbs : wbsLive; }
@@ -174,7 +172,7 @@ function incoming(id: string): Link[] { return (state().links || []).filter((l) 
 
 interface RunCpmResult { snap: Row[]; nodes: ScheduleNode[]; ids: string[]; links: Link[]; val: ScheduleValidateResult; cpm: CpmResult; noDur: ScheduleNode[]; }
 
-// Ejecuta el cálculo: snapshot → nodos → validación → CPM. Guarda lastCpm.
+// Ejecuta el cálculo: snapshot → nodos → validación → CPM.
 function runCpm(): RunCpmResult {
   const snap = fullRowsSnapshot();
   const nodes = scheduleNodes(snap);
@@ -183,7 +181,6 @@ function runCpm(): RunCpmResult {
   const val = GPI!.util.scheduleValidate(ids, links);
   const validLinks = links.filter((l) => ids.indexOf(l.from) >= 0 && ids.indexOf(l.to) >= 0 && l.from !== l.to);
   const cpm = GPI!.util.cpm(nodes as CpmNode[], validLinks, calData(), { startDate: metaStart() });
-  lastCpm = cpm;
   return { snap, nodes, ids, links, val, cpm, noDur: nodes.filter((n) => !n.hasDur) };
 }
 
@@ -336,7 +333,6 @@ function renderCalNote(): void {
 
 // ============================ VISTAS ============================
 function switchView(v: string): void {
-  curView = v;
   (["tabla", "red", "gantt"] as const).forEach((k) => {
     (document.getElementById("view-" + k) as HTMLElement).classList.toggle("active", k === v);
   });
@@ -538,7 +534,7 @@ function pad2(n: number): string { return (n < 10 ? "0" : "") + n; }
 function parseDateCell(s: unknown): string {
   const str = String(s || "").trim(); if (!str) return "";
   let m = /(\d{4})-(\d{1,2})-(\d{1,2})/.exec(str); if (m) return m[1] + "-" + pad2(+m[2]) + "-" + pad2(+m[3]);
-  m = /(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/.exec(str);
+  m = /(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/.exec(str);
   if (m) { const d = +m[1], mo = +m[2]; let y = +m[3]; if (y < 100) y += 2000; return y + "-" + pad2(mo) + "-" + pad2(d); }
   return "";
 }

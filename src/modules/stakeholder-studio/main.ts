@@ -1017,7 +1017,7 @@ function buildReport(): void {
     const c = s.category || "Sin categoría";
     catCounts[c] = (catCounts[c] || 0) + 1;
   });
-  let body = '<h2>1. Resumen</h2><table class="rep-kv">'
+  const body = '<h2>1. Resumen</h2><table class="rep-kv">'
     + '<tr><td>Interesados registrados</td><td><b>' + stakeholders.length + '</b></td></tr>'
     + '<tr><td>Por cuadrante poder–interés</td><td>' + Object.keys(counts).map((k) => k + ": <b>" + counts[k] + "</b>").join(" · ") + '</td></tr>'
     + '<tr><td>Por categoría</td><td>' + (Object.keys(catCounts).map((k) => escapeHtml(k) + ": <b>" + catCounts[k] + "</b>").join(" · ") || "—") + '</td></tr></table>'

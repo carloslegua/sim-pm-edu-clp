@@ -574,7 +574,7 @@
 		document.getElementById("launchGrid").innerHTML = html;
 		document.querySelectorAll("#launchGrid [data-import]").forEach((b) => {
 			b.addEventListener("click", () => {
-				importToolInto(b.dataset.import);
+				importToolInto();
 			});
 		});
 		document.querySelectorAll("#launchGrid [data-clear]").forEach((b) => {
@@ -757,7 +757,7 @@
 			});
 		});
 	}
-	function importToolInto(key) {
+	function importToolInto() {
 		const fi = document.getElementById("fileProject");
 		fi.value = "";
 		fi._mode = "module";

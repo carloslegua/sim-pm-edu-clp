@@ -29,6 +29,13 @@ jobs:
       - name: Typecheck (tsc --noEmit)
         run: npm run typecheck
 
+      # @typescript-eslint/no-explicit-any queda en "warn" (no falla el
+      # build): la auditoría de `any` documentada en CLAUDE.md dejó ~25
+      # usos legítimos como límites de datos externos. Este paso sí falla
+      # ante errores reales (variables muertas, unused imports, etc.).
+      - name: Lint (ESLint)
+        run: npm run lint
+
       - name: Tests (Vitest — unidad + humo sobre los HTML reales)
         run: npm test
 

@@ -742,7 +742,7 @@
 		if (!str) return "";
 		let m = /(\d{4})-(\d{1,2})-(\d{1,2})/.exec(str);
 		if (m) return m[1] + "-" + pad2(+m[2]) + "-" + pad2(+m[3]);
-		m = /(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/.exec(str);
+		m = /(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/.exec(str);
 		if (m) {
 			const d = +m[1], mo = +m[2];
 			let y = +m[3];
