@@ -38,7 +38,7 @@ negociables mientras dure.
 | 8 | PERT | `Pert_Analysis.html` | ✅ Migrado |
 | 9 | Plan de Cronograma | `Schedule_Management_Plan.html` | ✅ Migrado |
 | 10 | Cronograma / CPM | `Cronograma_CPM.html` | ✅ Migrado |
-| 11 | Interesados | `Stakeholder_Studio.html` | Pendiente (entregado a alumnos — al final) |
+| 11 | Interesados | `Stakeholder_Studio.html` | ✅ Migrado |
 | 12 | Acta de Constitución | `Project_Charter.html` | Pendiente (entregado a alumnos — al final) |
 | 13 | Panel de Control | `Panel_Control.html` | Pendiente (punto de entrada — absolutamente al final) |
 
@@ -76,6 +76,45 @@ sostuvieron y se corrigieron:
   separado).
 
 ## Hallazgos de la Fase 4 (por módulo migrado)
+
+**Stakeholder_Studio.html (undécimo módulo migrado, primero del Nivel B — entregado hoy a alumnos):**
+
+- Primer módulo del ecosistema escrito en JavaScript moderno (`const`/`let`,
+  arrow functions, template literals, destructuring) en vez de ES5
+  (`var`/`function`). El port es igualmente mecánico: solo se agregan
+  tipos, sin tocar la sintaxis ni la lógica.
+- Particularidad de cableado: el script original **no espera
+  `DOMContentLoaded`** — se ejecuta de inmediato porque el `<script>`
+  inline está colocado al final de `<body>` (el DOM ya existe en ese
+  punto). Se preservó exactamente ese comportamiento: el `<script src=
+  "stakeholder-studio.js">` queda en la misma posición y el módulo
+  ejecuta `loadSample(); wireToolbar(); render();` a nivel de módulo, sin
+  ningún listener. Es distinto del resto de los módulos ya migrados
+  (todos con `document.addEventListener("DOMContentLoaded", init)`), y
+  se documenta aquí para no "corregirlo" por error si se vuelve a tocar.
+- Único módulo del ecosistema con dos indicadores 0–100 (**Poder** e
+  **Interés**) que son **campos derivados** de 5 criterios ponderados
+  cada uno (nunca editables directamente) — un patrón de cálculo
+  multicriterio nuevo en la suite, distinto a los "campos derivados"
+  simples de otros módulos (como la Dur de Definir Actividades). Se
+  verificó con un caso puntual: bajar el criterio "Control de recursos"
+  de 5 a 1 en un interesado con pesos iguales (20% cada uno) cambia el
+  Poder mostrado de 95 a 75 exactamente, confirmando que la fórmula
+  ponderada y su redondeo se portaron bit a bit.
+- CSS del modal armonizada con `gpi-shared.css` (solo override de ancho,
+  380px, igual que RACI_Matrix) — ya estaba en la lista de módulos
+  verificados idénticos en la Fase 3. Nota de posición: en este archivo
+  `gpi-core.js` se cargaba al final de `<body>` (no en `<head>` como los
+  demás), inmediatamente antes del script inline; se preservó esa
+  posición relativa sin moverlo a `<head>`, ya que cambiarla habría sido
+  un ajuste cosmético fuera del alcance de "portar a TypeScript".
+- Verificado de punta a punta (servido por HTTP local): sin proyecto
+  activo arranca con el ejemplo DISTRIB+ (12 interesados) y las 3 vistas
+  (Registro, Matriz Poder–Interés, Modelo de Prominencia) renderizan sin
+  errores; con un proyecto real sin interesados aún, arranca en blanco
+  (regla de oro, un único interesado placeholder de `blankAnalysis()`,
+  no los 12 de DISTRIB+) y agregar un interesado persiste correctamente
+  en `gpi_db.projects.<id>.modules.stakeholders`.
 
 **Cronograma_CPM.html (décimo módulo migrado, el algorítmicamente más crítico):**
 
@@ -404,10 +443,10 @@ sostuvieron y se corrigieron:
   de Google Fonts siga igual entre módulos (ya encontró una divergencia
   preexistente, ver arriba).
 - **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. En
-  progreso: 10/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
+  progreso: 11/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
   `Recopilar_Requisitos.html`, `Enunciado_del_Alcance.html`, `WBS_Builder.html`,
   `Activity_Definition.html`, `Pert_Analysis.html`, `Schedule_Management_Plan.html`,
-  `Cronograma_CPM.html`).
+  `Cronograma_CPM.html`, `Stakeholder_Studio.html`).
   Patrón establecido: `src/modules/<key>/main.ts`
   + `configs/<key>.vite.config.ts` (usa el helper `configs/lib.config.mjs`)
   + `npm run build:<key>` + `tests/smoke/<key>.smoke.test.ts`.
