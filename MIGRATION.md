@@ -40,7 +40,7 @@ negociables mientras dure.
 | 10 | Cronograma / CPM | `Cronograma_CPM.html` | ✅ Migrado |
 | 11 | Interesados | `Stakeholder_Studio.html` | ✅ Migrado |
 | 12 | Acta de Constitución | `Project_Charter.html` | ✅ Migrado |
-| 13 | Panel de Control | `Panel_Control.html` | Pendiente (punto de entrada — absolutamente al final) |
+| 13 | Panel de Control | `Panel_Control.html` | ✅ Migrado |
 
 ## Hallazgos de la Fase 3 (ajustan el alcance original)
 
@@ -77,7 +77,52 @@ sostuvieron y se corrigieron:
 
 ## Hallazgos de la Fase 4 (por módulo migrado)
 
-**Project_Charter.html (duodécimo módulo migrado, el último de los 12 "de herramienta" — `Panel_Control.html` queda como único pendiente, el punto de entrada):**
+**Panel_Control.html (decimotercer y último módulo migrado — punto de entrada del ecosistema):**
+
+- Regla no negociable aplicada al pie de la letra: `MODULES`, `GROUPS`,
+  `MODULOS_ENTREGADOS`, `MODULOS_EXTRA` y `probeModules` se portaron sin
+  cambiar ni un valor ni una línea de lógica, solo se les agregaron tipos
+  (`ModuleDef[]`, `GroupDef[]`, `"*" | "auto" | string[]`). Es la única
+  zona que el profesorado edita para entregar módulos; cualquier cambio
+  de comportamiento ahí habría sido inaceptable en este port.
+- Particularidad de tipado única en todo el ecosistema: el script
+  original referencia `GPI` como identificador global bare **sin
+  ninguna verificación de undefined en ningún punto real del código**
+  (el único `if (window.GPI …)` que aparece es un STRING de
+  documentación para autores de futuros módulos, no código ejecutable).
+  A diferencia de Cost-management/Cronograma-CPM (que sí declaran
+  `var GPI: GpiApi | undefined` y lo comprueban), aquí no hay ningún
+  `typeof GPI` — el Panel depende incondicionalmente de `gpi-core.js`
+  (es el único módulo del ecosistema sin modo "funciona sin el núcleo").
+  Como TypeScript exige que todas las declaraciones `var` de un mismo
+  global compartan el mismo tipo en todo el proyecto, y `cost/main.ts`
+  ya lo declaró como `GpiApi | undefined`, no se pudo re-declarar aquí
+  como no-opcional sin chocar; en su lugar se ligó una constante de
+  módulo `const GPI: GpiApi = window.GPI as GpiApi;` una sola vez, en
+  vez de sembrar `GPI!` en las ~90 llamadas del archivo.
+- CSS del modal armonizada con `gpi-shared.css` (solo el ancho propio,
+  400px, y el `.modal-card input{...}` propio del modal de "prompt" de
+  nuevo/renombrar proyecto, que no existe en los demás módulos).
+- Es el módulo con más **lecturas cruzadas de todo el ecosistema**: el
+  tablero integrado (`renderDashboard`) combina en una sola vista
+  `GPI.util.wbsRollup`, `requirementsAudit`, `scopeAudit`,
+  `activitiesStats`, `pertStats`, `obsNodes`, `raciCoverage`,
+  `charterAudit`, `schedulePlanAudit` y `scheduleStats` — los 10
+  cálculos de auditoría/agregación del núcleo, todos ya cubiertos por
+  Vitest desde la Fase 2. `statChips` repite un subconjunto de esas
+  mismas llamadas por tarjeta de módulo en el launcher.
+- Verificado de punta a punta (servido por HTTP local): con
+  `localStorage` vacío, `ensureSeed()` crea el proyecto DISTRIB+ y el
+  launcher pinta las 21 tarjetas de módulo (12 "activas" — todo lo
+  construido, con `MODULOS_ENTREGADOS="*"` — y 9 "próximamente"); con un
+  proyecto real con EDT + interesados + acta poblados, el tablero
+  integrado muestra correctamente el conteo de interesados, el costo
+  rollup de la EDT y el porcentaje de completitud del acta (78%,
+  verificado contra el mismo `charterAudit` que ya tiene regresión en
+  Vitest); "Vaciar" un módulo desde el launcher persiste `null`
+  correctamente en `gpi_db.projects.<id>.modules.charter`.
+
+**Project_Charter.html (duodécimo módulo migrado, el último de los 12 "de herramienta" — `Panel_Control.html` quedaba como único pendiente, el punto de entrada):**
 
 - Mismo patrón que la mayoría del ecosistema: `addEventListener`
   exclusivamente, `window.GPI` explícito, IIFE propio, ES5 (`var`/
@@ -478,15 +523,16 @@ sostuvieron y se corrigieron:
   Requisitos NO se tocan. `npm run check:snippets` audita que el `<link>`
   de Google Fonts siga igual entre módulos (ya encontró una divergencia
   preexistente, ver arriba).
-- **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. En
-  progreso: 12/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
-  `Recopilar_Requisitos.html`, `Enunciado_del_Alcance.html`, `WBS_Builder.html`,
-  `Activity_Definition.html`, `Pert_Analysis.html`, `Schedule_Management_Plan.html`,
-  `Cronograma_CPM.html`, `Stakeholder_Studio.html`, `Project_Charter.html`). Solo
-  queda `Panel_Control.html` (punto de entrada, absolutamente al final).
-  Patrón establecido: `src/modules/<key>/main.ts`
-  + `configs/<key>.vite.config.ts` (usa el helper `configs/lib.config.mjs`)
-  + `npm run build:<key>` + `tests/smoke/<key>.smoke.test.ts`.
+- **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. ✅
+  Completa: los 13 módulos migrados (`OBS_Builder.html`, `RACI_Matrix.html`,
+  `Cost-management.html`, `Recopilar_Requisitos.html`, `Enunciado_del_Alcance.html`,
+  `WBS_Builder.html`, `Activity_Definition.html`, `Pert_Analysis.html`,
+  `Schedule_Management_Plan.html`, `Cronograma_CPM.html`, `Stakeholder_Studio.html`,
+  `Project_Charter.html`, `Panel_Control.html`). Patrón establecido:
+  `src/modules/<key>/main.ts` + `configs/<key>.vite.config.ts` (usa el
+  helper `configs/lib.config.mjs`) + `npm run build:<key>` +
+  `tests/smoke/<key>.smoke.test.ts`. 132 tests en verde, `tsc --noEmit`
+  limpio en todo el proyecto.
 - **Fase 5** — Verificación de despliegue (GitHub Pages y `file://`).
 
 Ver el plan completo en el historial de la conversación / plan aprobado para
