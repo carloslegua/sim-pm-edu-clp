@@ -26,6 +26,7 @@
    de ES5 -- el port es igualmente mecánico, solo se agregan tipos.
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
+import type { ProjectMeta } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global { interface Window { GPI?: GpiApi; } }
@@ -979,8 +980,8 @@ function gpiBadge(name: string | undefined, pushFn: () => void): void {
 function reportShell(docTitle: string, moduleName: string, bodyHtml: string): void {
   let el = document.getElementById("gpiReport");
   if (!el) { el = document.createElement("div"); el.id = "gpiReport"; document.body.appendChild(el); }
-  let meta: any = {};
-  try { if (window.GPI && window.GPI.available() && window.GPI.meta()) meta = window.GPI.meta(); } catch (_) { /* noop */ }
+  let meta: Partial<ProjectMeta> = {};
+  try { const m = window.GPI && window.GPI.available() ? window.GPI.meta() : null; if (m) meta = m; } catch (_) { /* noop */ }
   const tEl = document.getElementById("projectTitle") as HTMLInputElement | null, cEl = document.getElementById("courseTitle") as HTMLInputElement | null;
   const pName = (tEl && tEl.value) || meta.name || "Proyecto";
   const course = (cEl && cEl.value) || meta.course || "Gestión de Proyectos de Ingeniería";

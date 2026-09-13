@@ -430,11 +430,12 @@
 			t.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:64px;z-index:2000;background:#1A1A1C;color:#fff;font-family:'Manrope',sans-serif;font-size:12.5px;font-weight:600;line-height:1.5;padding:10px 16px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.3);max-width:520px;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none;";
 			document.body.appendChild(t);
 		}
-		t.textContent = msg;
-		t.style.opacity = "1";
-		clearTimeout(t._t);
-		t._t = setTimeout(() => {
-			t.style.opacity = "0";
+		const el = t;
+		el.textContent = msg;
+		el.style.opacity = "1";
+		clearTimeout(el._t);
+		el._t = setTimeout(() => {
+			el.style.opacity = "0";
 		}, 3200);
 	}
 	function seedFromProject() {

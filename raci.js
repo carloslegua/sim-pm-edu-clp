@@ -675,6 +675,14 @@
       ${!ok ? `<ul class="hr-rows">${d.items.slice(0, 5).map((l) => `<li>${escapeHtml(l.code + " " + l.name)}</li>`).join("")}${d.items.length > 5 ? `<li class="muted">…y ${d.items.length - 5} más</li>` : ""}</ul>` : ""}`;
 		}).join("");
 	}
+	function softDef(k, label, items, fmt) {
+		return {
+			k,
+			label,
+			items,
+			fmt
+		};
+	}
 	function renderSoft() {
 		const box = document.getElementById("softBox");
 		const audit = currentAudit();
@@ -683,24 +691,9 @@
 			return;
 		}
 		box.innerHTML = [
-			{
-				k: "SR-01",
-				label: "Más de un Responsable sin justificar en las notas del WBS",
-				items: audit.soft.SR01,
-				fmt: (l) => l.code + " " + l.name
-			},
-			{
-				k: "SR-02",
-				label: "Más de 3 Consultados (posible cuello de botella)",
-				items: audit.soft.SR02,
-				fmt: (l) => l.code + " " + l.name
-			},
-			{
-				k: "SR-03",
-				label: "Rol sin ninguna R ni A en toda la matriz (rol fantasma)",
-				items: audit.soft.SR03,
-				fmt: (c) => c.person && c.person.trim() || c.role
-			}
+			softDef("SR-01", "Más de un Responsable sin justificar en las notas del WBS", audit.soft.SR01, (l) => l.code + " " + l.name),
+			softDef("SR-02", "Más de 3 Consultados (posible cuello de botella)", audit.soft.SR02, (l) => l.code + " " + l.name),
+			softDef("SR-03", "Rol sin ninguna R ni A en toda la matriz (rol fantasma)", audit.soft.SR03, (c) => c.person && c.person.trim() || c.role)
 		].map((d) => {
 			const ok = d.items.length === 0;
 			return `<div class="hr-item ${ok ? "ok" : "warn"}">

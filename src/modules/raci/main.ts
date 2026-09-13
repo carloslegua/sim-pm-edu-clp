@@ -346,14 +346,20 @@ function renderHard(): void {
   }).join("");
 }
 
+// Empaqueta un ítem+formatter con su propio tipo T detrás de una interfaz
+// homogénea (fmt: (x: unknown) => string) para poder guardar entradas de
+// forma heterogénea (WbsLeafRow, ObsNodeRow) en un único arreglo `defs`.
+function softDef<T>(k: string, label: string, items: T[], fmt: (x: T) => string): { k: string; label: string; items: T[]; fmt: (x: unknown) => string } {
+  return { k, label, items, fmt: fmt as (x: unknown) => string };
+}
 function renderSoft(): void {
   const box = document.getElementById("softBox") as HTMLElement;
   const audit = currentAudit();
   if (!audit || audit.state === "vacio") { box.innerHTML = ""; return; }
-  const defs: Array<{ k: string; label: string; items: Array<{ code: string; name: string } | { person: string; role: string }>; fmt: (x: any) => string }> = [
-    { k: "SR-01", label: "Más de un Responsable sin justificar en las notas del WBS", items: audit.soft.SR01, fmt: (l) => l.code + " " + l.name },
-    { k: "SR-02", label: "Más de 3 Consultados (posible cuello de botella)", items: audit.soft.SR02, fmt: (l) => l.code + " " + l.name },
-    { k: "SR-03", label: "Rol sin ninguna R ni A en toda la matriz (rol fantasma)", items: audit.soft.SR03, fmt: (c) => (c.person && c.person.trim()) || c.role }
+  const defs = [
+    softDef("SR-01", "Más de un Responsable sin justificar en las notas del WBS", audit.soft.SR01, (l) => l.code + " " + l.name),
+    softDef("SR-02", "Más de 3 Consultados (posible cuello de botella)", audit.soft.SR02, (l) => l.code + " " + l.name),
+    softDef("SR-03", "Rol sin ninguna R ni A en toda la matriz (rol fantasma)", audit.soft.SR03, (c) => (c.person && c.person.trim()) || c.role)
   ];
   box.innerHTML = defs.map((d) => {
     const ok = d.items.length === 0;

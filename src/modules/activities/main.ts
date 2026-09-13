@@ -15,7 +15,7 @@
    DELIBERADAMENTE NO se usa GPI.ui.esc (modo suelto sin gpi-core.js).
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
-import type { ActivitiesModule, WbsModule } from "../../core/types";
+import type { ActivitiesModule, ProjectMeta, WbsModule } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -671,8 +671,8 @@ function enterLive(): void {
 // ---------- REPORTE IMPRIMIBLE ----------
 function reportShell(docTitle: string, moduleName: string, bodyHtml: string): void {
   const el = document.getElementById("gpiReport") as HTMLElement;
-  let meta: any = {};
-  try { if (window.GPI && window.GPI.available() && window.GPI.meta()) meta = window.GPI.meta(); } catch (_) { /* noop */ }
+  let meta: Partial<ProjectMeta> = {};
+  try { const m = window.GPI && window.GPI.available() ? window.GPI.meta() : null; if (m) meta = m; } catch (_) { /* noop */ }
   const pName = (document.getElementById("projectTitle") as HTMLInputElement).value || meta.name || "Proyecto";
   const course = (document.getElementById("courseTitle") as HTMLInputElement).value || meta.course || "Gestión de Proyectos de Ingeniería";
   const today = new Date().toLocaleDateString("es-PE", { year: "numeric", month: "long", day: "numeric" });

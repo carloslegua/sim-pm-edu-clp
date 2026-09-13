@@ -898,7 +898,8 @@
 		const el = document.getElementById("gpiReport");
 		let meta = {};
 		try {
-			if (window.GPI && window.GPI.available() && window.GPI.meta()) meta = window.GPI.meta();
+			const m = window.GPI && window.GPI.available() ? window.GPI.meta() : null;
+			if (m) meta = m;
 		} catch (_) {}
 		const pName = document.getElementById("projectTitle").value || meta.name || "Proyecto";
 		const course = document.getElementById("courseTitle").value || meta.course || "Gestión de Proyectos de Ingeniería";

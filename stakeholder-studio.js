@@ -1610,7 +1610,8 @@
 		}
 		let meta = {};
 		try {
-			if (window.GPI && window.GPI.available() && window.GPI.meta()) meta = window.GPI.meta();
+			const m = window.GPI && window.GPI.available() ? window.GPI.meta() : null;
+			if (m) meta = m;
 		} catch (_) {}
 		const tEl = document.getElementById("projectTitle"), cEl = document.getElementById("courseTitle");
 		const pName = tEl && tEl.value || meta.name || "Proyecto";
