@@ -22,6 +22,39 @@ también debe poder abrirse suelto por doble clic (`file://`). Por eso
 todo build es IIFE (nunca `type="module"`, que `file://` bloquea por
 CORS) y los artefactos compilados se commitean junto a su fuente.
 
+```mermaid
+flowchart TB
+    subgraph nav["Navegador — file:// o GitHub Pages, sin servidor"]
+        panel["Panel_Control.html<br>(punto de entrada)"]
+        subgraph tools["12 módulos de herramienta<br>(uno por área del PMBOK 8)"]
+            charter["Project_Charter.html"]
+            stake["Stakeholder_Studio.html"]
+            wbs["WBS_Builder.html"]
+            obs["OBS_Builder.html"]
+            raci["RACI_Matrix.html"]
+            req["Recopilar_Requisitos.html"]
+            scope["Enunciado_del_Alcance.html"]
+            act["Activity_Definition.html"]
+            pert["Pert_Analysis.html"]
+            splan["Schedule_Management_Plan.html"]
+            cpm["Cronograma_CPM.html"]
+            cost["Cost-management.html"]
+        end
+        core["gpi-core.js<br>(dominio compartido:<br>cpm, pertProbability,<br>audits, helpers de árbol...)"]
+    end
+    ls[("localStorage<br>clave gpi_db")]
+
+    panel -.->|"abre (enlace &lt;a&gt;)"| tools
+    panel -->|"GPI.getModule / setModule / meta"| core
+    tools -->|"GPI.getModule / setModule"| core
+    core -->|"lee / escribe"| ls
+```
+
+Cada módulo es un HTML independiente: no hay router ni SPA. El Panel
+solo enlaza a los demás con `<a href="...html">`; todo el acoplamiento
+real entre módulos pasa por `gpi-core.js` y `localStorage`, nunca por
+imports directos entre módulos de herramienta.
+
 Cada módulo puede funcionar en dos modos:
 
 - **Modo independiente** ("standalone"): sin proyecto activo en el
