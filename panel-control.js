@@ -133,6 +133,15 @@
 			desc: "Estructura de desglose del trabajo con costo, duración, avance y diccionario WBS. Siembra sus ramas desde los entregables del Enunciado del Alcance."
 		},
 		{
+			key: "schedulePlan",
+			group: "sched",
+			name: "Plan de Gestión del Cronograma",
+			file: "Schedule_Management_Plan.html",
+			icon: "📋",
+			color: "#3a86ff",
+			desc: "Metodología, calendario, umbrales de control, hitos, reserva y reglas de medición del desempeño (AACE RP 38R-06 / PMBOK)."
+		},
+		{
 			key: "activities",
 			group: "sched",
 			name: "Definir las Actividades",
@@ -149,15 +158,6 @@
 			icon: "σ",
 			color: "#8f2fd0",
 			desc: "Estimación probabilística de duraciones: por cada actividad, Optimista / Más probable / Pesimista con TE = (O+4M+P)/6, σ y σ². La M automática sigue a la duración por rendimiento de cuadrillas."
-		},
-		{
-			key: "schedulePlan",
-			group: "sched",
-			name: "Plan de Gestión del Cronograma",
-			file: "Schedule_Management_Plan.html",
-			icon: "📋",
-			color: "#3a86ff",
-			desc: "Metodología, calendario, umbrales de control, hitos, reserva y reglas de medición del desempeño (AACE RP 38R-06 / PMBOK)."
 		},
 		{
 			key: "schedule",

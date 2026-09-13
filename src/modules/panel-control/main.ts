@@ -135,13 +135,13 @@ let MODULES: ModuleDef[] = [
   { key: "wbs", group: "scope", name: "WBS Builder", file: "WBS_Builder.html", icon: "▦", color: "#6c5ce7",
     desc: "Estructura de desglose del trabajo con costo, duración, avance y diccionario WBS. Siembra sus ramas desde los entregables del Enunciado del Alcance." },
 
-  // — Cronograma —
+  // — Cronograma — (orden: Plan de Gestión → Definir Actividades → PERT → CPM)
+  { key: "schedulePlan", group: "sched", name: "Plan de Gestión del Cronograma", file: "Schedule_Management_Plan.html", icon: "📋", color: "#3a86ff",
+    desc: "Metodología, calendario, umbrales de control, hitos, reserva y reglas de medición del desempeño (AACE RP 38R-06 / PMBOK)." },
   { key: "activities", group: "sched", name: "Definir las Actividades", file: "Activity_Definition.html", icon: "☰", color: "#e56a10",
     desc: "Descompone cada paquete de trabajo de la EDT en actividades con unidad de medida y metrado: la base para estimar duraciones, recursos y costos del cronograma." },
   { key: "pert", group: "sched", name: "Análisis PERT", file: "Pert_Analysis.html", icon: "σ", color: "#8f2fd0",
     desc: "Estimación probabilística de duraciones: por cada actividad, Optimista / Más probable / Pesimista con TE = (O+4M+P)/6, σ y σ². La M automática sigue a la duración por rendimiento de cuadrillas." },
-  { key: "schedulePlan", group: "sched", name: "Plan de Gestión del Cronograma", file: "Schedule_Management_Plan.html", icon: "📋", color: "#3a86ff",
-    desc: "Metodología, calendario, umbrales de control, hitos, reserva y reglas de medición del desempeño (AACE RP 38R-06 / PMBOK)." },
   { key: "schedule", group: "sched", name: "Cronograma / CPM", file: "Cronograma_CPM.html", icon: "⏱", color: "#00c2a8",
     desc: "Red de precedencias (pegado desde MS Project/Excel), ruta crítica, holguras y diagrama de Gantt." },
 
