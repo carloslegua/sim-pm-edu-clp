@@ -99,7 +99,7 @@
 	}
 	function rans() {
 		try {
-			return gpiOn() && window.GPI.util ? window.GPI.util.charterRans(mod("charter") || {}) : [];
+			return gpiOn() && window.GPI.util ? window.GPI.util.charterRans(mod("charter")) : [];
 		} catch (_) {
 			return [];
 		}
@@ -375,7 +375,7 @@
 		toast(added ? "Se importaron " + added + " elemento(s) del Acta" : "El Acta no aportó elementos nuevos");
 	}
 	function audit() {
-		if (gpiOn() && window.GPI.util) return window.GPI.util.scopeAudit(state, mod("requirements") || {}, mod("charter") || {}, mod("wbs") || {});
+		if (gpiOn() && window.GPI.util) return window.GPI.util.scopeAudit(state, mod("requirements"), mod("charter"), mod("wbs"));
 		return {
 			total: state.deliverables.length,
 			deliverables: state.deliverables,
@@ -664,7 +664,8 @@
 	function buildReport() {
 		let meta = {};
 		try {
-			if (gpiOn() && window.GPI.available() && window.GPI.meta()) meta = window.GPI.meta();
+			const m = gpiOn() && window.GPI.available() ? window.GPI.meta() : null;
+			if (m) meta = m;
 		} catch (_) {}
 		const a = audit();
 		const ranById = {};

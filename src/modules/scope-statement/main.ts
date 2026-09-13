@@ -13,7 +13,9 @@
    DELIBERADAMENTE NO se usa GPI.ui.esc (modo suelto sin gpi-core.js).
    ============================================================ */
 import type * as GpiCore from "../../core/gpi-core";
-import type { CharterModule, GpiProject, RequirementItem, ScopeStatementModule, WbsModule } from "../../core/types";
+import type { GpiProject, ProjectMeta, ProjectModules, RequirementItem, ScopeStatementModule, WbsModule } from "../../core/types";
+
+type ModuleKey = keyof ProjectModules;
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -25,6 +27,7 @@ const CUR: Record<string, string> = { USD: "USD $", PEN: "S/", EUR: "€" };
 /* ---------- estado ---------- */
 interface DeliverableUi { id: string; code: string; name: string; description: string; acceptanceCriteria: string; ranIds: string[]; reqIds: string[]; }
 interface SreItem { id: string; text: string; }
+type SreKey = "assumptions" | "constraints" | "exclusions";
 interface ScopeBaseline { frozen: boolean; version: string; date: string; approver: string; snapshot: Record<string, unknown> | null; }
 interface ScopeState {
   productScope: string; projectScope: string; deliverables: DeliverableUi[];
@@ -84,15 +87,15 @@ function reCode(s: ScopeState): void { s.deliverables.forEach((d, i) => { d.code
 /* ---------- puente GPI (lectura de otros módulos) ---------- */
 function gpiOn(): boolean { return typeof window.GPI !== "undefined"; }
 function activeProject(): GpiProject | null { try { return gpiOn() && window.GPI!.available() ? window.GPI!.active() : null; } catch (_) { return null; } }
-function mod<K extends string>(name: K): any { try { return gpiOn() ? (window.GPI as GpiApi).getModule(name as any) : null; } catch (_) { return null; } }
-function rans(): GpiCore.CharterRan[] { try { return gpiOn() && window.GPI!.util ? window.GPI!.util.charterRans(mod("charter") || {}) : []; } catch (_) { return []; } }
+function mod<K extends ModuleKey>(name: K): ProjectModules[K] | null { try { return gpiOn() ? (window.GPI as GpiApi).getModule(name) : null; } catch (_) { return null; } }
+function rans(): GpiCore.CharterRan[] { try { return gpiOn() && window.GPI!.util ? window.GPI!.util.charterRans(mod("charter")) : []; } catch (_) { return []; } }
 function reqItems(): RequirementItem[] { const r = mod("requirements"); return (r && r.items) || []; }
 
 /* ---------- helpers ---------- */
 function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)); }
 function escAttr(s: unknown): string { return esc(s); }
 function setStatus(m: string): void { const el = document.getElementById("statusLeft"); if (el) el.textContent = m; }
-function toast(m: string): void { const t = document.getElementById("toast") as HTMLElement; t.textContent = m; t.classList.add("show"); clearTimeout((t as any)._t); (t as any)._t = setTimeout(() => { t.classList.remove("show"); }, 1900); }
+function toast(m: string): void { const t = document.getElementById("toast") as HTMLElement & { _t?: ReturnType<typeof setTimeout> }; t.textContent = m; t.classList.add("show"); clearTimeout(t._t); t._t = setTimeout(() => { t.classList.remove("show"); }, 1900); }
 function $(id: string): HTMLElement { return document.getElementById(id) as HTMLElement; }
 
 /* ---------- modal (Promise-based, sin confirm/alert nativos) ---------- */
@@ -215,7 +218,7 @@ function editDeliverable(i: number | null): void {
 }
 
 function suggestFromCharter(): void {
-  const ch = mod("charter") as CharterModule | null;
+  const ch = mod("charter");
   const dels = (ch && ch.deliverables) || [];
   if (!dels.length) { toast("El Acta no tiene entregables clave registrados"); return; }
   const existing: Record<string, boolean> = {}; state.deliverables.forEach((d) => { existing[(d.name || "").toLowerCase().trim()] = true; });
@@ -240,20 +243,20 @@ function renderSre(): void {
     }).join("");
   });
   document.querySelectorAll('#view-sre textarea[data-k]').forEach((t) => {
-    t.addEventListener("input", () => { const el = t as HTMLTextAreaElement; (state as any)[el.dataset.k as string][Number(el.dataset.i)].text = el.value; persistDebounced(); });
+    t.addEventListener("input", () => { const el = t as HTMLTextAreaElement; state[el.dataset.k as SreKey][Number(el.dataset.i)].text = el.value; persistDebounced(); });
   });
   document.querySelectorAll('#view-sre [data-rm]').forEach((b) => {
-    (b as HTMLElement).onclick = () => { const el = b as HTMLElement; (state as any)[el.dataset.rm as string].splice(Number(el.dataset.ri), 1); persist(); renderSre(); renderCoherence(); };
+    (b as HTMLElement).onclick = () => { const el = b as HTMLElement; state[el.dataset.rm as SreKey].splice(Number(el.dataset.ri), 1); persist(); renderSre(); renderCoherence(); };
   });
 }
 
 function pullSreFromCharter(): void {
-  const ch = mod("charter") as CharterModule | null; if (!ch) { toast("Conecta el Panel para traer datos del Acta"); return; }
+  const ch = mod("charter"); if (!ch) { toast("Conecta el Panel para traer datos del Acta"); return; }
   const map: Record<string, "assumptions" | "constraints" | "exclusions"> = { assumptions: "assumptions", constraints: "constraints", exclusions: "exclusions" };
   let added = 0;
   Object.keys(map).forEach((k0) => {
     const k = map[k0];
-    const src = (ch as any)[k] || [];
+    const src = ch[k] || [];
     const existing: Record<string, boolean> = {}; state[k].forEach((x) => { existing[x.text.toLowerCase().trim()] = true; });
     src.forEach((txt: unknown) => {
       const t = String(txt || "").trim(); if (!t || existing[t.toLowerCase()]) return;
@@ -266,7 +269,7 @@ function pullSreFromCharter(): void {
 
 /* ===== TAB COHERENCIA ===== */
 function audit(): GpiCore.ScopeAuditResult {
-  if (gpiOn() && window.GPI!.util) return window.GPI!.util.scopeAudit(state as unknown as ScopeStatementModule, mod("requirements") || {}, mod("charter") || {}, mod("wbs") || {});
+  if (gpiOn() && window.GPI!.util) return window.GPI!.util.scopeAudit(state as unknown as ScopeStatementModule, mod("requirements"), mod("charter"), mod("wbs"));
   // Respaldo mínimo si no está el núcleo (no debería ocurrir: gpi-core.js va junto)
   return {
     total: state.deliverables.length, deliverables: state.deliverables as unknown as Required<GpiCore.ScopeAuditResult["deliverables"][number]>[],
@@ -323,7 +326,7 @@ function renderBaseline(a: GpiCore.ScopeAuditResult): void {
   if (b.frozen) {
     st.innerHTML = '<span class="state-pill" style="background:rgba(0,194,168,.16);color:#00967f">🔒 Congelada v' + esc(b.version) + '</span>';
     host.innerHTML = '<div class="muted">Línea base <b>v' + esc(b.version) + '</b> congelada el <b>' + esc(b.date || "—") + '</b> por <b>' + esc(b.approver || "—") + '</b>. '
-      + 'Contiene ' + (((b.snapshot as any)?.deliverables || []).length) + ' entregable(s). '
+      + 'Contiene ' + (((b.snapshot?.deliverables as unknown[]) || []).length) + ' entregable(s). '
       + 'Los cambios posteriores deberían gestionarse por Control Integrado de Cambios.</div>'
       + '<div style="margin-top:10px"><button class="btn sm danger" id="btnUnfreeze">Descongelar (volver a editar la línea base)</button></div>';
     ($("btnUnfreeze") as HTMLElement).onclick = () => {
@@ -415,7 +418,7 @@ function renderTrace(): void {
     + '</div>';
 
   const o = m.orphans;
-  function ob(title: string, items: unknown[], mapper: (x: any) => string, kind: string): string {
+  function ob<T>(title: string, items: T[], mapper: (x: T) => string, kind: string): string {
     const n = items.length;
     const ncol = n ? (kind === "bad" ? "var(--danger)" : "var(--warn)") : "var(--good)";
     const bodyH = n ? '<ul>' + items.slice(0, 8).map(mapper).join("") + (items.length > 8 ? '<li>… (+' + (items.length - 8) + ' más)</li>' : '') + '</ul>' : '<div class="clean">✓ ninguno</div>';
@@ -504,7 +507,7 @@ function buildSample(linked: boolean): void {
 
 /* ---------- reporte imprimible ---------- */
 function buildReport(): void {
-  let meta: any = {}; try { if (gpiOn() && window.GPI!.available() && window.GPI!.meta()) meta = window.GPI!.meta(); } catch (_) { /* noop */ }
+  let meta: Partial<ProjectMeta> = {}; try { const m = gpiOn() && window.GPI!.available() ? window.GPI!.meta() : null; if (m) meta = m; } catch (_) { /* noop */ }
   const a = audit();
   const ranById: Record<string, GpiCore.CharterRan> = {}; rans().forEach((r) => { ranById[r.id] = r; });
   const reqById: Record<string, RequirementItem> = {}; reqItems().forEach((it) => { reqById[it.id] = it; });
@@ -579,7 +582,7 @@ function wire(): void {
   $("productScope").addEventListener("input", function () { state.productScope = (this as HTMLTextAreaElement).value; persistDebounced(); });
   $("projectScope").addEventListener("input", function () { state.projectScope = (this as HTMLTextAreaElement).value; persistDebounced(); });
   ($("btnPullDesc") as HTMLElement).onclick = () => {
-    const ch = mod("charter") as CharterModule | null; if (!ch) { toast("Conecta el Panel para traer la descripción del Acta"); return; }
+    const ch = mod("charter"); if (!ch) { toast("Conecta el Panel para traer la descripción del Acta"); return; }
     if (ch.description) { state.productScope = ch.description; renderScope(); persist(); toast("Descripción traída del Acta"); }
     else toast("El Acta no tiene descripción de alto nivel");
   };
