@@ -1,8 +1,11 @@
 // Servidor estático mínimo para servir la raíz del repo por HTTP local.
-// Usado por Playwright (tests/e2e, ver playwright.config.ts) para probar
-// el modo "mismo origen" documentado en README.md ("Nota"): los módulos
-// comparten localStorage de forma confiable servidos por HTTP, a
-// diferencia de file:// entre documentos distintos.
+// Dos usos:
+//   1. `npm run dev` -- para trabajar con varios módulos a la vez: bajo
+//      file:// el navegador puede NO compartir localStorage entre
+//      documentos distintos (ver README.md, "Nota", y CLAUDE.md); bajo
+//      un mismo origen HTTP sí lo comparte de forma confiable, siempre.
+//   2. Playwright (tests/e2e, ver playwright.config.ts) para probar
+//      exactamente ese modo "mismo origen" de punta a punta.
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { extname, join } from "node:path";
@@ -24,5 +27,6 @@ const server = createServer((req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`static-server escuchando en http://127.0.0.1:${PORT}/`);
+  console.log(`Servidor local listo → http://127.0.0.1:${PORT}/Panel_Control.html`);
+  console.log("Ctrl+C para detenerlo.");
 });

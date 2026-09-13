@@ -302,9 +302,14 @@ Gestión de Riesgos, Simulación Monte Carlo, Gestión de las Adquisiciones.
 ## Nota
 
 Para que las herramientas compartan datos automáticamente entre pestañas, sirve
-los archivos desde un mismo origen (GitHub Pages o `python3 -m http.server`).
-Abrirlos con doble clic (`file://`) también funciona por herramienta, pero el
-almacenamiento no siempre se comparte entre pestañas en ese modo.
+los archivos desde un mismo origen: **`npm run dev`** levanta un servidor local
+en `http://127.0.0.1:4173/` (o `python3 -m http.server` si prefieres no usar
+Node), igual que en producción (GitHub Pages). Abrirlos con doble clic
+(`file://`) también funciona por herramienta suelta, pero el almacenamiento no
+siempre se comparte entre pestañas en ese modo — es una diferencia real de
+cómo cada navegador trata el origen `file://` (no está estandarizada de forma
+consistente entre navegadores), no algo que este proyecto pueda forzar desde
+JavaScript. Si vas a usar varias herramientas juntas, usa un servidor local.
 
 ---
 
@@ -434,6 +439,7 @@ src/shared/styles/shared.css  → gpi-shared.css       (npm run build:shared)
 | Comando | Para qué |
 |---|---|
 | `npm install` | dependencias de desarrollo (Vite, TypeScript, Vitest) |
+| `npm run dev` | servidor HTTP local en `http://127.0.0.1:4173/` — mismo origen para las 13 páginas, así comparten `localStorage` de forma confiable (ver la nota sobre `file://` más arriba) |
 | `npm run build:<clave>` | recompila un módulo tras editar su `main.ts` |
 | `npm run build:all` | reconstruye los 15 artefactos y falla si alguno queda distinto del último commit — corre esto (no solo el `build:<clave>` puntual) antes de comitear, para no publicar un `.js` desactualizado en silencio |
 | `npm run typecheck` | `tsc --noEmit` sobre todo el proyecto |

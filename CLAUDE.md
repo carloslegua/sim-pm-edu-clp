@@ -44,6 +44,7 @@ raíz son generados y commiteados — nunca se editan a mano.**
 
 ```
 npm install              # una vez
+npm run dev              # servidor HTTP local (mismo origen -> localStorage compartido de verdad)
 npm run build:<clave>    # recompila un módulo tras editar su main.ts
 npm run build:all        # reconstruye TODO y falla si algo quedó desfasado
 npm run typecheck        # tsc --noEmit
@@ -203,12 +204,18 @@ scripts/static-server.mjs        → servidor HTTP mínimo, usado por tests/e2e
   documentos HTML distintos** (dos módulos abiertos como pestañas
   separadas por doble clic), aunque SÍ persiste de forma confiable
   dentro del MISMO documento a través de una recarga (ver
-  `tests/e2e/file-protocol.spec.ts`, que prueba justamente eso). El
-  modo confiable para compartir datos entre módulos es servir los
-  archivos por HTTP (GitHub Pages o un servidor local) — ya documentado
-  en el README ("Nota") desde antes de la migración a TypeScript;
-  `tests/e2e/http-cross-module.spec.ts` lo prueba de punta a punta en
-  Chrome real.
+  `tests/e2e/file-protocol.spec.ts`, que prueba justamente eso). Esto
+  **no es arreglable desde el código de la app**: qué almacenamiento
+  comparten dos documentos es una decisión del origen que le asigna el
+  navegador, y el origen que le corresponde a `file://` no está
+  estandarizado de forma consistente entre navegadores (a diferencia de
+  `http(s)://`, donde mismo host+puerto siempre es mismo origen). Ningún
+  cambio en `gpi-core.ts` puede anular eso. El modo confiable para
+  compartir datos entre módulos es servir los archivos por HTTP —
+  `npm run dev` (`scripts/static-server.mjs`) para desarrollo local,
+  GitHub Pages en producción — ya documentado en el README ("Nota")
+  desde antes de la migración a TypeScript; `tests/e2e/http-cross-module.spec.ts`
+  lo prueba de punta a punta en Chrome real.
 - `eslint.config.mjs` usa extensión `.mjs`, no `.js`: `scripts/verify-deploy.mjs`
   trata cualquier `*.js` en la raíz del repo como un artefacto IIFE
   compilado, y un archivo de config con `import`/`export` a nivel

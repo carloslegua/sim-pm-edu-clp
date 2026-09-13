@@ -18,6 +18,10 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
   distintos comparten datos bajo el mismo origen HTTP.
 - `scripts/static-server.mjs`: servidor HTTP mínimo reutilizado por los
   tests E2E.
+- `npm run dev`: expone ese mismo servidor para desarrollo/uso local —
+  soluciona que `file://` no comparta `localStorage` de forma confiable
+  entre módulos abiertos como documentos distintos (limitación real del
+  navegador, no de la app; ver CLAUDE.md).
 
 ### Security
 
