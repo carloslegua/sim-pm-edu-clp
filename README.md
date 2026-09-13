@@ -464,11 +464,15 @@ absoluta). Conviene ejecutarlo antes de publicar.
 
 ### Integración continua
 
-`.github/workflows/ci.yml` corre `typecheck` + `lint` + `test` + `build:all` +
-`verify:deploy` en cada push y cada pull request a `master`. Un PR con la
-insignia en rojo significa que rompió alguna de las reglas de arriba antes
-de que llegue a nadie más — no hace falta correrlos a mano para confiar en
-que `master` sigue sano.
+`.github/workflows/ci.yml` corre `typecheck` + `lint` + `test:coverage` +
+`build:all` + `verify:deploy` en cada push y cada pull request a `master`.
+Un PR con la insignia en rojo significa que rompió alguna de las reglas de
+arriba antes de que llegue a nadie más — no hace falta correrlos a mano
+para confiar en que `master` sigue sano.
+
+Además, un hook de pre-commit (husky + lint-staged, se instala solo con
+`npm install`) corre `eslint --fix` + `typecheck` + `build:all` en cada
+`git commit` local, antes de que el problema llegue siquiera a CI.
 
 ### Nota sobre Prettier y el estilo del código
 

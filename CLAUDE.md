@@ -54,8 +54,19 @@ npm run test:coverage    # igual, + piso de cobertura sobre src/core/** (ver vit
 npm run verify:deploy    # audita IIFE / rutas / gpi-core.js presente
 ```
 
-`.github/workflows/ci.yml` corre typecheck + lint + test + build:all +
-verify:deploy en cada push/PR a `master`.
+`.github/workflows/ci.yml` corre typecheck + lint + test:coverage +
+build:all + verify:deploy en cada push/PR a `master`.
+
+**Pre-commit hook (husky + lint-staged):** cada `git commit` corre
+automáticamente `eslint --fix` sobre los `.ts`/`.mjs` en stage, luego
+`npm run typecheck` y `npm run build:all` completos (no solo sobre lo
+tocado — un cambio en un archivo puede romper el tipado de otro, y
+`build:all` es precisamente el chequeo de "olvidé recompilar" de la
+Regla #2). Si algo falla, el commit se aborta con el mismo mensaje que
+verías en CI, pero antes de hacer push. Vive en `.husky/pre-commit`;
+`npm install` lo reinstala solo (script `prepare`). Para saltarlo en un
+caso excepcional: `git commit --no-verify` (evitar salvo que sepas
+exactamente por qué).
 
 `npm run format` / `npm run format:check` (Prettier) también existen,
 pero **no están wireados a CI ni se corrieron sobre el código existente**:
