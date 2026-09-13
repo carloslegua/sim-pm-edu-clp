@@ -35,7 +35,7 @@ negociables mientras dure.
 | 5 | Enunciado del Alcance | `Enunciado_del_Alcance.html` | ✅ Migrado |
 | 6 | EDT | `WBS_Builder.html` | ✅ Migrado |
 | 7 | Definir Actividades | `Activity_Definition.html` | ✅ Migrado |
-| 8 | PERT | `Pert_Analysis.html` | Pendiente |
+| 8 | PERT | `Pert_Analysis.html` | ✅ Migrado |
 | 9 | Plan de Cronograma | `Schedule_Management_Plan.html` | Pendiente |
 | 10 | Cronograma / CPM | `Cronograma_CPM.html` | Pendiente |
 | 11 | Interesados | `Stakeholder_Studio.html` | Pendiente (entregado a alumnos — al final) |
@@ -76,6 +76,40 @@ sostuvieron y se corrigieron:
   separado).
 
 ## Hallazgos de la Fase 4 (por módulo migrado)
+
+**Pert_Analysis.html (octavo módulo migrado):**
+
+- Mismo patrón que los anteriores: `addEventListener` exclusivamente
+  (`wireToolbar`, `wireGrid`, menú contextual por clic derecho),
+  `window.GPI` explícito, IIFE propio. CSS del modal idéntica byte a byte
+  a `gpi-shared.css` (incluido el `.modal-card h3` sin `color` explícito:
+  hereda `color:var(--ink-0)` del `body`, visualmente idéntico al de
+  `gpi-shared.css` que sí lo declara) — se dejó solo el override de ancho
+  (400px) y se adoptó el `<link>`.
+  Primer módulo migrado que consume `GPI.util.cpm`, `GPI.util
+  .pertProbability` y `GPI.util.projectCalendar` directamente (los tres ya
+  cubiertos por Vitest desde la Fase 2) para calcular la ruta crítica
+  **probabilística**: a diferencia de Cronograma/CPM (que usa duraciones
+  determinísticas), aquí el CPM se recalcula con las duraciones esperadas
+  (TE) de cada actividad — es el "CPM sobre TE" clásico del método PERT,
+  con las actividades sin terna completa entrando con su duración base y
+  varianza 0 (marcadas con `*`, con aviso de que la probabilidad está
+  sobrestimada hasta completarlas).
+  La M (más probable) tiene un modo "automático" que sigue en vivo a la
+  duración determinística `Dur = Met/(#Eq×R)` del módulo Definir las
+  Actividades — escribir un valor la fija manualmente; borrarlo la
+  regresa al automático. Se preservó íntegra la grilla estilo Excel
+  (pegado TSV, navegación de teclado, selección de rango, menú
+  contextual) y el modo de ingreso de O/P alternable entre días y % de M.
+- Verificado de punta a punta (servido por HTTP local): sin proyecto
+  activo arranca en blanco (mismo patrón que WBS/Activity_Definition); en
+  modo ejemplo (dataset DISTRIB+, compartido con Cronograma/CPM) detecta
+  correctamente la terna inválida deliberada de `a8` (fila en rojo,
+  aviso lateral) y calcula una ruta crítica de 9 actividades con
+  ΣTE≈69.2 d y probabilidad ≈89.2% de cumplir el plazo por defecto; con un
+  proyecto real, la M automática sigue la Dur base (100/25=4), y al
+  ingresar O=2/P=8 la TE calculada es exactamente (2+4×4+8)/6=4.33,
+  persistida en `gpi_db.projects.<id>.modules.pert`.
 
 **Activity_Definition.html (séptimo módulo migrado):**
 
@@ -285,9 +319,9 @@ sostuvieron y se corrigieron:
   de Google Fonts siga igual entre módulos (ya encontró una divergencia
   preexistente, ver arriba).
 - **Fase 4** — Migración de los 13 módulos, en el orden de la tabla. En
-  progreso: 7/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
+  progreso: 8/13 (`OBS_Builder.html`, `RACI_Matrix.html`, `Cost-management.html`,
   `Recopilar_Requisitos.html`, `Enunciado_del_Alcance.html`, `WBS_Builder.html`,
-  `Activity_Definition.html`).
+  `Activity_Definition.html`, `Pert_Analysis.html`).
   Patrón establecido: `src/modules/<key>/main.ts`
   + `configs/<key>.vite.config.ts` (usa el helper `configs/lib.config.mjs`)
   + `npm run build:<key>` + `tests/smoke/<key>.smoke.test.ts`.
