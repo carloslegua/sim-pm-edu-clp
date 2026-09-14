@@ -667,7 +667,7 @@ async function loadSampleIntoProject(): Promise<void> {
   }
   const colMap: ColumnMap = { code: 0, activityName: 2, unit: 3, qty: 4, unitPrice: 5 };
   const result = reconcileImportRows(sampleVirtualRows(), colMap);
-  if (!result.matched && !result.orphanCodes.length && !result.unmatchedActivities.length) {
+  if (!result.matched) {
     mode = prevMode;
     await showAlert("Ninguna actividad de ejemplo coincide con las actividades reales del proyecto (Código EDT + nombre). Revisa que hayas cargado el mismo ejemplo en Definir las Actividades.");
     return;
@@ -905,7 +905,7 @@ function templateInstructions(): Array<Array<XlCell | null>> {
   const L: Array<[string, number]> = [
     ["Cómo completar este archivo", 25],
     ["", 0],
-["1. Este archivo es un reflejo COMPLETO de la tabla: trae una fila por cada fila que ves en pantalla -- el proyecto (Tipo=“Proyecto”), cada fase (Tipo=“Fase”), cada paquete de trabajo (Tipo=“Paquete”, con su Subtotal acumulado si ya tiene precios) y, debajo de cada paquete, sus actividades. Solo las filas de ACTIVIDAD llevan precio: para completar el precio de una, ubícala por su “Código EDT” y “Nombre de la actividad” (ya vienen de “Definir las Actividades”, no las edites).", 4],
+["1. Este archivo es un reflejo COMPLETO de la tabla: trae una fila por cada fila que ves en pantalla -- el proyecto (Tipo=“Proyecto”), cada fase (Tipo=“Fase”), cada paquete de trabajo (Tipo=“Paquete”, con su Subtotal acumulado si ya tiene precios) y, debajo de cada paquete, sus actividades. Solo las filas de ACTIVIDAD llevan precio: para completar el precio de una, ubícala por su “Código EDT” y “Nombre de la actividad” (ya vienen de “Definir las Actividades”, no las edites) -- si además cambias “Paquete de trabajo”, debe seguir siendo el nombre real de ese paquete: si no coincide, la fila se rechaza al importar (protección contra mezclar filas de otro proyecto).", 4],
     ["1b. Las filas de Proyecto/Fase/Paquete son de referencia (no tienen “Nombre de la actividad”): se ignoran solas al reimportar el archivo, no hace falta tocarlas ni borrarlas.", 4],
     ["1c. La columna “Id.” es el mismo correlativo consecutivo (sin saltos, como el Task ID de MS Project) que ves en pantalla y en Definir las Actividades -- es solo de referencia para ubicar cada fila, no se usa para reconciliar al importar.", 4],
     ["2. Completa “Precio unitario” para cada actividad.", 4],
@@ -1082,10 +1082,11 @@ async function parseEstimateXlsx(file: File): Promise<{ headers: string[]; rows:
   return { headers: allRows[0], rows: allRows.slice(1) };
 }
 
-interface ColumnMap { code: number; activityName: number; unit?: number; qty?: number; unitPrice?: number; type?: number; }
+interface ColumnMap { code: number; activityName: number; unit?: number; qty?: number; unitPrice?: number; type?: number; pkgName?: number; }
 const HEADER_KEYWORDS: { field: keyof ColumnMap; keywords: string[] }[] = [
   { field: "code", keywords: ["codigo edt", "edt"] },
   { field: "activityName", keywords: ["nombre de la actividad"] },
+  { field: "pkgName", keywords: ["paquete de trabajo", "paquete"] },
   { field: "type", keywords: ["tipo"] },
   { field: "unit", keywords: ["unidad"] },
   { field: "qty", keywords: ["cantidad"] },
@@ -1095,9 +1096,14 @@ function normalizeHeader(s: string): string {
   return String(s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 // Empareja columnas por el TEXTO del encabezado (no por posición fija): así
-// tolera que el usuario reordene columnas en Excel. "Paquete de trabajo" (de
-// referencia) y "Subtotal" (calculado) se reconocen implícitamente al no
-// aparecer en HEADER_KEYWORDS: nunca se leen para reconciliar.
+// tolera que el usuario reordene columnas en Excel. "Subtotal" (calculado)
+// se reconoce implícitamente al no aparecer en HEADER_KEYWORDS: nunca se
+// lee para reconciliar. "Paquete de trabajo" SÍ se lee -- ver
+// reconcileImportRows(): además de resolver el paquete por Código EDT,
+// verifica que el NOMBRE del paquete en el archivo coincida con el
+// nombre real de ese paquete en la EDT actual, para no reconciliar una
+// fila contra el paquete equivocado si alguien edita el Código EDT a
+// mano sin actualizar el nombre.
 function mapHeaderColumns(headerRow: string[]): ColumnMap | null {
   const norm = headerRow.map(normalizeHeader);
   const map: Partial<ColumnMap> = {};
@@ -1114,14 +1120,24 @@ interface ReconcileResult {
   matched: number;
   orphanCodes: string[];
   unmatchedActivities: { code: string; name: string }[];
+  packageMismatches: { code: string; fileName: string; realName: string }[];
   missingActivities: { code: string; name: string }[];
 }
-// Reconcilia las filas del archivo contra las ACTIVIDADES actuales (de
-// "Definir las Actividades"), emparejando cada fila por Código EDT Y por
-// Nombre de la actividad -- ambos deben coincidir. Detecta además qué
-// actividades reales quedan sin precio tras el import (verificación de
-// cobertura, a pedido explícito): no importa si falta la fila entera o si
-// la fila estaba pero sin precio completado, ambos casos son "faltante".
+// Reconcilia las filas del archivo contra la EDT y las ACTIVIDADES actuales
+// (de WBS Builder y "Definir las Actividades") -- NUNCA contra lo que el
+// archivo dice ser, siempre contra el proyecto activo real. Cada fila debe
+// coincidir por Código EDT (contra un paquete REAL de la EDT actual) Y por
+// Nombre de la actividad (contra una actividad REAL de ese paquete) -- si
+// la columna "Paquete de trabajo" está presente, además se verifica que su
+// texto coincida con el nombre REAL de ese paquete, para detectar una fila
+// donde alguien cambió el Código EDT a mano sin actualizar el nombre (o
+// pegó filas de otro proyecto con códigos que por coincidencia existen acá
+// también). Ninguna de las tres validaciones es opcional: una fila que
+// falle cualquiera de ellas queda fuera de `byActivity`, nunca se importa
+// "a medias" ni se asume nada por defecto. Detecta además qué actividades
+// reales quedan sin precio tras el import (verificación de cobertura, a
+// pedido explícito): no importa si falta la fila entera o si la fila
+// estaba pero sin precio completado, ambos casos son "faltante".
 // El Código EDT de una fila puede venir en dos formas -- ambas válidas: el
 // código del PAQUETE ("4.2", como en archivos exportados antes de que el
 // export reprodujera el código propio de cada actividad) o el código de la
@@ -1140,6 +1156,7 @@ function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResu
   const byActivity: Record<string, string | number> = {};
   const orphanCodes: string[] = [];
   const unmatchedActivities: { code: string; name: string }[] = [];
+  const packageMismatches: { code: string; fileName: string; realName: string }[] = [];
   const pricedIds = new Set<string>();
   let matched = 0;
   rows.forEach((row) => {
@@ -1148,9 +1165,16 @@ function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResu
     const code = String(row[colMap.code] || "").trim();
     if (!code) return; // fila totalmente vacía: caso normal, se omite
     const activityName = String(row[colMap.activityName] || "").trim();
-    if (!activityName) return; // fila de referencia de un paquete sin actividades: normal, se omite
+    if (!activityName) return; // fila de referencia (paquete/fase/proyecto, o actividad sin completar): normal, se omite
     const leaf = resolveLeaf(code);
     if (!leaf) { orphanCodes.push(code); return; }
+    if (colMap.pkgName != null) {
+      const fileName = String(row[colMap.pkgName] || "").trim();
+      if (fileName && normalizeHeader(fileName) !== normalizeHeader(leaf.name)) {
+        packageMismatches.push({ code, fileName, realName: leaf.name });
+        return;
+      }
+    }
     const candidates = activitiesOf(leaf.id).filter((a) => normalizeHeader(a.name || "") === normalizeHeader(activityName));
     if (!candidates.length) { unmatchedActivities.push({ code, name: activityName }); return; }
     const price = colMap.unitPrice != null ? (parseExcelNum(row[colMap.unitPrice]) || "") : "";
@@ -1162,7 +1186,7 @@ function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResu
   leaves.forEach((l) => {
     activitiesOf(l.id).forEach((a) => { if (!pricedIds.has(a.id)) missingActivities.push({ code: l.code, name: a.name || "" }); });
   });
-  return { byActivity, matched, orphanCodes, unmatchedActivities, missingActivities };
+  return { byActivity, matched, orphanCodes, unmatchedActivities, packageMismatches, missingActivities };
 }
 
 async function importEstimateExcel(file: File): Promise<void> {
@@ -1180,13 +1204,26 @@ async function importEstimateExcel(file: File): Promise<void> {
     return;
   }
   const result = reconcileImportRows(parsed.rows, colMap);
-  if (!result.matched && !result.orphanCodes.length && !result.unmatchedActivities.length) {
+  const totalIssues = result.orphanCodes.length + result.unmatchedActivities.length + result.packageMismatches.length;
+  if (!result.matched && !totalIssues) {
     await showAlert("El archivo no tiene ninguna fila con datos: revisa que hayas completado el Precio unitario.");
+    return;
+  }
+  // Nada del archivo corresponde a la EDT ni a las actividades REALES del
+  // proyecto activo -- se rechaza por completo en vez de ofrecer
+  // "reemplazar" el estimado actual por un resultado vacío: eso borraría
+  // precios ya cargados sin haber verificado nada del archivo.
+  if (!result.matched && totalIssues) {
+    await showAlert("Ninguna fila del archivo coincide con la EDT ni con las actividades del proyecto activo (Código EDT" + (colMap.pkgName != null ? " + Paquete de trabajo" : "") + " + Nombre de la actividad). ¿Es el archivo correcto para este proyecto? No se modificó el estimado actual.", "Archivo no reconciliado");
     return;
   }
   let msg = "Se reemplazará el estimado actual por precios para " + result.matched + " actividad(es) del archivo" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT y las actividades no se tocan.";
   if (result.orphanCodes.length) {
     msg += " " + result.orphanCodes.length + " fila(s) no se importaron por no coincidir con ningún código EDT actual: " + result.orphanCodes.slice(0, 8).join(", ") + (result.orphanCodes.length > 8 ? "…" : "") + ".";
+  }
+  if (result.packageMismatches.length) {
+    const ex = result.packageMismatches.slice(0, 8).map((u) => u.code + " (\"" + u.fileName + "\" ≠ \"" + u.realName + "\")").join(", ");
+    msg += " " + result.packageMismatches.length + " fila(s) no se importaron porque el Paquete de trabajo del archivo no coincide con el nombre real de ese Código EDT: " + ex + (result.packageMismatches.length > 8 ? "…" : "") + ".";
   }
   if (result.unmatchedActivities.length) {
     const ex = result.unmatchedActivities.slice(0, 8).map((u) => u.code + " \"" + u.name + "\"").join(", ");
@@ -1201,7 +1238,7 @@ async function importEstimateExcel(file: File): Promise<void> {
   if (mode === "sample") stateSample = { byActivity: result.byActivity };
   else stateLive = { byActivity: result.byActivity };
   onDirty(true);
-  const issues = result.orphanCodes.length + result.unmatchedActivities.length;
+  const issues = totalIssues;
   setStatus(result.matched + " actividad(es) con precio importado" + (issues ? (" · " + issues + " fila(s) no reconciliada(s)") : "") + (result.missingActivities.length ? (" · " + result.missingActivities.length + " actividad(es) sin precio") : "") + ".");
 }
 

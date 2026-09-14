@@ -11,6 +11,25 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Importar un .xlsx en Estimar los Costos no rechazaba un archivo cuando
+  NINGUNA fila correspondía a la EDT/actividades reales del proyecto
+  activo.** La validación por Código EDT + Nombre de la actividad ya
+  existía y funcionaba fila por fila, pero cuando el resultado neto era
+  "0 actividades reconciliadas" (por ejemplo, al importar por error el
+  archivo de otro proyecto, con códigos y nombres que no corresponden a
+  nada acá) el módulo igual mostraba el modal de "reemplazar el
+  estimado actual" -- si el alumno confirmaba sin leer con cuidado,
+  perdía los precios reales ya cargados, reemplazados por un resultado
+  vacío. Ahora ese caso se RECHAZA directamente (alerta, sin ofrecer
+  reemplazar nada) -- mismo criterio de bloqueo que ya usaba
+  `Activity_Definition.html`, cerrando una asimetría entre los dos
+  módulos. Se agregó además una tercera capa de validación: si la
+  columna "Paquete de trabajo" está presente, su texto debe coincidir
+  con el nombre real de ese Código EDT -- detecta una fila donde
+  alguien cambió el código a mano sin actualizar el nombre del paquete.
+  Probado con un archivo completamente ajeno y con una fila de Código
+  EDT/Nombre correctos pero Paquete de trabajo equivocado.
+
 - **"⇩ Exportar a Excel" en Estimar los Costos no traía la columna "Id.",
   repetía el Código EDT del paquete en cada actividad, y omitía
   proyecto/fases/paquetes por completo (el archivo solo listaba

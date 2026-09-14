@@ -557,16 +557,40 @@ Costs")
   con Playwright y volviendo a subirla — incluye un test que
   descomprime el `.xlsx` real y compara celda por celda, y otro que
   bloquea la carga de `window.JSZip` para probar el CSV de reserva).
-- Import más estricto que Actividades (a pedido explícito): cada fila
-  debe coincidir por Código EDT **y** por Nombre de la actividad
-  (case/trim-insensible) contra las actividades reales de ese paquete
-  — un código existente con un nombre que no corresponde a ninguna
-  actividad ahí se descarta como "no reconocida", no se acepta a
-  ciegas. Además valida cobertura: toda actividad real que no quede con
-  precio tras el import (por fila ausente, código/nombre erróneo o
-  precio en blanco) se lista como "sin precio" en el resumen de
-  confirmación (aviso, no bloqueo — el import parcial sigue
-  permitido).
+- **Import más estricto que Actividades (a pedido explícito): cada fila
+  se valida en TRES niveles contra el proyecto activo REAL, nunca
+  contra lo que el archivo dice ser.** (1) Código EDT debe resolver a
+  un paquete real de la EDT actual (`resolveLeaf()`, vía `leafRows()`
+  — nunca se asume un paquete que no exista); (2) si la columna
+  "Paquete de trabajo" está presente, su texto debe coincidir
+  (case/trim-insensible) con el nombre REAL de ese paquete — detecta
+  una fila donde alguien cambió el Código EDT a mano sin actualizar el
+  nombre, o pegó filas de otro proyecto con códigos que coinciden por
+  casualidad (`packageMismatches` en `ReconcileResult`); (3) Nombre de
+  la actividad debe coincidir (case/trim-insensible) con una actividad
+  real de ESE paquete (`activitiesOf(leaf.id)`, de "Definir las
+  Actividades") — un código existente con un nombre que no corresponde
+  a ninguna actividad ahí se descarta como "no reconocida". Una fila
+  que falle cualquiera de las tres queda fuera de `byActivity` sin
+  excepción. **Si NINGUNA fila del archivo pasa las tres validaciones,
+  el import se RECHAZA por completo** (alerta, sin ofrecer reemplazar
+  nada) en vez de mostrar el modal de "reemplazar el estimado actual"
+  con un resultado vacío — bug corregido a pedido explícito del
+  usuario: antes ese modal SÍ aparecía cuando había filas con datos
+  pero ninguna reconciliaba (archivo de otro proyecto, por ejemplo), y
+  un clic distraído en "Continuar" borraba precios reales ya cargados
+  reemplazándolos por nada; el mismo criterio (bloquear cuando
+  `matched === 0`, sin mirar si hay huérfanas/no-reconocidas) ya lo
+  usaba `Activity_Definition.html` desde su propio import, así que esto
+  además cierra una asimetría entre los dos módulos. Además valida
+  cobertura: toda actividad real que no quede con precio tras el import
+  (por fila ausente, código/nombre/paquete erróneo o precio en blanco)
+  se lista como "sin precio" en el resumen de confirmación (aviso, no
+  bloqueo — el import PARCIAL sigue permitido cuando al menos una fila
+  sí reconcilió). Probado en `tests/e2e/cost-estimate-import.spec.ts`
+  con un archivo completamente ajeno (ninguna fila corresponde al
+  proyecto activo) y con una fila de Código EDT/Nombre correctos pero
+  Paquete de trabajo equivocado.
 - Un paquete queda "completo" (candidato a bloquear el Costo del WBS)
   únicamente cuando **todas** sus actividades tienen un Subtotal válido
   — un paquete con actividades parcialmente precificadas se muestra con

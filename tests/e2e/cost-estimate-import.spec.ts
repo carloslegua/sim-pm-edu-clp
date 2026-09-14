@@ -109,6 +109,37 @@ async function buildFixtureXlsx(): Promise<Buffer> {
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
+// Igual que buildFixtureXlsx() pero con filas arbitrarias -- para armar
+// casos de verificación puntuales (archivo completamente ajeno, Paquete de
+// trabajo que no coincide con el Código EDT, etc.) sin repetir todo el
+// mecanismo OOXML en cada test.
+async function buildRowsXlsx(headerRow: string[], rows: string[][]): Promise<Buffer> {
+  const zip = new JSZip();
+  const allRows = [headerRow, ...rows];
+  const COLS = "ABCDEFGHIJ";
+  const cellInline = (ref: string, text: string) => `<c r="${ref}" t="inlineStr"><is><t>${text}</t></is></c>`;
+  const sheetXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>"
+    + allRows.map((cells, ri) => `<row r="${ri + 1}">` + cells.map((v, ci) => v === "" ? "" : cellInline(COLS[ci] + (ri + 1), v)).join("") + "</row>").join("")
+    + "</sheetData></worksheet>";
+  zip.file("[Content_Types].xml",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    + '<Default Extension="xml" ContentType="application/xml"/>'
+    + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+  zip.file("_rels/.rels",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+  zip.file("xl/workbook.xml",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+    + '<sheets><sheet name="Estimado" sheetId="1" r:id="rId1"/></sheets></workbook>');
+  zip.file("xl/_rels/workbook.xml.rels",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
+  zip.file("xl/worksheets/sheet1.xml", sheetXml);
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
 test("Estimar los Costos — importar un .xlsx completado pone precio por actividad, valida código+nombre y avisa de actividades sin precio", async ({ page }) => {
   await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedDb);
   await page.goto("/Estimar_Costos.html");
@@ -314,4 +345,59 @@ test("Estimar los Costos — el CSV de reserva (sin window.JSZip) también trae 
   // solo sus actividades -- fiel reflejo de la tabla, igual que el .xlsx.
   const pkgA = lines.find((l) => l[2] === "Excavación de zanjas" && l[4] === "Paquete")!;
   expect(pkgA).toEqual(["2", "1.1", "Excavación de zanjas", "", "Paquete", "", "", "", "0"]);
+});
+
+test("Estimar los Costos — un archivo completamente ajeno (ninguna fila corresponde a la EDT/actividades reales) se rechaza y no toca el estimado existente", async ({ page }) => {
+  // Antes, si NINGUNA fila del archivo coincidía pero el archivo sí tenía
+  // datos (Código EDT + Nombre presentes, solo que de otro proyecto), el
+  // módulo igual ofrecía un modal de "reemplazar el estimado actual" por
+  // un resultado vacío -- un clic distraído borraba precios reales ya
+  // cargados. Ahora se rechaza directamente, sin ofrecer reemplazar nada.
+  const seedWithPrices = JSON.parse(JSON.stringify(seedDb));
+  seedWithPrices.projects.p1.modules.costEstimate = { byActivity: { a1: "190", a2: "40" } };
+  await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedWithPrices);
+  await page.goto("/Estimar_Costos.html");
+
+  const buffer = await buildRowsXlsx(
+    ["Código EDT", "Nombre de la actividad", "Paquete de trabajo", "Precio unitario"],
+    [
+      ["9.1", "Actividad fantasma A", "Paquete fantasma A", "999"],
+      ["9.2", "Actividad fantasma B", "Paquete fantasma B", "888"]
+    ]
+  );
+  await page.setInputFiles("#xlsxFileInput", { name: "otro_proyecto.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer });
+
+  // Se avisa y se rechaza -- nunca aparece el modal de confirmación que
+  // ofrecería "reemplazar" el estimado.
+  await expect(page.locator("#modalOverlay")).toHaveClass(/open/);
+  const msg = await page.locator("#modalMsg").textContent();
+  expect(msg).toMatch(/Ninguna fila del archivo coincide/);
+  expect(msg).not.toMatch(/Se reemplazará/);
+  await page.locator("#modalOk").click();
+
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("gpi_db") as string));
+  expect(saved.projects.p1.modules.costEstimate.byActivity).toEqual({ a1: "190", a2: "40" });
+});
+
+test("Estimar los Costos — una fila con Código EDT y Nombre correctos pero Paquete de trabajo equivocado se rechaza (no se asume el paquete solo por el código)", async ({ page }) => {
+  await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedDb);
+  await page.goto("/Estimar_Costos.html");
+
+  // "1.1" y "Corte de zanja" son correctos (coinciden con w2/a1), pero el
+  // archivo dice que "1.1" es "Paquete equivocado" -- no es el nombre real
+  // ("Excavación de zanjas"). Debe rechazarse: cambiar el Código EDT a mano
+  // sin actualizar el nombre del paquete no debe alcanzar para reconciliar.
+  const buffer = await buildRowsXlsx(
+    ["Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Precio unitario"],
+    [["1.1", "Paquete equivocado", "Corte de zanja", "190"]]
+  );
+  await page.setInputFiles("#xlsxFileInput", { name: "estimado.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer });
+
+  await expect(page.locator("#modalOverlay")).toHaveClass(/open/);
+  const msg = await page.locator("#modalMsg").textContent();
+  expect(msg).toMatch(/Ninguna fila del archivo coincide/);
+  await page.locator("#modalOk").click();
+
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("gpi_db") as string));
+  expect(saved.projects.p1.modules.costEstimate).toBeUndefined();
 });
