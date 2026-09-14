@@ -1051,7 +1051,7 @@
 			["", 0],
 			["1. Este archivo es un reflejo COMPLETO de la tabla: trae una fila por cada fila que ves en pantalla -- el proyecto (Tipo=“Proyecto”), cada fase (Tipo=“Fase”), cada paquete de trabajo (Tipo=“Paquete”, con su Subtotal acumulado si ya tiene precios) y, debajo de cada paquete, sus actividades. Solo las filas de ACTIVIDAD llevan precio: para completar el precio de una, ubícala por su “Código EDT” y “Nombre de la actividad” (ya vienen de “Definir las Actividades”, no las edites) -- si además cambias “Paquete de trabajo”, debe seguir siendo el nombre real de ese paquete: si no coincide, la fila se rechaza al importar (protección contra mezclar filas de otro proyecto).", 4],
 			["1b. Las filas de Proyecto/Fase/Paquete son de referencia -- repiten su propio nombre también en “Nombre de la actividad” (para que esa columna nunca quede vacía, útil si armas una tabla dinámica en Excel), pero se identifican y se ignoran solas al reimportar por su columna “Tipo”, no hace falta tocarlas ni borrarlas.", 4],
-			["1c. La columna “Id.” es el mismo correlativo consecutivo (sin saltos, como el Task ID de MS Project) que ves en pantalla y en Definir las Actividades -- es solo de referencia para ubicar cada fila, no se usa para reconciliar al importar.", 4],
+			["1c. La columna “Id.” es el mismo correlativo consecutivo (sin saltos, como el Task ID de MS Project) que ves en pantalla y en Definir las Actividades -- Código EDT y Nombre de la actividad siguen siendo la clave para reconciliar el precio, pero si el Id. de una fila ya no corresponde, en el proyecto actual, al mismo Código EDT/Nombre que trae el archivo (por ejemplo, porque editaste la EDT o las actividades después de exportarlo), se avisa igual: revisa esas filas antes de confiar en el resultado.", 4],
 			["2. Completa “Precio unitario” para cada actividad.", 4],
 			["3. La columna “Subtotal” es de referencia (Cantidad × Precio unitario, o la suma de sus actividades en la fila de un paquete): se recalcula sola al importar, no hace falta completarla ni editarla a mano.", 4],
 			["4. Un paquete sin ninguna actividad debajo (fila “Paquete” seguida directo de la del siguiente paquete o fase) todavía no tiene actividades definidas -- complétalas primero en “Definir las Actividades”, no aquí.", 4],
@@ -1280,6 +1280,10 @@
 			keywords: ["paquete de trabajo", "paquete"]
 		},
 		{
+			field: "id",
+			keywords: ["id."]
+		},
+		{
 			field: "type",
 			keywords: ["tipo"]
 		},
@@ -1309,6 +1313,9 @@
 		if (map.code == null || map.activityName == null) return null;
 		return map;
 	}
+	function exportNameOf(r) {
+		return r.kind === "milestone" ? r.code + " — " + r.name : r.name || "";
+	}
 	function reconcileImportRows(rows, colMap) {
 		const leaves = leafRows();
 		const byCode = {};
@@ -1320,18 +1327,42 @@
 			const idx = code.lastIndexOf(".");
 			return idx > 0 ? byCode[code.slice(0, idx)] : void 0;
 		}
+		const currentById = /* @__PURE__ */ new Map();
+		if (colMap.id != null) fullRows().forEach((r) => {
+			currentById.set(r.n, {
+				code: r.code,
+				name: exportNameOf(r)
+			});
+		});
 		const byActivity = {};
 		const orphanCodes = [];
 		const unmatchedActivities = [];
 		const packageMismatches = [];
+		const idMismatches = [];
 		const pricedIds = /* @__PURE__ */ new Set();
 		let matched = 0;
 		rows.forEach((row) => {
 			const type = colMap.type != null ? normalizeHeader(String(row[colMap.type] || "")) : "";
-			if (NON_ACTIVITY_TYPES.some((t) => type.indexOf(t) !== -1)) return;
 			const code = String(row[colMap.code] || "").trim();
-			if (!code) return;
 			const activityName = String(row[colMap.activityName] || "").trim();
+			if (colMap.id != null) {
+				const idStr = String(row[colMap.id] || "").trim();
+				const idNum = idStr === "" ? NaN : Number(idStr);
+				if (!Number.isNaN(idNum)) {
+					const current = currentById.get(idNum);
+					if (current) {
+						const codeMismatch = current.code !== code;
+						const nameMismatch = normalizeHeader(current.name) !== normalizeHeader(activityName);
+						if (codeMismatch || nameMismatch) idMismatches.push({
+							id: idNum,
+							codeMismatch,
+							nameMismatch
+						});
+					}
+				}
+			}
+			if (NON_ACTIVITY_TYPES.some((t) => type.indexOf(t) !== -1)) return;
+			if (!code) return;
 			if (!activityName) return;
 			const leaf = resolveLeaf(code);
 			if (!leaf) {
@@ -1380,6 +1411,7 @@
 			orphanCodes,
 			unmatchedActivities,
 			packageMismatches,
+			idMismatches,
 			missingActivities
 		};
 	}
@@ -1420,6 +1452,12 @@
 			const ex = result.unmatchedActivities.slice(0, 8).map((u) => u.code + " \"" + u.name + "\"").join(", ");
 			msg += " " + result.unmatchedActivities.length + " fila(s) no se importaron porque no hay ninguna actividad con ese nombre bajo ese paquete (¿cambiaron en Definir las Actividades?): " + ex + (result.unmatchedActivities.length > 8 ? "…" : "") + ".";
 		}
+		if (result.idMismatches.length) {
+			const anyCode = result.idMismatches.some((m) => m.codeMismatch);
+			const anyName = result.idMismatches.some((m) => m.nameMismatch);
+			const which = anyCode && anyName ? "la columna Código EDT y la columna Paquete de trabajo / Actividad" : anyCode ? "la columna Código EDT" : "la columna Paquete de trabajo / Actividad";
+			msg += " ⚠ " + result.idMismatches.length + " fila(s) tienen un Id. que ya no coincide con lo cargado en Definir las Actividades para esa misma posición: " + which + " no coincide(n) exactamente (¿se editó la EDT o las actividades después de exportar este archivo?).";
+		}
 		if (result.missingActivities.length) {
 			const ex = result.missingActivities.slice(0, 8).map((u) => u.code).join(", ");
 			msg += " ⚠ " + result.missingActivities.length + " actividad(es) de la EDT actual quedan sin precio: " + ex + (result.missingActivities.length > 8 ? "…" : "") + ".";
@@ -1429,7 +1467,7 @@
 		else stateLive = { byActivity: result.byActivity };
 		onDirty(true);
 		const issues = totalIssues;
-		setStatus(result.matched + " actividad(es) con precio importado" + (issues ? " · " + issues + " fila(s) no reconciliada(s)" : "") + (result.missingActivities.length ? " · " + result.missingActivities.length + " actividad(es) sin precio" : "") + ".");
+		setStatus(result.matched + " actividad(es) con precio importado" + (issues ? " · " + issues + " fila(s) no reconciliada(s)" : "") + (result.idMismatches.length ? " · " + result.idMismatches.length + " fila(s) con Id. desactualizado" : "") + (result.missingActivities.length ? " · " + result.missingActivities.length + " actividad(es) sin precio" : "") + ".");
 	}
 	function wireToolbar() {
 		document.getElementById("btnExportJson").addEventListener("click", exportJson);

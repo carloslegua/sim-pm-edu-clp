@@ -86,6 +86,25 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Al importar un .xlsx en Estimar los Costos, se verifica -- a través
+  de la columna "Id." -- que el Código EDT y el "Paquete de trabajo /
+  Actividad" de cada fila sigan correspondiendo, en el proyecto actual,
+  a lo mismo que había cuando se exportó el archivo.** A pedido
+  explícito del usuario: antes, la reconciliación por Código EDT +
+  Nombre de la actividad (que sigue siendo la que decide si una fila se
+  importa) no contrastaba nada contra el Id. de la fila, así que un
+  archivo exportado ANTES de un cambio posterior en Definir las
+  Actividades (una actividad nueva, un hito agregado, que corre la
+  numeración) se podía reimportar sin ningún aviso de que las filas ya
+  no correspondían a la misma posición. Ahora, si el Id. de una fila ya
+  no corresponde en el proyecto actual al mismo Código EDT y/o
+  "Paquete de trabajo / Actividad" que trae el archivo, se avisa en la
+  confirmación indicando cuántas filas y cuál(es) de las dos columnas
+  no coincide(n) -- es un aviso, no bloquea esa fila si Código EDT +
+  Nombre siguen resolviendo correctamente por su cuenta. Probado
+  insertando un hito en Definir las Actividades después de exportar y
+  reimportando el archivo ya desactualizado.
+
 - **Hitos en Definir las Actividades y Estimar los Costos**: nuevo tipo
   de actividad especial, con duración cero por definición y un código
   propio asignado por el alumno (convención "H1", "H2"... no la

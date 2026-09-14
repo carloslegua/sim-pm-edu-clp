@@ -403,3 +403,55 @@ test("Estimar los Costos — una fila con Código EDT y Nombre correctos pero Pa
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("gpi_db") as string));
   expect(saved.projects.p1.modules.costEstimate).toBeUndefined();
 });
+
+test("Estimar los Costos — un archivo exportado ANTES de un cambio posterior en Definir las Actividades avisa que el Id. de esas filas ya no coincide", async ({ page }) => {
+  // Exporta el archivo con la EDT/actividades originales, agrega en
+  // "Definir las Actividades" un hito ATADO al paquete 1.1 (se inserta
+  // DESPUÉS de a1/a2, antes del paquete 1.2 -- corre el Id. del paquete 1.2
+  // y de a3 en 1, sin tocar el Id. ni el Código EDT/nombre de a1/a2) y
+  // reimporta el MISMO archivo ya desactualizado: a1/a2 se siguen
+  // reconciliando por Código EDT + Nombre sin ningún problema (su Id.
+  // tampoco cambió), pero las filas de 1.2/a3 quedan con un Id. que ya no
+  // corresponde a lo que hay ahora mismo ahí -- debe avisarse, indicando
+  // cuántas filas y qué columna(s).
+  const seedWithPrices = JSON.parse(JSON.stringify(seedDb));
+  seedWithPrices.projects.p1.modules.costEstimate = { byActivity: { a1: "190", a2: "40" } };
+  await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedWithPrices);
+  await page.goto("/Estimar_Costos.html");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#btnExportExcel").click()
+  ]);
+  const exportedPath = await download.path();
+  expect(exportedPath).toBeTruthy();
+
+  // Simula que, después de exportar, alguien agregó un hito atado a 1.1 en
+  // Definir las Actividades -- corre el Id. de todo lo que viene después de
+  // 1.1 (el paquete 1.2 y su actividad) en 1, sin tocar 1.1 ni sus propias
+  // actividades.
+  await page.evaluate(() => {
+    const db = JSON.parse(localStorage.getItem("gpi_db") as string);
+    db.projects.p1.modules.activities.milestones = [
+      { id: "m1", code: "H1", name: "Fin de excavación", leafId: "w2" }
+    ];
+    localStorage.setItem("gpi_db", JSON.stringify(db));
+  });
+  await page.locator("#btnReload").click();
+  await expect(page.locator(".milestone-row")).toHaveCount(1);
+
+  await page.setInputFiles("#xlsxFileInput", exportedPath as string);
+  await expect(page.locator("#modalOverlay")).toHaveClass(/open/);
+  const msg = await page.locator("#modalMsg").textContent();
+  // a1/a2 se siguen reconciliando por Código EDT + Nombre (no se rechazan,
+  // su Id. no cambió); las 2 filas afectadas por el corrimiento son la del
+  // paquete 1.2 y la de su actividad (a3).
+  expect(msg).toMatch(/2 actividad\(es\) del archivo/);
+  expect(msg).toMatch(/2 fila\(s\) tienen un Id\. que ya no coincide/);
+  expect(msg).toMatch(/Código EDT.*Paquete de trabajo \/ Actividad|Paquete de trabajo \/ Actividad.*Código EDT/);
+  await page.locator("#modalOk").click();
+  await page.waitForTimeout(900);
+
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("gpi_db") as string));
+  expect(saved.projects.p1.modules.costEstimate.byActivity).toMatchObject({ a1: "190", a2: "40" });
+});

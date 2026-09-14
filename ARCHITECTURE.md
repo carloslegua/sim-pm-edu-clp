@@ -597,6 +597,28 @@ Costs")
   con un archivo completamente ajeno (ninguna fila corresponde al
   proyecto activo) y con una fila de Código EDT/Nombre correctos pero
   Paquete de trabajo equivocado.
+- **Cuarta capa, de AVISO (no bloquea): si el archivo trae la columna
+  "Id.", cada fila se contrasta por ese mismo Id. contra lo que
+  `fullRows()` calcula AHORA MISMO para esa posición** (a pedido
+  explícito del usuario: verificar que Código EDT y "Paquete de trabajo
+  / Actividad" coincidan, a través del Id., con lo cargado en Definir
+  las Actividades). Detecta un archivo desactualizado -- exportado
+  antes de un cambio posterior en Definir las Actividades que corrió la
+  numeración (una actividad nueva, un hito agregado, etc.) -- aunque el
+  Código EDT/Nombre de esa fila, tomados por sí solos, sigan siendo
+  válidos en OTRA posición del proyecto actual (por eso es un aviso y
+  no un bloqueo: la actividad se sigue reconciliando bien por Código
+  EDT + Nombre, que no dependen del orden). `idMismatches` en
+  `ReconcileResult` registra, por fila, si el Código EDT, el nombre, o
+  ambos dejaron de corresponder; el mensaje de confirmación indica
+  cuántas filas y cuál(es) columna(s). `exportNameOf()` reconstruye el
+  mismo texto que `exportRowModel()`/`buildEstimateCsv()` escriben en
+  "Nombre de la actividad" para cada tipo de fila (un hito incluye su
+  código, "H1 — nombre") para comparar contra exactamente lo mismo que
+  pudo haber quedado en el archivo. Probado insertando un hito ATADO a
+  un paquete después de exportar (corre el Id. del paquete siguiente y
+  su actividad, sin tocar el de las actividades anteriores) y
+  reimportando el archivo ya desactualizado.
 - Un paquete queda "completo" (candidato a bloquear el Costo del WBS)
   únicamente cuando **todas** sus actividades tienen un Subtotal válido
   — un paquete con actividades parcialmente precificadas se muestra con
