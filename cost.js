@@ -275,7 +275,7 @@
 		const cvW = fmt2(+$("cvWarn").value), cvE = fmt2(+$("cvEsc").value);
 		const fxTxt = $("fxMode").value === "frozen" ? "congelado a fecha base" : "flotante con banda ±" + $("fxBand").value + "%";
 		$("doc").innerHTML = `
-    <div class="doc-h">Plan de Gestión de Costos &amp; Basis of Estimate</div>
+    <div class="doc-h">Plan de Gestión Financiera &amp; Basis of Estimate</div>
     <p class="doc-meta">Generado ${(/* @__PURE__ */ new Date()).toLocaleDateString("es-PE")} · Fecha base del estimado: ${esc($("boeDate").value) || "—"} · Moneda base: ${esc($("cur").value)} (${sym()}) · Clase AACE: <b>Clase ${state.curClass}</b></p>
 
     <section class="dsec">
@@ -571,7 +571,7 @@
 	function exportJSON() {
 		const payload = {
 			kind: "gpi.cost/v1",
-			title: gpiOn() && GPI.meta() && GPI.meta().name || "Plan de Gestión de Costos",
+			title: gpiOn() && GPI.meta() && GPI.meta().name || "Plan de Gestión Financiera",
 			course: gpiOn() && GPI.meta() && GPI.meta().course || void 0,
 			data: collect()
 		};

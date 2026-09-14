@@ -865,7 +865,7 @@ export interface CostSummary {
   hasData: boolean;
 }
 
-// Resumen del Plan de Gestión de Costos para tableros. Recibe el objeto del
+// Resumen del Plan de Gestión Financiera (módulo "cost") para tableros. Recibe el objeto del
 // módulo "cost" (puede venir incompleto o null) y devuelve cifras derivadas:
 // estimación de las actividades, BAC (línea base), presupuesto total y el
 // conteo/monto de órdenes de cambio aprobadas por fuente de fondeo.

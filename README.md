@@ -86,9 +86,9 @@ acción explícita y confirmada del alumno.**
   proyecto — igual que el modo ejemplo de la Matriz RACI).
 - En modo independiente (archivo abierto sin `gpi-core.js` o sin proyecto
   activo), cada herramienta sigue mostrando su demo autocontenida.
-- Gestión de Costos solo crea su rebanada `modules.cost` tras la **primera
-  edición real** del usuario: abrir la página ya no genera un BAC fantasma
-  en el Panel.
+- Planificar la Gestión Financiera (`Cost-management.html`) solo crea su
+  rebanada `modules.cost` tras la **primera edición real** del usuario: abrir
+  la página ya no genera un BAC fantasma en el Panel.
 
 ## Módulos activos
 
@@ -166,9 +166,9 @@ no escribe nada en el almacén compartido. Se añadió reactividad entre pestañ
 (`GPI.onChange`) siguiendo el patrón del resto del ecosistema: refresca el
 encabezado cuando el Panel cambia el proyecto, sin pisar la edición en curso.
 
-## Módulo de Costos (novedad)
+## Planificar la Gestión Financiera (novedad)
 
-`Cost-management.html` implementa el Plan de Gestión de Costos (PMBOK 8 + AACE):
+`Cost-management.html` implementa el Plan de Gestión Financiera (PMBOK 8 + AACE):
 moneda y estimación base, clase de estimado (AACE 17R-97), contingencia e
 inflación, umbrales CV/CPI, órdenes de cambio y documento BOE. Integrado al
 núcleo: toma la estimación base del rollup de costos del WBS (botón

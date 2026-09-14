@@ -1,5 +1,5 @@
 /* ============================================================
-   GPI · Cost Management Plan — vanilla JS module (ES6)
+   GPI · Planificar la Gestión Financiera (Cost Management Plan) — vanilla JS module (ES6)
    Port mecánico del <script> inline de Cost-management.html (Fase 4 de
    MIGRATION.md): misma lógica, mismo comportamiento. Se agregan tipos y
    se compila a cost.js (IIFE) para que el HTML lo cargue como
@@ -219,7 +219,7 @@ function buildDoc(): void {
   const cvW = fmt2(+($("cvWarn") as HTMLInputElement).value), cvE = fmt2(+($("cvEsc") as HTMLInputElement).value);
   const fxTxt = ($("fxMode") as HTMLSelectElement).value === "frozen" ? "congelado a fecha base" : "flotante con banda ±" + ($("fxBand") as HTMLInputElement).value + "%";
   $("doc").innerHTML = `
-    <div class="doc-h">Plan de Gestión de Costos &amp; Basis of Estimate</div>
+    <div class="doc-h">Plan de Gestión Financiera &amp; Basis of Estimate</div>
     <p class="doc-meta">Generado ${new Date().toLocaleDateString("es-PE")} · Fecha base del estimado: ${esc(($("boeDate") as HTMLInputElement).value) || "—"} · Moneda base: ${esc(($("cur") as HTMLSelectElement).value)} (${sym()}) · Clase AACE: <b>Clase ${state.curClass}</b></p>
 
     <section class="dsec">
@@ -442,7 +442,7 @@ function load(): void {
 }
 function exportJSON(): void {
   const payload = {
-    kind: "gpi.cost/v1", title: (gpiOn() && (GPI as GpiApi).meta() && (GPI as GpiApi).meta()!.name) || "Plan de Gestión de Costos",
+    kind: "gpi.cost/v1", title: (gpiOn() && (GPI as GpiApi).meta() && (GPI as GpiApi).meta()!.name) || "Plan de Gestión Financiera",
     course: (gpiOn() && (GPI as GpiApi).meta() && (GPI as GpiApi).meta()!.course) || undefined, data: collect()
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });

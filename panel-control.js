@@ -171,7 +171,7 @@
 		{
 			key: "cost",
 			group: "cost",
-			name: "Gestión de Costos",
+			name: "Planificar la Gestión Financiera",
 			file: "Cost-management.html",
 			icon: "S/",
 			color: "#0093c0",

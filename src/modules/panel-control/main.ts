@@ -146,7 +146,7 @@ let MODULES: ModuleDef[] = [
     desc: "Red de precedencias (pegado desde MS Project/Excel), ruta crítica, holguras y diagrama de Gantt." },
 
   // — Costo —
-  { key: "cost", group: "cost", name: "Gestión de Costos", file: "Cost-management.html", icon: "S/", color: "#0093c0",
+  { key: "cost", group: "cost", name: "Planificar la Gestión Financiera", file: "Cost-management.html", icon: "S/", color: "#0093c0",
     desc: "Plan de gestión de costos (PMBOK 8 + AACE): moneda, clase de estimado, contingencia e inflación, umbrales CV/CPI, órdenes de cambio y documento BOE. Toma la estimación base de la EDT." },
   { key: "evm", group: "cost", name: "Valor Ganado (EVM)", file: null, icon: "📈", color: "#2e4374",
     desc: "PV, EV, AC, CV, SV, CPI, SPI, EAC y línea de corte dinámica." },
