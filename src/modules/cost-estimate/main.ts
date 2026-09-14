@@ -31,7 +31,7 @@
    `activities` en vivo en vez de asumir que siempre viene de gpi-core.
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
-import type { ActivitiesModule, ActivityItem, CostEstimateModule, ProjectMeta, WbsModule } from "../../core/types";
+import type { ActivitiesModule, ActivityItem, CostEstimateModule, MilestoneItem, ProjectMeta, WbsModule } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -134,6 +134,17 @@ function activitiesOf(leafId: string): ActivityItem[] {
   const acts = activitiesData();
   return (acts && acts.byLeaf && acts.byLeaf[leafId]) || [];
 }
+// Los hitos son de SOLO LECTURA aquí (vienen de "Definir las Actividades",
+// nunca se les asigna precio): se listan para trazabilidad pero no
+// participan de pkgSubtotal/pkgComplete/stats().totalCost.
+function milestonesOf(leafId: string): MilestoneItem[] {
+  const acts = activitiesData();
+  return ((acts && acts.milestones) || []).filter((m) => m.leafId === leafId);
+}
+function looseMilestones(): MilestoneItem[] {
+  const acts = activitiesData();
+  return ((acts && acts.milestones) || []).filter((m) => !m.leafId);
+}
 
 // Limpia formatos numéricos de Excel: "4,800.50", "4.800,50", "12,5", "4 800".
 // Regla: si hay punto y coma, el ÚLTIMO es el decimal; una coma seguida de
@@ -205,16 +216,19 @@ function stats(): Stats {
 }
 
 interface FullRow {
-  kind: "project" | "phase" | "package" | "activity";
+  kind: "project" | "phase" | "package" | "activity" | "milestone";
   n: number; code: string; level: number; name: string;
   id?: string; activityId?: string; unit?: string; qty?: string | number; unitPrice?: string | number; subtotal?: number | null;
   activityCount?: number; pkgSubtotal?: number | null; pkgComplete?: boolean;
 }
 
 // Modelo de filas completo, estilo MS Project: fila 0 = proyecto (tarea
-// resumen), N.º consecutivo para TODAS las filas (fases, paquetes y
-// actividades). La tabla, el reporte y el archivo exportado comparten esta
-// única fuente para no desalinearse nunca.
+// resumen), N.º consecutivo para TODAS las filas (fases, paquetes,
+// actividades e hitos). La tabla, el reporte y el archivo exportado
+// comparten esta única fuente para no desalinearse nunca. Los hitos (de
+// "Definir las Actividades") se listan después de las actividades de su
+// paquete, o en una sección final "Hitos del proyecto" si van sueltos --
+// siempre de solo lectura, sin costo.
 function fullRows(): FullRow[] {
   const w = wbsData(), out: FullRow[] = [];
   if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
@@ -233,7 +247,15 @@ function fullRows(): FullRow[] {
     list.forEach((a, i) => {
       out.push({ kind: "activity", n: n++, code: r.code + "." + (i + 1), level: r.depth + 2, name: a.name || "", activityId: a.id, unit: a.unit || "", qty: a.qty, unitPrice: state().byActivity[a.id], subtotal: subtotalOf(a) });
     });
+    milestonesOf(r.id).forEach((m) => {
+      out.push({ kind: "milestone", n: n++, code: m.code, level: r.depth + 2, name: m.name });
+    });
   });
+  const loose = looseMilestones();
+  if (loose.length) {
+    out.push({ kind: "phase", n: n++, code: "", level: 2, name: "Hitos del proyecto" });
+    loose.forEach((m) => { out.push({ kind: "milestone", n: n++, code: m.code, level: 3, name: m.name }); });
+  }
   return out;
 }
 
@@ -299,6 +321,14 @@ function renderTable(): void {
         + '<span class="pk-count' + (r.activityCount ? '' : ' zero') + '">' + (r.activityCount || 0) + ' act.</span></td>'
         + sub
         + '</tr>';
+    } else if (r.kind === "milestone") {
+      html += '<tr class="act-row milestone-row">'
+        + '<td class="n-cell act-item">' + r.n + '</td>'
+        + '<td class="act-code milestone-code">◆ ' + esc(r.code) + '</td>'
+        + '<td>' + (r.name ? esc(r.name) : '<span class="rep-note">— sin nombre —</span>') + '<span class="milestone-tag">Hito</span></td>'
+        + '<td>—</td><td class="num">—</td><td class="num">—</td>'
+        + '<td class="sub-cell empty" title="Los hitos no tienen costo">—</td>'
+        + '</tr>';
     } else {
       html += '<tr class="act-row">'
         + '<td class="n-cell act-item">' + r.n + '</td>'
@@ -323,9 +353,9 @@ function copyWholeTable(): void {
   if (!rows.length) { setStatus("No hay tabla que copiar."); return; }
   const lines = ["N.º\tCódigo EDT\tPaquete de trabajo / Actividad\tUnidad\tCantidad\tPrecio unitario\tSubtotal"];
   rows.forEach((r) => {
-    const isAct = r.kind === "activity";
+    const isAct = r.kind === "activity", isMs = r.kind === "milestone";
     lines.push([
-      r.n, r.code, r.name || "",
+      r.n, r.code, (r.name || "") + (isMs ? " (hito)" : ""),
       isAct ? ((r.unit as string) || "") : "",
       isAct ? (r.qty == null ? "" : r.qty) : "",
       isAct ? (r.unitPrice == null ? "" : r.unitPrice) : "",
@@ -471,7 +501,14 @@ const SAMPLE_ACTIVITIES: ActivitiesModule = (function () {
   by[I.p51] = [A("Pruebas de tableros y circuitos eléctricos", "pto", 120, 30), A("Pruebas hidráulicas de redes sanitarias", "glb", 1, 0.5)];
   by[I.p52] = [A("Capacitación operativa al personal del cliente", "hora", 40, 5), A("Elaboración de manuales de operación y mantenimiento", "doc", 2, 0.5)];
   by[I.p53] = [A("Elaboración de dossier de calidad y planos as-built", "doc", 1, 0.1), A("Acta de entrega y cierre del proyecto", "doc", 1, 0.5)];
-  return { byLeaf: by, idCounter: n + 1 };
+  // Mismos dos hitos ilustrativos que src/modules/activities/main.ts (uno
+  // atado a un paquete, uno suelto) -- se muestran aquí de solo lectura, sin
+  // costo, para que el modo ejemplo de Estimar los Costos también los liste.
+  const milestones: MilestoneItem[] = [
+    { id: "m1", code: "H1", name: "Fin de Cimentaciones", leafId: I.p42 },
+    { id: "m2", code: "H2", name: "Cierre del Proyecto", leafId: null }
+  ];
+  return { byLeaf: by, idCounter: n + 1, milestones };
 })();
 
 // Precio unitario de ejemplo por actividad (ids a1..a43, ver SAMPLE_ACTIVITIES
@@ -667,6 +704,12 @@ function buildReport(): void {
     } else if (r.kind === "package") {
       const pkgTxt = !r.activityCount ? '<span class="rep-note">sin actividades definidas</span>' : ('<b>' + fmtMoney(r.pkgSubtotal) + '</b>' + (r.pkgComplete ? '' : ' (parcial)'));
       body += '<tr><td class="num rep-pkg" style="text-align:center">' + r.n + '</td><td class="num rep-pkg">' + esc(r.code) + '</td><td class="rep-pkg">' + esc(r.name) + '</td><td class="rep-pkg" colspan="3">' + (r.activityCount || 0) + ' actividad(es)</td><td class="num rep-pkg" style="text-align:right">' + pkgTxt + '</td></tr>';
+    } else if (r.kind === "milestone") {
+      body += '<tr><td class="num" style="text-align:center">' + r.n + '</td>'
+        + '<td class="num">◆ ' + esc(r.code) + '</td>'
+        + '<td>' + esc(r.name) + ' <span class="rep-note">(hito)</span></td>'
+        + '<td>—</td><td class="num" style="text-align:right">—</td><td class="num" style="text-align:right">—</td>'
+        + '<td class="num" style="text-align:right">—</td></tr>';
     } else {
       if (r.subtotal != null) total += r.subtotal;
       body += '<tr><td class="num" style="text-align:center">' + r.n + '</td>'
@@ -688,7 +731,7 @@ function xmlEsc(s: unknown): string { return String(s == null ? "" : s).replace(
 
 interface XlCell { v: string | number; t: "s" | "n"; s?: number; }
 
-const TEMPLATE_HEADERS = ["Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Unidad", "Cantidad", "Precio unitario", "Subtotal"];
+const TEMPLATE_HEADERS = ["Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Unidad", "Cantidad", "Precio unitario", "Subtotal"];
 
 // Estilos: 0 normal · 1 encabezado · 2 centrado · 3 número · 4 nota/instrucciones · 25 título
 function xlsxStylesXml(): string {
@@ -754,29 +797,45 @@ function xlsxSheetXml(rows: Array<Array<XlCell | null>>, widths: number[], freez
 // un proyecto sin precios, esto produce filas en blanco -- funciona como
 // plantilla. Con datos, reproduce exactamente lo que se importaría de
 // vuelta (round-trip).
+// Los hitos (de "Definir las Actividades") se agregan como filas de solo
+// referencia -- columna "Tipo"="Hito" y precios siempre en blanco -- para
+// que el archivo exportado los muestre junto a las actividades costeadas
+// sin que se confundan con ellas al reimportar (reconcileImportRows las
+// omite por completo al ver Tipo="Hito").
 function exportRowModel(): Array<Array<XlCell | null>> {
   const head: XlCell[] = TEMPLATE_HEADERS.map((h) => ({ v: h, t: "s", s: 1 }));
   const out: Array<Array<XlCell | null>> = [head];
   leafRows().forEach((l) => {
     const list = activitiesOf(l.id);
     if (!list.length) {
-      out.push([{ v: l.code, t: "s", s: 2 }, { v: l.name || "", t: "s", s: 0 }, null, null, null, null, null]);
-      return;
+      out.push([{ v: l.code, t: "s", s: 2 }, { v: l.name || "", t: "s", s: 0 }, null, null, null, null, null, null]);
+    } else {
+      list.forEach((a) => {
+        const qty = numOrNull(a.qty);
+        const price = numOrNull(state().byActivity[a.id]);
+        const subtotal = (qty != null && price != null) ? Math.round(qty * price * 100) / 100 : null;
+        out.push([
+          { v: l.code, t: "s", s: 2 },
+          { v: l.name || "", t: "s", s: 0 },
+          { v: a.name || "", t: "s", s: 0 },
+          null,
+          a.unit ? { v: a.unit, t: "s", s: 0 } : null,
+          qty != null ? { v: qty, t: "n" } : null,
+          price != null ? { v: price, t: "n", s: 3 } : null,
+          subtotal != null ? { v: subtotal, t: "n", s: 3 } : null
+        ]);
+      });
     }
-    list.forEach((a) => {
-      const qty = numOrNull(a.qty);
-      const price = numOrNull(state().byActivity[a.id]);
-      const subtotal = (qty != null && price != null) ? Math.round(qty * price * 100) / 100 : null;
+    milestonesOf(l.id).forEach((m) => {
       out.push([
-        { v: l.code, t: "s", s: 2 },
-        { v: l.name || "", t: "s", s: 0 },
-        { v: a.name || "", t: "s", s: 0 },
-        a.unit ? { v: a.unit, t: "s", s: 0 } : null,
-        qty != null ? { v: qty, t: "n" } : null,
-        price != null ? { v: price, t: "n", s: 3 } : null,
-        subtotal != null ? { v: subtotal, t: "n", s: 3 } : null
+        { v: l.code, t: "s", s: 2 }, { v: l.name || "", t: "s", s: 0 },
+        { v: m.code + " — " + m.name, t: "s", s: 0 }, { v: "Hito", t: "s", s: 0 },
+        null, null, null, null
       ]);
     });
+  });
+  looseMilestones().forEach((m) => {
+    out.push([null, null, { v: m.code + " — " + m.name, t: "s", s: 0 }, { v: "Hito", t: "s", s: 0 }, null, null, null, null]);
   });
   return out;
 }
@@ -789,6 +848,7 @@ function templateInstructions(): Array<Array<XlCell | null>> {
     ["2. Completa “Precio unitario” para cada actividad.", 4],
     ["3. La columna “Subtotal” es de referencia (Cantidad × Precio unitario): se recalcula sola al importar, no hace falta completarla ni editarla a mano.", 4],
     ["4. Un paquete que aparece sin filas de actividad (solo Código EDT y Paquete de trabajo) todavía no tiene actividades definidas -- complétalas primero en “Definir las Actividades”, no aquí.", 4],
+    ["4b. Hitos: las filas con “Tipo”=“Hito” son las definidas en “Definir las Actividades” -- aparecen aquí solo como referencia (nunca tienen costo) y se ignoran por completo al reimportar el archivo, no hace falta tocarlas.", 4],
     ["5. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
     ["6. Guarda el archivo y vuelve a “Estimar los Costos” > botón “⇧ Importar desde Excel” para subirlo.", 4],
     ["", 0],
@@ -829,7 +889,7 @@ async function buildEstimateXlsxBlob(): Promise<Blob> {
     + '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
     + '</Relationships>');
   zip.file("xl/styles.xml", xlsxStylesXml());
-  zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(exportRowModel(), [10, 26, 34, 10, 11, 14, 14], true));
+  zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(exportRowModel(), [10, 26, 34, 8, 10, 11, 14, 14], true));
   zip.file("xl/worksheets/sheet2.xml", xlsxSheetXml(templateInstructions(), [115], false));
   return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
@@ -839,13 +899,21 @@ function buildEstimateCsv(): string {
   const lines = [TEMPLATE_HEADERS.join(";")];
   leafRows().forEach((l) => {
     const list = activitiesOf(l.id);
-    if (!list.length) { lines.push([cell(l.code), cell(l.name || ""), "", "", "", "", ""].join(";")); return; }
-    list.forEach((a) => {
-      const qty = numOrNull(a.qty);
-      const price = numOrNull(state().byActivity[a.id]);
-      const subtotal = (qty != null && price != null) ? Math.round(qty * price * 100) / 100 : null;
-      lines.push([cell(l.code), cell(l.name || ""), cell(a.name || ""), cell(a.unit || ""), cell(qty ?? ""), cell(price ?? ""), cell(subtotal ?? "")].join(";"));
+    if (!list.length) { lines.push([cell(l.code), cell(l.name || ""), "", "", "", "", "", ""].join(";")); }
+    else {
+      list.forEach((a) => {
+        const qty = numOrNull(a.qty);
+        const price = numOrNull(state().byActivity[a.id]);
+        const subtotal = (qty != null && price != null) ? Math.round(qty * price * 100) / 100 : null;
+        lines.push([cell(l.code), cell(l.name || ""), cell(a.name || ""), "", cell(a.unit || ""), cell(qty ?? ""), cell(price ?? ""), cell(subtotal ?? "")].join(";"));
+      });
+    }
+    milestonesOf(l.id).forEach((m) => {
+      lines.push([cell(l.code), cell(l.name || ""), cell(m.code + " — " + m.name), "Hito", "", "", "", ""].join(";"));
     });
+  });
+  looseMilestones().forEach((m) => {
+    lines.push(["", "", cell(m.code + " — " + m.name), "Hito", "", "", "", ""].join(";"));
   });
   return lines.join("\r\n");
 }
@@ -949,10 +1017,11 @@ async function parseEstimateXlsx(file: File): Promise<{ headers: string[]; rows:
   return { headers: allRows[0], rows: allRows.slice(1) };
 }
 
-interface ColumnMap { code: number; activityName: number; unit?: number; qty?: number; unitPrice?: number; }
+interface ColumnMap { code: number; activityName: number; unit?: number; qty?: number; unitPrice?: number; type?: number; }
 const HEADER_KEYWORDS: { field: keyof ColumnMap; keywords: string[] }[] = [
   { field: "code", keywords: ["codigo edt", "edt"] },
   { field: "activityName", keywords: ["nombre de la actividad"] },
+  { field: "type", keywords: ["tipo"] },
   { field: "unit", keywords: ["unidad"] },
   { field: "qty", keywords: ["cantidad"] },
   { field: "unitPrice", keywords: ["precio unitario", "precio"] }
@@ -997,6 +1066,8 @@ function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResu
   const pricedIds = new Set<string>();
   let matched = 0;
   rows.forEach((row) => {
+    const type = colMap.type != null ? normalizeHeader(String(row[colMap.type] || "")) : "";
+    if (type.indexOf("hito") !== -1) return; // fila de hito: solo lectura aquí, nunca se reconcilia como actividad
     const code = String(row[colMap.code] || "").trim();
     if (!code) return; // fila totalmente vacía: caso normal, se omite
     const activityName = String(row[colMap.activityName] || "").trim();

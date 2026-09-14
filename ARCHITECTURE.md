@@ -303,6 +303,32 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   emparejamiento por Código EDT, mismos avisos de códigos no encontrados.
   Requiere confirmación explícita antes de reemplazar (mismo texto que
   WBS Builder), y deja `mode` en `"live"` (nunca cambia a `"sample"`).
+- **Hitos** (`MilestoneItem` en `types.ts`, `milestones?: MilestoneItem[]`
+  en `ActivitiesModule`): duración cero por definición, con un **código
+  propio** asignado por el alumno (convención "H1", "H2"... no se valida
+  el prefijo) en vez de la numeración automática `4.2.1` del paquete.
+  Viven en un array SEPARADO de `byLeaf` porque, a diferencia de una
+  actividad, un hito puede ir **suelto** (`leafId: null`, hito del
+  proyecto en general) o **atado** a un paquete de trabajo (`leafId` =
+  id del paquete). Se marcan en el `.xlsx` con el mismo mecanismo que
+  Primavera P6 usa para su "Activity Type": una columna **"Tipo"**
+  (vacío = actividad normal, "Hito" = hito) + una columna **"Código de
+  hito"** para el código libre — ambas se detectan de forma tolerante
+  (`isMilestone` = Tipo contiene "hito" **o** hay Código de hito, así
+  alcanza con completar uno de los dos). Un hito con Código EDT
+  coincide con ese paquete; vacío = suelto; un código que no coincide
+  con ningún paquete real se reporta como huérfano y NO se importa
+  (igual criterio que una actividad con EDT inexistente). `fullRows()`
+  lista los hitos atados después de las actividades de su paquete, y
+  agrega una sección final "Hitos del proyecto" para los sueltos —
+  siempre con Duración "0" (valor por definición, nunca "—" de dato
+  faltante) e ícono ◆ distintivo (`.milestone-row`/`.milestone-code`).
+  El modo ejemplo trae dos hitos ilustrativos ("H1 Fin de
+  Cimentaciones", atado a 4.2; "H2 Cierre del Proyecto", suelto) para
+  demostrar ambos casos. **Fuera de alcance deliberado**: PERT y
+  Cronograma CPM no leen `milestones` (piden explícitamente solo
+  `byLeaf`) — un hito no aparece en la red ni en el Gantt de esos dos
+  módulos.
 
 **WBS_Builder.html** — el de mayor fan-out.
 - Lee `raci` (bloquea "Responsable" si la RACI ya asignó un "R" —
@@ -447,6 +473,21 @@ Costs")
   que el proyecto activo ya tenga la EDT (WBS Builder) y las actividades
   (Definir las Actividades → "⇩ Cargar ejemplo en el proyecto") cargadas
   — sin actividades reales no hay nada que precificar.
+- **Hitos**: de solo lectura aquí (nunca se les asigna precio, vienen de
+  `activities.milestones`) — se listan para trazabilidad, después de las
+  actividades de su paquete o en una sección final "Hitos del proyecto"
+  si van sueltos, con Unidad/Cantidad/Precio unitario/Subtotal siempre
+  "—" y **sin contribuir** a `pkgSubtotal`/`pkgComplete`/
+  `stats().totalCost`. El archivo exportado los incluye como referencia
+  (columna "Tipo"="Hito", precios en blanco) para que el reporte y el
+  round-trip los muestren; al reimportar, `reconcileImportRows` detecta
+  esa misma columna "Tipo" y los **omite silenciosamente** — nunca se
+  intenta emparejar un hito por nombre contra `activitiesOf()`, así el
+  round-trip de un archivo con hitos no los reporta como "no
+  reconocidos". No hizo falta tocar `gpi-core.ts`
+  (`applyCostEstimateToWbs`/`costEstimateRows` leen `activities.byLeaf`,
+  nunca `.milestones`): los hitos ya quedan fuera del costo del WBS sin
+  ningún cambio ahí.
 
 **RACI_Matrix.html**
 - Depende de `window.GPI.util` para su propia lógica en modo "live"
@@ -546,6 +587,13 @@ vez que se agrega o toca un módulo:
   concreto, Acero de refuerzo, Concreto en zapatas, Encofrado/
   desencofrado). Ver `sampleActivities()` para el detalle completo
   (nombre, unidad, metrado, rendimiento y n.º de equipos de cada una).
+- **Hitos** (`activities.milestones`, dos ilustrativos en
+  `sampleActivities()`/`SAMPLE_ACTIVITIES`): "H1 Fin de Cimentaciones"
+  atado al paquete 4.2, y "H2 Cierre del Proyecto" suelto (sin paquete)
+  — cubren los dos casos que soporta el modelo. Visibles en Definir las
+  Actividades y en Estimar los Costos (ahí de solo lectura, sin costo);
+  fuera de alcance en PERT/Cronograma CPM (ver la sección de
+  Activity_Definition.html más arriba).
 - **Estimar los Costos** (`costEstimate`, `sampleEstimate()` en
   `src/modules/cost-estimate/main.ts`): precio unitario **por
   actividad** (no por paquete — corregido tras la primera versión de

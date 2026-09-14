@@ -45,10 +45,14 @@ interface JSZipCtor { new (): JSZipInstance; loadAsync(data: ArrayBuffer): Promi
 // renciando su id: la EDT nunca se duplica aquí, se lee en vivo desde el
 // WBS Builder a través de gpi-core (principio de fuente única de verdad).
 interface ActivityRow { id: string; name: string; unit: string; qty: string | number; perf: string | number; teams: string | number; }
-interface ActivitiesState { byLeaf: Record<string, ActivityRow[]>; idCounter: number; }
+// Hito: duración cero por definición, código propio asignado por el alumno
+// (convención "H1", "H2"... no se valida el prefijo) -- puede colgar de un
+// paquete de trabajo (leafId) o ir suelto (leafId null = hito del proyecto).
+interface MilestoneRow { id: string; code: string; name: string; leafId?: string | null; }
+interface ActivitiesState { byLeaf: Record<string, ActivityRow[]>; idCounter: number; milestones: MilestoneRow[]; }
 
 let mode: "live" | "sample" = "live";
-let stateLive: ActivitiesState = { byLeaf: {}, idCounter: 1 };
+let stateLive: ActivitiesState = { byLeaf: {}, idCounter: 1, milestones: [] };
 let stateSample: ActivitiesState | null = null;
 let wbsLive: WbsModule | null = null;
 
@@ -70,7 +74,12 @@ function normalizeState(obj: any): ActivitiesState {
       teams: (a.teams == null || a.teams === "" ? 1 : a.teams)   // n.º de equipos (manual, default 1)
     }));
   });
-  return { byLeaf: by, idCounter: Number(obj.idCounter) || 1 };
+  const milestones: MilestoneRow[] = (Array.isArray(obj.milestones) ? obj.milestones : []).map((m: any) => ({
+    id: m.id || ("m" + Math.random().toString(36).slice(2, 8)),
+    code: m.code || "", name: m.name || "",
+    leafId: m.leafId || null
+  }));
+  return { byLeaf: by, idCounter: Number(obj.idCounter) || 1, milestones };
 }
 
 // ---------- modal (los diálogos nativos se bloquean en iframes) ----------
@@ -180,7 +189,7 @@ function durActivity(a: ActivityRow): number | null {
 }
 
 interface FullRow {
-  kind: "project" | "phase" | "package" | "activity";
+  kind: "project" | "phase" | "package" | "activity" | "milestone";
   n: number; code: string; level: number; name: string;
   id?: string; count?: number;
   unit?: string; qty?: string | number; perf?: string | number; teams?: string | number; dur?: number | null;
@@ -188,16 +197,20 @@ interface FullRow {
 }
 
 // Modelo de filas completo, estilo MS Project: fila 0 = proyecto (tarea
-// resumen), y N.º consecutivo para TODAS las filas (fases, paquetes y
-// actividades). Es la única fuente de numeración: la tabla, el reporte y la
-// plantilla exportada lo comparten para que nunca se desalineen.
-// level = nivel de esquema de MS Project (proyecto=1, sus fases=2, …).
+// resumen), y N.º consecutivo para TODAS las filas (fases, paquetes,
+// actividades e hitos). Es la única fuente de numeración: la tabla, el
+// reporte y la plantilla exportada lo comparten para que nunca se
+// desalineen. level = nivel de esquema de MS Project (proyecto=1, sus
+// fases=2, …). Los hitos atados a un paquete se listan después de sus
+// actividades; los sueltos (sin paquete) van en una sección final propia.
 function fullRows(): FullRow[] {
   const w = wbsData(), st = state(), out: FullRow[] = [];
   if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
   let n = 0;
   const rootName = ((w.nodes[w.rootId].name || "").trim()) || (document.getElementById("projectTitle") as HTMLInputElement).value || "Proyecto";
   out.push({ kind: "project", n: n++, code: "0", level: 1, name: rootName });
+  const milestones = st.milestones || [];
+  const looseMilestones = milestones.filter((m) => !m.leafId);
   treeRows().forEach((r) => {
     if (r.kind === "phase") {
       out.push({ kind: "phase", n: n++, code: r.code, level: r.depth + 1, name: r.name, id: r.id });
@@ -206,8 +219,17 @@ function fullRows(): FullRow[] {
       (st.byLeaf[r.id] || []).forEach((a, i) => {
         out.push({ kind: "activity", n: n++, code: r.code + "." + (i + 1), level: r.depth + 2, name: a.name, unit: a.unit, qty: a.qty, perf: a.perf, teams: a.teams, dur: durActivity(a), leafId: r.id, actIndex: i });
       });
+      milestones.filter((m) => m.leafId === r.id).forEach((m) => {
+        out.push({ kind: "milestone", n: n++, code: m.code, level: r.depth + 2, name: m.name, dur: 0, leafId: r.id });
+      });
     }
   });
+  if (looseMilestones.length) {
+    out.push({ kind: "phase", n: n++, code: "", level: 2, name: "Hitos del proyecto" });
+    looseMilestones.forEach((m) => {
+      out.push({ kind: "milestone", n: n++, code: m.code, level: 3, name: m.name, dur: 0 });
+    });
+  }
   return out;
 }
 
@@ -249,6 +271,14 @@ function renderTable(): void {
         + '<td class="n-cell">' + r.n + '</td>'
         + '<td class="pk-code">' + esc(r.code) + '</td>'
         + '<td colspan="6" style="padding-left:' + (8 + Math.max(0, r.level - 2) * 16) + 'px"><span class="pk-name">' + esc(r.name) + '</span><span class="pk-count' + (r.count ? '' : ' zero') + '">' + r.count + ' act.</span></td>'
+        + '</tr>';
+    } else if (r.kind === "milestone") {
+      html += '<tr class="act-row milestone-row">'
+        + '<td class="n-cell act-item">' + r.n + '</td>'
+        + '<td class="act-code milestone-code">◆ ' + esc(r.code) + '</td>'
+        + '<td>' + (r.name ? esc(r.name) : '<span class="rep-note">— sin nombre —</span>') + '<span class="milestone-tag">Hito</span></td>'
+        + '<td>—</td><td class="num">—</td><td class="num">—</td><td class="num" style="text-align:center">—</td>'
+        + '<td class="dur-cell" title="Los hitos tienen duración cero por definición">0</td>'
         + '</tr>';
     } else {
       html += '<tr class="act-row">'
@@ -293,14 +323,14 @@ function copyWholeTable(): void {
   if (!rows.length) { setStatus("No hay tabla que copiar."); return; }
   const lines = ["N.º\tEDT\tPaquete de trabajo / Actividad\tUnidad\tMetrado\tRend. (R)\t#Eq\tDur. (d)"];
   rows.forEach((r) => {
-    const isAct = r.kind === "activity";
+    const isAct = r.kind === "activity", isMs = r.kind === "milestone";
     lines.push([
-      r.n, r.code, r.name || "",
+      r.n, r.code, (r.name || "") + (isMs ? " (hito)" : ""),
       isAct ? (r.unit || "") : "",
       isAct ? (r.qty == null ? "" : r.qty) : "",
       isAct ? (r.perf == null ? "" : r.perf) : "",
       isAct ? Math.max(1, numVal(r.teams) || 1) : "",
-      isAct && r.dur != null ? r.dur : ""
+      isAct && r.dur != null ? r.dur : (isMs ? 0 : "")
     ].join("\t"));
   });
   const text = lines.join("\n");
@@ -448,7 +478,15 @@ function sampleActivities(): ActivitiesState {
   by[I.p51] = [A("Pruebas de tableros y circuitos eléctricos", "pto", 120, 30), A("Pruebas hidráulicas de redes sanitarias", "glb", 1, 0.5)]; // 4 · 2
   by[I.p52] = [A("Capacitación operativa al personal del cliente", "hora", 40, 5), A("Elaboración de manuales de operación y mantenimiento", "doc", 2, 0.5)]; // 8 · 4
   by[I.p53] = [A("Elaboración de dossier de calidad y planos as-built", "doc", 1, 0.1), A("Acta de entrega y cierre del proyecto", "doc", 1, 0.5)]; // 10 · 2
-  return { byLeaf: by, idCounter: n + 1 };
+  // Dos hitos ilustrativos: uno atado a un paquete (demuestra el caso más
+  // común, un entregable intermedio con fecha objetivo) y uno suelto (hito
+  // del proyecto en general, sin depender de un paquete puntual) -- para que
+  // el ejemplo DISTRIB+ muestre ambos casos que soporta el modelo de datos.
+  const milestones: MilestoneRow[] = [
+    { id: "m1", code: "H1", name: "Fin de Cimentaciones", leafId: I.p42 },
+    { id: "m2", code: "H2", name: "Cierre del Proyecto", leafId: null }
+  ];
+  return { byLeaf: by, idCounter: n + 1, milestones };
 }
 
 function enterSample(): void {
@@ -475,12 +513,13 @@ function wbsCodesOf(wbs: WbsModule): Record<string, string> {
   return codes;
 }
 
-// Filas "virtuales" con las actividades de ejemplo, en el mismo orden de
-// columnas que reconcileImportRows espera de un archivo real (Código EDT,
-// Paquete de trabajo [sin usar], Nombre de la actividad, Unidad, Metrado,
-// Rendimiento, N.º de equipos) -- así "Cargar ejemplo en el proyecto" puede
-// reutilizar TAL CUAL la misma reconciliación por código EDT que ya usa el
-// import de Excel, en vez de duplicar esa lógica.
+// Filas "virtuales" con las actividades e hitos de ejemplo, en el mismo
+// orden de columnas que reconcileImportRows espera de un archivo real
+// (Código EDT, Paquete de trabajo [sin usar], Nombre de la actividad, Tipo,
+// Código de hito, Unidad, Metrado, Rendimiento, N.º de equipos) -- así
+// "Cargar ejemplo en el proyecto" puede reutilizar TAL CUAL la misma
+// reconciliación por código EDT que ya usa el import de Excel, en vez de
+// duplicar esa lógica (incluidos los hitos, atados o sueltos).
 function sampleVirtualRows(): string[][] {
   const codes = wbsCodesOf(SAMPLE_WBS);
   const sample = sampleActivities();
@@ -489,8 +528,12 @@ function sampleVirtualRows(): string[][] {
     const code = codes[leafId];
     if (!code) return;
     sample.byLeaf[leafId].forEach((a) => {
-      rows.push([code, "", a.name, a.unit, String(a.qty), String(a.perf ?? ""), String(a.teams ?? "")]);
+      rows.push([code, "", a.name, "", "", a.unit, String(a.qty), String(a.perf ?? ""), String(a.teams ?? "")]);
     });
+  });
+  sample.milestones.forEach((m) => {
+    const code = m.leafId ? (codes[m.leafId] || "") : "";
+    rows.push([code, "", m.name, "Hito", m.code, "", "", "", ""]);
   });
   return rows;
 }
@@ -520,23 +563,23 @@ async function loadSampleIntoProject(): Promise<void> {
     await showAlert("La EDT del proyecto activo está vacía. Carga primero el ejemplo en WBS Builder (\"Cargar ejemplo\") y vuelve aquí.");
     return;
   }
-  const colMap: ColumnMap = { code: 0, name: 2, unit: 3, qty: 4, perf: 5, teams: 6 };
+  const colMap: ColumnMap = { code: 0, name: 2, type: 3, milestoneCode: 4, unit: 5, qty: 6, perf: 7, teams: 8 };
   const result = reconcileImportRows(sampleVirtualRows(), colMap);
-  if (!result.matched) {
+  if (!result.matched && !result.matchedMilestones) {
     mode = prevMode;
     await showAlert("Ningún código EDT del ejemplo coincide con la EDT actual del proyecto. Carga primero el caso DISTRIB+ en WBS Builder (\"Cargar ejemplo\").");
     return;
   }
-  let msg = "Se reemplazarán las actividades del PROYECTO ACTIVO (no el modo ejemplo) por las " + result.matched + " actividad(es) de ejemplo de DISTRIB+ que coinciden con su EDT actual.";
+  let msg = "Se reemplazarán las actividades del PROYECTO ACTIVO (no el modo ejemplo) por las " + result.matched + " actividad(es)" + (result.matchedMilestones ? " y " + result.matchedMilestones + " hito(s)" : "") + " de ejemplo de DISTRIB+ que coinciden con su EDT actual.";
   if (result.unmatchedCodes.length) {
     msg += " " + result.unmatchedCodes.length + " código(s) del ejemplo no se encontraron en la EDT actual (¿la cargaste igual que en WBS Builder?): " + result.unmatchedCodes.slice(0, 8).join(", ") + (result.unmatchedCodes.length > 8 ? "…" : "") + ".";
   }
   const ok = await showConfirm(msg, "Cargar ejemplo en el proyecto");
   if (!ok) { mode = prevMode; render(); return; }
-  stateLive = { byLeaf: result.byLeaf, idCounter: result.idCounter };
+  stateLive = { byLeaf: result.byLeaf, idCounter: result.idCounter, milestones: result.milestones };
   render();
   gpiPush();
-  setStatus("Ejemplo DISTRIB+ cargado en el proyecto activo (" + result.matched + " actividad(es)).");
+  setStatus("Ejemplo DISTRIB+ cargado en el proyecto activo (" + result.matched + " actividad(es)" + (result.matchedMilestones ? ", " + result.matchedMilestones + " hito(s)" : "") + ").");
 }
 
 // ---------- REPORTE IMPRIMIBLE ----------
@@ -587,6 +630,12 @@ function buildReport(): void {
       body += '<tr><td class="num rep-phase" style="text-align:center">' + r.n + '</td><td class="num rep-phase">' + esc(r.code) + '</td><td class="rep-phase" colspan="6">' + esc(r.name) + '</td></tr>';
     } else if (r.kind === "package") {
       body += '<tr><td class="num rep-pkg" style="text-align:center">' + r.n + '</td><td class="num rep-pkg">' + esc(r.code) + '</td><td class="rep-pkg">' + esc(r.name) + '</td><td class="rep-pkg" colspan="5">' + (r.count ? r.count + ' actividad(es)' : '<span class="rep-note">sin actividades</span>') + '</td></tr>';
+    } else if (r.kind === "milestone") {
+      body += '<tr><td class="num" style="text-align:center">' + r.n + '</td>'
+        + '<td class="num">◆ ' + esc(r.code) + '</td>'
+        + '<td>' + esc(r.name) + ' <span class="rep-note">(hito)</span></td>'
+        + '<td>—</td><td class="num" style="text-align:right">—</td><td class="num" style="text-align:right">—</td><td class="num" style="text-align:center">—</td>'
+        + '<td class="num" style="text-align:center"><b>0</b></td></tr>';
     } else {
       body += '<tr><td class="num" style="text-align:center">' + r.n + '</td>'
         + '<td class="num">' + esc(r.code) + '</td>'
@@ -611,7 +660,7 @@ function xmlEsc(s: unknown): string { return String(s == null ? "" : s).replace(
 
 interface XlCell { v: string | number; t: "s" | "n"; s?: number; }
 
-const TEMPLATE_HEADERS = ["Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"];
+const TEMPLATE_HEADERS = ["Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Código de hito", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"];
 
 // Estilos: 0 normal · 1 encabezado · 2 centrado · 4 nota/instrucciones · 25 título
 function xlsxStylesXml(): string {
@@ -676,7 +725,7 @@ function templateRowModel(): Array<Array<XlCell | null>> {
     out.push([
       { v: l.code, t: "s", s: 2 },
       { v: l.name || "", t: "s", s: 0 },
-      null, null, null, null, null
+      null, null, null, null, null, null, null
     ]);
   });
   return out;
@@ -689,10 +738,11 @@ function templateInstructions(): Array<Array<XlCell | null>> {
     ["1. Cada fila es un paquete de trabajo de la EDT. Las columnas “Código EDT” y “Paquete de trabajo” son de referencia — no las edites ni las borres: son la clave con la que este simulador reconoce a qué paquete pertenece cada actividad al importar el archivo de vuelta.", 4],
     ["2. Completa “Nombre de la actividad”, “Unidad”, “Metrado”, “Rendimiento (R)” y “N.º de equipos” para cada actividad del paquete.", 4],
     ["3. ¿Más de una actividad por el mismo paquete? Copia la fila completa (Ctrl+D en Excel) y repite el mismo “Código EDT” en la copia, cambiando el nombre de la actividad.", 4],
-    ["4. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
-    ["5. Guarda el archivo y vuelve a “Definir las Actividades” > botón “⇧ Importar actividades desde Excel” para subirlo.", 4],
+    ["4. Hitos: para marcar una fila como hito (duración cero) en vez de una actividad normal, escribe “Hito” en la columna “Tipo” y asígnale un código propio en “Código de hito” (por ejemplo “H1”, “H2”… la numeración la decides tú) — deja en blanco Unidad/Metrado/Rendimiento/N.º de equipos, no aplican a un hito. Si el hito pertenece a un paquete de trabajo, completa su “Código EDT”; si es un hito del proyecto en general (no depende de un paquete puntual), deja “Código EDT” en blanco.", 4],
+    ["5. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
+    ["6. Guarda el archivo y vuelve a “Definir las Actividades” > botón “⇧ Importar actividades desde Excel” para subirlo.", 4],
     ["", 0],
-    ["La duración de cada actividad (Metrado ÷ (N.º de equipos × Rendimiento), redondeada al entero superior) se calcula sola al importar — no hace falta traerla en este archivo.", 4],
+    ["La duración de cada actividad (Metrado ÷ (N.º de equipos × Rendimiento), redondeada al entero superior) se calcula sola al importar — no hace falta traerla en este archivo. Los hitos tienen duración cero por definición.", 4],
     ["", 0],
     ["Generado por el simulador GPI — módulo Definir las Actividades.", 4]
   ];
@@ -729,7 +779,7 @@ async function buildTemplateXlsxBlob(): Promise<Blob> {
     + '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
     + '</Relationships>');
   zip.file("xl/styles.xml", xlsxStylesXml());
-  zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(templateRowModel(), [10, 30, 30, 10, 11, 14, 12], true));
+  zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(templateRowModel(), [10, 30, 30, 8, 12, 10, 11, 14, 12], true));
   zip.file("xl/worksheets/sheet2.xml", xlsxSheetXml(templateInstructions(), [115], false));
   return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
@@ -737,7 +787,7 @@ async function buildTemplateXlsxBlob(): Promise<Blob> {
 function buildTemplateCsv(): string {
   function cell(v: unknown): string { const s = String(v == null ? "" : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
   const lines = [TEMPLATE_HEADERS.join(";")];
-  leafRows().forEach((l) => { lines.push([cell(l.code), cell(l.name || ""), "", "", "", "", ""].join(";")); });
+  leafRows().forEach((l) => { lines.push([cell(l.code), cell(l.name || ""), "", "", "", "", "", "", ""].join(";")); });
   return lines.join("\r\n");
 }
 
@@ -840,10 +890,12 @@ async function parseActivitiesXlsx(file: File): Promise<{ headers: string[]; row
   return { headers: allRows[0], rows: allRows.slice(1) };
 }
 
-interface ColumnMap { code: number; name: number; unit?: number; qty?: number; perf?: number; teams?: number; }
+interface ColumnMap { code: number; name: number; unit?: number; qty?: number; perf?: number; teams?: number; type?: number; milestoneCode?: number; }
 const HEADER_KEYWORDS: { field: keyof ColumnMap; keywords: string[] }[] = [
   { field: "code", keywords: ["codigo edt", "edt"] },
   { field: "name", keywords: ["nombre de la actividad", "actividad"] },
+  { field: "milestoneCode", keywords: ["codigo de hito"] },
+  { field: "type", keywords: ["tipo"] },
   { field: "unit", keywords: ["unidad"] },
   { field: "qty", keywords: ["metrado"] },
   { field: "perf", keywords: ["rendimiento"] },
@@ -865,19 +917,43 @@ function mapHeaderColumns(headerRow: string[]): ColumnMap | null {
   return map as ColumnMap;
 }
 
-interface ReconcileResult { byLeaf: Record<string, ActivityRow[]>; idCounter: number; matched: number; unmatchedCodes: string[]; }
+interface ReconcileResult {
+  byLeaf: Record<string, ActivityRow[]>; idCounter: number; matched: number; unmatchedCodes: string[];
+  milestones: MilestoneRow[]; matchedMilestones: number; milestoneIssues: string[];
+}
 // Agrupa las filas del archivo por el id real del paquete de trabajo
 // (emparejado por código EDT, calculado localmente con leafRows() -- nunca
 // contra GPI.util.wbsLeaves, para que el import funcione sin gpi-core.js).
+// Una fila es un HITO si su columna "Tipo" contiene "hito" o si trae un
+// "Código de hito" no vacío (tolerante a que el alumno solo complete uno de
+// los dos) -- en ese caso Unidad/Metrado/Rendimiento/N.º de equipos se
+// ignoran y el Código EDT es opcional (vacío = hito suelto del proyecto).
 function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResult {
   const codeToId: Record<string, string> = {};
   leafRows().forEach((l) => { codeToId[l.code] = l.id; });
   const byLeaf: Record<string, ActivityRow[]> = {};
-  let n = 0, matched = 0;
+  const milestones: MilestoneRow[] = [];
+  let n = 0, matched = 0, mn = 0, matchedMilestones = 0;
   const unmatched = new Set<string>();
+  const milestoneIssues: string[] = [];
   rows.forEach((row) => {
     const code = String(row[colMap.code] || "").trim();
     const name = String(row[colMap.name] || "").trim();
+    const type = colMap.type != null ? normalizeHeader(String(row[colMap.type] || "")) : "";
+    const milestoneCode = colMap.milestoneCode != null ? String(row[colMap.milestoneCode] || "").trim() : "";
+    const isMilestone = type.indexOf("hito") !== -1 || !!milestoneCode;
+    if (isMilestone) {
+      if (!name) return; // fila de hito sin nombre: caso normal (plantilla sin completar), se omite
+      if (!milestoneCode) { milestoneIssues.push('Hito "' + name + '" sin "Código de hito": no se importó.'); return; }
+      let leafId: string | null = null;
+      if (code) {
+        leafId = codeToId[code] || null;
+        if (!leafId) { milestoneIssues.push('Hito "' + milestoneCode + ' — ' + name + '": el Código EDT "' + code + '" no coincide con ningún paquete de la EDT actual, no se importó.'); return; }
+      }
+      milestones.push({ id: "m" + (++mn), code: milestoneCode, name, leafId });
+      matchedMilestones++;
+      return;
+    }
     if (!code || !name) return; // fila de la plantilla sin completar: caso normal, se omite
     const leafId = codeToId[code];
     if (!leafId) { unmatched.add(code); return; }
@@ -889,7 +965,7 @@ function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResu
     byLeaf[leafId].push({ id: "a" + (++n), name, unit, qty, perf, teams: teams || 1 });
     matched++;
   });
-  return { byLeaf, idCounter: n + 1, matched, unmatchedCodes: Array.from(unmatched) };
+  return { byLeaf, idCounter: n + 1, matched, unmatchedCodes: Array.from(unmatched), milestones, matchedMilestones, milestoneIssues };
 }
 
 async function importActivitiesExcel(file: File): Promise<void> {
@@ -907,21 +983,25 @@ async function importActivitiesExcel(file: File): Promise<void> {
     return;
   }
   const result = reconcileImportRows(parsed.rows, colMap);
-  if (!result.matched) {
+  if (!result.matched && !result.matchedMilestones) {
     await showAlert("No se encontró ninguna fila válida para importar: revisa que los códigos EDT del archivo coincidan con la EDT actual y que la columna de nombre de actividad esté completa.");
     return;
   }
   const s = stats();
-  let msg = "Se reemplazarán las " + (s.total + s.orphans) + " actividades de la lista actual por " + result.matched + " actividad(es) importada(s) del archivo" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT no se toca.";
+  let msg = "Se reemplazarán las " + (s.total + s.orphans) + " actividades de la lista actual por " + result.matched + " actividad(es)" + (result.matchedMilestones ? " y " + result.matchedMilestones + " hito(s)" : "") + " importado(s) del archivo" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT no se toca.";
   if (result.unmatchedCodes.length) {
     msg += " " + result.unmatchedCodes.length + " fila(s) no se importaron por no coincidir con ningún código EDT actual: " + result.unmatchedCodes.slice(0, 8).join(", ") + (result.unmatchedCodes.length > 8 ? "…" : "") + ".";
   }
+  if (result.milestoneIssues.length) {
+    msg += " " + result.milestoneIssues.length + " hito(s) con problemas: " + result.milestoneIssues.slice(0, 5).join(" ") + (result.milestoneIssues.length > 5 ? "…" : "");
+  }
   const ok = await showConfirm(msg, "Importar actividades desde Excel");
   if (!ok) return;
-  if (mode === "sample") stateSample = { byLeaf: result.byLeaf, idCounter: result.idCounter };
-  else stateLive = { byLeaf: result.byLeaf, idCounter: result.idCounter };
+  if (mode === "sample") stateSample = { byLeaf: result.byLeaf, idCounter: result.idCounter, milestones: result.milestones };
+  else stateLive = { byLeaf: result.byLeaf, idCounter: result.idCounter, milestones: result.milestones };
   onDirty(true);
-  setStatus(result.matched + " actividad(es) importada(s) desde Excel" + (result.unmatchedCodes.length ? (" · " + result.unmatchedCodes.length + " fila(s) no reconciliada(s)") : "") + ".");
+  const issues = result.unmatchedCodes.length + result.milestoneIssues.length;
+  setStatus(result.matched + " actividad(es)" + (result.matchedMilestones ? " y " + result.matchedMilestones + " hito(s)" : "") + " importado(s) desde Excel" + (issues ? (" · " + issues + " fila(s) no reconciliada(s)") : "") + ".");
 }
 
 // ---------- toolbar ----------
@@ -950,8 +1030,8 @@ function wireToolbar(): void {
     const s = stats();
     const ok = await showConfirm("Se eliminarán las " + (s.total + s.orphans) + " actividades de la lista actual" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT no se toca. ¿Continuar?", "Limpiar actividades");
     if (!ok) return;
-    if (mode === "sample") stateSample = { byLeaf: {}, idCounter: 1 };
-    else stateLive = { byLeaf: {}, idCounter: 1 };
+    if (mode === "sample") stateSample = { byLeaf: {}, idCounter: 1, milestones: [] };
+    else stateLive = { byLeaf: {}, idCounter: 1, milestones: [] };
     onDirty(true);
     setStatus("Lista de actividades vacía.");
   });

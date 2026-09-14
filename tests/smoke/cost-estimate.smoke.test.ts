@@ -76,12 +76,19 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
     await new Promise((r) => setTimeout(r, 100));
     expect(doc.getElementById("modeChip")!.textContent).toBe("MODO EJEMPLO");
     expect(doc.querySelectorAll(".pkg-row").length).toBe(18); // los 18 paquetes de la EDT
-    expect(doc.querySelectorAll(".act-row").length).toBe(43); // los 18 paquetes tienen actividades -- 43 en total
+    // .act-row incluye las 43 actividades + los 2 hitos de ejemplo (H1 atado
+    // a Cimentaciones, H2 suelto) -- ver .milestone-row para distinguirlos.
+    expect(doc.querySelectorAll(".act-row").length).toBe(45);
+    expect(doc.querySelectorAll(".milestone-row").length).toBe(2);
+    expect(doc.getElementById("estBody")!.textContent).toMatch(/Fin de Cimentaciones/);
+    expect(doc.getElementById("estBody")!.textContent).toMatch(/Hitos del proyecto/); // sección final para el suelto
+    expect(doc.getElementById("estBody")!.textContent).toMatch(/Cierre del Proyecto/);
     expect(doc.getElementById("sbCov")!.textContent).toBe("42/43 actividades con precio");
     expect(doc.getElementById("sbPct")!.textContent).toBe("98%");
     // p43 (Estructura y cobertura) queda "parcial" a propósito: 2 de sus 3
     // actividades tienen precio, la tercera no -- documentado en ARCHITECTURE.md.
     // Es el ÚNICO paquete sin estimado completo -- todos los demás lo tienen.
+    // Los hitos NUNCA cuentan aquí (ni en el total ni en la cobertura).
     expect(doc.getElementById("sbPkg")!.textContent).toBe("17/18 paquetes con estimado completo");
     expect(doc.getElementById("sbTotal")!.textContent).toBe("6,160,500");
     expect(doc.getElementById("missList")!.textContent).toMatch(/Todos los paquetes de trabajo tienen actividades definidas/);

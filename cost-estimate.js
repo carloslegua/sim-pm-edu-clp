@@ -129,6 +129,14 @@
 		const acts = activitiesData();
 		return acts && acts.byLeaf && acts.byLeaf[leafId] || [];
 	}
+	function milestonesOf(leafId) {
+		const acts = activitiesData();
+		return (acts && acts.milestones || []).filter((m) => m.leafId === leafId);
+	}
+	function looseMilestones() {
+		const acts = activitiesData();
+		return (acts && acts.milestones || []).filter((m) => !m.leafId);
+	}
 	function parseExcelNum(s) {
 		let str = String(s == null ? "" : s).trim().replace(/[\s ]/g, "");
 		if (!str) return "";
@@ -248,7 +256,35 @@
 					subtotal: subtotalOf(a)
 				});
 			});
+			milestonesOf(r.id).forEach((m) => {
+				out.push({
+					kind: "milestone",
+					n: n++,
+					code: m.code,
+					level: r.depth + 2,
+					name: m.name
+				});
+			});
 		});
+		const loose = looseMilestones();
+		if (loose.length) {
+			out.push({
+				kind: "phase",
+				n: n++,
+				code: "",
+				level: 2,
+				name: "Hitos del proyecto"
+			});
+			loose.forEach((m) => {
+				out.push({
+					kind: "milestone",
+					n: n++,
+					code: m.code,
+					level: 3,
+					name: m.name
+				});
+			});
+		}
 		return out;
 	}
 	function render() {
@@ -283,7 +319,8 @@
 				if (r.pkgSubtotal != null) total += r.pkgSubtotal;
 				const sub = !r.activityCount ? "<td class=\"sub-cell empty\" title=\"Este paquete todavía no tiene actividades definidas en Definir las Actividades\">sin actividades</td>" : r.pkgComplete ? "<td class=\"sub-cell\" title=\"Suma del Subtotal de sus actividades\">" + fmtMoney(r.pkgSubtotal) + "</td>" : "<td class=\"sub-cell partial\" title=\"Suma parcial: todavía faltan precios en alguna actividad de este paquete\">" + fmtMoney(r.pkgSubtotal) + " ⚠</td>";
 				html += "<tr class=\"pkg-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"pk-code\">" + esc(r.code) + "</td><td colspan=\"4\" style=\"padding-left:" + (8 + Math.max(0, r.level - 2) * 16) + "px\"><span class=\"pk-name\">" + esc(r.name) + "</span><span class=\"pk-count" + (r.activityCount ? "" : " zero") + "\">" + (r.activityCount || 0) + " act.</span></td>" + sub + "</tr>";
-			} else html += "<tr class=\"act-row\"><td class=\"n-cell act-item\">" + r.n + "</td><td class=\"act-code\">" + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "</td><td>" + esc(r.unit || "—") + "</td><td class=\"num\">" + fmtQty(r.qty) + "</td><td class=\"num\">" + fmtQty(r.unitPrice) + "</td>" + (r.subtotal == null ? "<td class=\"sub-cell empty\" title=\"Falta el Precio unitario\">—</td>" : "<td class=\"sub-cell\" title=\"Subtotal = Cantidad × Precio unitario\">" + fmtMoney(r.subtotal) + "</td>") + "</tr>";
+			} else if (r.kind === "milestone") html += "<tr class=\"act-row milestone-row\"><td class=\"n-cell act-item\">" + r.n + "</td><td class=\"act-code milestone-code\">◆ " + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "<span class=\"milestone-tag\">Hito</span></td><td>—</td><td class=\"num\">—</td><td class=\"num\">—</td><td class=\"sub-cell empty\" title=\"Los hitos no tienen costo\">—</td></tr>";
+			else html += "<tr class=\"act-row\"><td class=\"n-cell act-item\">" + r.n + "</td><td class=\"act-code\">" + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "</td><td>" + esc(r.unit || "—") + "</td><td class=\"num\">" + fmtQty(r.qty) + "</td><td class=\"num\">" + fmtQty(r.unitPrice) + "</td>" + (r.subtotal == null ? "<td class=\"sub-cell empty\" title=\"Falta el Precio unitario\">—</td>" : "<td class=\"sub-cell\" title=\"Subtotal = Cantidad × Precio unitario\">" + fmtMoney(r.subtotal) + "</td>") + "</tr>";
 		});
 		html += "<tr class=\"total-row\"><td colspan=\"6\" style=\"text-align:right\">Total estimado</td><td class=\"sub-cell\">" + fmtMoney(total) + "</td></tr>";
 		tbody.innerHTML = html;
@@ -296,11 +333,11 @@
 		}
 		const lines = ["N.º	Código EDT	Paquete de trabajo / Actividad	Unidad	Cantidad	Precio unitario	Subtotal"];
 		rows.forEach((r) => {
-			const isAct = r.kind === "activity";
+			const isAct = r.kind === "activity", isMs = r.kind === "milestone";
 			lines.push([
 				r.n,
 				r.code,
-				r.name || "",
+				(r.name || "") + (isMs ? " (hito)" : ""),
 				isAct ? r.unit || "" : "",
 				isAct ? r.qty == null ? "" : r.qty : "",
 				isAct ? r.unitPrice == null ? "" : r.unitPrice : "",
@@ -522,9 +559,21 @@
 		by[I.p51] = [A("Pruebas de tableros y circuitos eléctricos", "pto", 120, 30), A("Pruebas hidráulicas de redes sanitarias", "glb", 1, .5)];
 		by[I.p52] = [A("Capacitación operativa al personal del cliente", "hora", 40, 5), A("Elaboración de manuales de operación y mantenimiento", "doc", 2, .5)];
 		by[I.p53] = [A("Elaboración de dossier de calidad y planos as-built", "doc", 1, .1), A("Acta de entrega y cierre del proyecto", "doc", 1, .5)];
+		const milestones = [{
+			id: "m1",
+			code: "H1",
+			name: "Fin de Cimentaciones",
+			leafId: I.p42
+		}, {
+			id: "m2",
+			code: "H2",
+			name: "Cierre del Proyecto",
+			leafId: null
+		}];
 		return {
 			byLeaf: by,
-			idCounter: n + 1
+			idCounter: n + 1,
+			milestones
 		};
 	})();
 	function sampleEstimate() {
@@ -713,7 +762,8 @@
 			else if (r.kind === "package") {
 				const pkgTxt = !r.activityCount ? "<span class=\"rep-note\">sin actividades definidas</span>" : "<b>" + fmtMoney(r.pkgSubtotal) + "</b>" + (r.pkgComplete ? "" : " (parcial)");
 				body += "<tr><td class=\"num rep-pkg\" style=\"text-align:center\">" + r.n + "</td><td class=\"num rep-pkg\">" + esc(r.code) + "</td><td class=\"rep-pkg\">" + esc(r.name) + "</td><td class=\"rep-pkg\" colspan=\"3\">" + (r.activityCount || 0) + " actividad(es)</td><td class=\"num rep-pkg\" style=\"text-align:right\">" + pkgTxt + "</td></tr>";
-			} else {
+			} else if (r.kind === "milestone") body += "<tr><td class=\"num\" style=\"text-align:center\">" + r.n + "</td><td class=\"num\">◆ " + esc(r.code) + "</td><td>" + esc(r.name) + " <span class=\"rep-note\">(hito)</span></td><td>—</td><td class=\"num\" style=\"text-align:right\">—</td><td class=\"num\" style=\"text-align:right\">—</td><td class=\"num\" style=\"text-align:right\">—</td></tr>";
+			else {
 				if (r.subtotal != null) total += r.subtotal;
 				body += "<tr><td class=\"num\" style=\"text-align:center\">" + r.n + "</td><td class=\"num\">" + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "</td><td>" + esc(r.unit || "—") + "</td><td class=\"num\" style=\"text-align:right\">" + fmtQty(r.qty) + "</td><td class=\"num\" style=\"text-align:right\">" + fmtQty(r.unitPrice) + "</td><td class=\"num\" style=\"text-align:right\">" + fmtMoney(r.subtotal) + "</td></tr>";
 			}
@@ -729,6 +779,7 @@
 		"Código EDT",
 		"Paquete de trabajo",
 		"Nombre de la actividad",
+		"Tipo",
 		"Unidad",
 		"Cantidad",
 		"Precio unitario",
@@ -769,27 +820,25 @@
 		}))];
 		leafRows().forEach((l) => {
 			const list = activitiesOf(l.id);
-			if (!list.length) {
-				out.push([
-					{
-						v: l.code,
-						t: "s",
-						s: 2
-					},
-					{
-						v: l.name || "",
-						t: "s",
-						s: 0
-					},
-					null,
-					null,
-					null,
-					null,
-					null
-				]);
-				return;
-			}
-			list.forEach((a) => {
+			if (!list.length) out.push([
+				{
+					v: l.code,
+					t: "s",
+					s: 2
+				},
+				{
+					v: l.name || "",
+					t: "s",
+					s: 0
+				},
+				null,
+				null,
+				null,
+				null,
+				null,
+				null
+			]);
+			else list.forEach((a) => {
 				const qty = numOrNull(a.qty);
 				const price = numOrNull(state().byActivity[a.id]);
 				const subtotal = qty != null && price != null ? Math.round(qty * price * 100) / 100 : null;
@@ -809,6 +858,7 @@
 						t: "s",
 						s: 0
 					},
+					null,
 					a.unit ? {
 						v: a.unit,
 						t: "s",
@@ -830,6 +880,54 @@
 					} : null
 				]);
 			});
+			milestonesOf(l.id).forEach((m) => {
+				out.push([
+					{
+						v: l.code,
+						t: "s",
+						s: 2
+					},
+					{
+						v: l.name || "",
+						t: "s",
+						s: 0
+					},
+					{
+						v: m.code + " — " + m.name,
+						t: "s",
+						s: 0
+					},
+					{
+						v: "Hito",
+						t: "s",
+						s: 0
+					},
+					null,
+					null,
+					null,
+					null
+				]);
+			});
+		});
+		looseMilestones().forEach((m) => {
+			out.push([
+				null,
+				null,
+				{
+					v: m.code + " — " + m.name,
+					t: "s",
+					s: 0
+				},
+				{
+					v: "Hito",
+					t: "s",
+					s: 0
+				},
+				null,
+				null,
+				null,
+				null
+			]);
 		});
 		return out;
 	}
@@ -841,6 +939,7 @@
 			["2. Completa “Precio unitario” para cada actividad.", 4],
 			["3. La columna “Subtotal” es de referencia (Cantidad × Precio unitario): se recalcula sola al importar, no hace falta completarla ni editarla a mano.", 4],
 			["4. Un paquete que aparece sin filas de actividad (solo Código EDT y Paquete de trabajo) todavía no tiene actividades definidas -- complétalas primero en “Definir las Actividades”, no aquí.", 4],
+			["4b. Hitos: las filas con “Tipo”=“Hito” son las definidas en “Definir las Actividades” -- aparecen aquí solo como referencia (nunca tienen costo) y se ignoran por completo al reimportar el archivo, no hace falta tocarlas.", 4],
 			["5. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
 			["6. Guarda el archivo y vuelve a “Estimar los Costos” > botón “⇧ Importar desde Excel” para subirlo.", 4],
 			["", 0],
@@ -864,6 +963,7 @@
 			10,
 			26,
 			34,
+			8,
 			10,
 			11,
 			14,
@@ -883,19 +983,17 @@
 		const lines = [TEMPLATE_HEADERS.join(";")];
 		leafRows().forEach((l) => {
 			const list = activitiesOf(l.id);
-			if (!list.length) {
-				lines.push([
-					cell(l.code),
-					cell(l.name || ""),
-					"",
-					"",
-					"",
-					"",
-					""
-				].join(";"));
-				return;
-			}
-			list.forEach((a) => {
+			if (!list.length) lines.push([
+				cell(l.code),
+				cell(l.name || ""),
+				"",
+				"",
+				"",
+				"",
+				"",
+				""
+			].join(";"));
+			else list.forEach((a) => {
 				const qty = numOrNull(a.qty);
 				const price = numOrNull(state().byActivity[a.id]);
 				const subtotal = qty != null && price != null ? Math.round(qty * price * 100) / 100 : null;
@@ -903,12 +1001,37 @@
 					cell(l.code),
 					cell(l.name || ""),
 					cell(a.name || ""),
+					"",
 					cell(a.unit || ""),
 					cell(qty ?? ""),
 					cell(price ?? ""),
 					cell(subtotal ?? "")
 				].join(";"));
 			});
+			milestonesOf(l.id).forEach((m) => {
+				lines.push([
+					cell(l.code),
+					cell(l.name || ""),
+					cell(m.code + " — " + m.name),
+					"Hito",
+					"",
+					"",
+					"",
+					""
+				].join(";"));
+			});
+		});
+		looseMilestones().forEach((m) => {
+			lines.push([
+				"",
+				"",
+				cell(m.code + " — " + m.name),
+				"Hito",
+				"",
+				"",
+				"",
+				""
+			].join(";"));
 		});
 		return lines.join("\r\n");
 	}
@@ -1009,6 +1132,10 @@
 			keywords: ["nombre de la actividad"]
 		},
 		{
+			field: "type",
+			keywords: ["tipo"]
+		},
+		{
 			field: "unit",
 			keywords: ["unidad"]
 		},
@@ -1046,6 +1173,7 @@
 		const pricedIds = /* @__PURE__ */ new Set();
 		let matched = 0;
 		rows.forEach((row) => {
+			if ((colMap.type != null ? normalizeHeader(String(row[colMap.type] || "")) : "").indexOf("hito") !== -1) return;
 			const code = String(row[colMap.code] || "").trim();
 			if (!code) return;
 			const activityName = String(row[colMap.activityName] || "").trim();

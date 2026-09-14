@@ -3,7 +3,8 @@
 	var mode = "live";
 	var stateLive = {
 		byLeaf: {},
-		idCounter: 1
+		idCounter: 1,
+		milestones: []
 	};
 	var stateSample = null;
 	var wbsLive = null;
@@ -38,9 +39,16 @@
 				teams: a.teams == null || a.teams === "" ? 1 : a.teams
 			}));
 		});
+		const milestones = (Array.isArray(obj.milestones) ? obj.milestones : []).map((m) => ({
+			id: m.id || "m" + Math.random().toString(36).slice(2, 8),
+			code: m.code || "",
+			name: m.name || "",
+			leafId: m.leafId || null
+		}));
 		return {
 			byLeaf: by,
-			idCounter: Number(obj.idCounter) || 1
+			idCounter: Number(obj.idCounter) || 1,
+			milestones
 		};
 	}
 	function showModal(opts) {
@@ -195,6 +203,8 @@
 			level: 1,
 			name: rootName
 		});
+		const milestones = st.milestones || [];
+		const looseMilestones = milestones.filter((m) => !m.leafId);
 		treeRows().forEach((r) => {
 			if (r.kind === "phase") out.push({
 				kind: "phase",
@@ -230,8 +240,38 @@
 						actIndex: i
 					});
 				});
+				milestones.filter((m) => m.leafId === r.id).forEach((m) => {
+					out.push({
+						kind: "milestone",
+						n: n++,
+						code: m.code,
+						level: r.depth + 2,
+						name: m.name,
+						dur: 0,
+						leafId: r.id
+					});
+				});
 			}
 		});
+		if (looseMilestones.length) {
+			out.push({
+				kind: "phase",
+				n: n++,
+				code: "",
+				level: 2,
+				name: "Hitos del proyecto"
+			});
+			looseMilestones.forEach((m) => {
+				out.push({
+					kind: "milestone",
+					n: n++,
+					code: m.code,
+					level: 3,
+					name: m.name,
+					dur: 0
+				});
+			});
+		}
 		return out;
 	}
 	function renderTable() {
@@ -252,6 +292,7 @@
 			if (r.kind === "project") html += "<tr class=\"proj-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"code-cell\" style=\"color:var(--ink-1)\">0</td><td colspan=\"6\">" + esc(r.name) + " <span class=\"proj-hint\">Fila 0</span></td></tr>";
 			else if (r.kind === "phase") html += "<tr class=\"phase-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"code-cell\">" + esc(r.code) + "</td><td colspan=\"6\" style=\"padding-left:" + (10 + Math.max(0, r.level - 2) * 16) + "px\">" + esc(r.name) + "</td></tr>";
 			else if (r.kind === "package") html += "<tr class=\"pkg-row\" id=\"pkg-" + esc(r.id) + "\"><td class=\"n-cell\">" + r.n + "</td><td class=\"pk-code\">" + esc(r.code) + "</td><td colspan=\"6\" style=\"padding-left:" + (8 + Math.max(0, r.level - 2) * 16) + "px\"><span class=\"pk-name\">" + esc(r.name) + "</span><span class=\"pk-count" + (r.count ? "" : " zero") + "\">" + r.count + " act.</span></td></tr>";
+			else if (r.kind === "milestone") html += "<tr class=\"act-row milestone-row\"><td class=\"n-cell act-item\">" + r.n + "</td><td class=\"act-code milestone-code\">◆ " + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "<span class=\"milestone-tag\">Hito</span></td><td>—</td><td class=\"num\">—</td><td class=\"num\">—</td><td class=\"num\" style=\"text-align:center\">—</td><td class=\"dur-cell\" title=\"Los hitos tienen duración cero por definición\">0</td></tr>";
 			else html += "<tr class=\"act-row\"><td class=\"n-cell act-item\">" + r.n + "</td><td class=\"act-code\">" + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "</td><td>" + esc(r.unit || "—") + "</td><td class=\"num\">" + fmtQty(r.qty) + "</td><td class=\"num\">" + fmtQty(r.perf) + "</td><td class=\"num\" style=\"text-align:center\">" + esc(String(Math.max(1, numVal(r.teams) || 1))) + "</td>" + (r.dur == null ? "<td class=\"dur-cell empty\" title=\"Falta el metrado o el rendimiento para calcular la duración\">—</td>" : "<td class=\"dur-cell\" title=\"Dur = " + esc(r.qty) + " ÷ (" + esc(String(Math.max(1, numVal(r.teams) || 1))) + " × " + esc(r.perf) + "), redondeada al entero superior\">" + r.dur + "</td>") + "</tr>";
 		});
 		tbody.innerHTML = html;
@@ -278,16 +319,16 @@
 		}
 		const lines = ["N.º	EDT	Paquete de trabajo / Actividad	Unidad	Metrado	Rend. (R)	#Eq	Dur. (d)"];
 		rows.forEach((r) => {
-			const isAct = r.kind === "activity";
+			const isAct = r.kind === "activity", isMs = r.kind === "milestone";
 			lines.push([
 				r.n,
 				r.code,
-				r.name || "",
+				(r.name || "") + (isMs ? " (hito)" : ""),
 				isAct ? r.unit || "" : "",
 				isAct ? r.qty == null ? "" : r.qty : "",
 				isAct ? r.perf == null ? "" : r.perf : "",
 				isAct ? Math.max(1, numVal(r.teams) || 1) : "",
-				isAct && r.dur != null ? r.dur : ""
+				isAct && r.dur != null ? r.dur : isMs ? 0 : ""
 			].join("	"));
 		});
 		const text = lines.join("\n");
@@ -514,9 +555,21 @@
 		by[I.p51] = [A("Pruebas de tableros y circuitos eléctricos", "pto", 120, 30), A("Pruebas hidráulicas de redes sanitarias", "glb", 1, .5)];
 		by[I.p52] = [A("Capacitación operativa al personal del cliente", "hora", 40, 5), A("Elaboración de manuales de operación y mantenimiento", "doc", 2, .5)];
 		by[I.p53] = [A("Elaboración de dossier de calidad y planos as-built", "doc", 1, .1), A("Acta de entrega y cierre del proyecto", "doc", 1, .5)];
+		const milestones = [{
+			id: "m1",
+			code: "H1",
+			name: "Fin de Cimentaciones",
+			leafId: I.p42
+		}, {
+			id: "m2",
+			code: "H2",
+			name: "Cierre del Proyecto",
+			leafId: null
+		}];
 		return {
 			byLeaf: by,
-			idCounter: n + 1
+			idCounter: n + 1,
+			milestones
 		};
 	}
 	function enterSample() {
@@ -550,12 +603,28 @@
 					code,
 					"",
 					a.name,
+					"",
+					"",
 					a.unit,
 					String(a.qty),
 					String(a.perf ?? ""),
 					String(a.teams ?? "")
 				]);
 			});
+		});
+		sample.milestones.forEach((m) => {
+			const code = m.leafId ? codes[m.leafId] || "" : "";
+			rows.push([
+				code,
+				"",
+				m.name,
+				"Hito",
+				m.code,
+				"",
+				"",
+				"",
+				""
+			]);
 		});
 		return rows;
 	}
@@ -575,17 +644,19 @@
 		const result = reconcileImportRows(sampleVirtualRows(), {
 			code: 0,
 			name: 2,
-			unit: 3,
-			qty: 4,
-			perf: 5,
-			teams: 6
+			type: 3,
+			milestoneCode: 4,
+			unit: 5,
+			qty: 6,
+			perf: 7,
+			teams: 8
 		});
-		if (!result.matched) {
+		if (!result.matched && !result.matchedMilestones) {
 			mode = prevMode;
 			await showAlert("Ningún código EDT del ejemplo coincide con la EDT actual del proyecto. Carga primero el caso DISTRIB+ en WBS Builder (\"Cargar ejemplo\").");
 			return;
 		}
-		let msg = "Se reemplazarán las actividades del PROYECTO ACTIVO (no el modo ejemplo) por las " + result.matched + " actividad(es) de ejemplo de DISTRIB+ que coinciden con su EDT actual.";
+		let msg = "Se reemplazarán las actividades del PROYECTO ACTIVO (no el modo ejemplo) por las " + result.matched + " actividad(es)" + (result.matchedMilestones ? " y " + result.matchedMilestones + " hito(s)" : "") + " de ejemplo de DISTRIB+ que coinciden con su EDT actual.";
 		if (result.unmatchedCodes.length) msg += " " + result.unmatchedCodes.length + " código(s) del ejemplo no se encontraron en la EDT actual (¿la cargaste igual que en WBS Builder?): " + result.unmatchedCodes.slice(0, 8).join(", ") + (result.unmatchedCodes.length > 8 ? "…" : "") + ".";
 		if (!await showConfirm(msg, "Cargar ejemplo en el proyecto")) {
 			mode = prevMode;
@@ -594,11 +665,12 @@
 		}
 		stateLive = {
 			byLeaf: result.byLeaf,
-			idCounter: result.idCounter
+			idCounter: result.idCounter,
+			milestones: result.milestones
 		};
 		render();
 		gpiPush();
-		setStatus("Ejemplo DISTRIB+ cargado en el proyecto activo (" + result.matched + " actividad(es)).");
+		setStatus("Ejemplo DISTRIB+ cargado en el proyecto activo (" + result.matched + " actividad(es)" + (result.matchedMilestones ? ", " + result.matchedMilestones + " hito(s)" : "") + ").");
 	}
 	function reportShell(docTitle, moduleName, bodyHtml) {
 		const el = document.getElementById("gpiReport");
@@ -640,6 +712,7 @@
 			if (r.kind === "project") body += "<tr><td class=\"num rep-phase\" style=\"text-align:center\">0</td><td class=\"num rep-phase\">0</td><td class=\"rep-phase\" colspan=\"6\">" + esc(r.name) + " <span class=\"rep-note\">(tarea resumen del proyecto)</span></td></tr>";
 			else if (r.kind === "phase") body += "<tr><td class=\"num rep-phase\" style=\"text-align:center\">" + r.n + "</td><td class=\"num rep-phase\">" + esc(r.code) + "</td><td class=\"rep-phase\" colspan=\"6\">" + esc(r.name) + "</td></tr>";
 			else if (r.kind === "package") body += "<tr><td class=\"num rep-pkg\" style=\"text-align:center\">" + r.n + "</td><td class=\"num rep-pkg\">" + esc(r.code) + "</td><td class=\"rep-pkg\">" + esc(r.name) + "</td><td class=\"rep-pkg\" colspan=\"5\">" + (r.count ? r.count + " actividad(es)" : "<span class=\"rep-note\">sin actividades</span>") + "</td></tr>";
+			else if (r.kind === "milestone") body += "<tr><td class=\"num\" style=\"text-align:center\">" + r.n + "</td><td class=\"num\">◆ " + esc(r.code) + "</td><td>" + esc(r.name) + " <span class=\"rep-note\">(hito)</span></td><td>—</td><td class=\"num\" style=\"text-align:right\">—</td><td class=\"num\" style=\"text-align:right\">—</td><td class=\"num\" style=\"text-align:center\">—</td><td class=\"num\" style=\"text-align:center\"><b>0</b></td></tr>";
 			else body += "<tr><td class=\"num\" style=\"text-align:center\">" + r.n + "</td><td class=\"num\">" + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "</td><td>" + esc(r.unit || "—") + "</td><td class=\"num\" style=\"text-align:right\">" + fmtQty(r.qty) + "</td><td class=\"num\" style=\"text-align:right\">" + fmtQty(r.perf) + "</td><td class=\"num\" style=\"text-align:center\">" + esc(String(Math.max(1, numVal(r.teams) || 1))) + "</td><td class=\"num\" style=\"text-align:center\"><b>" + (r.dur == null ? "—" : r.dur) + "</b></td></tr>";
 		});
 		body += "</table>";
@@ -652,6 +725,8 @@
 		"Código EDT",
 		"Paquete de trabajo",
 		"Nombre de la actividad",
+		"Tipo",
+		"Código de hito",
 		"Unidad",
 		"Metrado",
 		"Rendimiento (R)",
@@ -706,6 +781,8 @@
 				null,
 				null,
 				null,
+				null,
+				null,
 				null
 			]);
 		});
@@ -718,10 +795,11 @@
 			["1. Cada fila es un paquete de trabajo de la EDT. Las columnas “Código EDT” y “Paquete de trabajo” son de referencia — no las edites ni las borres: son la clave con la que este simulador reconoce a qué paquete pertenece cada actividad al importar el archivo de vuelta.", 4],
 			["2. Completa “Nombre de la actividad”, “Unidad”, “Metrado”, “Rendimiento (R)” y “N.º de equipos” para cada actividad del paquete.", 4],
 			["3. ¿Más de una actividad por el mismo paquete? Copia la fila completa (Ctrl+D en Excel) y repite el mismo “Código EDT” en la copia, cambiando el nombre de la actividad.", 4],
-			["4. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
-			["5. Guarda el archivo y vuelve a “Definir las Actividades” > botón “⇧ Importar actividades desde Excel” para subirlo.", 4],
+			["4. Hitos: para marcar una fila como hito (duración cero) en vez de una actividad normal, escribe “Hito” en la columna “Tipo” y asígnale un código propio en “Código de hito” (por ejemplo “H1”, “H2”… la numeración la decides tú) — deja en blanco Unidad/Metrado/Rendimiento/N.º de equipos, no aplican a un hito. Si el hito pertenece a un paquete de trabajo, completa su “Código EDT”; si es un hito del proyecto en general (no depende de un paquete puntual), deja “Código EDT” en blanco.", 4],
+			["5. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
+			["6. Guarda el archivo y vuelve a “Definir las Actividades” > botón “⇧ Importar actividades desde Excel” para subirlo.", 4],
 			["", 0],
-			["La duración de cada actividad (Metrado ÷ (N.º de equipos × Rendimiento), redondeada al entero superior) se calcula sola al importar — no hace falta traerla en este archivo.", 4],
+			["La duración de cada actividad (Metrado ÷ (N.º de equipos × Rendimiento), redondeada al entero superior) se calcula sola al importar — no hace falta traerla en este archivo. Los hitos tienen duración cero por definición.", 4],
 			["", 0],
 			["Generado por el simulador GPI — módulo Definir las Actividades.", 4]
 		].map((row) => [{
@@ -741,6 +819,8 @@
 			10,
 			30,
 			30,
+			8,
+			12,
 			10,
 			11,
 			14,
@@ -762,6 +842,8 @@
 			lines.push([
 				cell(l.code),
 				cell(l.name || ""),
+				"",
+				"",
 				"",
 				"",
 				"",
@@ -868,6 +950,14 @@
 			keywords: ["nombre de la actividad", "actividad"]
 		},
 		{
+			field: "milestoneCode",
+			keywords: ["codigo de hito"]
+		},
+		{
+			field: "type",
+			keywords: ["tipo"]
+		},
+		{
 			field: "unit",
 			keywords: ["unidad"]
 		},
@@ -903,11 +993,38 @@
 			codeToId[l.code] = l.id;
 		});
 		const byLeaf = {};
-		let n = 0, matched = 0;
+		const milestones = [];
+		let n = 0, matched = 0, mn = 0, matchedMilestones = 0;
 		const unmatched = /* @__PURE__ */ new Set();
+		const milestoneIssues = [];
 		rows.forEach((row) => {
 			const code = String(row[colMap.code] || "").trim();
 			const name = String(row[colMap.name] || "").trim();
+			const type = colMap.type != null ? normalizeHeader(String(row[colMap.type] || "")) : "";
+			const milestoneCode = colMap.milestoneCode != null ? String(row[colMap.milestoneCode] || "").trim() : "";
+			if (type.indexOf("hito") !== -1 || !!milestoneCode) {
+				if (!name) return;
+				if (!milestoneCode) {
+					milestoneIssues.push("Hito \"" + name + "\" sin \"Código de hito\": no se importó.");
+					return;
+				}
+				let leafId = null;
+				if (code) {
+					leafId = codeToId[code] || null;
+					if (!leafId) {
+						milestoneIssues.push("Hito \"" + milestoneCode + " — " + name + "\": el Código EDT \"" + code + "\" no coincide con ningún paquete de la EDT actual, no se importó.");
+						return;
+					}
+				}
+				milestones.push({
+					id: "m" + ++mn,
+					code: milestoneCode,
+					name,
+					leafId
+				});
+				matchedMilestones++;
+				return;
+			}
 			if (!code || !name) return;
 			const leafId = codeToId[code];
 			if (!leafId) {
@@ -933,7 +1050,10 @@
 			byLeaf,
 			idCounter: n + 1,
 			matched,
-			unmatchedCodes: Array.from(unmatched)
+			unmatchedCodes: Array.from(unmatched),
+			milestones,
+			matchedMilestones,
+			milestoneIssues
 		};
 	}
 	async function importActivitiesExcel(file) {
@@ -954,24 +1074,28 @@
 			return;
 		}
 		const result = reconcileImportRows(parsed.rows, colMap);
-		if (!result.matched) {
+		if (!result.matched && !result.matchedMilestones) {
 			await showAlert("No se encontró ninguna fila válida para importar: revisa que los códigos EDT del archivo coincidan con la EDT actual y que la columna de nombre de actividad esté completa.");
 			return;
 		}
 		const s = stats();
-		let msg = "Se reemplazarán las " + (s.total + s.orphans) + " actividades de la lista actual por " + result.matched + " actividad(es) importada(s) del archivo" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT no se toca.";
+		let msg = "Se reemplazarán las " + (s.total + s.orphans) + " actividades de la lista actual por " + result.matched + " actividad(es)" + (result.matchedMilestones ? " y " + result.matchedMilestones + " hito(s)" : "") + " importado(s) del archivo" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT no se toca.";
 		if (result.unmatchedCodes.length) msg += " " + result.unmatchedCodes.length + " fila(s) no se importaron por no coincidir con ningún código EDT actual: " + result.unmatchedCodes.slice(0, 8).join(", ") + (result.unmatchedCodes.length > 8 ? "…" : "") + ".";
+		if (result.milestoneIssues.length) msg += " " + result.milestoneIssues.length + " hito(s) con problemas: " + result.milestoneIssues.slice(0, 5).join(" ") + (result.milestoneIssues.length > 5 ? "…" : "");
 		if (!await showConfirm(msg, "Importar actividades desde Excel")) return;
 		if (mode === "sample") stateSample = {
 			byLeaf: result.byLeaf,
-			idCounter: result.idCounter
+			idCounter: result.idCounter,
+			milestones: result.milestones
 		};
 		else stateLive = {
 			byLeaf: result.byLeaf,
-			idCounter: result.idCounter
+			idCounter: result.idCounter,
+			milestones: result.milestones
 		};
 		onDirty(true);
-		setStatus(result.matched + " actividad(es) importada(s) desde Excel" + (result.unmatchedCodes.length ? " · " + result.unmatchedCodes.length + " fila(s) no reconciliada(s)" : "") + ".");
+		const issues = result.unmatchedCodes.length + result.milestoneIssues.length;
+		setStatus(result.matched + " actividad(es)" + (result.matchedMilestones ? " y " + result.matchedMilestones + " hito(s)" : "") + " importado(s) desde Excel" + (issues ? " · " + issues + " fila(s) no reconciliada(s)" : "") + ".");
 	}
 	function wireToolbar() {
 		document.getElementById("btnExportJson").addEventListener("click", exportJson);
@@ -1010,11 +1134,13 @@
 			if (!await showConfirm("Se eliminarán las " + (s.total + s.orphans) + " actividades de la lista actual" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT no se toca. ¿Continuar?", "Limpiar actividades")) return;
 			if (mode === "sample") stateSample = {
 				byLeaf: {},
-				idCounter: 1
+				idCounter: 1,
+				milestones: []
 			};
 			else stateLive = {
 				byLeaf: {},
-				idCounter: 1
+				idCounter: 1,
+				milestones: []
 			};
 			onDirty(true);
 			setStatus("Lista de actividades vacía.");

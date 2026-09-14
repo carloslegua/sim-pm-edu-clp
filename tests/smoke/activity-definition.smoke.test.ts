@@ -79,6 +79,12 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
     expect(doc.getElementById("modeChip")!.textContent).toBe("MODO EJEMPLO");
     expect(doc.querySelectorAll(".pkg-row").length).toBeGreaterThan(5);
     expect(doc.querySelectorAll(".act-row").length).toBeGreaterThan(5);
+    // Dos hitos ilustrativos: uno atado a un paquete (H1, Cimentaciones) y
+    // uno suelto (H2, Cierre del Proyecto) -- ver sampleActivities().
+    expect(doc.querySelectorAll(".milestone-row").length).toBe(2);
+    expect(doc.getElementById("actsBody")!.textContent).toMatch(/Fin de Cimentaciones/);
+    expect(doc.getElementById("actsBody")!.textContent).toMatch(/Hitos del proyecto/);
+    expect(doc.getElementById("actsBody")!.textContent).toMatch(/Cierre del Proyecto/);
   });
 
   it("con proyecto activo real: la tabla muestra los paquetes de la EDT en modo solo lectura", async () => {

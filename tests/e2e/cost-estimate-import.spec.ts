@@ -145,3 +145,43 @@ test("Estimar los Costos — el archivo que exporta se puede reimportar sin camb
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("gpi_db") as string));
   expect(saved.projects.p1.modules.costEstimate.byActivity).toMatchObject({ a1: "190", a2: "40" });
 });
+
+test("Estimar los Costos — un hito de Definir las Actividades se ve sin costo y el round-trip lo ignora silenciosamente", async ({ page }) => {
+  const seedWithMilestone = JSON.parse(JSON.stringify(seedDb));
+  seedWithMilestone.projects.p1.modules.activities.milestones = [
+    { id: "m1", code: "H1", name: "Fin de excavación", leafId: "w2" },
+    { id: "m2", code: "H2", name: "Cierre del proyecto", leafId: null }
+  ];
+  // Precios ya cargados de antemano: el export/reimport de este caso debe
+  // preservarlos igual, ignorando las filas de hito sin tocarlos.
+  seedWithMilestone.projects.p1.modules.costEstimate = { byActivity: { a1: "190", a2: "40" } };
+  await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedWithMilestone);
+  await page.goto("/Estimar_Costos.html");
+
+  // Los hitos aparecen (uno bajo su paquete, uno en "Hitos del proyecto") sin
+  // costo, y no alteran el total ni cuentan como actividades sin precio.
+  await expect(page.locator(".milestone-row")).toHaveCount(2);
+  await expect(page.locator("#estBody")).toContainText("Fin de excavación");
+  await expect(page.locator("#estBody")).toContainText("Hitos del proyecto");
+  await expect(page.locator("#estBody")).toContainText("Cierre del proyecto");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#btnExportExcel").click()
+  ]);
+  const exportedPath = await download.path();
+  expect(exportedPath).toBeTruthy();
+
+  await page.setInputFiles("#xlsxFileInput", exportedPath as string);
+  await expect(page.locator("#modalOverlay")).toHaveClass(/open/);
+  const msg = await page.locator("#modalMsg").textContent();
+  // El archivo exportado trae las filas de hito marcadas Tipo="Hito": deben
+  // omitirse por completo, nunca reportarse como fila no reconciliada.
+  expect(msg).not.toMatch(/no coincidir con ningún código EDT actual/);
+  expect(msg).not.toMatch(/no hay ninguna actividad con ese nombre/);
+  await page.locator("#modalOk").click();
+  await page.waitForTimeout(900);
+
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("gpi_db") as string));
+  expect(saved.projects.p1.modules.costEstimate.byActivity).toMatchObject({ a1: "190", a2: "40" });
+});

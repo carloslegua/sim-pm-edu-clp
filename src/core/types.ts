@@ -100,9 +100,20 @@ export interface ActivityItem {
   [key: string]: unknown;
 }
 
+// Hito: actividad especial de duración cero, con codificación propia (no la
+// numeración automática del paquete) -- puede colgar de un paquete de
+// trabajo (leafId) o ir suelto, sin pertenecer a ninguno (hito de proyecto).
+export interface MilestoneItem {
+  id: string;
+  code: string;
+  name: string;
+  leafId?: string | null;
+}
+
 export interface ActivitiesModule {
   byLeaf: Record<string, ActivityItem[]>;
   idCounter: number;
+  milestones?: MilestoneItem[];
 }
 
 // Precio unitario por ACTIVIDAD (el id es el mismo que usa ActivitiesModule
