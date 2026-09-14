@@ -435,7 +435,7 @@ Costs")
   completo) y `Cost-management.html` (`pullFromCostEstimate`, botón
   "Traer de Estimar los Costos").
 - Modo ejemplo: copia literal de `SAMPLE_WBS`+`sampleActivities()` de
-  `activities/main.ts` (mismos 18 paquetes DISTRIB+, mismas 8 con
+  `activities/main.ts` (mismos 18 paquetes DISTRIB+, LOS 18 con
   actividades definidas) — ver el catálogo canónico más abajo para los
   precios de ejemplo y el total resultante.
 - **"⇩ Cargar ejemplo en el proyecto"**: mismo mecanismo que
@@ -536,23 +536,37 @@ vez que se agrega o toca un módulo:
   3.3 Equipos eléctricos e instalaciones) · 4 Construcción (4.1–4.5) ·
   5 Pruebas y Puesta en Marcha (5.1–5.3). Costo total del WBS: **S/
   7.100.000** (18 paquetes).
+- **Actividades** (`activities`, `sampleActivities()` en
+  `src/modules/activities/main.ts`): LOS 18 paquetes de trabajo quedan
+  con una o más actividades reales que los desagregan (ningún paquete
+  se deja "tal cual", copiando el WBS sin descomponer — corregido tras
+  detectar que 10 de los 18 quedaban sin actividades "a propósito, como
+  ejercicio"). 43 actividades en total, 1 a 5 por paquete según su
+  complejidad (p. ej. 4.2 Cimentaciones: Excavación de zanjas, Solado de
+  concreto, Acero de refuerzo, Concreto en zapatas, Encofrado/
+  desencofrado). Ver `sampleActivities()` para el detalle completo
+  (nombre, unidad, metrado, rendimiento y n.º de equipos de cada una).
 - **Estimar los Costos** (`costEstimate`, `sampleEstimate()` en
   `src/modules/cost-estimate/main.ts`): precio unitario **por
   actividad** (no por paquete — corregido tras la primera versión de
   este módulo). Reutiliza literalmente `SAMPLE_WBS` y
-  `sampleActivities()` de `activities/main.ts` (mismas 8 de los 18
-  paquetes con actividades definidas, a propósito, igual que
-  Actividades); los otros 10 paquetes no tienen actividades y por lo
-  tanto no se pueden costear todavía — esto ya no reproduce el total
-  del WBS (S/ 7.100.000), que quedó calibrado a nivel de paquete antes
-  de esta corrección. Precios de ejemplo: 21 de las 22 actividades de
-  esas 8 paquetes tienen precio (la actividad "Instalación de cobertura
-  TR-4" del paquete 4.3 se deja deliberadamente sin precio, para
-  demostrar el estado "parcial" — 4.3 es el único de los 8 paquetes que
-  NO queda con estimado completo). Resultado: **21/22 actividades con
-  precio (95%), 7/8 paquetes con estimado completo, total S/
-  2.009.700**. Ver `sampleEstimate()` para el precio unitario exacto de
-  cada actividad (ids `a1`…`a22`).
+  `sampleActivities()` de `activities/main.ts` (mismos 18 paquetes,
+  TODOS con actividades) — esto ya no reproduce el total del WBS
+  (S/ 7.100.000), que quedó calibrado a nivel de paquete antes de la
+  corrección a nivel de actividad; los precios de ejemplo son
+  ilustrativos por unidad, no recalibrados contra ese total. La
+  actividad "Instalación de cobertura TR-4" del paquete 4.3 se deja
+  deliberadamente sin precio, para demostrar el estado "parcial" en la
+  UI — 4.3 es el único de los 18 paquetes que NO queda con estimado
+  completo (y por lo tanto el único cuyo Costo no se bloquea en WBS
+  Builder en modo ejemplo). Resultado: **42/43 actividades con precio
+  (98%), 17/18 paquetes con estimado completo, total S/ 6.160.500**. Ver
+  `sampleEstimate()` para el precio unitario exacto de cada actividad
+  (ids `a1`…`a43` — la numeración de ids NO coincide entre este archivo
+  y `activities/main.ts`: cada uno construye su propia copia local en
+  orden distinto, y el emparejamiento entre ambos para "Cargar ejemplo
+  en el proyecto" es por Código EDT + nombre de actividad, nunca por id
+  — ver esa sección más abajo).
 - **OBS** (`obs`/`raci` la replican): Comité Directivo/Sponsor →
   Gerencia General DISTRIB+ · Director de Proyecto → PM · Jefe de
   Ingeniería/Ing. Civil → Geotecnia, Ing. Estructural, Ing. MEP · Jefe

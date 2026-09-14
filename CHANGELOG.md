@@ -11,6 +11,21 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Ejemplo DISTRIB+ de Actividades completo: los 18 paquetes de trabajo
+  quedan desagregados**, no solo 8. Antes, 10 de los 18 paquetes se
+  dejaban deliberadamente sin actividades ("ejercicio para el alumno"),
+  pero eso hacía que, para esos paquetes, la EDT de ejemplo se viera
+  "tal cual copiada del WBS, sin desagregar" — justo lo que un paquete
+  de trabajo NO debería ser. Se agregaron 21 actividades nuevas (43 en
+  total) cubriendo Informes de seguimiento, Diseño eléctrico/sanitario,
+  Permisos, los 3 paquetes de Procura, Acabados, Instalaciones MEP,
+  Capacitación al cliente y Acta de cierre. El ejemplo de "Estimar los
+  Costos" (que reutiliza estas mismas actividades) se actualiza en el
+  mismo sentido: 42/43 actividades con precio, 17/18 paquetes con
+  estimado completo, total S/ 6.160.500 (antes 21/22, 7/8, S/
+  2.009.700) — sigue quedando deliberadamente una sola actividad sin
+  precio, para demostrar el estado "parcial" en la UI.
+
 - **"⇩ Cargar ejemplo en el proyecto" en Definir las Actividades y en
   Estimar los Costos**: hasta ahora, el "Modo ejemplo" de estos dos
   módulos era un sandbox que nunca tocaba el proyecto activo (por

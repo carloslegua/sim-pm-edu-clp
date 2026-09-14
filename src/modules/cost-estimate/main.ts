@@ -421,8 +421,8 @@ function importJson(file: File): void {
 
 // ---------- EDT y actividades DE EJEMPLO (demo independiente) ----------
 // Réplica EXACTA de la EDT y de las actividades de ejemplo de "Definir las
-// Actividades" (mismos 18 paquetes DISTRIB+ y mismas 8 paquetes con
-// actividades definidas -- ver src/modules/activities/main.ts, SAMPLE_WBS y
+// Actividades" (mismos 18 paquetes DISTRIB+, TODOS con actividades
+// definidas -- ver src/modules/activities/main.ts, SAMPLE_WBS y
 // sampleActivities()). Se copian aquí en vez de importarse porque cada
 // módulo debe poder mostrar su modo ejemplo sin gpi-core.js (mismo criterio
 // de duplicación local que ya usan WBS/Actividades/PERT/Cronograma-CPM).
@@ -436,16 +436,16 @@ const SAMPLE_WBS: WbsModule & { ids: Record<string, string> } = (function () {
   }
   const root = N(null, "Proyecto DISTRIB+ S.A. — Almacén Lurín");
   const f1 = N(root, "Dirección de Proyecto");
-  const p11 = N(f1, "Acta de constitución"), p12 = N(f1, "Plan de gestión del proyecto"); N(f1, "Informes de seguimiento y control");
+  const p11 = N(f1, "Acta de constitución"), p12 = N(f1, "Plan de gestión del proyecto"), p13 = N(f1, "Informes de seguimiento y control");
   const f2 = N(root, "Ingeniería y Diseño");
-  const p21 = N(f2, "Estudio de suelos"), p22 = N(f2, "Diseño estructural"); N(f2, "Diseño eléctrico y sanitario"); N(f2, "Permisos y licencias municipales");
+  const p21 = N(f2, "Estudio de suelos"), p22 = N(f2, "Diseño estructural"), p23 = N(f2, "Diseño eléctrico y sanitario"), p24 = N(f2, "Permisos y licencias municipales");
   const f3 = N(root, "Procura");
-  N(f3, "Estructuras metálicas prefabricadas"); N(f3, "Materiales de construcción"); N(f3, "Equipos eléctricos e instalaciones");
+  const p31 = N(f3, "Estructuras metálicas prefabricadas"), p32 = N(f3, "Materiales de construcción"), p33 = N(f3, "Equipos eléctricos e instalaciones");
   const f4 = N(root, "Construcción");
-  const p41 = N(f4, "Movimiento de tierras"), p42 = N(f4, "Cimentaciones"), p43 = N(f4, "Estructura y cobertura"); N(f4, "Acabados y cerramientos"); N(f4, "Instalaciones MEP");
+  const p41 = N(f4, "Movimiento de tierras"), p42 = N(f4, "Cimentaciones"), p43 = N(f4, "Estructura y cobertura"), p44 = N(f4, "Acabados y cerramientos"), p45 = N(f4, "Instalaciones MEP");
   const f5 = N(root, "Pruebas y Puesta en Marcha");
-  const p51 = N(f5, "Pruebas de instalaciones"); N(f5, "Capacitación al cliente"); N(f5, "Acta de entrega y cierre");
-  return { rootId: root, idCounter: k + 1, nodes, ids: { p11, p12, p21, p22, p41, p42, p43, p51 } };
+  const p51 = N(f5, "Pruebas de instalaciones"), p52 = N(f5, "Capacitación al cliente"), p53 = N(f5, "Acta de entrega y cierre");
+  return { rootId: root, idCounter: k + 1, nodes, ids: { p11, p12, p13, p21, p22, p23, p24, p31, p32, p33, p41, p42, p43, p44, p45, p51, p52, p53 } };
 })();
 
 const SAMPLE_ACTIVITIES: ActivitiesModule = (function () {
@@ -455,30 +455,52 @@ const SAMPLE_ACTIVITIES: ActivitiesModule = (function () {
   }
   by[I.p11] = [A("Elaboración y aprobación del acta de constitución", "doc", 1, 0.25)];
   by[I.p12] = [A("Plan para la dirección del proyecto (líneas base)", "doc", 1, 0.2), A("Planes subsidiarios de gestión", "doc", 6, 0.5)];
+  by[I.p13] = [A("Elaboración de informes mensuales de avance", "doc", 4, 0.5), A("Reuniones de control y seguimiento del proyecto", "reunión", 16, 2)];
   by[I.p21] = [A("Calicatas exploratorias", "und", 8, 2), A("Ensayos de laboratorio de suelos", "glb", 1, 0.1), A("Informe geotécnico", "doc", 1, 0.25)];
   by[I.p22] = [A("Memoria de cálculo estructural", "doc", 1, 0.1), A("Planos estructurales", "lám", 24, 2)];
+  by[I.p23] = [A("Memoria de cálculo eléctrico y sanitario", "doc", 1, 0.15), A("Planos eléctricos y sanitarios", "lám", 18, 2)];
+  by[I.p24] = [A("Trámite de licencia de edificación municipal", "trámite", 1, 0.05), A("Trámite de certificado ITSE", "trámite", 1, 0.1)];
+  by[I.p31] = [A("Fabricación de estructuras metálicas", "ton", 260, 15, 2), A("Transporte y entrega de estructuras a obra", "viaje", 12, 3)];
+  by[I.p32] = [A("Adquisición y suministro de cemento y agregados", "ton", 800, 100), A("Adquisición y suministro de materiales varios de construcción", "glb", 1, 0.15)];
+  by[I.p33] = [A("Adquisición de tableros y equipos eléctricos", "und", 15, 3), A("Adquisición de equipos de instalaciones sanitarias", "und", 10, 2)];
   by[I.p41] = [A("Corte y excavación masiva", "m³", 4800, 320, 2), A("Relleno y compactación con material propio", "m³", 2100, 250), A("Eliminación de material excedente", "m³", 2700, 300), A("Nivelación y perfilado de plataforma", "m²", 6500, 1200)];
   by[I.p42] = [A("Excavación de zanjas para zapatas", "m³", 620, 60, 2), A("Solado de concreto e=10 cm", "m²", 480, 120), A("Acero de refuerzo fy=4200 kg/cm²", "kg", 38500, 2500, 2), A("Concreto f'c=280 kg/cm² en zapatas", "m³", 410, 45, 2), A("Encofrado y desencofrado de cimentaciones", "m²", 950, 90, 2)];
   by[I.p43] = [A("Montaje de columnas metálicas", "und", 48, 6), A("Montaje de vigas y tijerales", "ton", 96, 8), A("Instalación de cobertura TR-4", "m²", 5200, 350, 2)];
+  by[I.p44] = [A("Tarrajeo de muros y cielorrasos", "m²", 3200, 40, 2), A("Pintura general de interiores y exteriores", "m²", 3200, 80, 2), A("Cerramiento perimétrico", "m", 320, 20)];
+  by[I.p45] = [A("Instalación de tableros y circuitos eléctricos", "pto", 980, 25, 2), A("Instalación de redes sanitarias", "m", 450, 30)];
   by[I.p51] = [A("Pruebas de tableros y circuitos eléctricos", "pto", 120, 30), A("Pruebas hidráulicas de redes sanitarias", "glb", 1, 0.5)];
+  by[I.p52] = [A("Capacitación operativa al personal del cliente", "hora", 40, 5), A("Elaboración de manuales de operación y mantenimiento", "doc", 2, 0.5)];
+  by[I.p53] = [A("Elaboración de dossier de calidad y planos as-built", "doc", 1, 0.1), A("Acta de entrega y cierre del proyecto", "doc", 1, 0.5)];
   return { byLeaf: by, idCounter: n + 1 };
 })();
 
-// Precio unitario de ejemplo por actividad (ids a1..a19, ver SAMPLE_ACTIVITIES
-// arriba). No apunta a reproducir el costo total del WBS de ejemplo (ya no
-// tiene sentido: solo 8 de los 18 paquetes tienen actividades definidas, a
-// propósito, igual que en Actividades) -- son precios ilustrativos por
-// unidad. Total resultante documentado en ARCHITECTURE.md.
+// Precio unitario de ejemplo por actividad (ids a1..a43, ver SAMPLE_ACTIVITIES
+// arriba). No apunta a reproducir el costo total del WBS de ejemplo (son
+// precios ilustrativos por unidad, no calibrados contra ese total) -- ver
+// ARCHITECTURE.md para el total resultante. La actividad "Instalación de
+// cobertura TR-4" (a20) se deja deliberadamente SIN precio: es el único
+// paquete (4.3 Estructura y cobertura) que queda "parcial" en el ejemplo,
+// para demostrar ese estado en la UI y en el bloqueo de Costo del WBS.
 function sampleEstimate(): EstimateState {
   const byActivity: Record<string, number> = {
     a1: 12000,                          // Acta de constitución (doc x1)
     a2: 20000, a3: 3000,                // Plan de gestión (doc x1) + Planes subsidiarios (doc x6)
-    a4: 800, a5: 15000, a6: 6600,       // Calicatas (und x8) + Ensayos (glb x1) + Informe geotécnico (doc x1)
-    a7: 45000, a8: 5000,                // Memoria de cálculo (doc x1) + Planos estructurales (lám x24)
-    a9: 40, a10: 35, a11: 25, a12: 7,   // Movimiento de tierras (4 actividades, m³/m²)
-    a13: 45, a14: 60, a15: 4.5, a16: 550, a17: 85, // Cimentaciones (5 actividades)
-    a18: 3500, a19: 6500,               // Estructura y cobertura (2 de 3 -- a20 sin precio, a propósito)
-    a21: 350, a22: 18000                // Pruebas de instalaciones (2 actividades)
+    a4: 4000, a5: 800,                  // Informes mensuales (doc x4) + Reuniones de control (reunión x16)
+    a6: 800, a7: 15000, a8: 6600,       // Calicatas (und x8) + Ensayos (glb x1) + Informe geotécnico (doc x1)
+    a9: 45000, a10: 5000,               // Memoria de cálculo estructural (doc x1) + Planos estructurales (lám x24)
+    a11: 35000, a12: 4000,              // Memoria eléctrica/sanitaria (doc x1) + Planos eléctricos/sanitarios (lám x18)
+    a13: 25000, a14: 15000,             // Licencia de edificación (trámite x1) + Certificado ITSE (trámite x1)
+    a15: 6500, a16: 10000,              // Fabricación estructuras (ton x260) + Transporte a obra (viaje x12)
+    a17: 850, a18: 35000,               // Cemento y agregados (ton x800) + Materiales varios (glb x1)
+    a19: 12000, a20: 23500,             // Tableros y equipos eléctricos (und x15) + Equipos sanitarios (und x10)
+    a21: 40, a22: 35, a23: 25, a24: 7,  // Movimiento de tierras (4 actividades, m³/m²)
+    a25: 45, a26: 60, a27: 4.5, a28: 550, a29: 85, // Cimentaciones (5 actividades)
+    a30: 3500, a31: 6500,               // Estructura y cobertura (2 de 3 -- a32 sin precio, a propósito)
+    a33: 45, a34: 25, a35: 800,         // Acabados y cerramientos (3 actividades)
+    a36: 350, a37: 320,                 // Instalaciones MEP (2 actividades)
+    a38: 350, a39: 18000,               // Pruebas de instalaciones (2 actividades)
+    a40: 300, a41: 8000,                // Capacitación al cliente (2 actividades)
+    a42: 25000, a43: 15000              // Acta de entrega y cierre (2 actividades)
   };
   return { byActivity };
 }

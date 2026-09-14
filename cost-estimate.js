@@ -432,24 +432,15 @@
 		}
 		const root = N(null, "Proyecto DISTRIB+ S.A. — Almacén Lurín");
 		const f1 = N(root, "Dirección de Proyecto");
-		const p11 = N(f1, "Acta de constitución"), p12 = N(f1, "Plan de gestión del proyecto");
-		N(f1, "Informes de seguimiento y control");
+		const p11 = N(f1, "Acta de constitución"), p12 = N(f1, "Plan de gestión del proyecto"), p13 = N(f1, "Informes de seguimiento y control");
 		const f2 = N(root, "Ingeniería y Diseño");
-		const p21 = N(f2, "Estudio de suelos"), p22 = N(f2, "Diseño estructural");
-		N(f2, "Diseño eléctrico y sanitario");
-		N(f2, "Permisos y licencias municipales");
+		const p21 = N(f2, "Estudio de suelos"), p22 = N(f2, "Diseño estructural"), p23 = N(f2, "Diseño eléctrico y sanitario"), p24 = N(f2, "Permisos y licencias municipales");
 		const f3 = N(root, "Procura");
-		N(f3, "Estructuras metálicas prefabricadas");
-		N(f3, "Materiales de construcción");
-		N(f3, "Equipos eléctricos e instalaciones");
+		const p31 = N(f3, "Estructuras metálicas prefabricadas"), p32 = N(f3, "Materiales de construcción"), p33 = N(f3, "Equipos eléctricos e instalaciones");
 		const f4 = N(root, "Construcción");
-		const p41 = N(f4, "Movimiento de tierras"), p42 = N(f4, "Cimentaciones"), p43 = N(f4, "Estructura y cobertura");
-		N(f4, "Acabados y cerramientos");
-		N(f4, "Instalaciones MEP");
+		const p41 = N(f4, "Movimiento de tierras"), p42 = N(f4, "Cimentaciones"), p43 = N(f4, "Estructura y cobertura"), p44 = N(f4, "Acabados y cerramientos"), p45 = N(f4, "Instalaciones MEP");
 		const f5 = N(root, "Pruebas y Puesta en Marcha");
-		const p51 = N(f5, "Pruebas de instalaciones");
-		N(f5, "Capacitación al cliente");
-		N(f5, "Acta de entrega y cierre");
+		const p51 = N(f5, "Pruebas de instalaciones"), p52 = N(f5, "Capacitación al cliente"), p53 = N(f5, "Acta de entrega y cierre");
 		return {
 			rootId: root,
 			idCounter: k + 1,
@@ -457,12 +448,22 @@
 			ids: {
 				p11,
 				p12,
+				p13,
 				p21,
 				p22,
+				p23,
+				p24,
+				p31,
+				p32,
+				p33,
 				p41,
 				p42,
 				p43,
-				p51
+				p44,
+				p45,
+				p51,
+				p52,
+				p53
 			}
 		};
 	})();
@@ -482,12 +483,18 @@
 		}
 		by[I.p11] = [A("Elaboración y aprobación del acta de constitución", "doc", 1, .25)];
 		by[I.p12] = [A("Plan para la dirección del proyecto (líneas base)", "doc", 1, .2), A("Planes subsidiarios de gestión", "doc", 6, .5)];
+		by[I.p13] = [A("Elaboración de informes mensuales de avance", "doc", 4, .5), A("Reuniones de control y seguimiento del proyecto", "reunión", 16, 2)];
 		by[I.p21] = [
 			A("Calicatas exploratorias", "und", 8, 2),
 			A("Ensayos de laboratorio de suelos", "glb", 1, .1),
 			A("Informe geotécnico", "doc", 1, .25)
 		];
 		by[I.p22] = [A("Memoria de cálculo estructural", "doc", 1, .1), A("Planos estructurales", "lám", 24, 2)];
+		by[I.p23] = [A("Memoria de cálculo eléctrico y sanitario", "doc", 1, .15), A("Planos eléctricos y sanitarios", "lám", 18, 2)];
+		by[I.p24] = [A("Trámite de licencia de edificación municipal", "trámite", 1, .05), A("Trámite de certificado ITSE", "trámite", 1, .1)];
+		by[I.p31] = [A("Fabricación de estructuras metálicas", "ton", 260, 15, 2), A("Transporte y entrega de estructuras a obra", "viaje", 12, 3)];
+		by[I.p32] = [A("Adquisición y suministro de cemento y agregados", "ton", 800, 100), A("Adquisición y suministro de materiales varios de construcción", "glb", 1, .15)];
+		by[I.p33] = [A("Adquisición de tableros y equipos eléctricos", "und", 15, 3), A("Adquisición de equipos de instalaciones sanitarias", "und", 10, 2)];
 		by[I.p41] = [
 			A("Corte y excavación masiva", "m³", 4800, 320, 2),
 			A("Relleno y compactación con material propio", "m³", 2100, 250),
@@ -506,7 +513,15 @@
 			A("Montaje de vigas y tijerales", "ton", 96, 8),
 			A("Instalación de cobertura TR-4", "m²", 5200, 350, 2)
 		];
+		by[I.p44] = [
+			A("Tarrajeo de muros y cielorrasos", "m²", 3200, 40, 2),
+			A("Pintura general de interiores y exteriores", "m²", 3200, 80, 2),
+			A("Cerramiento perimétrico", "m", 320, 20)
+		];
+		by[I.p45] = [A("Instalación de tableros y circuitos eléctricos", "pto", 980, 25, 2), A("Instalación de redes sanitarias", "m", 450, 30)];
 		by[I.p51] = [A("Pruebas de tableros y circuitos eléctricos", "pto", 120, 30), A("Pruebas hidráulicas de redes sanitarias", "glb", 1, .5)];
+		by[I.p52] = [A("Capacitación operativa al personal del cliente", "hora", 40, 5), A("Elaboración de manuales de operación y mantenimiento", "doc", 2, .5)];
+		by[I.p53] = [A("Elaboración de dossier de calidad y planos as-built", "doc", 1, .1), A("Acta de entrega y cierre del proyecto", "doc", 1, .5)];
 		return {
 			byLeaf: by,
 			idCounter: n + 1
@@ -517,24 +532,45 @@
 			a1: 12e3,
 			a2: 2e4,
 			a3: 3e3,
-			a4: 800,
-			a5: 15e3,
-			a6: 6600,
-			a7: 45e3,
-			a8: 5e3,
-			a9: 40,
-			a10: 35,
-			a11: 25,
-			a12: 7,
-			a13: 45,
-			a14: 60,
-			a15: 4.5,
-			a16: 550,
-			a17: 85,
-			a18: 3500,
-			a19: 6500,
-			a21: 350,
-			a22: 18e3
+			a4: 4e3,
+			a5: 800,
+			a6: 800,
+			a7: 15e3,
+			a8: 6600,
+			a9: 45e3,
+			a10: 5e3,
+			a11: 35e3,
+			a12: 4e3,
+			a13: 25e3,
+			a14: 15e3,
+			a15: 6500,
+			a16: 1e4,
+			a17: 850,
+			a18: 35e3,
+			a19: 12e3,
+			a20: 23500,
+			a21: 40,
+			a22: 35,
+			a23: 25,
+			a24: 7,
+			a25: 45,
+			a26: 60,
+			a27: 4.5,
+			a28: 550,
+			a29: 85,
+			a30: 3500,
+			a31: 6500,
+			a33: 45,
+			a34: 25,
+			a35: 800,
+			a36: 350,
+			a37: 320,
+			a38: 350,
+			a39: 18e3,
+			a40: 300,
+			a41: 8e3,
+			a42: 25e3,
+			a43: 15e3
 		} };
 	}
 	function enterSample() {

@@ -75,14 +75,16 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
     (doc.getElementById("btnSample") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 100));
     expect(doc.getElementById("modeChip")!.textContent).toBe("MODO EJEMPLO");
-    expect(doc.querySelectorAll(".pkg-row").length).toBe(18); // los 18 paquetes de la EDT, con o sin actividades
-    expect(doc.querySelectorAll(".act-row").length).toBe(22); // solo 8 de los 18 tienen actividades -- 22 en total
-    expect(doc.getElementById("sbCov")!.textContent).toBe("21/22 actividades con precio");
-    expect(doc.getElementById("sbPct")!.textContent).toBe("95%");
+    expect(doc.querySelectorAll(".pkg-row").length).toBe(18); // los 18 paquetes de la EDT
+    expect(doc.querySelectorAll(".act-row").length).toBe(43); // los 18 paquetes tienen actividades -- 43 en total
+    expect(doc.getElementById("sbCov")!.textContent).toBe("42/43 actividades con precio");
+    expect(doc.getElementById("sbPct")!.textContent).toBe("98%");
     // p43 (Estructura y cobertura) queda "parcial" a propósito: 2 de sus 3
     // actividades tienen precio, la tercera no -- documentado en ARCHITECTURE.md.
-    expect(doc.getElementById("sbPkg")!.textContent).toBe("7/8 paquetes con estimado completo");
-    expect(doc.getElementById("sbTotal")!.textContent).toBe("2,009,700");
+    // Es el ÚNICO paquete sin estimado completo -- todos los demás lo tienen.
+    expect(doc.getElementById("sbPkg")!.textContent).toBe("17/18 paquetes con estimado completo");
+    expect(doc.getElementById("sbTotal")!.textContent).toBe("6,160,500");
+    expect(doc.getElementById("missList")!.textContent).toMatch(/Todos los paquetes de trabajo tienen actividades definidas/);
   });
 
   it("con proyecto activo real: la tabla muestra el paquete y su actividad en modo solo lectura", async () => {
