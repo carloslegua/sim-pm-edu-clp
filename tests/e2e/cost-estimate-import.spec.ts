@@ -221,10 +221,13 @@ test("Estimar los Costos — un hito de Definir las Actividades se ve sin costo 
 test("Estimar los Costos — '⇩ Exportar a Excel' trae la columna Id. y el Código EDT propio de cada actividad (no el del paquete repetido)", async ({ page }) => {
   // Antes, exportRowModel() reconstruía las filas por su cuenta: repetía el
   // Código EDT del PAQUETE ("1.1") en cada una de sus actividades (nunca el
-  // propio, "1.1.1"/"1.1.2", el que sí muestra la tabla en pantalla) y no
-  // traía ninguna columna de Id. -- este test exporta un caso con un
-  // paquete de 2 actividades y hitos (uno suelto al principio, uno atado,
-  // uno suelto al final) y verifica el .xlsx real generado, celda por celda.
+  // propio, "1.1.1"/"1.1.2", el que sí muestra la tabla en pantalla), no
+  // traía ninguna columna de Id., y omitía proyecto/fases/paquetes por
+  // completo (el archivo solo listaba actividades e hitos, no un fiel
+  // reflejo de la tabla) -- este test exporta un caso con un paquete de 2
+  // actividades y hitos (uno suelto al principio, uno atado, uno suelto al
+  // final) y verifica el .xlsx real generado, fila por fila y celda por
+  // celda, contra TODO lo que muestra la tabla en pantalla.
   const seedWithMilestone = JSON.parse(JSON.stringify(seedDb));
   seedWithMilestone.projects.p1.modules.activities.milestones = [
     { id: "m1", code: "H1", name: "Inicio del proyecto", leafId: null, afterLeafId: null },
@@ -246,13 +249,18 @@ test("Estimar los Costos — '⇩ Exportar a Excel' trae la columna Id. y el Có
   // Encabezado: Id., Código EDT, Paquete de trabajo, Nombre de la actividad, Tipo, Unidad, Cantidad, Precio unitario, Subtotal
   expect(rows[0].slice(0, 9)).toEqual(["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Unidad", "Cantidad", "Precio unitario", "Subtotal"]);
 
-  // 0=proyecto y 1=fase NO se exportan (el archivo es de paquetes/actividades/
-  // hitos); el primero en el archivo es H1 (hito suelto sin ancla, Id 1).
-  expect(rows[1].slice(0, 5)).toEqual(["1", "", "", "H1 — Inicio del proyecto", "Hito"]);
+  // El archivo lista TODO lo que se ve en pantalla, en el mismo orden y con
+  // el mismo Id.: proyecto (fila 0), el hito suelto sin ancla (antes de
+  // todo), la fase, y CADA paquete como su propia fila (con su Subtotal
+  // acumulado) -- ya no solo sus actividades.
+  expect(rows[1].slice(0, 5)).toEqual(["0", "0", "Proyecto Live", "", "Proyecto"]);
+  expect(rows[2].slice(0, 5)).toEqual(["1", "", "", "H1 — Inicio del proyecto", "Hito"]);
+  expect(rows[3].slice(0, 5)).toEqual(["2", "1", "Fase 1", "", "Fase"]);
+  // Paquete 1.1: sus dos actividades están priceadas -- Subtotal = 380000 + 20000.
+  expect(rows[4].slice(0, 9)).toEqual(["3", "1.1", "Excavación de zanjas", "", "Paquete", "", "", "", "400000"]);
 
   // a1 y a2: cada una con SU PROPIO Código EDT ("1.1.1"/"1.1.2"), no "1.1"
-  // repetido -- el paquete "1.1" nunca aparece como fila propia porque SÍ
-  // tiene actividades.
+  // repetido.
   const a1 = rows.find((r) => r[3] === "Corte de zanja")!;
   expect(a1.slice(0, 9)).toEqual(["4", "1.1.1", "Excavación de zanjas", "Corte de zanja", "", "m³", "2000", "190", "380000"]);
   const a2 = rows.find((r) => r[3] === "Eliminación de material")!;
@@ -262,6 +270,11 @@ test("Estimar los Costos — '⇩ Exportar a Excel' trae la columna Id. y el Có
   // referencia, nunca su propia numeración EDT), Id consecutivo (6).
   const h2 = rows.find((r) => r[3] === "H2 — Fin de excavación")!;
   expect(h2.slice(0, 5)).toEqual(["6", "1.1", "Excavación de zanjas", "H2 — Fin de excavación", "Hito"]);
+
+  // Paquete 1.2: su única actividad no tiene precio -- Subtotal acumulado 0
+  // (parcial, igual que se ve en pantalla con la advertencia ⚠).
+  const pkgB = rows.find((r) => r[2] === "Encofrado de cimentaciones" && r[4] === "Paquete")!;
+  expect(pkgB.slice(0, 9)).toEqual(["7", "1.2", "Encofrado de cimentaciones", "", "Paquete", "", "", "", "0"]);
 
   // a3: única actividad de 1.2, sin precio (queda en blanco a propósito).
   const a3 = rows.find((r) => r[3] === "Encofrado de zapatas")!;
@@ -297,4 +310,8 @@ test("Estimar los Costos — el CSV de reserva (sin window.JSZip) también trae 
   expect(a1).toEqual(["3", "1.1.1", "Excavación de zanjas", "Corte de zanja", "", "m³", "2000", "", ""]);
   const a2 = lines.find((l) => l[3] === "Eliminación de material")!;
   expect(a2).toEqual(["4", "1.1.2", "Excavación de zanjas", "Eliminación de material", "", "m³", "500", "", ""]);
+  // El CSV también trae el paquete como su propia fila (Tipo="Paquete"), no
+  // solo sus actividades -- fiel reflejo de la tabla, igual que el .xlsx.
+  const pkgA = lines.find((l) => l[2] === "Excavación de zanjas" && l[4] === "Paquete")!;
+  expect(pkgA).toEqual(["2", "1.1", "Excavación de zanjas", "", "Paquete", "", "", "", "0"]);
 });

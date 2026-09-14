@@ -824,18 +824,22 @@ function xlsxSheetXml(rows: Array<Array<XlCell | null>>, widths: number[], freez
 }
 
 // Modelo de filas del archivo exportado: SIEMPRE deriva de fullRows() (la
-// MISMA fuente que la tabla en pantalla y el reporte impreso), para que el
-// Id., el Código EDT y todo lo demás sean IDÉNTICOS a lo que el alumno ve
-// en pantalla -- antes esta función reconstruía las filas por su cuenta
-// (repitiendo el código del PAQUETE en cada actividad, nunca el propio de
-// cada una, y sin ninguna columna de Id.), lo que producía un archivo
-// desalineado con la tabla y con Definir las Actividades/PERT/Cronograma-
-// CPM. Un paquete sin actividades definidas aparece como una fila de solo
-// referencia (recordatorio, no de precio). En un proyecto sin precios,
-// esto produce filas en blanco -- funciona como plantilla. Con datos,
-// reproduce exactamente lo que se importaría de vuelta (round-trip); ver
-// resolveLeaf() en reconcileImportRows(), que acepta tanto el Código EDT
-// del paquete como el de la actividad al reimportar.
+// MISMA fuente que la tabla en pantalla y el reporte impreso) y lista TODAS
+// las filas que se ven ahí -- proyecto, fases, paquetes (con o sin
+// actividades), actividades e hitos -- para que el archivo sea un fiel
+// reflejo de la tabla, no solo un listado de actividades. Antes esta
+// función omitía proyecto/fases por completo y solo emitía la fila propia
+// de un paquete cuando NO tenía actividades (el paquete quedaba implícito,
+// repetido en cada una de sus actividades) -- corregido a pedido explícito
+// del usuario. Las filas de proyecto/fase/paquete son de solo referencia
+// (columna "Tipo" = "Proyecto"/"Fase"/"Paquete", "Nombre de la actividad"
+// en blanco) -- un paquete SÍ trae su Subtotal acumulado en la columna
+// Subtotal cuando tiene actividades con precio, igual que en pantalla.
+// Con datos, reproduce exactamente lo que se importaría de vuelta
+// (round-trip); ver resolveLeaf() en reconcileImportRows(), que acepta
+// tanto el Código EDT del paquete como el de la actividad al reimportar
+// (y que ya omite cualquier fila con "Nombre de la actividad" en blanco,
+// así que estas filas de referencia nunca se reconcilian por error).
 // Los hitos (de "Definir las Actividades") se agregan como filas de solo
 // referencia -- columna "Tipo"="Hito" y precios siempre en blanco -- para
 // que el archivo exportado los muestre junto a las actividades costeadas
@@ -851,12 +855,21 @@ function exportRowModel(): Array<Array<XlCell | null>> {
   const out: Array<Array<XlCell | null>> = [head];
   let pkgCode = "", pkgName = "";
   fullRows().forEach((r) => {
-    if (r.kind === "project" || r.kind === "phase") return; // el archivo lista paquetes/actividades/hitos, no fases ni la fila de proyecto
+    if (r.kind === "project") {
+      out.push([{ v: r.n, t: "n" }, { v: r.code, t: "s", s: 2 }, { v: r.name || "", t: "s", s: 0 }, null, { v: "Proyecto", t: "s", s: 0 }, null, null, null, null]);
+      return;
+    }
+    if (r.kind === "phase") {
+      out.push([{ v: r.n, t: "n" }, { v: r.code, t: "s", s: 2 }, { v: r.name || "", t: "s", s: 0 }, null, { v: "Fase", t: "s", s: 0 }, null, null, null, null]);
+      return;
+    }
     if (r.kind === "package") {
       pkgCode = r.code; pkgName = r.name;
-      if (!r.activityCount) {
-        out.push([{ v: r.n, t: "n" }, { v: r.code, t: "s", s: 2 }, { v: r.name || "", t: "s", s: 0 }, null, null, null, null, null, null]);
-      }
+      out.push([
+        { v: r.n, t: "n" }, { v: r.code, t: "s", s: 2 }, { v: r.name || "", t: "s", s: 0 }, null,
+        { v: "Paquete", t: "s", s: 0 }, null, null, null,
+        r.pkgSubtotal != null ? { v: r.pkgSubtotal, t: "n", s: 3 } : null
+      ]);
       return;
     }
     if (r.kind === "milestone") {
@@ -892,11 +905,12 @@ function templateInstructions(): Array<Array<XlCell | null>> {
   const L: Array<[string, number]> = [
     ["Cómo completar este archivo", 25],
     ["", 0],
-    ["1. Cada fila es una ACTIVIDAD (no un paquete): las actividades ya están definidas en “Definir las Actividades”. Las columnas “Código EDT”, “Paquete de trabajo”, “Nombre de la actividad”, “Unidad” y “Cantidad” son de referencia -- no las edites: son la clave con la que este simulador reconoce a qué actividad pertenece cada precio al importar el archivo de vuelta (el Código EDT y el Nombre de la actividad deben coincidir con la EDT actual).", 4],
-    ["1b. La columna “Id.” es el mismo correlativo consecutivo (sin saltos, como el Task ID de MS Project) que ves en pantalla y en Definir las Actividades -- es solo de referencia para ubicar cada fila, no se usa para reconciliar al importar.", 4],
+["1. Este archivo es un reflejo COMPLETO de la tabla: trae una fila por cada fila que ves en pantalla -- el proyecto (Tipo=“Proyecto”), cada fase (Tipo=“Fase”), cada paquete de trabajo (Tipo=“Paquete”, con su Subtotal acumulado si ya tiene precios) y, debajo de cada paquete, sus actividades. Solo las filas de ACTIVIDAD llevan precio: para completar el precio de una, ubícala por su “Código EDT” y “Nombre de la actividad” (ya vienen de “Definir las Actividades”, no las edites).", 4],
+    ["1b. Las filas de Proyecto/Fase/Paquete son de referencia (no tienen “Nombre de la actividad”): se ignoran solas al reimportar el archivo, no hace falta tocarlas ni borrarlas.", 4],
+    ["1c. La columna “Id.” es el mismo correlativo consecutivo (sin saltos, como el Task ID de MS Project) que ves en pantalla y en Definir las Actividades -- es solo de referencia para ubicar cada fila, no se usa para reconciliar al importar.", 4],
     ["2. Completa “Precio unitario” para cada actividad.", 4],
-    ["3. La columna “Subtotal” es de referencia (Cantidad × Precio unitario): se recalcula sola al importar, no hace falta completarla ni editarla a mano.", 4],
-    ["4. Un paquete que aparece sin filas de actividad (solo Código EDT y Paquete de trabajo) todavía no tiene actividades definidas -- complétalas primero en “Definir las Actividades”, no aquí.", 4],
+    ["3. La columna “Subtotal” es de referencia (Cantidad × Precio unitario, o la suma de sus actividades en la fila de un paquete): se recalcula sola al importar, no hace falta completarla ni editarla a mano.", 4],
+    ["4. Un paquete sin ninguna actividad debajo (fila “Paquete” seguida directo de la del siguiente paquete o fase) todavía no tiene actividades definidas -- complétalas primero en “Definir las Actividades”, no aquí.", 4],
     ["4b. Hitos: las filas con “Tipo”=“Hito” son las definidas en “Definir las Actividades” -- aparecen aquí solo como referencia (nunca tienen costo) y se ignoran por completo al reimportar el archivo, no hace falta tocarlas.", 4],
     ["5. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
     ["6. Guarda el archivo y vuelve a “Estimar los Costos” > botón “⇧ Importar desde Excel” para subirlo.", 4],
@@ -952,10 +966,11 @@ function buildEstimateCsv(): string {
   const lines = [TEMPLATE_HEADERS.join(";")];
   let pkgCode = "", pkgName = "";
   fullRows().forEach((r) => {
-    if (r.kind === "project" || r.kind === "phase") return;
+    if (r.kind === "project") { lines.push([cell(r.n), cell(r.code), cell(r.name || ""), "", "Proyecto", "", "", "", ""].join(";")); return; }
+    if (r.kind === "phase") { lines.push([cell(r.n), cell(r.code), cell(r.name || ""), "", "Fase", "", "", "", ""].join(";")); return; }
     if (r.kind === "package") {
       pkgCode = r.code; pkgName = r.name;
-      if (!r.activityCount) { lines.push([cell(r.n), cell(r.code), cell(r.name || ""), "", "", "", "", "", ""].join(";")); }
+      lines.push([cell(r.n), cell(r.code), cell(r.name || ""), "", "Paquete", "", "", "", cell(r.pkgSubtotal ?? "")].join(";"));
       return;
     }
     if (r.kind === "milestone") {

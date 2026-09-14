@@ -524,18 +524,28 @@ Costs")
 - **`exportRowModel()`/`buildEstimateCsv()` (el `.xlsx` y su CSV de
   reserva sin `window.JSZip`) derivan de `fullRows()`** — la MISMA
   fuente que la tabla en pantalla y el reporte impreso — en vez de
-  reconstruir las filas por su cuenta. Bug corregido (a pedido
-  explícito del usuario): antes SÍ las reconstruían aparte, lo que
-  producía dos fallas simultáneas en el archivo exportado — (1) **no
-  traía ninguna columna "Id."** (se agregó a las otras tres vistas en
-  un cambio anterior, pero nunca a la exportación) y (2) el "Código
-  EDT" de cada ACTIVIDAD repetía el código del PAQUETE ("1.1" en las
-  dos filas de un paquete con dos actividades) en vez del código propio
-  de cada una ("1.1.1"/"1.1.2", el que sí muestra la tabla en
-  pantalla). Al derivar de `fullRows()` ambas quedan resueltas de raíz
-  y automáticamente alineadas con lo que el alumno ve. Consecuencia en
-  el import: `reconcileImportRows()` ahora resuelve el paquete de una
-  fila con `resolveLeaf()`, que acepta tanto el código del paquete
+  reconstruir las filas por su cuenta, y listan TODO lo que esa tabla
+  muestra: proyecto, fases, paquetes (con o sin actividades) y
+  actividades e hitos, no solo estos dos últimos. Tres bugs corregidos
+  en la misma causa raíz (a pedido explícito del usuario, en dos
+  correcciones sucesivas): (1) **no traía ninguna columna "Id."** (se
+  agregó a las otras tres vistas en un cambio anterior, pero nunca a la
+  exportación); (2) el "Código EDT" de cada ACTIVIDAD repetía el código
+  del PAQUETE ("1.1" en las dos filas de un paquete con dos
+  actividades) en vez del código propio de cada una ("1.1.1"/"1.1.2",
+  el que sí muestra la tabla en pantalla); (3) **el archivo omitía
+  proyecto/fases/paquetes por completo** — un paquete CON actividades
+  nunca tenía su propia fila (quedaba implícito, repetido en cada una
+  de sus actividades), así que el export era solo un listado de
+  actividades, no un reflejo fiel de la tabla. Las filas de
+  proyecto/fase/paquete son de solo referencia (columna "Tipo" =
+  "Proyecto"/"Fase"/"Paquete", "Nombre de la actividad" en blanco —
+  por eso `reconcileImportRows()` las descarta solas al reimportar,
+  mismo criterio que ya usaba para "fila sin completar"); la fila de un
+  paquete SÍ trae su Subtotal acumulado (`pkgSubtotal`, igual que en
+  pantalla, incluso en `0` cuando está "parcial"). Consecuencia en el
+  import: `reconcileImportRows()` resuelve el paquete de una fila de
+  actividad con `resolveLeaf()`, que acepta tanto el código del paquete
   ("1.1", archivos viejos) como el de una actividad ("1.1.1", el que
   genera el export de hoy) — quita el último segmento `.N` si el código
   exacto no es un paquete.
