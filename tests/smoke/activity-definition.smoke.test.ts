@@ -94,12 +94,12 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
     expect(doc.getElementById("actsBody")!.textContent).not.toMatch(/Hitos del proyecto/);
   });
 
-  it("un hito NUNCA consume Id: el correlativo de fases/paquetes/actividades sigue igual con o sin hitos de por medio", async () => {
+  it("el Id es consecutivo SIN SALTOS: un hito también ocupa su propio número (como un Task ID de MS Project)", async () => {
     // w2 (1.1) tiene 2 actividades + 1 hito atado (se lista después de sus
-    // actividades); w3 (1.2) tiene 1 actividad más. Si el hito consumiera un
-    // número, w3 y su actividad quedarían corridos en 1 -- justo lo que este
-    // test evita, porque ese Id debe coincidir con el que ven Estimar los
-    // Costos, PERT y Cronograma/CPM (que nunca ven los hitos).
+    // actividades); w3 (1.2) tiene 1 actividad más. El hito consume el
+    // siguiente número disponible (5) igual que cualquier otra fila -- así
+    // esta tabla se puede cotejar fila por fila contra MS Project, donde un
+    // hito también es una fila con su propio Task ID, nunca un hueco.
     const seedWithMilestone = {
       version: 1, activeId: "p1",
       projects: {
@@ -137,8 +137,8 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
     const rows = Array.from(doc.querySelectorAll("#actsBody tr"));
     const idOf = (row: Element) => row.querySelector(".n-cell")!.textContent;
     // 0=proyecto, 1=Fase 1, 2=Paquete A, 3=Actividad 1, 4=Actividad 2,
-    // (hito: "—", no consume), 5=Paquete B, 6=Actividad 3.
-    expect(rows.map(idOf)).toEqual(["0", "1", "2", "3", "4", "—", "5", "6"]);
+    // 5=hito (consume número), 6=Paquete B, 7=Actividad 3.
+    expect(rows.map(idOf)).toEqual(["0", "1", "2", "3", "4", "5", "6", "7"]);
     expect(rows[5].className).toMatch(/milestone-row/);
     expect(rows[6].textContent).toMatch(/Paquete B/);
   });

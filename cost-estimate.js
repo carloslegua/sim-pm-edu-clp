@@ -235,7 +235,7 @@
 		loose.start.forEach((m) => {
 			out.push({
 				kind: "milestone",
-				n: -1,
+				n: n++,
 				code: m.code,
 				level: 2,
 				name: m.name
@@ -288,7 +288,7 @@
 			milestonesOf(r.id).forEach((m) => {
 				out.push({
 					kind: "milestone",
-					n: -1,
+					n: n++,
 					code: m.code,
 					level: r.depth + 2,
 					name: m.name
@@ -297,7 +297,7 @@
 			(loose.afterLeaf[r.id] || []).forEach((m) => {
 				out.push({
 					kind: "milestone",
-					n: -1,
+					n: n++,
 					code: m.code,
 					level: r.depth + 1,
 					name: m.name
@@ -307,7 +307,7 @@
 		loose.orphan.forEach((m) => {
 			out.push({
 				kind: "milestone",
-				n: -1,
+				n: n++,
 				code: m.code,
 				level: 2,
 				name: m.name
@@ -347,7 +347,7 @@
 				if (r.pkgSubtotal != null) total += r.pkgSubtotal;
 				const sub = !r.activityCount ? "<td class=\"sub-cell empty\" title=\"Este paquete todavía no tiene actividades definidas en Definir las Actividades\">sin actividades</td>" : r.pkgComplete ? "<td class=\"sub-cell\" title=\"Suma del Subtotal de sus actividades\">" + fmtMoney(r.pkgSubtotal) + "</td>" : "<td class=\"sub-cell partial\" title=\"Suma parcial: todavía faltan precios en alguna actividad de este paquete\">" + fmtMoney(r.pkgSubtotal) + " ⚠</td>";
 				html += "<tr class=\"pkg-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"pk-code\">" + esc(r.code) + "</td><td colspan=\"4\" style=\"padding-left:" + (8 + Math.max(0, r.level - 2) * 16) + "px\"><span class=\"pk-name\">" + esc(r.name) + "</span><span class=\"pk-count" + (r.activityCount ? "" : " zero") + "\">" + (r.activityCount || 0) + " act.</span></td>" + sub + "</tr>";
-			} else if (r.kind === "milestone") html += "<tr class=\"act-row milestone-row\"><td class=\"n-cell act-item\" title=\"Los hitos no consumen Id: no cuentan para la EDT ni para el correlativo que comparten las demás tablas\">—</td><td class=\"act-code milestone-code\">◆ " + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "<span class=\"milestone-tag\">Hito</span></td><td>—</td><td class=\"num\">—</td><td class=\"num\">—</td><td class=\"sub-cell empty\" title=\"Los hitos no tienen costo\">—</td></tr>";
+			} else if (r.kind === "milestone") html += "<tr class=\"act-row milestone-row\"><td class=\"n-cell act-item\">" + r.n + "</td><td class=\"act-code milestone-code\">◆ " + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "<span class=\"milestone-tag\">Hito</span></td><td>—</td><td class=\"num\">—</td><td class=\"num\">—</td><td class=\"sub-cell empty\" title=\"Los hitos no tienen costo\">—</td></tr>";
 			else html += "<tr class=\"act-row\"><td class=\"n-cell act-item\">" + r.n + "</td><td class=\"act-code\">" + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "</td><td>" + esc(r.unit || "—") + "</td><td class=\"num\">" + fmtQty(r.qty) + "</td><td class=\"num\">" + fmtQty(r.unitPrice) + "</td>" + (r.subtotal == null ? "<td class=\"sub-cell empty\" title=\"Falta el Precio unitario\">—</td>" : "<td class=\"sub-cell\" title=\"Subtotal = Cantidad × Precio unitario\">" + fmtMoney(r.subtotal) + "</td>") + "</tr>";
 		});
 		html += "<tr class=\"total-row\"><td colspan=\"6\" style=\"text-align:right\">Total estimado</td><td class=\"sub-cell\">" + fmtMoney(total) + "</td></tr>";
@@ -363,7 +363,7 @@
 		rows.forEach((r) => {
 			const isAct = r.kind === "activity", isMs = r.kind === "milestone";
 			lines.push([
-				isMs ? "—" : r.n,
+				r.n,
 				r.code,
 				(r.name || "") + (isMs ? " (hito)" : ""),
 				isAct ? r.unit || "" : "",
@@ -791,7 +791,7 @@
 	}
 	function buildReport() {
 		const s = stats();
-		let body = (mode === "sample" ? "<p class=\"rep-note\"><b>Modo ejemplo:</b> este listado usa la EDT y las actividades didácticas, no los datos del proyecto activo.</p>" : "") + "<h2>1. Resumen</h2><table class=\"rep-kv\"><tr><td>Costo total estimado</td><td><b>" + fmtMoney(s.totalCost) + "</b></td></tr><tr><td>Actividades con precio</td><td>" + s.pricedActivities + " de " + s.totalActivities + " (<b>" + s.pct + "%</b>)</td></tr><tr><td>Paquetes con estimado completo</td><td>" + s.completeLeaves + " de " + s.leavesWithActivities + " paquetes con actividades definidas</td></tr>" + (s.leavesWithoutActivities.length ? "<tr><td>Paquetes sin actividades definidas</td><td>⚠ " + s.leavesWithoutActivities.length + " (no se pueden costear hasta definirlas en Definir las Actividades)</td></tr>" : "") + "</table><h2>2. Estimación de costos por actividad</h2><p class=\"rep-note\">Numeración estilo MS Project: la fila 0 es la tarea resumen del proyecto y el Id corre consecutivo por todas las filas — el mismo Id identifica el mismo paquete/actividad en Definir las Actividades, Análisis PERT y Cronograma/CPM. Unidad y Cantidad vienen de Definir las Actividades; Subtotal = Cantidad × Precio unitario, valor calculado (nunca se ingresa directamente). El costo de un paquete es la suma del Subtotal de sus actividades. Los hitos no tienen Id (no cuentan para ese correlativo compartido).</p><table><tr><th style=\"width:6%\">Id.</th><th style=\"width:9%\">Código EDT</th><th>Paquete de trabajo / Actividad</th><th style=\"width:8%\">Unidad</th><th style=\"width:10%\">Cantidad</th><th style=\"width:11%\">Precio unitario</th><th style=\"width:11%\">Subtotal</th></tr>";
+		let body = (mode === "sample" ? "<p class=\"rep-note\"><b>Modo ejemplo:</b> este listado usa la EDT y las actividades didácticas, no los datos del proyecto activo.</p>" : "") + "<h2>1. Resumen</h2><table class=\"rep-kv\"><tr><td>Costo total estimado</td><td><b>" + fmtMoney(s.totalCost) + "</b></td></tr><tr><td>Actividades con precio</td><td>" + s.pricedActivities + " de " + s.totalActivities + " (<b>" + s.pct + "%</b>)</td></tr><tr><td>Paquetes con estimado completo</td><td>" + s.completeLeaves + " de " + s.leavesWithActivities + " paquetes con actividades definidas</td></tr>" + (s.leavesWithoutActivities.length ? "<tr><td>Paquetes sin actividades definidas</td><td>⚠ " + s.leavesWithoutActivities.length + " (no se pueden costear hasta definirlas en Definir las Actividades)</td></tr>" : "") + "</table><h2>2. Estimación de costos por actividad</h2><p class=\"rep-note\">Numeración estilo MS Project: la fila 0 es la tarea resumen del proyecto y el Id corre consecutivo, sin saltos, por todas las filas (incluidos los hitos) — igual que el Task ID de MS Project, para que esta tabla se pueda cotejar fila por fila contra un cronograma pegado o exportado ahí. Unidad y Cantidad vienen de Definir las Actividades; Subtotal = Cantidad × Precio unitario, valor calculado (nunca se ingresa directamente). El costo de un paquete es la suma del Subtotal de sus actividades.</p><table><tr><th style=\"width:6%\">Id.</th><th style=\"width:9%\">Código EDT</th><th>Paquete de trabajo / Actividad</th><th style=\"width:8%\">Unidad</th><th style=\"width:10%\">Cantidad</th><th style=\"width:11%\">Precio unitario</th><th style=\"width:11%\">Subtotal</th></tr>";
 		const repRows = fullRows();
 		let total = 0;
 		if (!repRows.length) body += "<tr><td colspan=\"7\" class=\"rep-note\">— Sin EDT cargada —</td></tr>";
@@ -801,7 +801,7 @@
 			else if (r.kind === "package") {
 				const pkgTxt = !r.activityCount ? "<span class=\"rep-note\">sin actividades definidas</span>" : "<b>" + fmtMoney(r.pkgSubtotal) + "</b>" + (r.pkgComplete ? "" : " (parcial)");
 				body += "<tr><td class=\"num rep-pkg\" style=\"text-align:center\">" + r.n + "</td><td class=\"num rep-pkg\">" + esc(r.code) + "</td><td class=\"rep-pkg\">" + esc(r.name) + "</td><td class=\"rep-pkg\" colspan=\"3\">" + (r.activityCount || 0) + " actividad(es)</td><td class=\"num rep-pkg\" style=\"text-align:right\">" + pkgTxt + "</td></tr>";
-			} else if (r.kind === "milestone") body += "<tr><td class=\"num\" style=\"text-align:center\">—</td><td class=\"num\">◆ " + esc(r.code) + "</td><td>" + esc(r.name) + " <span class=\"rep-note\">(hito)</span></td><td>—</td><td class=\"num\" style=\"text-align:right\">—</td><td class=\"num\" style=\"text-align:right\">—</td><td class=\"num\" style=\"text-align:right\">—</td></tr>";
+			} else if (r.kind === "milestone") body += "<tr><td class=\"num\" style=\"text-align:center\">" + r.n + "</td><td class=\"num\">◆ " + esc(r.code) + "</td><td>" + esc(r.name) + " <span class=\"rep-note\">(hito)</span></td><td>—</td><td class=\"num\" style=\"text-align:right\">—</td><td class=\"num\" style=\"text-align:right\">—</td><td class=\"num\" style=\"text-align:right\">—</td></tr>";
 			else {
 				if (r.subtotal != null) total += r.subtotal;
 				body += "<tr><td class=\"num\" style=\"text-align:center\">" + r.n + "</td><td class=\"num\">" + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "</td><td>" + esc(r.unit || "—") + "</td><td class=\"num\" style=\"text-align:right\">" + fmtQty(r.qty) + "</td><td class=\"num\" style=\"text-align:right\">" + fmtQty(r.unitPrice) + "</td><td class=\"num\" style=\"text-align:right\">" + fmtMoney(r.subtotal) + "</td></tr>";

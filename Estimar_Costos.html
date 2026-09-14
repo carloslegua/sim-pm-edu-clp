@@ -240,7 +240,7 @@
         <table class="acts" id="estTable">
           <thead>
             <tr>
-              <th class="col-item" title="Correlativo consecutivo, como el ID de MS Project: 0 = proyecto (tarea resumen). Identifica el mismo paquete/actividad en Definir las Actividades, Análisis PERT y Cronograma/CPM -- los hitos no tienen Id.">Id.</th>
+              <th class="col-item" title="Correlativo consecutivo, sin saltos, como el Task ID de MS Project: 0 = proyecto (tarea resumen), y cada fila (incluidos los hitos) tiene el siguiente número. Identifica el mismo paquete/actividad en Definir las Actividades y, hasta el primer hito, también en Análisis PERT/Cronograma-CPM (que no listan hitos).">Id.</th>
               <th class="col-code">Código EDT</th>
               <th>Paquete de trabajo / Actividad</th>
               <th class="col-unit">Unidad</th>
@@ -273,7 +273,7 @@
     <div class="tip-box"><b>Cómo se carga el precio:</b> <b>⇩ Exportar a Excel</b> genera un .xlsx con un renglón por actividad (Código EDT, Paquete de trabajo, Nombre de la actividad, Unidad y Cantidad, de referencia); si el proyecto no tiene precios aún, sale en blanco y sirve de plantilla. Completa <b>Precio unitario</b>, guarda y vuelve a subirlo con <b>⇧ Importar desde Excel</b>: reemplaza el estimado actual, verificando que cada fila coincida por Código EDT <b>y</b> por Nombre de la actividad con las actividades actuales.</div>
     <div class="tip-box"><b>Round-trip:</b> el mismo botón <b>⇩ Exportar a Excel</b> sirve para respaldar o seguir editando afuera un estimado que ya existe: si reimportas ese archivo sin tocarlo, obtienes exactamente los mismos datos.</div>
     <div class="tip-box"><b>Paquete "completo" vs. "parcial":</b> un paquete solo se considera con estimado completo (y solo entonces WBS Builder bloquea su Costo) cuando <b>todas</b> sus actividades tienen precio. Si falta precio en alguna, el paquete muestra su suma parcial con ⚠ y el Costo del WBS sigue siendo editable a mano.</div>
-    <div class="tip-box">Como en MS Project: la fila <b>0</b> es la tarea resumen del proyecto (EDT <b>0</b>) y la columna <b>Id.</b> numera consecutivamente fases, paquetes y actividades. Este mismo Id. identifica al mismo paquete/actividad en Definir las Actividades, Análisis PERT y Cronograma/CPM — úsalo para verificar que es la misma fila en cada tabla. Los <b>hitos</b> (◆) no tienen Id.: no cuentan para ese correlativo compartido.</div>
+    <div class="tip-box">Como en MS Project: la fila <b>0</b> es la tarea resumen del proyecto (EDT <b>0</b>) y la columna <b>Id.</b> numera consecutivamente, SIN SALTOS, fases, paquetes, actividades y <b>hitos</b> (◆) — igual que el Task ID de MS Project, para poder cotejar esta tabla fila por fila contra un cronograma pegado o exportado ahí. Este mismo Id. identifica al mismo paquete/actividad en Definir las Actividades y, hasta el primer hito, también en Análisis PERT/Cronograma-CPM (que no listan hitos).</div>
   </aside>
 </div>
 

@@ -182,7 +182,7 @@ uniforme antes de tocar un archivo:
    depende incondicionalmente de `gpi-core.js`, así que no necesita
    `GPI?`/`GPI!` en cada uno de sus ~90 sitios de uso).
 
-## El "Id." compartido entre Definir las Actividades, Estimar los Costos, Análisis PERT y Cronograma/CPM
+## El "Id." de Definir las Actividades, Estimar los Costos, Análisis PERT y Cronograma/CPM
 
 Los cuatro módulos del cronograma leen la MISMA EDT (`wbs`) y las MISMAS
 actividades (`activities.byLeaf`) en vivo desde gpi-core, y cada uno
@@ -190,34 +190,50 @@ arma su propia `fullRows()`/`fullRowsSnapshot()` recorriendo esa EDT con
 el mismo algoritmo MS Project: fila 0 = proyecto, luego cada fase,
 paquete y actividad en orden jerárquico, con un correlativo (`n`/`netId`)
 que antes se llamaba "N.º" y ahora se muestra como **"Id."** en la
-cabecera de las cuatro tablas. La razón del cambio de nombre: ese Id. es
-la clave con la que un alumno verifica que la fila 7 de Definir las
-Actividades es EXACTAMENTE el mismo paquete/actividad que la fila 7 de
-Estimar los Costos, de Análisis PERT y de Cronograma/CPM — por eso debe
-coincidir número por número entre los cuatro para el mismo proyecto.
+cabecera de las cuatro tablas.
 
-Esto impone una regla al agregar cualquier cosa nueva a `fullRows()` en
-Definir las Actividades o Estimar los Costos (los únicos dos que hoy
-muestran más que fase/paquete/actividad): **si el elemento nuevo no
-existe también en PERT/Cronograma-CPM, su fila NUNCA debe incrementar el
-contador de Id.** — se le asigna un Id. propio fuera de ese correlativo
-(mostrado como "—" o su propio código) para no correr la numeración de
-todo lo que viene después. Los **hitos** son el caso ya resuelto así:
-viven en `activities.milestones` (que PERT y Cronograma-CPM ni siquiera
-leen), se muestran con su propio código (H1, H2…) y "—" en la columna
-Id., y `placeLooseMilestones()`/las líneas `milestones.filter(...)` en
-`fullRows()` de ambos módulos pasan `n: -1` en vez de `n: n++` — ver el
-detalle en la sección de Activity_Definition.html más abajo. Cualquier
-elemento futuro con la misma asimetría (visible en un módulo, ausente en
-los otros) debe seguir el mismo patrón, no el de fase/paquete/actividad.
+**Regla de oro (corregida a pedido explícito del usuario, ver historial
+de commits): el Id. es SIEMPRE consecutivo y SIN SALTOS, exactamente
+como el Task ID que MS Project asigna a cada fila de un cronograma —
+incluidos los hitos.** Un alumno pega o exporta estas tablas contra un
+cronograma real de MS Project, donde una fila (tarea o hito) siempre
+tiene un ID entero consecutivo; si esta tabla dejara un hueco (p. ej.
+"—") en la fila de un hito, esa correspondencia 1:1 con MS Project se
+rompería. Por eso **ninguna fila deja de incrementar el contador de
+Id.** — ni siquiera un elemento que solo existe en un módulo. La primera
+versión de este diseño hacía lo contrario (los hitos no consumían Id.,
+para que el número coincidiera entre los cuatro módulos); se revirtió
+porque romper la correlación con MS Project es más grave que perder esa
+coincidencia entre módulos.
 
-Cubierto por tests cruzados: `tests/smoke/activity-definition.smoke.test.ts`,
-`cost-estimate.smoke.test.ts`, `pert-analysis.smoke.test.ts` y
-`cronograma-cpm.smoke.test.ts` siembran el MISMO proyecto (EDT de 2
-paquetes + 3 actividades + 1 hito en el medio) y verifican que las
-cuatro tablas producen la secuencia de Id. `0,1,2,3,4,5,6` — con el hito
-mostrando "—" en Definir las Actividades/Estimar los Costos, y sin
-aparecer siquiera en PERT/Cronograma-CPM.
+Consecuencia directa: dentro de un mismo proyecto, el Id. de **Definir
+las Actividades** y de **Estimar los Costos** siempre coincide entre sí
+(ambos muestran hitos), y el Id. de **Análisis PERT** y de
+**Cronograma/CPM** siempre coincide entre sí (ninguno de los dos lee
+`activities.milestones`, así que ninguno muestra hitos). Pero entre esos
+dos PARES, el Id. solo coincide **hasta el primer hito** del proyecto —
+a partir de ahí, Definir las Actividades/Estimar los Costos van "un
+número más adelante" que PERT/Cronograma-CPM para el mismo paquete o
+actividad, porque los primeros sí le dan un número real al hito y los
+segundos ni lo ven. Esto es esperado, no un bug: cada par de tablas
+mantiene su propia correlación 1:1 con MS Project (que es lo que
+realmente importa), a costa de que el Id. dejе de ser una clave universal
+entre los cuatro cuando hay hitos de por medio.
+
+Los hitos ya siguen esta regla: en `fullRows()` de `activities/main.ts` y
+`cost-estimate/main.ts`, las líneas `milestones.filter(...)` /
+`placeLooseMilestones(...)` pasan `n: n++` igual que cualquier otra fila
+(nunca `n: -1` ni un valor especial) — ver el detalle en la sección de
+Activity_Definition.html más abajo. Cualquier elemento futuro que solo
+exista en un módulo debe seguir el mismo patrón: consumir su número como
+cualquier fila, nunca dejar un hueco.
+
+Cubierto por tests: `tests/smoke/activity-definition.smoke.test.ts` y
+`cost-estimate.smoke.test.ts` siembran un proyecto con un hito de por
+medio y verifican la secuencia sin saltos `0,1,2,3,4,5,6,7` (el hito
+ocupa el 5); `pert-analysis.smoke.test.ts` y `cronograma-cpm.smoke.test.ts`
+siembran el MISMO proyecto y verifican que su propia secuencia
+`0,1,2,3,4,5,6` no se ve afectada por el hito (nunca lo ven).
 
 ## Patrones y particularidades por módulo
 
@@ -381,12 +397,15 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
     su paquete; siempre con Duración "0" (valor por definición, nunca
     "—" de dato faltante) e ícono ◆ distintivo
     (`.milestone-row`/`.milestone-code`).
-  - **Un hito nunca consume el "Id." compartido** con Estimar los
-    Costos/PERT/Cronograma-CPM (ver la sección general más arriba): sus
-    filas pasan `n: -1` en vez de `n: n++`, y la celda Id. muestra "—".
-    Si consumiera un número, el paquete/actividad que viene después
-    quedaría con un Id. distinto al que le asignan PERT y Cronograma-CPM
-    (que no ven hitos), rompiendo la verificación cruzada entre tablas.
+  - **Un hito SÍ consume un Id. real, consecutivo, sin saltos** (ver la
+    sección general más arriba): su fila pasa `n: n++` igual que
+    cualquier otra, nunca un valor especial ni "—" — porque esta tabla
+    se pega/exporta contra MS Project, donde un hito también es una fila
+    con su propio Task ID. Consecuencia: el paquete/actividad que viene
+    después de un hito queda con un Id. distinto al que le asignan PERT
+    y Cronograma-CPM para ese mismo paquete (que nunca ven hitos) — es
+    un trade-off aceptado, no un bug (la correlación con MS Project pesa
+    más que la coincidencia exacta entre las cuatro tablas).
   - El modo ejemplo trae tres hitos ilustrativos: "H1 Inicio del
     Proyecto" (suelto, `afterLeafId: null`, al principio de todo), "H2
     Fin de Cimentaciones" (atado a 4.2), "H3 Cierre del Proyecto"

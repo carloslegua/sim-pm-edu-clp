@@ -228,7 +228,7 @@
 		loose.start.forEach((m) => {
 			out.push({
 				kind: "milestone",
-				n: -1,
+				n: n++,
 				code: m.code,
 				level: 2,
 				name: m.name,
@@ -273,7 +273,7 @@
 				milestones.filter((m) => m.leafId === r.id).forEach((m) => {
 					out.push({
 						kind: "milestone",
-						n: -1,
+						n: n++,
 						code: m.code,
 						level: r.depth + 2,
 						name: m.name,
@@ -284,7 +284,7 @@
 				(loose.afterLeaf[r.id] || []).forEach((m) => {
 					out.push({
 						kind: "milestone",
-						n: -1,
+						n: n++,
 						code: m.code,
 						level: r.depth + 1,
 						name: m.name,
@@ -296,7 +296,7 @@
 		loose.orphan.forEach((m) => {
 			out.push({
 				kind: "milestone",
-				n: -1,
+				n: n++,
 				code: m.code,
 				level: 2,
 				name: m.name,
@@ -323,7 +323,7 @@
 			if (r.kind === "project") html += "<tr class=\"proj-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"code-cell\" style=\"color:var(--ink-1)\">0</td><td colspan=\"6\">" + esc(r.name) + " <span class=\"proj-hint\">Fila 0</span></td></tr>";
 			else if (r.kind === "phase") html += "<tr class=\"phase-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"code-cell\">" + esc(r.code) + "</td><td colspan=\"6\" style=\"padding-left:" + (10 + Math.max(0, r.level - 2) * 16) + "px\">" + esc(r.name) + "</td></tr>";
 			else if (r.kind === "package") html += "<tr class=\"pkg-row\" id=\"pkg-" + esc(r.id) + "\"><td class=\"n-cell\">" + r.n + "</td><td class=\"pk-code\">" + esc(r.code) + "</td><td colspan=\"6\" style=\"padding-left:" + (8 + Math.max(0, r.level - 2) * 16) + "px\"><span class=\"pk-name\">" + esc(r.name) + "</span><span class=\"pk-count" + (r.count ? "" : " zero") + "\">" + r.count + " act.</span></td></tr>";
-			else if (r.kind === "milestone") html += "<tr class=\"act-row milestone-row\"><td class=\"n-cell act-item\" title=\"Los hitos no consumen Id: no cuentan para la EDT ni para el correlativo que comparten las demás tablas\">—</td><td class=\"act-code milestone-code\">◆ " + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "<span class=\"milestone-tag\">Hito</span></td><td>—</td><td class=\"num\">—</td><td class=\"num\">—</td><td class=\"num\" style=\"text-align:center\">—</td><td class=\"dur-cell\" title=\"Los hitos tienen duración cero por definición\">0</td></tr>";
+			else if (r.kind === "milestone") html += "<tr class=\"act-row milestone-row\"><td class=\"n-cell act-item\">" + r.n + "</td><td class=\"act-code milestone-code\">◆ " + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "<span class=\"milestone-tag\">Hito</span></td><td>—</td><td class=\"num\">—</td><td class=\"num\">—</td><td class=\"num\" style=\"text-align:center\">—</td><td class=\"dur-cell\" title=\"Los hitos tienen duración cero por definición\">0</td></tr>";
 			else html += "<tr class=\"act-row\"><td class=\"n-cell act-item\">" + r.n + "</td><td class=\"act-code\">" + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "</td><td>" + esc(r.unit || "—") + "</td><td class=\"num\">" + fmtQty(r.qty) + "</td><td class=\"num\">" + fmtQty(r.perf) + "</td><td class=\"num\" style=\"text-align:center\">" + esc(String(Math.max(1, numVal(r.teams) || 1))) + "</td>" + (r.dur == null ? "<td class=\"dur-cell empty\" title=\"Falta el metrado o el rendimiento para calcular la duración\">—</td>" : "<td class=\"dur-cell\" title=\"Dur = " + esc(r.qty) + " ÷ (" + esc(String(Math.max(1, numVal(r.teams) || 1))) + " × " + esc(r.perf) + "), redondeada al entero superior\">" + r.dur + "</td>") + "</tr>";
 		});
 		tbody.innerHTML = html;
@@ -352,7 +352,7 @@
 		rows.forEach((r) => {
 			const isAct = r.kind === "activity", isMs = r.kind === "milestone";
 			lines.push([
-				isMs ? "—" : r.n,
+				r.n,
 				r.code,
 				(r.name || "") + (isMs ? " (hito)" : ""),
 				isAct ? r.unit || "" : "",
@@ -791,14 +791,14 @@
 	}
 	function buildReport() {
 		const s = stats();
-		let body = (mode === "sample" ? "<p class=\"rep-note\"><b>Modo ejemplo:</b> este listado usa la EDT y las actividades didácticas, no los datos del proyecto activo.</p>" : "") + "<h2>1. Resumen</h2><table class=\"rep-kv\"><tr><td>Actividades definidas</td><td><b>" + s.total + "</b></td></tr><tr><td>Cobertura de paquetes de trabajo</td><td>" + s.covered + " de " + s.leaves + " paquetes con actividades (<b>" + s.pct + "%</b>)</td></tr>" + (s.orphans ? "<tr><td>Actividades huérfanas</td><td>⚠ " + s.orphans + " (su paquete ya no existe en la EDT)</td></tr>" : "") + "</table><h2>2. Listado de actividades y metrados</h2><p class=\"rep-note\">Numeración estilo MS Project: la fila 0 es la tarea resumen del proyecto y el Id corre consecutivo por todas las filas — el mismo Id identifica el mismo paquete/actividad en Estimar los Costos, Análisis PERT y Cronograma/CPM. Cada actividad hereda el código EDT de su paquete más un correlativo. La duración es un valor calculado: Dur = Met ÷ (#Eq × R), donde R es el rendimiento diario de un equipo y #Eq el número de equipos en paralelo, redondeada al entero superior. Los hitos no tienen Id (no cuentan para ese correlativo compartido).</p><table><tr><th style=\"width:6%\">Id.</th><th style=\"width:9%\">Código EDT</th><th>Paquete de trabajo / Actividad</th><th style=\"width:7%\">Unidad</th><th style=\"width:9%\">Metrado</th><th style=\"width:9%\">Rend. (R)</th><th style=\"width:6%\">#Eq</th><th style=\"width:8%\">Dur. (d)</th></tr>";
+		let body = (mode === "sample" ? "<p class=\"rep-note\"><b>Modo ejemplo:</b> este listado usa la EDT y las actividades didácticas, no los datos del proyecto activo.</p>" : "") + "<h2>1. Resumen</h2><table class=\"rep-kv\"><tr><td>Actividades definidas</td><td><b>" + s.total + "</b></td></tr><tr><td>Cobertura de paquetes de trabajo</td><td>" + s.covered + " de " + s.leaves + " paquetes con actividades (<b>" + s.pct + "%</b>)</td></tr>" + (s.orphans ? "<tr><td>Actividades huérfanas</td><td>⚠ " + s.orphans + " (su paquete ya no existe en la EDT)</td></tr>" : "") + "</table><h2>2. Listado de actividades y metrados</h2><p class=\"rep-note\">Numeración estilo MS Project: la fila 0 es la tarea resumen del proyecto y el Id corre consecutivo, sin saltos, por todas las filas (incluidos los hitos) — igual que el Task ID de MS Project, para que esta tabla se pueda cotejar fila por fila contra un cronograma pegado o exportado ahí. Cada actividad hereda el código EDT de su paquete más un correlativo. La duración es un valor calculado: Dur = Met ÷ (#Eq × R), donde R es el rendimiento diario de un equipo y #Eq el número de equipos en paralelo, redondeada al entero superior.</p><table><tr><th style=\"width:6%\">Id.</th><th style=\"width:9%\">Código EDT</th><th>Paquete de trabajo / Actividad</th><th style=\"width:7%\">Unidad</th><th style=\"width:9%\">Metrado</th><th style=\"width:9%\">Rend. (R)</th><th style=\"width:6%\">#Eq</th><th style=\"width:8%\">Dur. (d)</th></tr>";
 		const repRows = fullRows();
 		if (!repRows.length) body += "<tr><td colspan=\"8\" class=\"rep-note\">— Sin EDT cargada —</td></tr>";
 		repRows.forEach((r) => {
 			if (r.kind === "project") body += "<tr><td class=\"num rep-phase\" style=\"text-align:center\">0</td><td class=\"num rep-phase\">0</td><td class=\"rep-phase\" colspan=\"6\">" + esc(r.name) + " <span class=\"rep-note\">(tarea resumen del proyecto)</span></td></tr>";
 			else if (r.kind === "phase") body += "<tr><td class=\"num rep-phase\" style=\"text-align:center\">" + r.n + "</td><td class=\"num rep-phase\">" + esc(r.code) + "</td><td class=\"rep-phase\" colspan=\"6\">" + esc(r.name) + "</td></tr>";
 			else if (r.kind === "package") body += "<tr><td class=\"num rep-pkg\" style=\"text-align:center\">" + r.n + "</td><td class=\"num rep-pkg\">" + esc(r.code) + "</td><td class=\"rep-pkg\">" + esc(r.name) + "</td><td class=\"rep-pkg\" colspan=\"5\">" + (r.count ? r.count + " actividad(es)" : "<span class=\"rep-note\">sin actividades</span>") + "</td></tr>";
-			else if (r.kind === "milestone") body += "<tr><td class=\"num\" style=\"text-align:center\">—</td><td class=\"num\">◆ " + esc(r.code) + "</td><td>" + esc(r.name) + " <span class=\"rep-note\">(hito)</span></td><td>—</td><td class=\"num\" style=\"text-align:right\">—</td><td class=\"num\" style=\"text-align:right\">—</td><td class=\"num\" style=\"text-align:center\">—</td><td class=\"num\" style=\"text-align:center\"><b>0</b></td></tr>";
+			else if (r.kind === "milestone") body += "<tr><td class=\"num\" style=\"text-align:center\">" + r.n + "</td><td class=\"num\">◆ " + esc(r.code) + "</td><td>" + esc(r.name) + " <span class=\"rep-note\">(hito)</span></td><td>—</td><td class=\"num\" style=\"text-align:right\">—</td><td class=\"num\" style=\"text-align:right\">—</td><td class=\"num\" style=\"text-align:center\">—</td><td class=\"num\" style=\"text-align:center\"><b>0</b></td></tr>";
 			else body += "<tr><td class=\"num\" style=\"text-align:center\">" + r.n + "</td><td class=\"num\">" + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "</td><td>" + esc(r.unit || "—") + "</td><td class=\"num\" style=\"text-align:right\">" + fmtQty(r.qty) + "</td><td class=\"num\" style=\"text-align:right\">" + fmtQty(r.perf) + "</td><td class=\"num\" style=\"text-align:center\">" + esc(String(Math.max(1, numVal(r.teams) || 1))) + "</td><td class=\"num\" style=\"text-align:center\"><b>" + (r.dur == null ? "—" : r.dur) + "</b></td></tr>";
 		});
 		body += "</table>";

@@ -105,13 +105,15 @@ describe("Pert_Analysis.html (migrado a pert.js)", () => {
     expect(pertMod.byActivity.a1.mAuto).toBe(true);
   });
 
-  it("el Id de cada fila coincide con el de Definir las Actividades/Estimar los Costos para la misma EDT (los hitos, que PERT no procesa, no corren la numeración)", async () => {
+  it("PERT nunca ve hitos: su Id para paquetes/actividades no se ve afectado por ellos (aunque Definir las Actividades/Estimar los Costos sí les asignan un número ahí)", async () => {
     // Mismo seed (EDT + actividades + hito en 'activities') que su
     // equivalente en activity-definition.smoke.test.ts y
     // cost-estimate.smoke.test.ts -- PERT ni siquiera lee
-    // "activities.milestones", así que su numeración ya no se ve afectada
-    // por hitos; este test confirma que el resultado (0,1,2,3,4,5,6) es
-    // exactamente el mismo Id que ven esos otros dos módulos.
+    // "activities.milestones", así que su propia numeración sigue siendo
+    // 0,1,2,3,4,5,6 pase lo que pase con los hitos: NO es la misma
+    // secuencia que ahora produce Activities/Estimar los Costos para w3/a3
+    // (ahí el hito sí consume un número, así que esas dos tablas quedan
+    // "corridas" respecto de PERT a partir del hito -- ver ARCHITECTURE.md).
     const seedWithMilestone = {
       version: 1, activeId: "p1",
       projects: {

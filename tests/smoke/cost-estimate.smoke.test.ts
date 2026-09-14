@@ -101,11 +101,11 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
     expect(doc.getElementById("missList")!.textContent).toMatch(/Todos los paquetes de trabajo tienen actividades definidas/);
   });
 
-  it("un hito NUNCA consume Id: el correlativo coincide con el que muestra Definir las Actividades para la misma EDT", async () => {
+  it("el Id es consecutivo SIN SALTOS: un hito también ocupa su propio número, igual que en Definir las Actividades", async () => {
     // Mismo seed (EDT + actividades + hito) que su equivalente en
-    // tests/smoke/activity-definition.smoke.test.ts -- el Id de cada fila
-    // debe coincidir EXACTO entre ambos módulos para el mismo paquete/
-    // actividad, sin que el hito corra la numeración de w3/a3.
+    // tests/smoke/activity-definition.smoke.test.ts -- el hito consume el
+    // siguiente número disponible (5), igual en ambos módulos: esta tabla
+    // también debe poder cotejarse fila por fila contra MS Project.
     const seedWithMilestone = {
       version: 1, activeId: "p1",
       projects: {
@@ -142,7 +142,7 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
     const doc = dom.window.document;
     const rows = Array.from(doc.querySelectorAll("#estBody tr")).filter((r) => !r.className.includes("total-row"));
     const idOf = (row: Element) => row.querySelector(".n-cell")!.textContent;
-    expect(rows.map(idOf)).toEqual(["0", "1", "2", "3", "4", "—", "5", "6"]);
+    expect(rows.map(idOf)).toEqual(["0", "1", "2", "3", "4", "5", "6", "7"]);
   });
 
   it("con proyecto activo real: la tabla muestra el paquete y su actividad en modo solo lectura", async () => {

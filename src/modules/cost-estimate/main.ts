@@ -241,18 +241,17 @@ interface FullRow {
 }
 
 // Modelo de filas completo, estilo MS Project: fila 0 = proyecto (tarea
-// resumen), Id consecutivo para las filas de fase/paquete/actividad. La
-// tabla, el reporte y el archivo exportado comparten esta única fuente para
-// no desalinearse nunca. Este Id debe coincidir EXACTAMENTE con el de
-// Definir las Actividades (y con el de Análisis PERT/Cronograma-CPM, que
-// recorren la misma EDT y las mismas actividades) para que un alumno pueda
-// verificar que es el mismo paquete/actividad en cada tabla -- por eso los
-// hitos (que solo existen aquí y en Definir las Actividades; PERT y
-// Cronograma-CPM no los ven) NUNCA consumen un número de este contador. Los
-// hitos (de "Definir las Actividades") se listan después de las actividades
-// de su paquete si están atados, o se intercalan en CUALQUIER posición del
-// listado si van sueltos (ver placeLooseMilestones) -- nunca en un bloque
-// aparte -- siempre de solo lectura, sin costo.
+// resumen), Id CONSECUTIVO SIN SALTOS para todas las demás filas (fases,
+// paquetes, actividades E HITOS). La tabla, el reporte y el archivo
+// exportado comparten esta única fuente para no desalinearse nunca. Este
+// Id debe coincidir fila por fila con el Task ID que asigna MS Project al
+// mismo cronograma (ahí un hito también es una fila con su propio ID
+// consecutivo, nunca un hueco) -- por eso NINGUNA fila, hitos incluidos,
+// se salta el contador. Los hitos (de "Definir las Actividades") se listan
+// después de las actividades de su paquete si están atados, o se
+// intercalan en CUALQUIER posición del listado si van sueltos (ver
+// placeLooseMilestones) -- nunca en un bloque aparte -- siempre de solo
+// lectura, sin costo.
 function fullRows(): FullRow[] {
   const w = wbsData(), out: FullRow[] = [];
   if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
@@ -263,7 +262,7 @@ function fullRows(): FullRow[] {
   const knownLeafIds: Record<string, boolean> = {};
   tree.forEach((r) => { if (r.kind === "package") knownLeafIds[r.id] = true; });
   const loose = placeLooseMilestones(allMilestones(), knownLeafIds);
-  loose.start.forEach((m) => { out.push({ kind: "milestone", n: -1, code: m.code, level: 2, name: m.name }); });
+  loose.start.forEach((m) => { out.push({ kind: "milestone", n: n++, code: m.code, level: 2, name: m.name }); });
   tree.forEach((r) => {
     if (r.kind === "phase") {
       out.push({ kind: "phase", n: n++, code: r.code, level: r.depth + 1, name: r.name, id: r.id });
@@ -277,13 +276,13 @@ function fullRows(): FullRow[] {
       out.push({ kind: "activity", n: n++, code: r.code + "." + (i + 1), level: r.depth + 2, name: a.name || "", activityId: a.id, unit: a.unit || "", qty: a.qty, unitPrice: state().byActivity[a.id], subtotal: subtotalOf(a) });
     });
     milestonesOf(r.id).forEach((m) => {
-      out.push({ kind: "milestone", n: -1, code: m.code, level: r.depth + 2, name: m.name });
+      out.push({ kind: "milestone", n: n++, code: m.code, level: r.depth + 2, name: m.name });
     });
     (loose.afterLeaf[r.id] || []).forEach((m) => {
-      out.push({ kind: "milestone", n: -1, code: m.code, level: r.depth + 1, name: m.name });
+      out.push({ kind: "milestone", n: n++, code: m.code, level: r.depth + 1, name: m.name });
     });
   });
-  loose.orphan.forEach((m) => { out.push({ kind: "milestone", n: -1, code: m.code, level: 2, name: m.name }); });
+  loose.orphan.forEach((m) => { out.push({ kind: "milestone", n: n++, code: m.code, level: 2, name: m.name }); });
   return out;
 }
 
@@ -351,7 +350,7 @@ function renderTable(): void {
         + '</tr>';
     } else if (r.kind === "milestone") {
       html += '<tr class="act-row milestone-row">'
-        + '<td class="n-cell act-item" title="Los hitos no consumen Id: no cuentan para la EDT ni para el correlativo que comparten las demás tablas">—</td>'
+        + '<td class="n-cell act-item">' + r.n + '</td>'
         + '<td class="act-code milestone-code">◆ ' + esc(r.code) + '</td>'
         + '<td>' + (r.name ? esc(r.name) : '<span class="rep-note">— sin nombre —</span>') + '<span class="milestone-tag">Hito</span></td>'
         + '<td>—</td><td class="num">—</td><td class="num">—</td>'
@@ -383,7 +382,7 @@ function copyWholeTable(): void {
   rows.forEach((r) => {
     const isAct = r.kind === "activity", isMs = r.kind === "milestone";
     lines.push([
-      isMs ? "—" : r.n, r.code, (r.name || "") + (isMs ? " (hito)" : ""),
+      r.n, r.code, (r.name || "") + (isMs ? " (hito)" : ""),
       isAct ? ((r.unit as string) || "") : "",
       isAct ? (r.qty == null ? "" : r.qty) : "",
       isAct ? (r.unitPrice == null ? "" : r.unitPrice) : "",
@@ -719,7 +718,7 @@ function buildReport(): void {
     + (s.leavesWithoutActivities.length ? '<tr><td>Paquetes sin actividades definidas</td><td>⚠ ' + s.leavesWithoutActivities.length + ' (no se pueden costear hasta definirlas en Definir las Actividades)</td></tr>' : '')
     + '</table>'
     + '<h2>2. Estimación de costos por actividad</h2>'
-    + '<p class="rep-note">Numeración estilo MS Project: la fila 0 es la tarea resumen del proyecto y el Id corre consecutivo por todas las filas — el mismo Id identifica el mismo paquete/actividad en Definir las Actividades, Análisis PERT y Cronograma/CPM. Unidad y Cantidad vienen de Definir las Actividades; Subtotal = Cantidad × Precio unitario, valor calculado (nunca se ingresa directamente). El costo de un paquete es la suma del Subtotal de sus actividades. Los hitos no tienen Id (no cuentan para ese correlativo compartido).</p>'
+    + '<p class="rep-note">Numeración estilo MS Project: la fila 0 es la tarea resumen del proyecto y el Id corre consecutivo, sin saltos, por todas las filas (incluidos los hitos) — igual que el Task ID de MS Project, para que esta tabla se pueda cotejar fila por fila contra un cronograma pegado o exportado ahí. Unidad y Cantidad vienen de Definir las Actividades; Subtotal = Cantidad × Precio unitario, valor calculado (nunca se ingresa directamente). El costo de un paquete es la suma del Subtotal de sus actividades.</p>'
     + '<table><tr><th style="width:6%">Id.</th><th style="width:9%">Código EDT</th><th>Paquete de trabajo / Actividad</th><th style="width:8%">Unidad</th><th style="width:10%">Cantidad</th><th style="width:11%">Precio unitario</th><th style="width:11%">Subtotal</th></tr>';
   const repRows = fullRows();
   let total = 0;
@@ -735,7 +734,7 @@ function buildReport(): void {
       const pkgTxt = !r.activityCount ? '<span class="rep-note">sin actividades definidas</span>' : ('<b>' + fmtMoney(r.pkgSubtotal) + '</b>' + (r.pkgComplete ? '' : ' (parcial)'));
       body += '<tr><td class="num rep-pkg" style="text-align:center">' + r.n + '</td><td class="num rep-pkg">' + esc(r.code) + '</td><td class="rep-pkg">' + esc(r.name) + '</td><td class="rep-pkg" colspan="3">' + (r.activityCount || 0) + ' actividad(es)</td><td class="num rep-pkg" style="text-align:right">' + pkgTxt + '</td></tr>';
     } else if (r.kind === "milestone") {
-      body += '<tr><td class="num" style="text-align:center">—</td>'
+      body += '<tr><td class="num" style="text-align:center">' + r.n + '</td>'
         + '<td class="num">◆ ' + esc(r.code) + '</td>'
         + '<td>' + esc(r.name) + ' <span class="rep-note">(hito)</span></td>'
         + '<td>—</td><td class="num" style="text-align:right">—</td><td class="num" style="text-align:right">—</td>'

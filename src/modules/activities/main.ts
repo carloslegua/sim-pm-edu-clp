@@ -220,21 +220,19 @@ function placeLooseMilestones(milestones: MilestoneRow[], knownLeafIds: Record<s
 }
 
 // Modelo de filas completo, estilo MS Project: fila 0 = proyecto (tarea
-// resumen), e Id consecutivo para las filas de fase/paquete/actividad. Es
-// la única fuente de numeración: la tabla, el reporte y la plantilla
-// exportada lo comparten para que nunca se desalineen. Este Id es también
-// la clave que un alumno usa para verificar que un mismo paquete/actividad
-// es el mismo en Definir las Actividades, Estimar los Costos, Análisis
-// PERT y Cronograma/CPM -- los cuatro recorren la MISMA EDT y las MISMAS
-// actividades en el MISMO orden, así que el Id de cada uno debe coincidir
-// exactamente. Por eso los HITOS -- que solo existen aquí y en Estimar los
-// Costos, PERT/Cronograma-CPM no los ven -- NUNCA consumen un número de
-// este contador: se muestran con su propio código (H1, H2…) y un guion en
-// la columna Id, para no correr el conteo de los demás. level = nivel de
-// esquema de MS Project (proyecto=1, sus fases=2, …). Los hitos atados a un
-// paquete se listan después de sus actividades; los sueltos se intercalan
-// en CUALQUIER posición del listado (ver placeLooseMilestones) -- nunca en
-// un bloque aparte ni con numeración EDT propia.
+// resumen), e Id CONSECUTIVO SIN SALTOS para todas las demás filas (fases,
+// paquetes, actividades E HITOS). Es la única fuente de numeración: la
+// tabla, el reporte y la plantilla exportada lo comparten para que nunca se
+// desalineen. Este Id debe coincidir fila por fila con el Task ID que
+// asigna MS Project al mismo cronograma (ahí un hito también es una fila
+// con su propio ID consecutivo, nunca un hueco) -- por eso NINGUNA fila,
+// hitos incluidos, se salta el contador: hacerlo rompería la
+// correspondencia 1:1 que el alumno necesita al pegar/exportar esta tabla
+// contra MS Project. level = nivel de esquema de MS Project (proyecto=1,
+// sus fases=2, …). Los hitos atados a un paquete se listan después de sus
+// actividades; los sueltos se intercalan en CUALQUIER posición del listado
+// (ver placeLooseMilestones) -- nunca en un bloque aparte ni con
+// numeración EDT propia (su código EDT-like es su propio código H1/H2…).
 function fullRows(): FullRow[] {
   const w = wbsData(), st = state(), out: FullRow[] = [];
   if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
@@ -246,7 +244,7 @@ function fullRows(): FullRow[] {
   const knownLeafIds: Record<string, boolean> = {};
   tree.forEach((r) => { if (r.kind === "package") knownLeafIds[r.id] = true; });
   const loose = placeLooseMilestones(milestones, knownLeafIds);
-  loose.start.forEach((m) => { out.push({ kind: "milestone", n: -1, code: m.code, level: 2, name: m.name, dur: 0 }); });
+  loose.start.forEach((m) => { out.push({ kind: "milestone", n: n++, code: m.code, level: 2, name: m.name, dur: 0 }); });
   tree.forEach((r) => {
     if (r.kind === "phase") {
       out.push({ kind: "phase", n: n++, code: r.code, level: r.depth + 1, name: r.name, id: r.id });
@@ -256,14 +254,14 @@ function fullRows(): FullRow[] {
         out.push({ kind: "activity", n: n++, code: r.code + "." + (i + 1), level: r.depth + 2, name: a.name, unit: a.unit, qty: a.qty, perf: a.perf, teams: a.teams, dur: durActivity(a), leafId: r.id, actIndex: i });
       });
       milestones.filter((m) => m.leafId === r.id).forEach((m) => {
-        out.push({ kind: "milestone", n: -1, code: m.code, level: r.depth + 2, name: m.name, dur: 0, leafId: r.id });
+        out.push({ kind: "milestone", n: n++, code: m.code, level: r.depth + 2, name: m.name, dur: 0, leafId: r.id });
       });
       (loose.afterLeaf[r.id] || []).forEach((m) => {
-        out.push({ kind: "milestone", n: -1, code: m.code, level: r.depth + 1, name: m.name, dur: 0 });
+        out.push({ kind: "milestone", n: n++, code: m.code, level: r.depth + 1, name: m.name, dur: 0 });
       });
     }
   });
-  loose.orphan.forEach((m) => { out.push({ kind: "milestone", n: -1, code: m.code, level: 2, name: m.name, dur: 0 }); });
+  loose.orphan.forEach((m) => { out.push({ kind: "milestone", n: n++, code: m.code, level: 2, name: m.name, dur: 0 }); });
   return out;
 }
 
@@ -308,7 +306,7 @@ function renderTable(): void {
         + '</tr>';
     } else if (r.kind === "milestone") {
       html += '<tr class="act-row milestone-row">'
-        + '<td class="n-cell act-item" title="Los hitos no consumen Id: no cuentan para la EDT ni para el correlativo que comparten las demás tablas">—</td>'
+        + '<td class="n-cell act-item">' + r.n + '</td>'
         + '<td class="act-code milestone-code">◆ ' + esc(r.code) + '</td>'
         + '<td>' + (r.name ? esc(r.name) : '<span class="rep-note">— sin nombre —</span>') + '<span class="milestone-tag">Hito</span></td>'
         + '<td>—</td><td class="num">—</td><td class="num">—</td><td class="num" style="text-align:center">—</td>'
@@ -359,7 +357,7 @@ function copyWholeTable(): void {
   rows.forEach((r) => {
     const isAct = r.kind === "activity", isMs = r.kind === "milestone";
     lines.push([
-      isMs ? "—" : r.n, r.code, (r.name || "") + (isMs ? " (hito)" : ""),
+      r.n, r.code, (r.name || "") + (isMs ? " (hito)" : ""),
       isAct ? (r.unit || "") : "",
       isAct ? (r.qty == null ? "" : r.qty) : "",
       isAct ? (r.perf == null ? "" : r.perf) : "",
@@ -664,7 +662,7 @@ function buildReport(): void {
     + (s.orphans ? '<tr><td>Actividades huérfanas</td><td>⚠ ' + s.orphans + ' (su paquete ya no existe en la EDT)</td></tr>' : '')
     + '</table>'
     + '<h2>2. Listado de actividades y metrados</h2>'
-    + '<p class="rep-note">Numeración estilo MS Project: la fila 0 es la tarea resumen del proyecto y el Id corre consecutivo por todas las filas — el mismo Id identifica el mismo paquete/actividad en Estimar los Costos, Análisis PERT y Cronograma/CPM. Cada actividad hereda el código EDT de su paquete más un correlativo. La duración es un valor calculado: Dur = Met ÷ (#Eq × R), donde R es el rendimiento diario de un equipo y #Eq el número de equipos en paralelo, redondeada al entero superior. Los hitos no tienen Id (no cuentan para ese correlativo compartido).</p>'
+    + '<p class="rep-note">Numeración estilo MS Project: la fila 0 es la tarea resumen del proyecto y el Id corre consecutivo, sin saltos, por todas las filas (incluidos los hitos) — igual que el Task ID de MS Project, para que esta tabla se pueda cotejar fila por fila contra un cronograma pegado o exportado ahí. Cada actividad hereda el código EDT de su paquete más un correlativo. La duración es un valor calculado: Dur = Met ÷ (#Eq × R), donde R es el rendimiento diario de un equipo y #Eq el número de equipos en paralelo, redondeada al entero superior.</p>'
     + '<table><tr><th style="width:6%">Id.</th><th style="width:9%">Código EDT</th><th>Paquete de trabajo / Actividad</th><th style="width:7%">Unidad</th><th style="width:9%">Metrado</th><th style="width:9%">Rend. (R)</th><th style="width:6%">#Eq</th><th style="width:8%">Dur. (d)</th></tr>';
   const repRows = fullRows();
   if (!repRows.length) {
@@ -678,7 +676,7 @@ function buildReport(): void {
     } else if (r.kind === "package") {
       body += '<tr><td class="num rep-pkg" style="text-align:center">' + r.n + '</td><td class="num rep-pkg">' + esc(r.code) + '</td><td class="rep-pkg">' + esc(r.name) + '</td><td class="rep-pkg" colspan="5">' + (r.count ? r.count + ' actividad(es)' : '<span class="rep-note">sin actividades</span>') + '</td></tr>';
     } else if (r.kind === "milestone") {
-      body += '<tr><td class="num" style="text-align:center">—</td>'
+      body += '<tr><td class="num" style="text-align:center">' + r.n + '</td>'
         + '<td class="num">◆ ' + esc(r.code) + '</td>'
         + '<td>' + esc(r.name) + ' <span class="rep-note">(hito)</span></td>'
         + '<td>—</td><td class="num" style="text-align:right">—</td><td class="num" style="text-align:right">—</td><td class="num" style="text-align:center">—</td>'

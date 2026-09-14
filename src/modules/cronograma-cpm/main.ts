@@ -137,12 +137,13 @@ interface Row {
 
 // Snapshot de filas estilo MS Project (0=proyecto, luego fases/paquetes/
 // actividades) — la instantánea que consume GPI.util.buildScheduleLinks y
-// la fuente del Id. (netId). Las actividades llevan activityId+dur+te. Este
-// Id. debe coincidir con el de Definir las Actividades/Estimar los Costos/
-// PERT para el mismo paquete/actividad -- los cuatro recorren la MISMA EDT
-// y las MISMAS actividades, en el MISMO orden (project → fases → paquetes →
-// actividades), sin que los hitos (que Cronograma-CPM no procesa) alteren
-// la cuenta en ninguno de los otros tres.
+// la fuente del Id. (netId), consecutivo SIN SALTOS igual que el Task ID de
+// MS Project. Este Id. coincide con el de Análisis PERT siempre (tampoco
+// procesa hitos) y con el de Definir las Actividades/Estimar los Costos
+// hasta el primer hito del proyecto -- ahí esos dos SÍ le asignan un número
+// real (nunca un hueco, para no romper su propia correlación 1:1 con MS
+// Project), así que sus filas posteriores a un hito quedan corridas
+// respecto de este módulo y de PERT, que no ven hitos en absoluto.
 function fullRowsSnapshot(): Row[] {
   const w = wbsData(), act = actsData(), idx = pertIndex(), out: Row[] = [];
   if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;

@@ -749,7 +749,7 @@ function buildReport(): void {
     + '<tr><td>Probabilidad de cumplimiento</td><td>Pendiente de la ruta crítica: se activa con el módulo Cronograma/CPM (Z = (plazo − ΣTE) / √Σσ² sobre la ruta).</td></tr>'
     + '</table>'
     + '<h2>2. Análisis por actividad</h2>'
-    + '<p class="rep-note">TE = (O + 4M + P) / 6 · σ = (P − O) / 6 · σ² = σ². La M automática sigue a la duración determinística Dur = Met ÷ (#Eq × R) del módulo Definir las Actividades; las M fijadas a mano se marcan con *. Valores de O/M/P mostrados en días. El Id de cada fila coincide con el de Definir las Actividades, Estimar los Costos y Cronograma/CPM (mismo paquete/actividad).</p>'
+    + '<p class="rep-note">TE = (O + 4M + P) / 6 · σ = (P − O) / 6 · σ² = σ². La M automática sigue a la duración determinística Dur = Met ÷ (#Eq × R) del módulo Definir las Actividades; las M fijadas a mano se marcan con *. Valores de O/M/P mostrados en días. El Id de cada fila coincide con el de Cronograma/CPM siempre, y con el de Definir las Actividades/Estimar los Costos hasta el primer hito del proyecto (este análisis no incluye hitos).</p>'
     + '<table><tr><th style="width:5%">Id.</th><th style="width:9%">EDT</th><th>Actividad</th><th style="width:7%">Dur</th><th style="width:7%">O</th><th style="width:7%">M</th><th style="width:7%">P</th><th style="width:7%">TE</th><th style="width:7%">σ</th><th style="width:7%">σ²</th></tr>';
   fullRows().forEach((r) => {
     if (r.kind === "project") {

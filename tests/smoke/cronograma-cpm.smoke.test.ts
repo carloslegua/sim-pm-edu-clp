@@ -107,12 +107,15 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
     expect(sch.links[0]).toMatchObject({ from: "a1", to: "a2", type: "FS" });
   });
 
-  it("el Id de cada fila coincide con el de Definir las Actividades/Estimar los Costos/PERT para la misma EDT (los hitos, que Cronograma-CPM no procesa, no corren la numeración)", async () => {
+  it("Cronograma-CPM nunca ve hitos: su Id (netId) para paquetes/actividades no se ve afectado por ellos, igual que PERT", async () => {
     // Mismo seed (EDT + actividades + hito en 'activities') que su
     // equivalente en activity-definition/cost-estimate/pert-analysis
     // .smoke.test.ts -- Cronograma-CPM ni siquiera lee
-    // "activities.milestones", así que su numeración (netId) debe coincidir
-    // exactamente: 0,1,2,3,4,5,6.
+    // "activities.milestones", así que su propio netId sigue siendo
+    // 0,1,2,3,4,5,6 pase lo que pase con los hitos (coincide siempre con
+    // PERT); Activities/Estimar los Costos, en cambio, ahora sí le asignan
+    // un número real al hito, así que sus filas para w3/a3 quedan corridas
+    // en 1 respecto de este módulo -- ver ARCHITECTURE.md.
     const seedWithMilestone = {
       version: 1, activeId: "p1",
       projects: {
