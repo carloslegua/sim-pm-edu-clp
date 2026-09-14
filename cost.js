@@ -468,6 +468,26 @@
 		recalcCont();
 		flash();
 	}
+	function pullFromCostEstimate() {
+		if (!gpiOn()) {
+			showToast("Abre este módulo desde el Panel de Control para conectar la EDT.");
+			return;
+		}
+		userEdited = true;
+		const wbs = GPI.getModule("wbs");
+		const estimate = GPI.getModule("costEstimate");
+		const total = GPI.util && wbs ? GPI.util.costEstimateTotal(estimate, wbs) : 0;
+		if (!total) {
+			showToast("Aún no hay paquetes con Cantidad y Precio unitario cargados en Estimar los Costos.");
+			return;
+		}
+		const v = Math.round(total);
+		$("baseCost").value = String(v);
+		$("actCostP1").value = String(v);
+		save();
+		recalcCont();
+		flash();
+	}
 	var userEdited = false;
 	["input", "change"].forEach((ev) => document.addEventListener(ev, (e) => {
 		if (e.isTrusted) userEdited = true;
@@ -629,6 +649,9 @@
 		const pw1 = document.getElementById("pullWbs1"), pw3 = document.getElementById("pullWbs3");
 		if (pw1) pw1.style.display = connected ? "inline-flex" : "none";
 		if (pw3) pw3.style.display = connected ? "inline-flex" : "none";
+		const pe1 = document.getElementById("pullEst1"), pe3 = document.getElementById("pullEst3");
+		if (pe1) pe1.style.display = connected ? "inline-flex" : "none";
+		if (pe3) pe3.style.display = connected ? "inline-flex" : "none";
 		document.querySelectorAll("#classbar button").forEach((x) => x.classList.toggle("on", +x.dataset.c === state.curClass));
 		renderClass();
 		renderCO();
@@ -663,6 +686,7 @@
 		recalcCont,
 		onBaseInput,
 		pullFromWBS,
+		pullFromCostEstimate,
 		addCO,
 		coStatus,
 		delCO,

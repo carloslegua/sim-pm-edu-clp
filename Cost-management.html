@@ -212,7 +212,7 @@
           <label class="f" style="margin-bottom:0"><span>Estimación de costos de las actividades</span>
             <div class="hint">Suma de las estimaciones por actividad. Alimenta la contingencia e inflación (pestaña 03).</div>
             <input id="actCostP1" class="mono" type="number" value="7100000" onchange="onBaseInput(this)" oninput="onBaseInput(this)">
-            <div class="inline-actions"><button class="btn sm" id="pullWbs1" onclick="pullFromWBS()" style="display:none">↧ Traer de la EDT (WBS Builder)</button></div>
+            <div class="inline-actions"><button class="btn sm" id="pullWbs1" onclick="pullFromWBS()" style="display:none">↧ Traer de la EDT (WBS Builder)</button><button class="btn sm" id="pullEst1" onclick="pullFromCostEstimate()" style="display:none">↧ Traer de Estimar los Costos</button></div>
           </label>
         </div>
       </div>
@@ -340,7 +340,7 @@
           <label class="f"><span>Estimación de costos de las actividades</span>
             <div class="hint">Sincronizada con la pestaña 01 y con la EDT del proyecto activo. Base para contingencia y escalation.</div>
             <input id="baseCost" class="mono" type="number" value="7100000" onchange="onBaseInput(this)" oninput="onBaseInput(this)">
-            <div class="inline-actions"><button class="btn sm" id="pullWbs3" onclick="pullFromWBS()" style="display:none">↧ Traer de la EDT (WBS Builder)</button></div>
+            <div class="inline-actions"><button class="btn sm" id="pullWbs3" onclick="pullFromWBS()" style="display:none">↧ Traer de la EDT (WBS Builder)</button><button class="btn sm" id="pullEst3" onclick="pullFromCostEstimate()" style="display:none">↧ Traer de Estimar los Costos</button></div>
           </label>
           <div class="row row-2">
             <label class="f"><span>Método de contingencia</span>

@@ -14,7 +14,7 @@ construido el sistema.
 
 ## Modelo general
 
-13 módulos HTML autocontenidos comparten un núcleo de datos
+14 módulos HTML autocontenidos comparten un núcleo de datos
 (`gpi-core.js`, compilado desde `src/core/gpi-core.ts`) sobre
 `localStorage["gpi_db"]`. Sitio 100% estático: sin backend, sin paso de
 build en producción — GitHub Pages sirve la raíz tal cual, y cada HTML
@@ -26,7 +26,7 @@ CORS) y los artefactos compilados se commitean junto a su fuente.
 flowchart TB
     subgraph nav["Navegador — file:// o GitHub Pages, sin servidor"]
         panel["Panel_Control.html<br>(punto de entrada)"]
-        subgraph tools["12 módulos de herramienta<br>(uno por área del PMBOK 8)"]
+        subgraph tools["13 módulos de herramienta<br>(uno por área del PMBOK 8)"]
             charter["Project_Charter.html"]
             stake["Stakeholder_Studio.html"]
             wbs["WBS_Builder.html"]
@@ -39,6 +39,7 @@ flowchart TB
             splan["Schedule_Management_Plan.html"]
             cpm["Cronograma_CPM.html"]
             cost["Cost-management.html"]
+            costest["Estimar_Costos.html"]
         end
         core["gpi-core.js<br>(dominio compartido:<br>cpm, pertProbability,<br>audits, helpers de árbol...)"]
     end
@@ -116,7 +117,7 @@ Cada campo de `modules.*` es independiente y puede faltar (`undefined`)
 o venir `null` (un módulo "vaciado" explícitamente desde el Panel, ver
 `GPI.setModule(key, null)`) — ningún módulo asume que otro ya se llenó.
 
-### Los 12 tipos de módulo, uno por herramienta
+### Los 13 tipos de módulo, uno por herramienta
 
 | Clave en `modules.*` | Tipo (en `core/types.ts`) | Lo escribe |
 |---|---|---|
@@ -129,6 +130,7 @@ o venir `null` (un módulo "vaciado" explícitamente desde el Panel, ver
 | `raci` | `RaciModule` | RACI_Matrix.html |
 | `schedulePlan` | `SchedulePlanModule` | Schedule_Management_Plan.html |
 | `cost` | `CostModule` | Cost-management.html |
+| `costEstimate` | `CostEstimateModule` | Estimar_Costos.html |
 | `requirements` | `RequirementsModule` | Recopilar_Requisitos.html |
 | `scopeStatement` | `ScopeStatementModule` | Enunciado_del_Alcance.html |
 | `schedule` | `ScheduleModule` | Cronograma_CPM.html |
@@ -182,7 +184,7 @@ uniforme antes de tocar un archivo:
 
 ## Patrones y particularidades por módulo
 
-Convenciones que comparten los 13 (no se repiten abajo salvo que un
+Convenciones que comparten los 14 (no se repiten abajo salvo que un
 módulo se aparte): `addEventListener` para cablear la UI (no atributos
 `onclick` inline, salvo las dos excepciones marcadas abajo), IIFE
 propio, `<script src="gpi-core.js">` en la cabecera, CSS de modal
@@ -313,12 +315,17 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
     la UI ("🔗 Tomado del Cronograma"). Sin esa ruta crítica calculable,
     los campos siguen editables a mano y se etiquetan "📐 Estimado".
     Mismo patrón que RACI→Responsable, pero para fechas.
-  - **Costo**: siempre una estimación bottom-up ingresada en la propia
-    EDT — hoy ningún otro módulo del curso calcula un costo real por
-    paquete de trabajo (el módulo `cost` hace lo opuesto: LEE el rollup
-    de costo del WBS como su "costo base" para calcular el BAC, no al
-    revés). El campo se etiqueta "📐 Estimado" en vez de dar a entender
-    que es un valor definitivo.
+  - **Costo**: si el paquete ya tiene una Cantidad y un Precio unitario
+    válidos (>0) en `costEstimate` (Estimar_Costos.html),
+    `GPI.util.applyCostEstimateToWbs` fija `cost` = Cantidad × Precio
+    unitario y `costEstimateLocksCost` bloquea el campo ("🔗 Tomado de
+    Estimar los Costos") — mismo patrón que Fechas↔Cronograma CPM. Sin
+    ese dato, el campo sigue editable a mano y se etiqueta "📐 Estimado"
+    (estimación bottom-up ingresada en la propia EDT). El módulo `cost`
+    (Planificar la Gestión Financiera) puede a su vez traer su "costo
+    base" del rollup del WBS **o** directamente del total de
+    `costEstimate` (`costEstimateTotal`) — ver su propia sección más
+    abajo.
 
 **Enunciado_del_Alcance.html**
 - El módulo de solo-lectura más complejo: su pestaña "Consistencia"
@@ -336,16 +343,57 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   (origen del requisito) y `wbs` (trazabilidad), con datos de
   demostración propios (`DEMO`) para el modo suelto.
 
-**Cost-management.html**
+**Cost-management.html** (módulo "Planificar la Gestión Financiera")
 - La otra excepción con atributos `onclick`/`onchange`/`oninput`
   inline (`Object.assign(window, { exportJSON, importJSON, save,
-  recalcCont, onBaseInput, pullFromWBS, addCO, coStatus, delCO,
-  buildDoc })`).
+  recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO,
+  coStatus, delCO, buildDoc })`).
 - Referencia `GPI` como identificador global bare (patrón 2 de la
   sección anterior).
 - No usa modales — usa un toast propio. No carga `gpi-shared.css`.
 - Regla de oro propia: no crea `modules.cost` hasta la primera edición
   real del alumno (`save()` sin editar nada no persiste nada).
+- Dos fuentes para el "costo base" de la estimación, ambas manuales
+  (el alumno decide cuál traer, no hay auto-sincronización): "↧ Traer
+  de la EDT" (`pullFromWBS`, rollup de costo del WBS — mezcla estimados
+  manuales y costos reales de `costEstimate` allí donde el WBS ya los
+  bloqueó) y "↧ Traer de Estimar los Costos" (`pullFromCostEstimate`,
+  `GPI.util.costEstimateTotal` — solo la suma de paquetes con Cantidad
+  y Precio unitario cargados ahí, ignora estimados manuales del WBS).
+
+**Estimar_Costos.html** (módulo `costEstimate`, proceso PMBOK "Estimate
+Costs")
+- Mismo flujo que Activity_Definition.html (construido primero en la
+  misma sesión): tabla de solo lectura, una fila por paquete de trabajo
+  de la EDT, poblada por import/export de `.xlsx` — mismo mecanismo
+  hand-rolled de lectura/escritura OOXML vía `window.JSZip`
+  (`xlsxStylesXml`/`xlsxSheetXml`/parseo de `sharedStrings.xml` e
+  `inlineStr`/emparejamiento de columnas por texto de encabezado).
+  Columnas: Código EDT | Nombre del paquete de trabajo/actividad |
+  Unidad de medida | Cantidad | Precio unitario | Subtotal. El Subtotal
+  nunca se persiste — se recalcula siempre (Cantidad × Precio unitario),
+  mismo principio que la Duración en Actividades/PERT.
+- Diferencias clave con Actividades: granularidad 1 fila = 1 paquete
+  (no N filas por paquete — `EstimateState.byLeaf` es
+  `Record<id, EstimateItem>`, no un array), la exportación **no** es una
+  plantilla siempre en blanco sino una "foto" del estado actual
+  (`exportRowModel`) — en un proyecto sin estimado sale en blanco y
+  sirve de plantilla; con datos, reimportarla sin tocarla reproduce
+  exactamente lo mismo (round-trip, probado en
+  `tests/e2e/cost-estimate-import.spec.ts` capturando la descarga real
+  con Playwright y volviendo a subirla).
+- Import más estricto que Actividades (a pedido explícito): cada fila
+  debe coincidir por Código EDT **y** por nombre (case/trim-insensible)
+  con el paquete actual — un código que existe pero con un nombre
+  distinto se descarta como "nombre no coincide", no se acepta a
+  ciegas. Además valida cobertura: todo paquete de la EDT sin ninguna
+  fila en el archivo se lista como "faltante" en el resumen de
+  confirmación (aviso, no bloqueo — el import parcial sigue
+  permitido).
+- Escribe `modules.costEstimate`; lo leen `WBS_Builder.html`
+  (`applyCostEstimateToWbs`, bloquea el Costo del paquete) y
+  `Cost-management.html` (`pullFromCostEstimate`, botón "Traer de
+  Estimar los Costos").
 
 **RACI_Matrix.html**
 - Depende de `window.GPI.util` para su propia lógica en modo "live"
@@ -405,7 +453,7 @@ actividades, 13 enlaces): **53 días laborables, fin 2026-09-16, ruta
 crítica `a1-a2-a3-a4-a8-a9-a10-a11-a12`**. Si este número cambia sin un
 cambio deliberado en `cpm()` o en el dataset, algo se rompió.
 
-### Regla: UN SOLO proyecto ejemplo coherente en los 12 módulos
+### Regla: UN SOLO proyecto ejemplo coherente en los 13 módulos
 
 Cada módulo (excepto `panel-control`) genera su propio "Cargar ejemplo"
 / "Modo ejemplo" de forma **independiente en su propio código** — no
@@ -414,10 +462,12 @@ todos lean; cada `main.ts` tiene su propia función (`loadSample()`,
 `SAMPLE`, `sampleState()`, `buildSample()`...). Por diseño, **todas
 deben describir el MISMO proyecto ficticio** ("DISTRIB+ S.A. — Almacén
 Lurín"), con los mismos códigos, nombres, personas y fechas — auditado
-end-to-end el 2026-09-13 (12/12 módulos coherentes; ver detalle de la
-corrida en el historial de conversación si hace falta el detalle
-completo). Catálogo canónico para no tener que releer los 12 archivos
-cada vez que se agrega o toca un módulo:
+end-to-end el 2026-09-13 (12/12 módulos existentes en ese momento eran
+coherentes; ver detalle de la corrida en el historial de conversación
+si hace falta el detalle completo). `costEstimate` (Estimar_Costos.html)
+se agregó después extendiendo el mismo catálogo (ver más abajo). Este
+es el catálogo canónico para no tener que releer los 13 archivos cada
+vez que se agrega o toca un módulo:
 
 - **Proyecto**: "DISTRIB+ S.A. — Almacén Lurín" (Lima), 12.000 m² en
   Lurín. Código de manager `DPLU-2026`. Inicio **2026-07-06**, cierre
@@ -425,7 +475,7 @@ cada vez que se agrega o toca un módulo:
   todos los módulos que la mencionan — `cost` debe arrancar en USD por
   defecto también, no en PEN, aunque su monto base 7.100.000 numérico
   coincida con el total del WBS).
-- **EDT** (`wbs`/`activities`/`pert`/`cronograma-cpm`/`raci` la
+- **EDT** (`wbs`/`activities`/`pert`/`cronograma-cpm`/`raci`/`costEstimate` la
   replican tal cual): 1 Dirección de Proyecto (1.1–1.3) · 2 Ingeniería
   y Diseño (2.1 Estudio de suelos, 2.2 Diseño estructural, 2.3 Diseño
   eléctrico y sanitario, **2.4 Permisos y licencias municipales**) · 3
@@ -433,6 +483,18 @@ cada vez que se agrega o toca un módulo:
   3.3 Equipos eléctricos e instalaciones) · 4 Construcción (4.1–4.5) ·
   5 Pruebas y Puesta en Marcha (5.1–5.3). Costo total del WBS: **S/
   7.100.000** (18 paquetes).
+- **Estimar los Costos** (`costEstimate`, `sampleEstimate()` en
+  `src/modules/cost-estimate/main.ts`): Cantidad/Unidad/Precio unitario
+  por paquete, calibrados para reproducir EXACTO el costo de cada
+  paquete del WBS de ejemplo — 1.1 glb 1×12.000 · 1.2 glb 1×38.000 · 1.3
+  glb 1×145.000 · 2.1 pto 8×3.500 · 2.2 m² 3.000×55 · 2.3 pto 980×100 ·
+  2.4 glb 1×64.000 · 3.1 ton 260×7.000 · 3.2 glb 1×715.000 · 3.3 glb
+  1×415.000 · 4.1 m³ 2.000×190 · 4.2 m³ 1.050×700 · 4.3 m² 2.330×500 ·
+  4.4 m² 2.750×200 · 4.5 pto 970×500 · 5.1 glb 1×145.000 · 5.2 hora
+  96×500 · 5.3 glb 1×92.000. Todos los paquetes quedan estimados (a
+  diferencia de Actividades, donde varios quedan sin actividades a
+  propósito): el estimado de costos se espera completo para calcular el
+  BAC. Total: **S/ 7.100.000**, idéntico al WBS.
 - **OBS** (`obs`/`raci` la replican): Comité Directivo/Sponsor →
   Gerencia General DISTRIB+ · Director de Proyecto → PM · Jefe de
   Ingeniería/Ing. Civil → Geotecnia, Ing. Estructural, Ing. MEP · Jefe

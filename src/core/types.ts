@@ -105,6 +105,17 @@ export interface ActivitiesModule {
   idCounter: number;
 }
 
+export interface CostEstimateItem {
+  unit?: string;
+  qty?: string | number;
+  unitPrice?: string | number;
+  [key: string]: unknown;
+}
+
+export interface CostEstimateModule {
+  byLeaf: Record<string, CostEstimateItem>;
+}
+
 export interface PertEntry {
   o?: string | number;
   m?: string | number;
@@ -287,6 +298,7 @@ export interface ProjectModules {
   stakeholders?: StakeholdersModule | null;
   wbs?: WbsModule | null;
   activities?: ActivitiesModule | null;
+  costEstimate?: CostEstimateModule | null;
   pert?: PertModule | null;
   obs?: ObsModule | null;
   raci?: RaciModule | null;

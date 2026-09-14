@@ -175,7 +175,16 @@
 			file: "Cost-management.html",
 			icon: "S/",
 			color: "#0093c0",
-			desc: "Plan de gestión de costos (PMBOK 8 + AACE): moneda, clase de estimado, contingencia e inflación, umbrales CV/CPI, órdenes de cambio y documento BOE. Toma la estimación base de la EDT."
+			desc: "Plan de gestión de costos (PMBOK 8 + AACE): moneda, clase de estimado, contingencia e inflación, umbrales CV/CPI, órdenes de cambio y documento BOE. Toma la estimación base de la EDT o de Estimar los Costos."
+		},
+		{
+			key: "costEstimate",
+			group: "cost",
+			name: "Estimar los Costos",
+			file: "Estimar_Costos.html",
+			icon: "🧮",
+			color: "#00967f",
+			desc: "Estimación de costo por paquete de trabajo (Unidad, Cantidad, Precio unitario → Subtotal), importada/exportada desde un .xlsx verificado por Código EDT y nombre contra la EDT. Alimenta el costo real del WBS y la línea base de Planificar la Gestión Financiera."
 		},
 		{
 			key: "evm",

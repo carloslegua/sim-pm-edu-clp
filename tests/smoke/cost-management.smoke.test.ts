@@ -46,7 +46,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(doc.getElementById("kBAC")!.textContent).toBe("$ 8,075,181");
     expect(doc.querySelectorAll("#coBody tr").length).toBe(2); // SAMPLE_CO
 
-    for (const fn of ["exportJSON", "importJSON", "save", "recalcCont", "onBaseInput", "pullFromWBS", "addCO", "coStatus", "delCO", "buildDoc"]) {
+    for (const fn of ["exportJSON", "importJSON", "save", "recalcCont", "onBaseInput", "pullFromWBS", "pullFromCostEstimate", "addCO", "coStatus", "delCO", "buildDoc"]) {
       expect(typeof (dom.window as any)[fn]).toBe("function");
     }
 
@@ -84,5 +84,32 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     const saved = GPI.getModule("cost");
     expect(saved).toBeTruthy();
     expect(saved.budget.baseCost).toBe(500000);
+  });
+
+  it("pullFromCostEstimate trae el total de Estimar los Costos (Cantidad × Precio unitario), no el rollup del WBS", async () => {
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Costos", course: "GPI", currency: "USD", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: { rootId: "root", idCounter: 2, nodes: { root: { name: "P", children: ["w1"] }, w1: { name: "Paquete 1", children: [], cost: 500000 } } },
+            costEstimate: { byLeaf: { w1: { unit: "m³", qty: 2000, unitPrice: 190 } } }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Cost-management.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const GPI = (dom.window as any).GPI;
+
+    (dom.window as any).pullFromCostEstimate();
+    const baseCost = (dom.window.document.getElementById("baseCost") as HTMLInputElement).value;
+    expect(baseCost).toBe("380000"); // 2000 x 190, no los 500000 del WBS
+    expect(GPI.getModule("cost").budget.baseCost).toBe(380000);
   });
 });

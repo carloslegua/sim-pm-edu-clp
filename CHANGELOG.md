@@ -9,8 +9,35 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ## [Unreleased]
 
+### Added
+
+- **Nuevo módulo "Estimar los Costos" (`Estimar_Costos.html`, clave
+  `costEstimate`)**: proceso PMBOK "Estimate Costs" — una fila por
+  paquete de trabajo de la EDT (Unidad, Cantidad, Precio unitario →
+  Subtotal, nunca persistido). Se completa importando un `.xlsx` que
+  valida cada fila por Código EDT **y** nombre contra la EDT actual y
+  avisa de paquetes sin fila en el archivo; "⇩ Exportar a Excel" siempre
+  reproduce el estado actual (plantilla en blanco si no hay estimado,
+  round-trip fiel si ya lo hay — probado en un test E2E real que
+  descarga y reimporta el archivo). Mismo mecanismo de `.xlsx` hand-rolled
+  (JSZip) construido para "Definir las Actividades".
+  - `WBS_Builder.html`: el Costo de un paquete queda bloqueado
+    ("🔗 Tomado de Estimar los Costos") cuando ese paquete ya tiene un
+    costo real aquí — mismo patrón que Fechas↔Cronograma CPM.
+  - `Cost-management.html` (Planificar la Gestión Financiera): nuevo
+    botón "↧ Traer de Estimar los Costos", alternativo al ya existente
+    "↧ Traer de la EDT".
+  - Nuevas funciones de núcleo en `gpi-core.ts`: `costEstimateRows`,
+    `costEstimateTotal`, `applyCostEstimateToWbs`.
+
 ### Changed
 
+- **Renombre**: el módulo "Gestión de Costos" pasa a llamarse
+  "Planificar la Gestión Financiera" (`Cost-management.html`, misma
+  clave `cost`, mismo archivo — solo cambia el nombre visible).
+- WBS Builder: el encabezado de columna "Código" pasa a llamarse
+  "Código EDT" (tabla y reporte), uniformizando el término con la
+  plantilla de Excel de Actividades/Estimar los Costos.
 - **Coherencia Costo/Fechas/Responsable en la EDT (`WBS_Builder.html`)**:
   al definir la EDT no se puede conocer el costo, la duración ni las
   fechas reales de un paquete — ahora queda explícito en la UI cuándo un

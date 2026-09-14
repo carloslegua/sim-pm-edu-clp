@@ -104,6 +104,7 @@ acción explícita y confirmada del alumno.**
 | Cronograma   | `Schedule_Management_Plan.html`  | `schedulePlan`  |
 | Cronograma   | `Cronograma_CPM.html`            | `schedule`      |
 | Costo        | `Cost-management.html`           | `cost`          |
+| Costo        | `Estimar_Costos.html`            | `costEstimate`  |
 | Recursos     | `OBS_Builder.html`               | `obs`           |
 | Recursos     | `RACI_Matrix.html`               | `raci`          |
 
@@ -172,8 +173,22 @@ encabezado cuando el Panel cambia el proyecto, sin pisar la edición en curso.
 moneda y estimación base, clase de estimado (AACE 17R-97), contingencia e
 inflación, umbrales CV/CPI, órdenes de cambio y documento BOE. Integrado al
 núcleo: toma la estimación base del rollup de costos del WBS (botón
-"↧ Traer de la EDT"), guarda en `modules.cost` del proyecto activo y muestra sus
-KPIs (BAC, órdenes de cambio) en el Panel.
+"↧ Traer de la EDT") o del total de Estimar los Costos (botón "↧ Traer de
+Estimar los Costos"), guarda en `modules.cost` del proyecto activo y muestra
+sus KPIs (BAC, órdenes de cambio) en el Panel.
+
+## Estimar los Costos (novedad)
+
+`Estimar_Costos.html` implementa el proceso PMBOK "Estimate Costs": una fila
+por paquete de trabajo de la EDT (Unidad, Cantidad, Precio unitario →
+Subtotal calculado). Se completa importando un `.xlsx` que valida cada fila
+por Código EDT **y** nombre contra la EDT actual, y avisa si algún paquete
+queda sin fila en el archivo; el mismo botón "⇩ Exportar a Excel" siempre
+reproduce el estado actual (sirve de plantilla en blanco si el proyecto no
+tiene estimado, o de respaldo/edición externa fiel si ya lo tiene —
+round-trip). Guarda en `modules.costEstimate`; WBS Builder bloquea el Costo
+de cada paquete ya estimado aquí, y Planificar la Gestión Financiera puede
+traer su costo base directamente de este total.
 
 ## Módulo de Requisitos (novedad)
 
@@ -426,7 +441,7 @@ que la probabilidad queda **sobrestimada**.
 
 ## Desarrollo
 
-La lógica de los 13 módulos y del núcleo vive en `src/` (TypeScript) y se
+La lógica de los 14 módulos y del núcleo vive en `src/` (TypeScript) y se
 compila a los `.js` que carga cada HTML. **Los `.js` de la raíz son artefactos
 generados y versionados**: se regeneran, no se editan.
 

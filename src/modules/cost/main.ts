@@ -7,8 +7,8 @@
 
    IMPORTANTE — a diferencia de OBS/RACI: el HTML de este módulo usa
    atributos onclick/onchange/oninput INLINE (no addEventListener) para
-   ~10 funciones (exportJSON, importJSON, save, recalcCont, onBaseInput,
-   pullFromWBS, addCO, coStatus, delCO, buildDoc), incluidas dos
+   ~11 funciones (exportJSON, importJSON, save, recalcCont, onBaseInput,
+   pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc), incluidas dos
    generadas dinámicamente en filas de tabla (coStatus, delCO). Vite
    compila este módulo en su propio closure: esas funciones NO quedan
    accesibles por nombre desde el HTML a menos que se expongan
@@ -24,7 +24,7 @@
    sin gpi-core.js.
    ============================================================ */
 import type * as GpiCore from "../../core/gpi-core";
-import type { CostModule, ProjectMeta, WbsModule } from "../../core/types";
+import type { CostEstimateModule, CostModule, ProjectMeta, WbsModule } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -373,6 +373,16 @@ function pullFromWBS(): void {
   const v = Math.round(roll.cost); ($("baseCost") as HTMLInputElement).value = String(v); ($("actCostP1") as HTMLInputElement).value = String(v);
   save(); recalcCont(); flash();
 }
+function pullFromCostEstimate(): void {
+  if (!gpiOn()) { showToast("Abre este módulo desde el Panel de Control para conectar la EDT."); return; }
+  userEdited = true;
+  const wbs = (GPI as GpiApi).getModule("wbs") as WbsModule | null;
+  const estimate = (GPI as GpiApi).getModule("costEstimate") as CostEstimateModule | null;
+  const total = ((GPI as GpiApi).util && wbs) ? (GPI as GpiApi).util.costEstimateTotal(estimate, wbs) : 0;
+  if (!total) { showToast("Aún no hay paquetes con Cantidad y Precio unitario cargados en Estimar los Costos."); return; }
+  const v = Math.round(total); ($("baseCost") as HTMLInputElement).value = String(v); ($("actCostP1") as HTMLInputElement).value = String(v);
+  save(); recalcCont(); flash();
+}
 
 /* La rebanada "cost" del proyecto solo se crea tras una edición real del
    usuario (o si ya existía). El autoguardado al salir no debe escribir el
@@ -490,6 +500,9 @@ function init(reload: boolean): void {
   const pw1 = document.getElementById("pullWbs1"), pw3 = document.getElementById("pullWbs3");
   if (pw1) pw1.style.display = connected ? "inline-flex" : "none";
   if (pw3) pw3.style.display = connected ? "inline-flex" : "none";
+  const pe1 = document.getElementById("pullEst1"), pe3 = document.getElementById("pullEst3");
+  if (pe1) pe1.style.display = connected ? "inline-flex" : "none";
+  if (pe3) pe3.style.display = connected ? "inline-flex" : "none";
   document.querySelectorAll("#classbar button").forEach((x) => x.classList.toggle("on", +(x as HTMLElement).dataset.c! === state.curClass));
   renderClass(); renderCO(); recalcCont(); buildDoc();
   // Guardar solo si ya existe la rebanada "cost" del proyecto (o si estamos en
@@ -519,4 +532,4 @@ init(false);
 // archivo) que buscan estas funciones POR NOMBRE en el ámbito global.
 // Sin esto, Vite las deja encerradas en el closure del bundle y cada
 // clic tira "x is not defined".
-Object.assign(window, { exportJSON, importJSON, save, recalcCont, onBaseInput, pullFromWBS, addCO, coStatus, delCO, buildDoc });
+Object.assign(window, { exportJSON, importJSON, save, recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc });

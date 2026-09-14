@@ -14,6 +14,7 @@
     "build:scope-statement": "vite build --config configs/scope-statement.vite.config.ts && node scripts/sync-artifact.mjs scope-statement.js",
     "build:wbs": "vite build --config configs/wbs.vite.config.ts && node scripts/sync-artifact.mjs wbs.js",
     "build:activities": "vite build --config configs/activities.vite.config.ts && node scripts/sync-artifact.mjs activities.js",
+    "build:cost-estimate": "vite build --config configs/cost-estimate.vite.config.ts && node scripts/sync-artifact.mjs cost-estimate.js",
     "build:pert": "vite build --config configs/pert.vite.config.ts && node scripts/sync-artifact.mjs pert.js",
     "build:schedule-plan": "vite build --config configs/schedule-plan.vite.config.ts && node scripts/sync-artifact.mjs schedule-plan.js",
     "build:cronograma-cpm": "vite build --config configs/cronograma-cpm.vite.config.ts && node scripts/sync-artifact.mjs cronograma-cpm.js",

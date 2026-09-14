@@ -32,14 +32,14 @@ beforeAll(async () => {
 afterAll(() => { server.close(); });
 
 describe("Panel_Control.html (migrado a panel-control.js)", () => {
-  it("localStorage vacío: ensureSeed crea el proyecto DISTRIB+ y el launcher pinta las 21 tarjetas de módulo (12 activas, 9 'próximamente')", async () => {
+  it("localStorage vacío: ensureSeed crea el proyecto DISTRIB+ y el launcher pinta las 22 tarjetas de módulo (13 activas, 9 'próximamente')", async () => {
     const dom = await JSDOM.fromURL(base + "Panel_Control.html", { runScripts: "dangerously", resources: "usable" });
     await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
     expect(doc.querySelectorAll("#projSelect option").length).toBe(1);
     expect(doc.querySelector("#projSelect option")!.textContent).toContain("DISTRIB+ S.A.");
-    expect(doc.querySelectorAll(".mod-card").length).toBe(21);
-    expect(doc.querySelectorAll(".mod-card.active").length).toBe(12);
+    expect(doc.querySelectorAll(".mod-card").length).toBe(22);
+    expect(doc.querySelectorAll(".mod-card.active").length).toBe(13);
     expect(doc.querySelectorAll(".mod-card.soon").length).toBe(9);
 
     (doc.getElementById("btnRename") as HTMLElement).click();

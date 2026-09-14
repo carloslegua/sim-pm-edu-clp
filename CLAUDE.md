@@ -8,7 +8,7 @@ fecha y evidencia puntual de cada paso, vive en [MIGRATION.md](MIGRATION.md).
 
 ## Qué es esto
 
-Suite educativa PMBOK 8 de 13 módulos HTML + un núcleo de datos
+Suite educativa PMBOK 8 de 14 módulos HTML + un núcleo de datos
 compartido (`gpi-core.js`) sobre `localStorage`. Sitio 100% estático: sin
 backend, sin servidor de build en producción. Se despliega copiando
 archivos a GitHub Pages o abriendo cualquier módulo con doble clic
@@ -36,7 +36,7 @@ raíz son generados y commiteados — nunca se editan a mano.**
    DISTRIB+ sobre el proyecto activo sin una acción explícita del alumno
    (botón "Cargar ejemplo"). Un módulo sin datos arranca **en blanco**,
    nunca con el ejemplo precargado.
-6. **Los 12 "Cargar ejemplo" son UN SOLO proyecto coherente** ("DISTRIB+
+6. **Los 13 "Cargar ejemplo" son UN SOLO proyecto coherente** ("DISTRIB+
    S.A. — Almacén Lurín"): mismos códigos EDT, mismas personas del OBS,
    mismas fechas de hito, mismo presupuesto/moneda entre TODOS los
    módulos — ver el catálogo canónico en ARCHITECTURE.md ("Dataset de
@@ -187,7 +187,7 @@ scripts/static-server.mjs        → servidor HTTP mínimo, usado por tests/e2e
      `cronograma-cpm` y `panel-control`. Ver el comentario al inicio de
      cada archivo para el porqué puntual de cada patrón.
 - `GPI.ui.esc`/`GPI.ui.kpi` existen en el núcleo pero **deliberadamente no
-  los usan los 12 módulos de herramienta** (cada uno mantiene su propio
+  los usan los 13 módulos de herramienta** (cada uno mantiene su propio
   `esc()` local): así siguen funcionando aunque `gpi-core.js` no cargue.
   No es una inconsistencia a "corregir" — es la decisión documentada en
   `MIGRATION.md` (Fase 3).
@@ -201,7 +201,7 @@ scripts/static-server.mjs        → servidor HTTP mínimo, usado por tests/e2e
   vale la pena reevaluar volver a la serie 7 nativa.
 - **La cobertura de tests solo mide `src/core/**`, a propósito**: Vitest
   instrumenta el código que importa como módulo TS (`tests/unit/*` importa
-  `gpi-core.ts` directo), pero los smoke tests de los 13 módulos cargan el
+  `gpi-core.ts` directo), pero los smoke tests de los 14 módulos cargan el
   `.js` YA COMPILADO dentro de un jsdom (`runScripts:"dangerously"`, igual
   que un `<script>` clásico) — ese bundle no tiene sourcemap hacia el `.ts`
   fuente, así que la cobertura v8 no puede atribuirle líneas y mostraría
@@ -260,7 +260,7 @@ scripts/static-server.mjs        → servidor HTTP mínimo, usado por tests/e2e
   "recommended" frente a convenciones ya establecidas del port, en vez
   de forzar un cambio de código en decenas de sitios:
   1. `no-unused-vars` con `caughtErrors: "none"` — `catch (e) { }` /
-     `catch (err) { }` sin usar el error aparece en los 13 módulos para
+     `catch (err) { }` sin usar el error aparece en los 14 módulos para
      descartar fallos silenciosos de APIs (localStorage en iframes,
      clipboard, FileReader).
   2. `no-unused-expressions` con `allowShortCircuit: true` — el idioma

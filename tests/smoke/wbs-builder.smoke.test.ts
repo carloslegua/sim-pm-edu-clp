@@ -201,4 +201,39 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
     expect(doc.getElementById("propsPanel")!.textContent).toMatch(/Tomado del Cronograma \(CPM\)/);
     expect(doc.getElementById("propsPanel")!.textContent).toMatch(/Estimado.*Este costo se ingresa aquí/);
   });
+
+  it("con un costo real en Estimar los Costos: el campo Costo del WBS queda bloqueado con ese valor", async () => {
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 2,
+              nodes: {
+                root: { id: "root", parentId: null, name: "P", children: ["w1"], duration: 0, cost: 999, resource: "", percent: 0, start: "", end: "", notes: "", collapsed: false, orientation: "spread" },
+                w1: { id: "w1", parentId: "root", name: "Paquete 1", duration: 5, cost: 999, resource: "", percent: 0, start: "", end: "", notes: "", children: [], collapsed: false, orientation: "spread" }
+              }
+            },
+            costEstimate: { byLeaf: { w1: { unit: "m³", qty: 100, unitPrice: 25 } } }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "WBS_Builder.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    const node = Array.from(doc.querySelectorAll("#canvas .node")).find((n) => n.textContent?.includes("Paquete 1")) as HTMLElement;
+    node.dispatchEvent(new dom.window.Event("click", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 50));
+    const cost = doc.getElementById("f_cost") as HTMLInputElement;
+    expect(cost.disabled).toBe(true);
+    expect(cost.value).toBe("2500"); // 100 x 25, no el 999 sembrado a mano
+    expect(doc.getElementById("propsPanel")!.textContent).toMatch(/Tomado de Estimar los Costos/);
+  });
 });

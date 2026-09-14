@@ -18,7 +18,7 @@
 import type {
   GpiDb, GpiProject, ProjectMeta, ProjectModules,
   WbsModule, ObsModule, ObsNode, RaciModule,
-  ActivitiesModule, ActivityItem, PertModule,
+  ActivitiesModule, ActivityItem, CostEstimateModule, PertModule,
   ScheduleModule, ScheduleLink, ScheduleLinkType, ScheduleLagUnit,
   RequirementsModule, RequirementItem, ScopeStatementModule, ScopeDeliverable,
   CharterModule, CharterRequirement, CostModule,
@@ -434,6 +434,59 @@ export function applyScheduleToWbs(
       if (!end || row.finishDate > end) end = row.finishDate;
     });
     if (start && end) { out.nodes[leafId].start = start; out.nodes[leafId].end = end; lockedLeafIds.push(leafId); }
+  });
+  return { wbs: out, lockedLeafIds };
+}
+
+// Une la EDT con el módulo "Estimar los Costos" (una fila por paquete de
+// trabajo, igual granularidad que el WBS). El subtotal NUNCA se persiste —
+// se recalcula siempre como Cantidad × Precio unitario, mismo principio que
+// la Duración en Actividades/PERT. Paquetes sin Cantidad/Precio unitario
+// válidos (aún no estimados) devuelven `qty`/`unitPrice`/`subtotal` en null.
+export interface CostEstimateRow { id: string; code: string; name: string; unit: string; qty: number | null; unitPrice: number | null; subtotal: number | null; }
+
+function numOrNull(v: unknown): number | null {
+  if (v === "" || v == null) return null;
+  const n = Number(v);
+  return isFinite(n) ? n : null;
+}
+
+export function costEstimateRows(estimate?: CostEstimateModule | null, wbs?: WbsModule | null): CostEstimateRow[] {
+  const byLeaf = (estimate && estimate.byLeaf) || {};
+  return wbsLeaves(wbs).map((l) => {
+    const item = byLeaf[l.id];
+    const qty = item ? numOrNull(item.qty) : null;
+    const unitPrice = item ? numOrNull(item.unitPrice) : null;
+    const subtotal = (qty != null && unitPrice != null) ? qty * unitPrice : null;
+    return { id: l.id, code: l.code, name: l.name, unit: (item && item.unit) || "", qty, unitPrice, subtotal };
+  });
+}
+
+// Total estimado del proyecto (suma de subtotales válidos) — lo consume
+// Planificar la Gestión Financiera como fuente alterna a wbsRollup(wbs).cost.
+export function costEstimateTotal(estimate?: CostEstimateModule | null, wbs?: WbsModule | null): number {
+  return costEstimateRows(estimate, wbs).reduce((s, r) => s + (r.subtotal || 0), 0);
+}
+
+export interface WbsCostEstimateSync { wbs: WbsModule; lockedLeafIds: string[]; }
+
+// Núcleo de la integración Estimar los Costos → WBS: análogo a
+// applyScheduleToWbs, pero para Costo en vez de fechas. Devuelve un WBS
+// clonado donde el costo de cada paquete (hoja) con Cantidad y Precio
+// unitario válidos (>0) en el estimado queda fijado a Cantidad×Precio
+// unitario. Los paquetes sin esos datos conservan su costo manual/estimado
+// actual -- el WBS sigue siendo la fuente de la verdad para esos casos.
+export function applyCostEstimateToWbs(wbs?: WbsModule | null, estimate?: CostEstimateModule | null): WbsCostEstimateSync {
+  const out = wbs ? (JSON.parse(JSON.stringify(wbs)) as WbsModule) : (wbs as unknown as WbsModule);
+  if (!wbs || !wbs.nodes || !estimate || !estimate.byLeaf) return { wbs: out, lockedLeafIds: [] };
+  const lockedLeafIds: string[] = [];
+  Object.keys(estimate.byLeaf).forEach((leafId) => {
+    const item = estimate.byLeaf[leafId];
+    if (!item || !out.nodes[leafId]) return;
+    const qty = numOrNull(item.qty), unitPrice = numOrNull(item.unitPrice);
+    if (qty == null || unitPrice == null || qty <= 0 || unitPrice <= 0) return;
+    out.nodes[leafId].cost = qty * unitPrice;
+    lockedLeafIds.push(leafId);
   });
   return { wbs: out, lockedLeafIds };
 }
@@ -1667,7 +1720,8 @@ export const ui = { esc, kpi };
 
 export const util = {
   wbsRollup, wbsResources, wbsCodes, wbsLeaves, obsNodes, obsLabel,
-  raciResponsibleIds, applyRaciToWbs, applyScheduleToWbs, wbsPhases, activitiesStats, pertStats,
+  raciResponsibleIds, applyRaciToWbs, applyScheduleToWbs, costEstimateRows, costEstimateTotal,
+  applyCostEstimateToWbs, wbsPhases, activitiesStats, pertStats,
   pertProbability, charterAudit, schedulePlanAudit, raciCoverage, raciAudit,
   costSummary, pad2, charterRans, requirementsAudit, reqByWbsLeaf,
   scopeDeliverables, wbsDelIds, scopeAudit, traceMatrix,

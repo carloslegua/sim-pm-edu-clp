@@ -20,7 +20,9 @@
 	var gpiPertModule = null;
 	var gpiScheduleModule = null;
 	var gpiSchedulePlanModule = null;
+	var gpiCostEstimateModule = null;
 	var scheduleLockedLeafIds = /* @__PURE__ */ new Set();
+	var costEstimateLockedLeafIds = /* @__PURE__ */ new Set();
 	var rootId = "root";
 	var selectedId = null;
 	var zoom = 1;
@@ -613,7 +615,7 @@
 		walk(rootId, 0);
 		let html = `<table class="wbs-table">
     <thead><tr>
-      <th style="width:80px;">Código</th>
+      <th style="width:80px;">Código EDT</th>
       <th>Paquete de trabajo</th>
       <th style="width:70px;">Nivel</th>
       <th style="width:90px;">Duración</th>
@@ -653,6 +655,8 @@
 		const rolled = rolledAll[selectedId];
 		const isLeaf = rolled.isLeaf;
 		const cpmLocked = cpmLocksDates(node);
+		const costLocked = costEstimateLocksCost(node);
+		const costEditable = isLeaf && !costLocked;
 		const hasDates = isLeaf && !cpmLocked && daysBetween(node.start, node.end) != null;
 		const durationEditable = isLeaf && !cpmLocked && !hasDates;
 		const datesEditable = isLeaf && !cpmLocked;
@@ -679,7 +683,7 @@
       </div>
       <div class="field">
         <label>Costo (S/)</label>
-        <input id="f_cost" type="number" min="0" value="${isLeaf ? node.cost : rolled.cost}" ${isLeaf ? "" : "disabled"} />
+        <input id="f_cost" type="number" min="0" value="${isLeaf ? node.cost : rolled.cost}" ${costEditable ? "" : "disabled"} />
       </div>
     </div>
     <div class="field-row">
@@ -697,7 +701,7 @@
       <label>Notas / Descripción</label>
       <textarea id="f_notes">${escapeHtml(node.notes || "")}</textarea>
     </div>
-    ${isLeaf ? `<div class="empty-hint">📐 <b>Estimado.</b> Este costo se ingresa aquí (bottom-up); hoy ningún otro módulo del curso calcula un costo real por paquete.</div>` : ""}
+    ${costLocked ? `<div class="empty-hint">🔗 <b>Tomado de Estimar los Costos</b> (Cantidad × Precio unitario) para este paquete. Para cambiarlo, abre <a href="Estimar_Costos.html" style="color:var(--cyan-dark); font-weight:700;">Estimar los Costos ▸</a></div>` : isLeaf ? `<div class="empty-hint">📐 <b>Estimado.</b> Este costo se ingresa aquí (bottom-up) hasta que <a href="Estimar_Costos.html" style="color:var(--cyan-dark); font-weight:700;">Estimar los Costos ▸</a> calcule uno real para este paquete.</div>` : ""}
     ${cpmLocked ? `<div class="empty-hint">🔗 <b>Tomado del Cronograma (CPM)</b> a partir de las actividades y la ruta crítica calculadas para este paquete. Para cambiarlo, abre <a href="Cronograma_CPM.html" style="color:var(--cyan-dark); font-weight:700;">Cronograma CPM ▸</a></div>` : hasDates ? `<div class="empty-hint">📐 <b>Estimado.</b> Duración calculada automáticamente a partir de las fechas (${rolled.duration} d). Borra alguna fecha para editarla manualmente.</div>` : isLeaf ? `<div class="empty-hint">📐 <b>Estimado.</b> Cuando definas las actividades de este paquete y calcules la ruta crítica en <a href="Cronograma_CPM.html" style="color:var(--cyan-dark); font-weight:700;">Cronograma CPM ▸</a>, la fecha real se toma automáticamente de ahí.</div>` : ""}
     ${!isLeaf ? `<div class="empty-hint">Este paquete agrupa subtareas: el costo se suma (estimación bottom-up), pero <b>la duración se calcula como el tramo entre el inicio más temprano y el fin más tardío</b> de sus subtareas — no la suma, porque pueden ejecutarse en paralelo.</div>` : ""}
     ${!isRoot ? `<div class="danger-zone"><button class="btn danger" id="f_delete" style="width:100%;">🗑 Eliminar este nodo y sus subtareas</button></div>` : ""}
@@ -711,7 +715,7 @@
 			});
 		};
 		bind("f_name", "name", false);
-		bind("f_cost", "cost", true);
+		if (costEditable) bind("f_cost", "cost", true);
 		bind("f_percent", "percent", true);
 		if (!raciLocksResource(node) && obsOptions.length) bind("f_resource", "resource", false);
 		bind("f_notes", "notes", false);
@@ -782,6 +786,10 @@
 	function cpmLocksDates(node) {
 		if (!node || node.children.length > 0) return false;
 		return scheduleLockedLeafIds.has(node.id);
+	}
+	function costEstimateLocksCost(node) {
+		if (!node || node.children.length > 0) return false;
+		return costEstimateLockedLeafIds.has(node.id);
 	}
 	function obsOptionLabel(o) {
 		return o.person && o.person.trim() ? `${o.role} — ${o.person}` : o.role || o.person || "";
@@ -1122,6 +1130,7 @@
 			gpiPertModule = p.modules && p.modules.pert || null;
 			gpiScheduleModule = p.modules && p.modules.schedule || null;
 			gpiSchedulePlanModule = p.modules && p.modules.schedulePlan || null;
+			gpiCostEstimateModule = p.modules && p.modules.costEstimate || null;
 			const mod = p.modules && p.modules.wbs;
 			if (mod && mod.nodes && mod.rootId) {
 				const modWbs = gpiRaciModule && gpiObsModule && GPI.util ? GPI.util.applyRaciToWbs(mod, gpiRaciModule, gpiObsModule) : mod;
@@ -1129,17 +1138,23 @@
 					wbs: modWbs,
 					lockedLeafIds: []
 				};
-				nodes = schedSync.wbs.nodes;
-				rootId = schedSync.wbs.rootId;
-				idCounter = schedSync.wbs.idCounter || 1;
+				const costSync = GPI.util && GPI.util.applyCostEstimateToWbs ? GPI.util.applyCostEstimateToWbs(schedSync.wbs, gpiCostEstimateModule) : {
+					wbs: schedSync.wbs,
+					lockedLeafIds: []
+				};
+				nodes = costSync.wbs.nodes;
+				rootId = costSync.wbs.rootId;
+				idCounter = costSync.wbs.idCounter || 1;
 				selectedId = rootId;
 				scheduleLockedLeafIds = new Set(schedSync.lockedLeafIds);
+				costEstimateLockedLeafIds = new Set(costSync.lockedLeafIds);
 				render();
 				setTimeout(fitToScreen, 50);
 				setStatus("Proyecto cargado desde el Panel de Control.");
 			} else {
 				blankProject(p.meta && p.meta.name || "Proyecto sin título");
 				scheduleLockedLeafIds = /* @__PURE__ */ new Set();
+				costEstimateLockedLeafIds = /* @__PURE__ */ new Set();
 				render();
 				setTimeout(fitToScreen, 50);
 				setStatus("Proyecto sin EDT todavía. Agrega fases y paquetes, o usa ⌘ Cargar ejemplo para explorar el caso DISTRIB+.");
@@ -1214,6 +1229,33 @@
 				setStatus("Fechas actualizadas desde el Cronograma CPM.");
 			}
 		}
+		function refreshCostEstimateSync() {
+			const p = GPI.active();
+			if (!p) return;
+			gpiCostEstimateModule = p.modules && p.modules.costEstimate || null;
+			if (!GPI.util || !GPI.util.applyCostEstimateToWbs) return;
+			const snapshot = {
+				rootId,
+				idCounter,
+				nodes
+			};
+			const costSync = GPI.util.applyCostEstimateToWbs(snapshot, gpiCostEstimateModule);
+			costEstimateLockedLeafIds = new Set(costSync.lockedLeafIds);
+			let changed = false;
+			costSync.lockedLeafIds.forEach((id) => {
+				const n = nodes[id], sn = costSync.wbs.nodes[id];
+				if (!n || !sn) return;
+				const c = Number(sn.cost) || 0;
+				if (Number(n.cost) !== c) {
+					n.cost = c;
+					changed = true;
+				}
+			});
+			if (changed) {
+				render();
+				setStatus("Costo actualizado desde Estimar los Costos.");
+			}
+		}
 		if (proj) pull();
 		window.addEventListener("beforeunload", push);
 		document.addEventListener("visibilitychange", () => {
@@ -1221,12 +1263,14 @@
 			else {
 				refreshRaciSync();
 				refreshScheduleSync();
+				refreshCostEstimateSync();
 			}
 		});
 		GPI.onChange(() => {
 			if (!document.hidden) {
 				refreshRaciSync();
 				refreshScheduleSync();
+				refreshCostEstimateSync();
 			}
 		});
 		gpiBadge(proj ? proj.meta && proj.meta.name : "", push);
@@ -1338,14 +1382,15 @@
 			if (isLeaf) {
 				leafCount++;
 				const fromCpm = scheduleLockedLeafIds.has(id);
-				dictHtml += "<tr><td class=\"num\">" + escapeHtml(code || "—") + "</td><td><b>" + escapeHtml(n.name) + "</b></td><td>" + escapeHtml(n.resource || "—") + "</td><td class=\"num\" style=\"text-align:center\">" + (Number(n.duration) || 0) + "</td><td class=\"num\">" + repDate(n.start) + (fromCpm ? " ¹" : "") + "</td><td class=\"num\">" + repDate(n.end) + (fromCpm ? " ¹" : "") + "</td><td class=\"num\" style=\"text-align:right\">" + m(n.cost) + "</td><td>" + escapeHtml(n.notes || "—") + "</td></tr>";
+				const fromEstimate = costEstimateLockedLeafIds.has(id);
+				dictHtml += "<tr><td class=\"num\">" + escapeHtml(code || "—") + "</td><td><b>" + escapeHtml(n.name) + "</b></td><td>" + escapeHtml(n.resource || "—") + "</td><td class=\"num\" style=\"text-align:center\">" + (Number(n.duration) || 0) + "</td><td class=\"num\">" + repDate(n.start) + (fromCpm ? " ¹" : "") + "</td><td class=\"num\">" + repDate(n.end) + (fromCpm ? " ¹" : "") + "</td><td class=\"num\" style=\"text-align:right\">" + m(n.cost) + (fromEstimate ? " ²" : "") + "</td><td>" + escapeHtml(n.notes || "—") + "</td></tr>";
 			}
 			n.children.forEach((cid, i) => {
 				walk(cid, code ? code + "." + (i + 1) : String(i + 1), depth + 1);
 			});
 		})(rootId, "", 0);
 		const total = agg(rootId);
-		reportShell("EDT y Diccionario del Proyecto", "WBS Builder · Gestión del Alcance", "<h2>1. Estructura de Desglose del Trabajo (EDT)</h2><p class=\"rep-note\">Los costos y fechas de fases y del proyecto son consolidados (rollup) de sus paquetes de trabajo; las fechas de los niveles superiores reflejan el rango inicio más temprano → fin más tardío (ejecución en paralelo incluida).</p><table><tr><th style=\"width:8%\">Código</th><th>Elemento</th><th style=\"width:15%\">Responsable</th><th style=\"width:9%\">Inicio</th><th style=\"width:9%\">Fin</th><th style=\"width:12%\">Costo</th><th style=\"width:8%\">Avance</th></tr>" + rowsHtml + "<tr><td colspan=\"5\" style=\"text-align:right\"><b>Costo total del proyecto (rollup de " + leafCount + " paquetes)</b></td><td class=\"num\" style=\"text-align:right\"><b>" + m(total.cost) + "</b></td><td></td></tr></table><h2>2. Diccionario de la EDT — paquetes de trabajo</h2><table><tr><th style=\"width:8%\">Código</th><th style=\"width:17%\">Paquete de trabajo</th><th style=\"width:12%\">Responsable</th><th style=\"width:7%\">Dur. (d)</th><th style=\"width:9%\">Inicio</th><th style=\"width:9%\">Fin</th><th style=\"width:11%\">Costo</th><th>Descripción / notas</th></tr>" + (dictHtml || "<tr><td colspan=\"8\" class=\"rep-note\">— Sin paquetes de trabajo —</td></tr>") + "</table><p class=\"rep-note\">El responsable de cada paquete proviene de la Matriz RACI (rol marcado con \"R\") o, si aún no la tiene, de una selección manual dentro del OBS del proyecto — nunca de texto libre. El costo es siempre una estimación bottom-up ingresada en esta EDT. Las fechas marcadas con ¹ provienen del Cronograma CPM (ruta crítica ya calculable para ese paquete); el resto son una estimación manual, sujeta a cambiar una vez definido el cronograma real.</p>");
+		reportShell("EDT y Diccionario del Proyecto", "WBS Builder · Gestión del Alcance", "<h2>1. Estructura de Desglose del Trabajo (EDT)</h2><p class=\"rep-note\">Los costos y fechas de fases y del proyecto son consolidados (rollup) de sus paquetes de trabajo; las fechas de los niveles superiores reflejan el rango inicio más temprano → fin más tardío (ejecución en paralelo incluida).</p><table><tr><th style=\"width:8%\">Código EDT</th><th>Elemento</th><th style=\"width:15%\">Responsable</th><th style=\"width:9%\">Inicio</th><th style=\"width:9%\">Fin</th><th style=\"width:12%\">Costo</th><th style=\"width:8%\">Avance</th></tr>" + rowsHtml + "<tr><td colspan=\"5\" style=\"text-align:right\"><b>Costo total del proyecto (rollup de " + leafCount + " paquetes)</b></td><td class=\"num\" style=\"text-align:right\"><b>" + m(total.cost) + "</b></td><td></td></tr></table><h2>2. Diccionario de la EDT — paquetes de trabajo</h2><table><tr><th style=\"width:8%\">Código EDT</th><th style=\"width:17%\">Paquete de trabajo</th><th style=\"width:12%\">Responsable</th><th style=\"width:7%\">Dur. (d)</th><th style=\"width:9%\">Inicio</th><th style=\"width:9%\">Fin</th><th style=\"width:11%\">Costo</th><th>Descripción / notas</th></tr>" + (dictHtml || "<tr><td colspan=\"8\" class=\"rep-note\">— Sin paquetes de trabajo —</td></tr>") + "</table><p class=\"rep-note\">El responsable de cada paquete proviene de la Matriz RACI (rol marcado con \"R\") o, si aún no la tiene, de una selección manual dentro del OBS del proyecto — nunca de texto libre. Las fechas marcadas con ¹ provienen del Cronograma CPM (ruta crítica ya calculable para ese paquete); los costos marcados con ² provienen de Estimar los Costos (Cantidad × Precio unitario ya calculados para ese paquete); el resto de fechas y costos son una estimación manual bottom-up ingresada en esta EDT, sujeta a cambiar una vez calculados los valores reales en esos módulos.</p>");
 	}
 	(function() {
 		const b = document.getElementById("btnReport");
