@@ -288,6 +288,21 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   Excel) como `t="inlineStr"` (el propio formato de exportación de este
   proyecto). La duración sigue sin persistirse: se recalcula en pantalla
   igual que en `pert`/`cronograma-cpm`.
+- **"⇩ Cargar ejemplo en el proyecto" (`loadSampleIntoProject`) — distinto
+  de "Modo ejemplo"**: "Modo ejemplo" es un sandbox que nunca toca el
+  proyecto activo (documentado desde su rediseño). Pero eso dejaba un
+  hueco de coherencia: si el alumno ya cargó el ejemplo DISTRIB+ en WBS
+  Builder (que SÍ reemplaza el proyecto real, igual que este botón),
+  "Definir las Actividades" sobre ESE MISMO proyecto seguía viéndose sin
+  ninguna actividad — el ejemplo rico de actividades (`sampleActivities()`)
+  quedaba atrapado en el sandbox. Este botón reconcilia
+  `sampleActivities()` contra la EDT REAL del proyecto activo
+  reutilizando **la misma `reconcileImportRows()`** que usa el import de
+  Excel real (construye "filas virtuales" con `sampleVirtualRows()` y las
+  pasa por el mismo camino que un archivo importado) — mismo
+  emparejamiento por Código EDT, mismos avisos de códigos no encontrados.
+  Requiere confirmación explícita antes de reemplazar (mismo texto que
+  WBS Builder), y deja `mode` en `"live"` (nunca cambia a `"sample"`).
 
 **WBS_Builder.html** — el de mayor fan-out.
 - Lee `raci` (bloquea "Responsable" si la RACI ya asignó un "R" —
@@ -423,6 +438,15 @@ Costs")
   `activities/main.ts` (mismos 18 paquetes DISTRIB+, mismas 8 con
   actividades definidas) — ver el catálogo canónico más abajo para los
   precios de ejemplo y el total resultante.
+- **"⇩ Cargar ejemplo en el proyecto"**: mismo mecanismo que
+  `Activity_Definition.html` (ver esa sección) — reconcilia los precios
+  de ejemplo (`samplePriceByName()`, por NOMBRE de actividad, no por id:
+  los ids reales del proyecto activo son distintos a los de
+  `SAMPLE_ACTIVITIES`) contra las actividades REALES vía la misma
+  `reconcileImportRows()` que usa el import de Excel. Exige, en orden,
+  que el proyecto activo ya tenga la EDT (WBS Builder) y las actividades
+  (Definir las Actividades → "⇩ Cargar ejemplo en el proyecto") cargadas
+  — sin actividades reales no hay nada que precificar.
 
 **RACI_Matrix.html**
 - Depende de `window.GPI.util` para su propia lógica en modo "live"

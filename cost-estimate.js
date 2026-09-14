@@ -548,6 +548,97 @@
 		render();
 		setStatus("De vuelta a la EDT del proyecto activo.");
 	}
+	function wbsCodesOf(wbs) {
+		const codes = {};
+		(function walk(id, code) {
+			codes[id] = code;
+			(wbs.nodes[id].children || []).forEach((cid, i) => walk(cid, code ? code + "." + (i + 1) : String(i + 1)));
+		})(wbs.rootId, "");
+		return codes;
+	}
+	function samplePriceByName() {
+		const est = sampleEstimate();
+		const out = {};
+		Object.keys(SAMPLE_ACTIVITIES.byLeaf).forEach((leafId) => {
+			SAMPLE_ACTIVITIES.byLeaf[leafId].forEach((a) => {
+				const p = est.byActivity[a.id];
+				if (p != null && a.name) out[a.name] = Number(p);
+			});
+		});
+		return out;
+	}
+	function sampleVirtualRows() {
+		const codes = wbsCodesOf(SAMPLE_WBS);
+		const priceByName = samplePriceByName();
+		const rows = [];
+		Object.keys(SAMPLE_ACTIVITIES.byLeaf).forEach((leafId) => {
+			const code = codes[leafId];
+			if (!code) return;
+			SAMPLE_ACTIVITIES.byLeaf[leafId].forEach((a) => {
+				const price = priceByName[a.name || ""];
+				rows.push([
+					code,
+					"",
+					a.name || "",
+					a.unit || "",
+					String(a.qty ?? ""),
+					price != null ? String(price) : ""
+				]);
+			});
+		});
+		return rows;
+	}
+	async function loadSampleIntoProject() {
+		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) {
+			await showAlert("Esto solo aplica con un proyecto activo conectado al Panel de Control. Usa \"Modo ejemplo\" para explorar el caso DISTRIB+ sin conexión.");
+			return;
+		}
+		gpiPullWbs();
+		const prevMode = mode;
+		mode = "live";
+		const liveLeaves = leafRows();
+		if (!liveLeaves.length) {
+			mode = prevMode;
+			await showAlert("La EDT del proyecto activo está vacía. Carga primero el ejemplo en WBS Builder (\"Cargar ejemplo\") y vuelve aquí.");
+			return;
+		}
+		if (!liveLeaves.some((l) => activitiesOf(l.id).length > 0)) {
+			mode = prevMode;
+			await showAlert("El proyecto activo todavía no tiene actividades. Carga primero el ejemplo en Definir las Actividades (\"⇩ Cargar ejemplo en el proyecto\") y vuelve aquí.");
+			return;
+		}
+		const result = reconcileImportRows(sampleVirtualRows(), {
+			code: 0,
+			activityName: 2,
+			unit: 3,
+			qty: 4,
+			unitPrice: 5
+		});
+		if (!result.matched && !result.orphanCodes.length && !result.unmatchedActivities.length) {
+			mode = prevMode;
+			await showAlert("Ninguna actividad de ejemplo coincide con las actividades reales del proyecto (Código EDT + nombre). Revisa que hayas cargado el mismo ejemplo en Definir las Actividades.");
+			return;
+		}
+		let msg = "Se reemplazará el estimado del PROYECTO ACTIVO (no el modo ejemplo) con precios para " + result.matched + " actividad(es) que coinciden con sus actividades reales.";
+		if (result.orphanCodes.length) msg += " " + result.orphanCodes.length + " código(s) del ejemplo no se encontraron en la EDT actual: " + result.orphanCodes.slice(0, 8).join(", ") + (result.orphanCodes.length > 8 ? "…" : "") + ".";
+		if (result.unmatchedActivities.length) {
+			const ex = result.unmatchedActivities.slice(0, 8).map((u) => u.code + " \"" + u.name + "\"").join(", ");
+			msg += " " + result.unmatchedActivities.length + " actividad(es) de ejemplo no se encontraron bajo su paquete real: " + ex + (result.unmatchedActivities.length > 8 ? "…" : "") + ".";
+		}
+		if (result.missingActivities.length) {
+			const ex = result.missingActivities.slice(0, 8).map((u) => u.code).join(", ");
+			msg += " ⚠ " + result.missingActivities.length + " actividad(es) reales quedan sin precio: " + ex + (result.missingActivities.length > 8 ? "…" : "") + ".";
+		}
+		if (!await showConfirm(msg, "Cargar ejemplo en el proyecto")) {
+			mode = prevMode;
+			render();
+			return;
+		}
+		stateLive = { byActivity: result.byActivity };
+		render();
+		gpiPush();
+		setStatus("Ejemplo DISTRIB+ cargado en el proyecto activo (" + result.matched + " actividad(es) con precio).");
+	}
 	function reportShell(docTitle, moduleName, bodyHtml) {
 		const el = document.getElementById("gpiReport");
 		let meta = {};
@@ -1031,6 +1122,7 @@
 		});
 		document.getElementById("btnSample").addEventListener("click", enterSample);
 		document.getElementById("btnLive").addEventListener("click", enterLive);
+		document.getElementById("btnLoadSampleLive").addEventListener("click", loadSampleIntoProject);
 		document.getElementById("btnClear").addEventListener("click", async () => {
 			if (!await showConfirm("Se eliminará el precio de las " + stats().pricedActivities + " actividades ya con precio" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT y las actividades no se tocan. ¿Continuar?", "Limpiar estimado")) return;
 			if (mode === "sample") stateSample = { byActivity: {} };

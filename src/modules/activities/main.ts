@@ -452,6 +452,82 @@ function enterLive(): void {
   setStatus("De vuelta a la EDT del proyecto activo.");
 }
 
+// Códigos EDT de un árbol WBS cualquiera (no depende de wbsData()/mode) --
+// se usa para calcular los códigos del propio SAMPLE_WBS, que sirven de
+// clave para reconciliar el ejemplo contra la EDT REAL del proyecto activo.
+function wbsCodesOf(wbs: WbsModule): Record<string, string> {
+  const codes: Record<string, string> = {};
+  (function walk(id: string, code: string): void {
+    codes[id] = code;
+    (wbs.nodes[id].children || []).forEach((cid, i) => walk(cid, code ? code + "." + (i + 1) : String(i + 1)));
+  })(wbs.rootId, "");
+  return codes;
+}
+
+// Filas "virtuales" con las actividades de ejemplo, en el mismo orden de
+// columnas que reconcileImportRows espera de un archivo real (Código EDT,
+// Paquete de trabajo [sin usar], Nombre de la actividad, Unidad, Metrado,
+// Rendimiento, N.º de equipos) -- así "Cargar ejemplo en el proyecto" puede
+// reutilizar TAL CUAL la misma reconciliación por código EDT que ya usa el
+// import de Excel, en vez de duplicar esa lógica.
+function sampleVirtualRows(): string[][] {
+  const codes = wbsCodesOf(SAMPLE_WBS);
+  const sample = sampleActivities();
+  const rows: string[][] = [];
+  Object.keys(sample.byLeaf).forEach((leafId) => {
+    const code = codes[leafId];
+    if (!code) return;
+    sample.byLeaf[leafId].forEach((a) => {
+      rows.push([code, "", a.name, a.unit, String(a.qty), String(a.perf ?? ""), String(a.teams ?? "")]);
+    });
+  });
+  return rows;
+}
+
+// ---------- CARGAR EJEMPLO EN EL PROYECTO (reemplaza el WBS Builder's
+// "Cargar ejemplo") ----------
+// A diferencia de "Modo ejemplo" (sandbox: nunca toca el proyecto activo,
+// pensado para explorar el caso DISTRIB+ sin riesgo), esta acción SÍ
+// reemplaza las actividades del proyecto activo real -- mismo patrón que ya
+// usa WBS Builder para su propio "Cargar ejemplo" (confirmación explícita
+// antes de reemplazar). Existe porque, si el alumno ya cargó el ejemplo en
+// WBS Builder (EDT real poblada con DISTRIB+), "Modo ejemplo" por sí solo
+// nunca deja esa MISMA EDT real con actividades: quedan aisladas en el
+// sandbox y los módulos que dependen de las actividades del proyecto real
+// (PERT, Cronograma CPM, Estimar los Costos) la seguirían viendo vacía.
+async function loadSampleIntoProject(): Promise<void> {
+  if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) {
+    await showAlert("Esto solo aplica con un proyecto activo conectado al Panel de Control. Usa \"Modo ejemplo\" para explorar el caso DISTRIB+ sin conexión.");
+    return;
+  }
+  gpiPullWbs();
+  const prevMode = mode;
+  mode = "live"; // leafRows()/reconcileImportRows deben mirar la EDT REAL, no la de ejemplo
+  const liveLeaves = leafRows();
+  if (!liveLeaves.length) {
+    mode = prevMode;
+    await showAlert("La EDT del proyecto activo está vacía. Carga primero el ejemplo en WBS Builder (\"Cargar ejemplo\") y vuelve aquí.");
+    return;
+  }
+  const colMap: ColumnMap = { code: 0, name: 2, unit: 3, qty: 4, perf: 5, teams: 6 };
+  const result = reconcileImportRows(sampleVirtualRows(), colMap);
+  if (!result.matched) {
+    mode = prevMode;
+    await showAlert("Ningún código EDT del ejemplo coincide con la EDT actual del proyecto. Carga primero el caso DISTRIB+ en WBS Builder (\"Cargar ejemplo\").");
+    return;
+  }
+  let msg = "Se reemplazarán las actividades del PROYECTO ACTIVO (no el modo ejemplo) por las " + result.matched + " actividad(es) de ejemplo de DISTRIB+ que coinciden con su EDT actual.";
+  if (result.unmatchedCodes.length) {
+    msg += " " + result.unmatchedCodes.length + " código(s) del ejemplo no se encontraron en la EDT actual (¿la cargaste igual que en WBS Builder?): " + result.unmatchedCodes.slice(0, 8).join(", ") + (result.unmatchedCodes.length > 8 ? "…" : "") + ".";
+  }
+  const ok = await showConfirm(msg, "Cargar ejemplo en el proyecto");
+  if (!ok) { mode = prevMode; render(); return; }
+  stateLive = { byLeaf: result.byLeaf, idCounter: result.idCounter };
+  render();
+  gpiPush();
+  setStatus("Ejemplo DISTRIB+ cargado en el proyecto activo (" + result.matched + " actividad(es)).");
+}
+
 // ---------- REPORTE IMPRIMIBLE ----------
 function reportShell(docTitle: string, moduleName: string, bodyHtml: string): void {
   const el = document.getElementById("gpiReport") as HTMLElement;
@@ -858,6 +934,7 @@ function wireToolbar(): void {
   document.getElementById("btnPrint")!.addEventListener("click", () => { window.print(); });
   document.getElementById("btnSample")!.addEventListener("click", enterSample);
   document.getElementById("btnLive")!.addEventListener("click", enterLive);
+  document.getElementById("btnLoadSampleLive")!.addEventListener("click", loadSampleIntoProject);
   document.getElementById("btnClear")!.addEventListener("click", async () => {
     const s = stats();
     const ok = await showConfirm("Se eliminarán las " + (s.total + s.orphans) + " actividades de la lista actual" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT no se toca. ¿Continuar?", "Limpiar actividades");

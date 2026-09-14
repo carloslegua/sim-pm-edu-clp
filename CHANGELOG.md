@@ -11,6 +11,21 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **"⇩ Cargar ejemplo en el proyecto" en Definir las Actividades y en
+  Estimar los Costos**: hasta ahora, el "Modo ejemplo" de estos dos
+  módulos era un sandbox que nunca tocaba el proyecto activo (por
+  diseño). Eso dejaba un hueco de coherencia: si el alumno ya cargaba el
+  ejemplo DISTRIB+ en WBS Builder (que sí reemplaza el proyecto real),
+  "Definir las Actividades" sobre esa misma EDT real se seguía viendo
+  sin ninguna actividad — la EDT "se veía" sin desagregar en paquetes de
+  trabajo. Este nuevo botón sí reemplaza los datos del proyecto activo
+  real (con la misma confirmación explícita que ya usa WBS Builder),
+  reconciliando el ejemplo por Código EDT (y, en Estimar los Costos,
+  también por nombre de actividad) contra la EDT/actividades reales —
+  reutilizando tal cual la misma función de reconciliación que ya usa el
+  import de archivos `.xlsx` reales, en vez de duplicar esa lógica.
+  Requiere hacerlo en orden: EDT (WBS Builder) → Actividades → Costos.
+
 - **Nuevo módulo "Estimar los Costos" (`Estimar_Costos.html`, clave
   `costEstimate`)**: proceso PMBOK "Estimate Costs". El costo vive a
   nivel de **actividad**, no de paquete de trabajo (un paquete no tiene

@@ -515,6 +515,76 @@
 		render();
 		setStatus("De vuelta a la EDT del proyecto activo.");
 	}
+	function wbsCodesOf(wbs) {
+		const codes = {};
+		(function walk(id, code) {
+			codes[id] = code;
+			(wbs.nodes[id].children || []).forEach((cid, i) => walk(cid, code ? code + "." + (i + 1) : String(i + 1)));
+		})(wbs.rootId, "");
+		return codes;
+	}
+	function sampleVirtualRows() {
+		const codes = wbsCodesOf(SAMPLE_WBS);
+		const sample = sampleActivities();
+		const rows = [];
+		Object.keys(sample.byLeaf).forEach((leafId) => {
+			const code = codes[leafId];
+			if (!code) return;
+			sample.byLeaf[leafId].forEach((a) => {
+				rows.push([
+					code,
+					"",
+					a.name,
+					a.unit,
+					String(a.qty),
+					String(a.perf ?? ""),
+					String(a.teams ?? "")
+				]);
+			});
+		});
+		return rows;
+	}
+	async function loadSampleIntoProject() {
+		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) {
+			await showAlert("Esto solo aplica con un proyecto activo conectado al Panel de Control. Usa \"Modo ejemplo\" para explorar el caso DISTRIB+ sin conexión.");
+			return;
+		}
+		gpiPullWbs();
+		const prevMode = mode;
+		mode = "live";
+		if (!leafRows().length) {
+			mode = prevMode;
+			await showAlert("La EDT del proyecto activo está vacía. Carga primero el ejemplo en WBS Builder (\"Cargar ejemplo\") y vuelve aquí.");
+			return;
+		}
+		const result = reconcileImportRows(sampleVirtualRows(), {
+			code: 0,
+			name: 2,
+			unit: 3,
+			qty: 4,
+			perf: 5,
+			teams: 6
+		});
+		if (!result.matched) {
+			mode = prevMode;
+			await showAlert("Ningún código EDT del ejemplo coincide con la EDT actual del proyecto. Carga primero el caso DISTRIB+ en WBS Builder (\"Cargar ejemplo\").");
+			return;
+		}
+		let msg = "Se reemplazarán las actividades del PROYECTO ACTIVO (no el modo ejemplo) por las " + result.matched + " actividad(es) de ejemplo de DISTRIB+ que coinciden con su EDT actual.";
+		if (result.unmatchedCodes.length) msg += " " + result.unmatchedCodes.length + " código(s) del ejemplo no se encontraron en la EDT actual (¿la cargaste igual que en WBS Builder?): " + result.unmatchedCodes.slice(0, 8).join(", ") + (result.unmatchedCodes.length > 8 ? "…" : "") + ".";
+		if (!await showConfirm(msg, "Cargar ejemplo en el proyecto")) {
+			mode = prevMode;
+			render();
+			return;
+		}
+		stateLive = {
+			byLeaf: result.byLeaf,
+			idCounter: result.idCounter
+		};
+		render();
+		gpiPush();
+		setStatus("Ejemplo DISTRIB+ cargado en el proyecto activo (" + result.matched + " actividad(es)).");
+	}
 	function reportShell(docTitle, moduleName, bodyHtml) {
 		const el = document.getElementById("gpiReport");
 		let meta = {};
@@ -919,6 +989,7 @@
 		});
 		document.getElementById("btnSample").addEventListener("click", enterSample);
 		document.getElementById("btnLive").addEventListener("click", enterLive);
+		document.getElementById("btnLoadSampleLive").addEventListener("click", loadSampleIntoProject);
 		document.getElementById("btnClear").addEventListener("click", async () => {
 			const s = stats();
 			if (!await showConfirm("Se eliminarán las " + (s.total + s.orphans) + " actividades de la lista actual" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT no se toca. ¿Continuar?", "Limpiar actividades")) return;

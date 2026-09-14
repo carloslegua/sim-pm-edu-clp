@@ -495,6 +495,110 @@ function enterLive(): void {
   setStatus("De vuelta a la EDT del proyecto activo.");
 }
 
+// Códigos EDT de un árbol WBS cualquiera (no depende de wbsData()/mode) --
+// se usa para calcular los códigos del propio SAMPLE_WBS, clave para
+// reconciliar el ejemplo contra la EDT/actividades REALES del proyecto activo.
+function wbsCodesOf(wbs: WbsModule): Record<string, string> {
+  const codes: Record<string, string> = {};
+  (function walk(id: string, code: string): void {
+    codes[id] = code;
+    (wbs.nodes[id].children || []).forEach((cid, i) => walk(cid, code ? code + "." + (i + 1) : String(i + 1)));
+  })(wbs.rootId, "");
+  return codes;
+}
+
+// Precio de ejemplo por NOMBRE de actividad (no por id): permite reconciliar
+// contra actividades reales cuyos ids sean distintos a los de SAMPLE_ACTIVITIES.
+function samplePriceByName(): Record<string, number> {
+  const est = sampleEstimate();
+  const out: Record<string, number> = {};
+  Object.keys(SAMPLE_ACTIVITIES.byLeaf).forEach((leafId) => {
+    SAMPLE_ACTIVITIES.byLeaf[leafId].forEach((a) => {
+      const p = est.byActivity[a.id];
+      if (p != null && a.name) out[a.name] = Number(p);
+    });
+  });
+  return out;
+}
+
+// Filas "virtuales" con los precios de ejemplo, en el mismo orden de columnas
+// que reconcileImportRows espera de un archivo real (Código EDT, Paquete de
+// trabajo [sin usar], Nombre de la actividad, Unidad, Cantidad, Precio
+// unitario) -- así "Cargar ejemplo en el proyecto" reutiliza TAL CUAL la
+// misma reconciliación por código EDT + nombre que ya usa el import de
+// Excel, en vez de duplicar esa lógica. Las actividades de ejemplo sin
+// precio (p. ej. la de "Instalación de cobertura TR-4", dejada a propósito
+// sin precio) quedan con la columna de precio en blanco, igual que en la
+// exportación real -- reconcileImportRows ya sabe omitirlas sin contarlas
+// como huérfanas.
+function sampleVirtualRows(): string[][] {
+  const codes = wbsCodesOf(SAMPLE_WBS);
+  const priceByName = samplePriceByName();
+  const rows: string[][] = [];
+  Object.keys(SAMPLE_ACTIVITIES.byLeaf).forEach((leafId) => {
+    const code = codes[leafId];
+    if (!code) return;
+    SAMPLE_ACTIVITIES.byLeaf[leafId].forEach((a) => {
+      const price = priceByName[a.name || ""];
+      rows.push([code, "", a.name || "", a.unit || "", String(a.qty ?? ""), price != null ? String(price) : ""]);
+    });
+  });
+  return rows;
+}
+
+// ---------- CARGAR EJEMPLO EN EL PROYECTO ----------
+// A diferencia de "Modo ejemplo" (sandbox: nunca toca el proyecto activo),
+// esta acción SÍ reemplaza el estimado del proyecto activo real -- mismo
+// patrón que ya usa WBS Builder y, ahora, Definir las Actividades para su
+// propio "Cargar ejemplo". Requiere que el proyecto activo ya tenga la EDT
+// y las actividades de ejemplo cargadas ahí (en ese orden): sin actividades
+// reales no hay nada que precificar.
+async function loadSampleIntoProject(): Promise<void> {
+  if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) {
+    await showAlert("Esto solo aplica con un proyecto activo conectado al Panel de Control. Usa \"Modo ejemplo\" para explorar el caso DISTRIB+ sin conexión.");
+    return;
+  }
+  gpiPullWbs();
+  const prevMode = mode;
+  mode = "live"; // leafRows()/activitiesOf()/reconcileImportRows deben mirar el proyecto REAL
+  const liveLeaves = leafRows();
+  if (!liveLeaves.length) {
+    mode = prevMode;
+    await showAlert("La EDT del proyecto activo está vacía. Carga primero el ejemplo en WBS Builder (\"Cargar ejemplo\") y vuelve aquí.");
+    return;
+  }
+  if (!liveLeaves.some((l) => activitiesOf(l.id).length > 0)) {
+    mode = prevMode;
+    await showAlert("El proyecto activo todavía no tiene actividades. Carga primero el ejemplo en Definir las Actividades (\"⇩ Cargar ejemplo en el proyecto\") y vuelve aquí.");
+    return;
+  }
+  const colMap: ColumnMap = { code: 0, activityName: 2, unit: 3, qty: 4, unitPrice: 5 };
+  const result = reconcileImportRows(sampleVirtualRows(), colMap);
+  if (!result.matched && !result.orphanCodes.length && !result.unmatchedActivities.length) {
+    mode = prevMode;
+    await showAlert("Ninguna actividad de ejemplo coincide con las actividades reales del proyecto (Código EDT + nombre). Revisa que hayas cargado el mismo ejemplo en Definir las Actividades.");
+    return;
+  }
+  let msg = "Se reemplazará el estimado del PROYECTO ACTIVO (no el modo ejemplo) con precios para " + result.matched + " actividad(es) que coinciden con sus actividades reales.";
+  if (result.orphanCodes.length) {
+    msg += " " + result.orphanCodes.length + " código(s) del ejemplo no se encontraron en la EDT actual: " + result.orphanCodes.slice(0, 8).join(", ") + (result.orphanCodes.length > 8 ? "…" : "") + ".";
+  }
+  if (result.unmatchedActivities.length) {
+    const ex = result.unmatchedActivities.slice(0, 8).map((u) => u.code + " \"" + u.name + "\"").join(", ");
+    msg += " " + result.unmatchedActivities.length + " actividad(es) de ejemplo no se encontraron bajo su paquete real: " + ex + (result.unmatchedActivities.length > 8 ? "…" : "") + ".";
+  }
+  if (result.missingActivities.length) {
+    const ex = result.missingActivities.slice(0, 8).map((u) => u.code).join(", ");
+    msg += " ⚠ " + result.missingActivities.length + " actividad(es) reales quedan sin precio: " + ex + (result.missingActivities.length > 8 ? "…" : "") + ".";
+  }
+  const ok = await showConfirm(msg, "Cargar ejemplo en el proyecto");
+  if (!ok) { mode = prevMode; render(); return; }
+  stateLive = { byActivity: result.byActivity };
+  render();
+  gpiPush();
+  setStatus("Ejemplo DISTRIB+ cargado en el proyecto activo (" + result.matched + " actividad(es) con precio).");
+}
+
 // ---------- REPORTE IMPRIMIBLE ----------
 function reportShell(docTitle: string, moduleName: string, bodyHtml: string): void {
   const el = document.getElementById("gpiReport") as HTMLElement;
@@ -952,6 +1056,7 @@ function wireToolbar(): void {
   document.getElementById("btnPrint")!.addEventListener("click", () => { window.print(); });
   document.getElementById("btnSample")!.addEventListener("click", enterSample);
   document.getElementById("btnLive")!.addEventListener("click", enterLive);
+  document.getElementById("btnLoadSampleLive")!.addEventListener("click", loadSampleIntoProject);
   document.getElementById("btnClear")!.addEventListener("click", async () => {
     const s = stats();
     const ok = await showConfirm("Se eliminará el precio de las " + s.pricedActivities + " actividades ya con precio" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT y las actividades no se tocan. ¿Continuar?", "Limpiar estimado");

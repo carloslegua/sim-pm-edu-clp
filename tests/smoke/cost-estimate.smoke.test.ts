@@ -123,4 +123,81 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
     const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
     expect(saved.projects.p1.modules.costEstimate).toBeUndefined();
   });
+
+  it("'⇩ Cargar ejemplo en el proyecto' SÍ reemplaza el estimado del proyecto activo real, emparejando por Código EDT + nombre de actividad", async () => {
+    // La EDT y las actividades sembradas aquí reproducen los códigos 1.1/1.2
+    // y los NOMBRES de actividad del caso DISTRIB+ (misma fase "Dirección de
+    // Proyecto"), con ids e nombres de paquete DISTINTOS a propósito: el
+    // emparejamiento es por Código EDT + Nombre de la actividad, no por ids
+    // internos ni por nombre de paquete.
+    const seedLive = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 4,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] },
+                w1: { id: "w1", parentId: "root", name: "Fase Cualquiera", children: ["w2", "w3"] },
+                w2: { id: "w2", parentId: "w1", name: "Paquete con otro nombre A", children: [] },
+                w3: { id: "w3", parentId: "w1", name: "Paquete con otro nombre B", children: [] }
+              }
+            },
+            activities: {
+              byLeaf: {
+                w2: [{ id: "x1", name: "Elaboración y aprobación del acta de constitución", unit: "doc", qty: 1, perf: 0.25, teams: 1 }],
+                w3: [
+                  { id: "x2", name: "Plan para la dirección del proyecto (líneas base)", unit: "doc", qty: 1, perf: 0.2, teams: 1 },
+                  { id: "x3", name: "Planes subsidiarios de gestión", unit: "doc", qty: 6, perf: 0.5, teams: 1 }
+                ]
+              },
+              idCounter: 4
+            }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Estimar_Costos.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedLive)); }
+    });
+    await new Promise((r) => setTimeout(r, 900));
+    const doc = dom.window.document;
+    (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 100));
+    expect((doc.getElementById("modalOverlay") as HTMLElement).classList.contains("open")).toBe(true);
+    expect((doc.getElementById("modalMsg") as HTMLElement).textContent).toMatch(/PROYECTO ACTIVO/);
+    (doc.getElementById("modalOk") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 900));
+
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    const est = saved.projects.p1.modules.costEstimate;
+    expect(est.byActivity).toMatchObject({ x1: "12000", x2: "20000", x3: "3000" });
+    expect(doc.getElementById("modeChip")!.textContent).toBe("EDT del proyecto"); // sigue en modo "live", no "sample"
+  });
+
+  it("'⇩ Cargar ejemplo en el proyecto' avisa si el proyecto activo todavía no tiene actividades", async () => {
+    const seedNoActs = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: { wbs: { rootId: "root", idCounter: 2, nodes: { root: { id: "root", parentId: null, name: "P", children: ["w1"] }, w1: { id: "w1", parentId: "root", name: "Paquete 1", children: [] } } } }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Estimar_Costos.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedNoActs)); }
+    });
+    await new Promise((r) => setTimeout(r, 900));
+    const doc = dom.window.document;
+    (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 100));
+    expect((doc.getElementById("modalMsg") as HTMLElement).textContent).toMatch(/todavía no tiene actividades/);
+  });
 });

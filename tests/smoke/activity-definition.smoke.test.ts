@@ -118,4 +118,69 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
     const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
     expect(saved.projects.p1.modules.activities).toBeUndefined();
   });
+
+  it("'⇩ Cargar ejemplo en el proyecto' SÍ reemplaza las actividades del proyecto activo real, emparejando por Código EDT", async () => {
+    // A diferencia del "Modo ejemplo" (sandbox), esta acción reconcilia las
+    // actividades de ejemplo de DISTRIB+ contra la EDT REAL -- ver el
+    // comentario de loadSampleIntoProject() en activities/main.ts. La EDT
+    // sembrada aquí reproduce los códigos 1.1 y 1.2 del caso DISTRIB+
+    // (misma fase "Dirección de Proyecto"), con nombres de paquete
+    // DISTINTOS a propósito: el emparejamiento es por Código EDT, no por
+    // nombre de paquete.
+    const seedLive = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 4,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] },
+                w1: { id: "w1", parentId: "root", name: "Fase Cualquiera", children: ["w2", "w3"] },
+                w2: { id: "w2", parentId: "w1", name: "Paquete con otro nombre A", children: [] },
+                w3: { id: "w3", parentId: "w1", name: "Paquete con otro nombre B", children: [] }
+              }
+            }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Activity_Definition.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedLive)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 100));
+    expect((doc.getElementById("modalOverlay") as HTMLElement).classList.contains("open")).toBe(true);
+    expect((doc.getElementById("modalMsg") as HTMLElement).textContent).toMatch(/PROYECTO ACTIVO/);
+    (doc.getElementById("modalOk") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 900));
+
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    const acts = saved.projects.p1.modules.activities;
+    expect(acts.byLeaf.w2).toHaveLength(1); // 1.1 = Acta de constitución
+    expect(acts.byLeaf.w2[0].name).toMatch(/acta de constitución/i);
+    expect(acts.byLeaf.w3).toHaveLength(2); // 1.2 = Plan de gestión del proyecto (2 actividades)
+    expect(doc.getElementById("modeChip")!.textContent).toBe("EDT del proyecto"); // sigue en modo "live", no "sample"
+  });
+
+  it("'⇩ Cargar ejemplo en el proyecto' avisa si la EDT del proyecto activo está vacía", async () => {
+    const seedNoWbs = {
+      version: 1, activeId: "p1",
+      projects: { p1: { schema: "gpi.project/v1", meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 }, modules: {} } }
+    };
+    const dom = await JSDOM.fromURL(base + "Activity_Definition.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedNoWbs)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 100));
+    expect((doc.getElementById("modalMsg") as HTMLElement).textContent).toMatch(/EDT del proyecto activo está vacía/);
+  });
 });
