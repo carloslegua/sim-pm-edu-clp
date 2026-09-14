@@ -133,9 +133,23 @@
 		const acts = activitiesData();
 		return (acts && acts.milestones || []).filter((m) => m.leafId === leafId);
 	}
-	function looseMilestones() {
+	function allMilestones() {
 		const acts = activitiesData();
-		return (acts && acts.milestones || []).filter((m) => !m.leafId);
+		return acts && acts.milestones || [];
+	}
+	function placeLooseMilestones(milestones, knownLeafIds) {
+		const start = [], orphan = [];
+		const afterLeaf = {};
+		milestones.filter((m) => !m.leafId).forEach((m) => {
+			if (!m.afterLeafId) start.push(m);
+			else if (knownLeafIds[m.afterLeafId]) (afterLeaf[m.afterLeafId] ||= []).push(m);
+			else orphan.push(m);
+		});
+		return {
+			start,
+			afterLeaf,
+			orphan
+		};
 	}
 	function parseExcelNum(s) {
 		let str = String(s == null ? "" : s).trim().replace(/[\s ]/g, "");
@@ -212,7 +226,22 @@
 			level: 1,
 			name: rootName
 		});
-		treeRows().forEach((r) => {
+		const tree = treeRows();
+		const knownLeafIds = {};
+		tree.forEach((r) => {
+			if (r.kind === "package") knownLeafIds[r.id] = true;
+		});
+		const loose = placeLooseMilestones(allMilestones(), knownLeafIds);
+		loose.start.forEach((m) => {
+			out.push({
+				kind: "milestone",
+				n: n++,
+				code: m.code,
+				level: 2,
+				name: m.name
+			});
+		});
+		tree.forEach((r) => {
 			if (r.kind === "phase") {
 				out.push({
 					kind: "phase",
@@ -265,26 +294,25 @@
 					name: m.name
 				});
 			});
-		});
-		const loose = looseMilestones();
-		if (loose.length) {
-			out.push({
-				kind: "phase",
-				n: n++,
-				code: "",
-				level: 2,
-				name: "Hitos del proyecto"
-			});
-			loose.forEach((m) => {
+			(loose.afterLeaf[r.id] || []).forEach((m) => {
 				out.push({
 					kind: "milestone",
 					n: n++,
 					code: m.code,
-					level: 3,
+					level: r.depth + 1,
 					name: m.name
 				});
 			});
-		}
+		});
+		loose.orphan.forEach((m) => {
+			out.push({
+				kind: "milestone",
+				n: n++,
+				code: m.code,
+				level: 2,
+				name: m.name
+			});
+		});
 		return out;
 	}
 	function render() {
@@ -559,17 +587,28 @@
 		by[I.p51] = [A("Pruebas de tableros y circuitos eléctricos", "pto", 120, 30), A("Pruebas hidráulicas de redes sanitarias", "glb", 1, .5)];
 		by[I.p52] = [A("Capacitación operativa al personal del cliente", "hora", 40, 5), A("Elaboración de manuales de operación y mantenimiento", "doc", 2, .5)];
 		by[I.p53] = [A("Elaboración de dossier de calidad y planos as-built", "doc", 1, .1), A("Acta de entrega y cierre del proyecto", "doc", 1, .5)];
-		const milestones = [{
-			id: "m1",
-			code: "H1",
-			name: "Fin de Cimentaciones",
-			leafId: I.p42
-		}, {
-			id: "m2",
-			code: "H2",
-			name: "Cierre del Proyecto",
-			leafId: null
-		}];
+		const milestones = [
+			{
+				id: "m1",
+				code: "H1",
+				name: "Inicio del Proyecto",
+				leafId: null,
+				afterLeafId: null
+			},
+			{
+				id: "m2",
+				code: "H2",
+				name: "Fin de Cimentaciones",
+				leafId: I.p42
+			},
+			{
+				id: "m3",
+				code: "H3",
+				name: "Cierre del Proyecto",
+				leafId: null,
+				afterLeafId: I.p53
+			}
+		];
 		return {
 			byLeaf: by,
 			idCounter: n + 1,
@@ -818,7 +857,34 @@
 			t: "s",
 			s: 1
 		}))];
-		leafRows().forEach((l) => {
+		const milestoneRow = (m) => [
+			null,
+			null,
+			{
+				v: m.code + " — " + m.name,
+				t: "s",
+				s: 0
+			},
+			{
+				v: "Hito",
+				t: "s",
+				s: 0
+			},
+			null,
+			null,
+			null,
+			null
+		];
+		const leaves = leafRows();
+		const knownLeafIds = {};
+		leaves.forEach((l) => {
+			knownLeafIds[l.id] = true;
+		});
+		const loose = placeLooseMilestones(allMilestones(), knownLeafIds);
+		loose.start.forEach((m) => {
+			out.push(milestoneRow(m));
+		});
+		leaves.forEach((l) => {
 			const list = activitiesOf(l.id);
 			if (!list.length) out.push([
 				{
@@ -908,26 +974,12 @@
 					null
 				]);
 			});
+			(loose.afterLeaf[l.id] || []).forEach((m) => {
+				out.push(milestoneRow(m));
+			});
 		});
-		looseMilestones().forEach((m) => {
-			out.push([
-				null,
-				null,
-				{
-					v: m.code + " — " + m.name,
-					t: "s",
-					s: 0
-				},
-				{
-					v: "Hito",
-					t: "s",
-					s: 0
-				},
-				null,
-				null,
-				null,
-				null
-			]);
+		loose.orphan.forEach((m) => {
+			out.push(milestoneRow(m));
 		});
 		return out;
 	}
@@ -981,7 +1033,26 @@
 			return /[";\n]/.test(s) ? "\"" + s.replace(/"/g, "\"\"") + "\"" : s;
 		}
 		const lines = [TEMPLATE_HEADERS.join(";")];
-		leafRows().forEach((l) => {
+		const milestoneLine = (m) => [
+			"",
+			"",
+			cell(m.code + " — " + m.name),
+			"Hito",
+			"",
+			"",
+			"",
+			""
+		].join(";");
+		const leaves = leafRows();
+		const knownLeafIds = {};
+		leaves.forEach((l) => {
+			knownLeafIds[l.id] = true;
+		});
+		const loose = placeLooseMilestones(allMilestones(), knownLeafIds);
+		loose.start.forEach((m) => {
+			lines.push(milestoneLine(m));
+		});
+		leaves.forEach((l) => {
 			const list = activitiesOf(l.id);
 			if (!list.length) lines.push([
 				cell(l.code),
@@ -1020,18 +1091,12 @@
 					""
 				].join(";"));
 			});
+			(loose.afterLeaf[l.id] || []).forEach((m) => {
+				lines.push(milestoneLine(m));
+			});
 		});
-		looseMilestones().forEach((m) => {
-			lines.push([
-				"",
-				"",
-				cell(m.code + " — " + m.name),
-				"Hito",
-				"",
-				"",
-				"",
-				""
-			].join(";"));
+		loose.orphan.forEach((m) => {
+			lines.push(milestoneLine(m));
 		});
 		return lines.join("\r\n");
 	}

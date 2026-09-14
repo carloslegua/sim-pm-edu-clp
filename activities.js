@@ -43,7 +43,8 @@
 			id: m.id || "m" + Math.random().toString(36).slice(2, 8),
 			code: m.code || "",
 			name: m.name || "",
-			leafId: m.leafId || null
+			leafId: m.leafId || null,
+			afterLeafId: m.afterLeafId || null
 		}));
 		return {
 			byLeaf: by,
@@ -191,6 +192,20 @@
 		if (!isFinite(eq) || eq < 1) eq = 1;
 		return Math.ceil(met / (eq * r));
 	}
+	function placeLooseMilestones(milestones, knownLeafIds) {
+		const start = [], orphan = [];
+		const afterLeaf = {};
+		milestones.filter((m) => !m.leafId).forEach((m) => {
+			if (!m.afterLeafId) start.push(m);
+			else if (knownLeafIds[m.afterLeafId]) (afterLeaf[m.afterLeafId] ||= []).push(m);
+			else orphan.push(m);
+		});
+		return {
+			start,
+			afterLeaf,
+			orphan
+		};
+	}
 	function fullRows() {
 		const w = wbsData(), st = state(), out = [];
 		if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
@@ -204,8 +219,23 @@
 			name: rootName
 		});
 		const milestones = st.milestones || [];
-		const looseMilestones = milestones.filter((m) => !m.leafId);
-		treeRows().forEach((r) => {
+		const tree = treeRows();
+		const knownLeafIds = {};
+		tree.forEach((r) => {
+			if (r.kind === "package") knownLeafIds[r.id] = true;
+		});
+		const loose = placeLooseMilestones(milestones, knownLeafIds);
+		loose.start.forEach((m) => {
+			out.push({
+				kind: "milestone",
+				n: n++,
+				code: m.code,
+				level: 2,
+				name: m.name,
+				dur: 0
+			});
+		});
+		tree.forEach((r) => {
 			if (r.kind === "phase") out.push({
 				kind: "phase",
 				n: n++,
@@ -251,27 +281,28 @@
 						leafId: r.id
 					});
 				});
+				(loose.afterLeaf[r.id] || []).forEach((m) => {
+					out.push({
+						kind: "milestone",
+						n: n++,
+						code: m.code,
+						level: r.depth + 1,
+						name: m.name,
+						dur: 0
+					});
+				});
 			}
 		});
-		if (looseMilestones.length) {
+		loose.orphan.forEach((m) => {
 			out.push({
-				kind: "phase",
+				kind: "milestone",
 				n: n++,
-				code: "",
+				code: m.code,
 				level: 2,
-				name: "Hitos del proyecto"
+				name: m.name,
+				dur: 0
 			});
-			looseMilestones.forEach((m) => {
-				out.push({
-					kind: "milestone",
-					n: n++,
-					code: m.code,
-					level: 3,
-					name: m.name,
-					dur: 0
-				});
-			});
-		}
+		});
 		return out;
 	}
 	function renderTable() {
@@ -555,17 +586,28 @@
 		by[I.p51] = [A("Pruebas de tableros y circuitos eléctricos", "pto", 120, 30), A("Pruebas hidráulicas de redes sanitarias", "glb", 1, .5)];
 		by[I.p52] = [A("Capacitación operativa al personal del cliente", "hora", 40, 5), A("Elaboración de manuales de operación y mantenimiento", "doc", 2, .5)];
 		by[I.p53] = [A("Elaboración de dossier de calidad y planos as-built", "doc", 1, .1), A("Acta de entrega y cierre del proyecto", "doc", 1, .5)];
-		const milestones = [{
-			id: "m1",
-			code: "H1",
-			name: "Fin de Cimentaciones",
-			leafId: I.p42
-		}, {
-			id: "m2",
-			code: "H2",
-			name: "Cierre del Proyecto",
-			leafId: null
-		}];
+		const milestones = [
+			{
+				id: "m1",
+				code: "H1",
+				name: "Inicio del Proyecto",
+				leafId: null,
+				afterLeafId: null
+			},
+			{
+				id: "m2",
+				code: "H2",
+				name: "Fin de Cimentaciones",
+				leafId: I.p42
+			},
+			{
+				id: "m3",
+				code: "H3",
+				name: "Cierre del Proyecto",
+				leafId: null,
+				afterLeafId: I.p53
+			}
+		];
 		return {
 			byLeaf: by,
 			idCounter: n + 1,
@@ -595,7 +637,26 @@
 		const codes = wbsCodesOf(SAMPLE_WBS);
 		const sample = sampleActivities();
 		const rows = [];
-		Object.keys(sample.byLeaf).forEach((leafId) => {
+		const packageIds = Object.keys(sample.byLeaf);
+		const knownLeafIds = {};
+		packageIds.forEach((id) => {
+			knownLeafIds[id] = true;
+		});
+		const loose = placeLooseMilestones(sample.milestones, knownLeafIds);
+		loose.start.forEach((m) => {
+			rows.push([
+				"",
+				"",
+				m.name,
+				"Hito",
+				m.code,
+				"",
+				"",
+				"",
+				""
+			]);
+		});
+		packageIds.forEach((leafId) => {
 			const code = codes[leafId];
 			if (!code) return;
 			sample.byLeaf[leafId].forEach((a) => {
@@ -611,11 +672,36 @@
 					String(a.teams ?? "")
 				]);
 			});
+			sample.milestones.filter((m) => m.leafId === leafId).forEach((m) => {
+				rows.push([
+					code,
+					"",
+					m.name,
+					"Hito",
+					m.code,
+					"",
+					"",
+					"",
+					""
+				]);
+			});
+			(loose.afterLeaf[leafId] || []).forEach((m) => {
+				rows.push([
+					"",
+					"",
+					m.name,
+					"Hito",
+					m.code,
+					"",
+					"",
+					"",
+					""
+				]);
+			});
 		});
-		sample.milestones.forEach((m) => {
-			const code = m.leafId ? codes[m.leafId] || "" : "";
+		loose.orphan.forEach((m) => {
 			rows.push([
-				code,
+				"",
 				"",
 				m.name,
 				"Hito",
@@ -796,6 +882,7 @@
 			["2. Completa “Nombre de la actividad”, “Unidad”, “Metrado”, “Rendimiento (R)” y “N.º de equipos” para cada actividad del paquete.", 4],
 			["3. ¿Más de una actividad por el mismo paquete? Copia la fila completa (Ctrl+D en Excel) y repite el mismo “Código EDT” en la copia, cambiando el nombre de la actividad.", 4],
 			["4. Hitos: para marcar una fila como hito (duración cero) en vez de una actividad normal, escribe “Hito” en la columna “Tipo” y asígnale un código propio en “Código de hito” (por ejemplo “H1”, “H2”… la numeración la decides tú) — deja en blanco Unidad/Metrado/Rendimiento/N.º de equipos, no aplican a un hito. Si el hito pertenece a un paquete de trabajo, completa su “Código EDT”; si es un hito del proyecto en general (no depende de un paquete puntual), deja “Código EDT” en blanco.", 4],
+			["4b. Un hito NUNCA forma parte de la EDT ni de su numeración: su posición en el listado es dónde insertes su fila en este archivo, respecto de las filas de paquete. Una fila de hito insertada ANTES de la primera fila de paquete aparece al principio de todo (p. ej. un hito de inicio de proyecto); insertada DESPUÉS de la última fila de paquete aparece al final de todo (p. ej. un hito de fin de proyecto); insertada entre dos paquetes cualesquiera, aparece justo ahí — no se agrupan todos juntos en un bloque aparte.", 4],
 			["5. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
 			["6. Guarda el archivo y vuelve a “Definir las Actividades” > botón “⇧ Importar actividades desde Excel” para subirlo.", 4],
 			["", 0],
@@ -995,6 +1082,7 @@
 		const byLeaf = {};
 		const milestones = [];
 		let n = 0, matched = 0, mn = 0, matchedMilestones = 0;
+		let lastLeafId = null;
 		const unmatched = /* @__PURE__ */ new Set();
 		const milestoneIssues = [];
 		rows.forEach((row) => {
@@ -1020,7 +1108,8 @@
 					id: "m" + ++mn,
 					code: milestoneCode,
 					name,
-					leafId
+					leafId,
+					afterLeafId: leafId ? null : lastLeafId
 				});
 				matchedMilestones++;
 				return;
@@ -1031,6 +1120,7 @@
 				unmatched.add(code);
 				return;
 			}
+			lastLeafId = leafId;
 			const unit = colMap.unit != null ? String(row[colMap.unit] || "").trim() : "";
 			const qty = colMap.qty != null ? parseExcelNum(row[colMap.qty]) || "" : "";
 			const perf = colMap.perf != null ? parseExcelNum(row[colMap.perf]) || "" : "";

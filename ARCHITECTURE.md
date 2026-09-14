@@ -318,17 +318,40 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   alcanza con completar uno de los dos). Un hito con Código EDT
   coincide con ese paquete; vacío = suelto; un código que no coincide
   con ningún paquete real se reporta como huérfano y NO se importa
-  (igual criterio que una actividad con EDT inexistente). `fullRows()`
-  lista los hitos atados después de las actividades de su paquete, y
-  agrega una sección final "Hitos del proyecto" para los sueltos —
-  siempre con Duración "0" (valor por definición, nunca "—" de dato
-  faltante) e ícono ◆ distintivo (`.milestone-row`/`.milestone-code`).
-  El modo ejemplo trae dos hitos ilustrativos ("H1 Fin de
-  Cimentaciones", atado a 4.2; "H2 Cierre del Proyecto", suelto) para
-  demostrar ambos casos. **Fuera de alcance deliberado**: PERT y
-  Cronograma CPM no leen `milestones` (piden explícitamente solo
-  `byLeaf`) — un hito no aparece en la red ni en el Gantt de esos dos
-  módulos.
+  (igual criterio que una actividad con EDT inexistente).
+  - **Un hito suelto puede ir en CUALQUIER posición del listado — nunca
+    se agrupa en un capítulo aparte tipo "Hitos del proyecto"** (diseño
+    corregido: la primera versión sí los agrupaba al final, y eso
+    impedía representar, por ejemplo, un hito de inicio de proyecto).
+    `afterLeafId` (junto a `leafId`, ambos en `MilestoneItem`) dice
+    después de qué paquete se posiciona un hito suelto: `null`/vacío =
+    al principio de todo (antes de la fase 1, p. ej. un hito de inicio
+    de proyecto); el id de un paquete real = justo después de ese
+    paquete (el id del ÚLTIMO paquete produce un hito de fin de
+    proyecto); un id que ya no existe = huérfano, se muestra al final
+    para no perder el dato. `afterLeafId` nunca cuenta para la
+    numeración EDT. Al importar un `.xlsx`, `afterLeafId` se deriva de
+    dónde el alumno insertó la fila del hito respecto de las filas de
+    paquete: `reconcileImportRows` rastrea `lastLeafId` (el último
+    paquete reconocido, en el orden de las filas del archivo) — una
+    fila de hito suelto ANTES de la primera fila de paquete queda sin
+    ancla (al principio); DESPUÉS de la última fila de paquete queda
+    anclada a ese último paquete (al final). `fullRows()` usa
+    `placeLooseMilestones()` (helper compartido, misma copia local en
+    `activities/main.ts` y `cost-estimate/main.ts`) para intercalar
+    cada hito suelto en su posición exacta.
+  - `fullRows()` lista los hitos atados después de las actividades de
+    su paquete; siempre con Duración "0" (valor por definición, nunca
+    "—" de dato faltante) e ícono ◆ distintivo
+    (`.milestone-row`/`.milestone-code`).
+  - El modo ejemplo trae tres hitos ilustrativos: "H1 Inicio del
+    Proyecto" (suelto, `afterLeafId: null`, al principio de todo), "H2
+    Fin de Cimentaciones" (atado a 4.2), "H3 Cierre del Proyecto"
+    (suelto, `afterLeafId` = el id del último paquete, 5.3, al final de
+    todo) — cubren los tres casos que soporta el modelo.
+  - **Fuera de alcance deliberado**: PERT y Cronograma CPM no leen
+    `milestones` (piden explícitamente solo `byLeaf`) — un hito no
+    aparece en la red ni en el Gantt de esos dos módulos.
 
 **WBS_Builder.html** — el de mayor fan-out.
 - Lee `raci` (bloquea "Responsable" si la RACI ya asignó un "R" —
@@ -475,9 +498,11 @@ Costs")
   — sin actividades reales no hay nada que precificar.
 - **Hitos**: de solo lectura aquí (nunca se les asigna precio, vienen de
   `activities.milestones`) — se listan para trazabilidad, después de las
-  actividades de su paquete o en una sección final "Hitos del proyecto"
-  si van sueltos, con Unidad/Cantidad/Precio unitario/Subtotal siempre
-  "—" y **sin contribuir** a `pkgSubtotal`/`pkgComplete`/
+  actividades de su paquete si están atados, o intercalados en su
+  posición exacta si van sueltos (misma `placeLooseMilestones()` que
+  `activities/main.ts`, nunca agrupados en un bloque aparte — ver esa
+  sección), con Unidad/Cantidad/Precio unitario/Subtotal siempre "—" y
+  **sin contribuir** a `pkgSubtotal`/`pkgComplete`/
   `stats().totalCost`. El archivo exportado los incluye como referencia
   (columna "Tipo"="Hito", precios en blanco) para que el reporte y el
   round-trip los muestren; al reimportar, `reconcileImportRows` detecta
@@ -587,10 +612,13 @@ vez que se agrega o toca un módulo:
   concreto, Acero de refuerzo, Concreto en zapatas, Encofrado/
   desencofrado). Ver `sampleActivities()` para el detalle completo
   (nombre, unidad, metrado, rendimiento y n.º de equipos de cada una).
-- **Hitos** (`activities.milestones`, dos ilustrativos en
-  `sampleActivities()`/`SAMPLE_ACTIVITIES`): "H1 Fin de Cimentaciones"
-  atado al paquete 4.2, y "H2 Cierre del Proyecto" suelto (sin paquete)
-  — cubren los dos casos que soporta el modelo. Visibles en Definir las
+- **Hitos** (`activities.milestones`, tres ilustrativos en
+  `sampleActivities()`/`SAMPLE_ACTIVITIES`): "H1 Inicio del Proyecto"
+  suelto AL PRINCIPIO de todo (`afterLeafId: null`), "H2 Fin de
+  Cimentaciones" atado al paquete 4.2, y "H3 Cierre del Proyecto" suelto
+  DESPUÉS del último paquete (`afterLeafId` = id de 5.3) — cubren los
+  tres casos que soporta el modelo (suelto al inicio, atado, suelto al
+  final; nunca agrupados en un capítulo aparte). Visibles en Definir las
   Actividades y en Estimar los Costos (ahí de solo lectura, sin costo);
   fuera de alcance en PERT/Cronograma CPM (ver la sección de
   Activity_Definition.html más arriba).

@@ -94,16 +94,22 @@ test("Activity_Definition — importar un .xlsx completado puebla las actividade
 });
 
 // Arma un .xlsx con columnas "Tipo" y "Código de hito" (el mecanismo estilo
-// P6 para marcar hitos), cubriendo los tres casos del diseño: hito atado a
-// un paquete, hito suelto (sin Código EDT) e hito con código faltante (debe
-// omitirse, no importarse como actividad).
+// P6 para marcar hitos), cubriendo los casos del diseño: un hito suelto
+// insertado ANTES de la primera fila de paquete (debe quedar al principio de
+// todo, p. ej. un hito de inicio de proyecto), uno atado a un paquete, uno
+// suelto insertado DESPUÉS de la última fila de paquete (debe quedar al
+// final de todo, p. ej. un hito de fin de proyecto), uno con EDT inexistente
+// (huérfano, no se importa) y uno sin "Código de hito" (tampoco se importa).
+// Ninguno de los sueltos debe agruparse en un capítulo aparte.
 async function buildMilestonesFixtureXlsx(): Promise<Buffer> {
   const zip = new JSZip();
   const rows = [
     ["Código EDT", "Nombre de la actividad", "Tipo", "Código de hito", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"],
+    ["", "Inicio del proyecto", "Hito", "H0", "", "", "", ""],        // hito suelto ANTES de cualquier paquete
     ["1.1", "Excavar zanja", "", "", "m³", "100", "25", ""],
     ["1.1", "Fin de excavación", "Hito", "H1", "", "", "", ""],       // hito atado al paquete 1.1
-    ["", "Cierre del proyecto", "Hito", "H2", "", "", "", ""],        // hito suelto: sin Código EDT
+    ["1.2", "Encofrado de zapatas", "", "", "m²", "300", "30", ""],
+    ["", "Cierre del proyecto", "Hito", "H2", "", "", "", ""],        // hito suelto DESPUÉS del último paquete (1.2)
     ["9.9", "Hito huérfano", "Hito", "H3", "", "", "", ""],           // EDT inexistente: no se importa
     ["1.2", "Hito sin código", "Hito", "", "", "", "", ""]            // sin Código de hito: no se importa
   ];
@@ -142,20 +148,28 @@ test("Activity_Definition — importar hitos (atado, suelto y con código faltan
   await expect(page.locator("#modalMsg")).toContainText("hito(s)");
   await page.locator("#modalOk").click();
 
-  // Solo H1 (atado) y H2 (suelto) se importan: H3 (EDT inexistente) y el
-  // hito sin "Código de hito" quedan fuera.
-  await expect(page.locator(".milestone-row")).toHaveCount(2);
+  // Solo H0 (suelto al principio), H1 (atado) y H2 (suelto al final) se
+  // importan: H3 (EDT inexistente) y el hito sin "Código de hito" quedan
+  // fuera. Ninguno se agrupa en un capítulo aparte -- cada uno aparece
+  // exactamente donde se insertó su fila en el archivo.
+  await expect(page.locator(".milestone-row")).toHaveCount(3);
+  const rows = page.locator("#actsBody tr");
+  await expect(rows.first()).toHaveClass(/proj-row/);
+  await expect(rows.nth(1)).toHaveClass(/milestone-row/); // H0: antes de cualquier paquete
+  await expect(rows.nth(1)).toContainText("Inicio del proyecto");
+  await expect(rows.last()).toHaveClass(/milestone-row/); // H2: después del último paquete (1.2)
+  await expect(rows.last()).toContainText("Cierre del proyecto");
   await expect(page.locator("#actsBody")).toContainText("Fin de excavación");
-  await expect(page.locator("#actsBody")).toContainText("Hitos del proyecto"); // sección final para el suelto
-  await expect(page.locator("#actsBody")).toContainText("Cierre del proyecto");
+  await expect(page.locator("#actsBody")).not.toContainText("Hitos del proyecto");
   await expect(page.locator("#actsBody")).not.toContainText("Hito huérfano");
   await expect(page.locator("#actsBody")).not.toContainText("Hito sin código");
 
   await page.waitForTimeout(900);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("gpi_db") as string));
   const acts = saved.projects.p1.modules.activities;
-  expect(acts.milestones).toHaveLength(2);
+  expect(acts.milestones).toHaveLength(3);
   const byCode: Record<string, any> = Object.fromEntries(acts.milestones.map((m: any) => [m.code, m]));
+  expect(byCode.H0).toMatchObject({ name: "Inicio del proyecto", leafId: null, afterLeafId: null });
   expect(byCode.H1).toMatchObject({ name: "Fin de excavación", leafId: "w2" });
-  expect(byCode.H2).toMatchObject({ name: "Cierre del proyecto", leafId: null });
+  expect(byCode.H2).toMatchObject({ name: "Cierre del proyecto", leafId: null, afterLeafId: "w3" });
 });

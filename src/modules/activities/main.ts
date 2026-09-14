@@ -48,7 +48,10 @@ interface ActivityRow { id: string; name: string; unit: string; qty: string | nu
 // Hito: duración cero por definición, código propio asignado por el alumno
 // (convención "H1", "H2"... no se valida el prefijo) -- puede colgar de un
 // paquete de trabajo (leafId) o ir suelto (leafId null = hito del proyecto).
-interface MilestoneRow { id: string; code: string; name: string; leafId?: string | null; }
+// Un hito suelto NUNCA se agrupa en un capítulo aparte: afterLeafId dice
+// después de qué paquete se posiciona en el listado (null = al principio de
+// todo, p. ej. un hito de inicio de proyecto) -- nunca cuenta para la EDT.
+interface MilestoneRow { id: string; code: string; name: string; leafId?: string | null; afterLeafId?: string | null; }
 interface ActivitiesState { byLeaf: Record<string, ActivityRow[]>; idCounter: number; milestones: MilestoneRow[]; }
 
 let mode: "live" | "sample" = "live";
@@ -77,7 +80,8 @@ function normalizeState(obj: any): ActivitiesState {
   const milestones: MilestoneRow[] = (Array.isArray(obj.milestones) ? obj.milestones : []).map((m: any) => ({
     id: m.id || ("m" + Math.random().toString(36).slice(2, 8)),
     code: m.code || "", name: m.name || "",
-    leafId: m.leafId || null
+    leafId: m.leafId || null,
+    afterLeafId: m.afterLeafId || null
   }));
   return { byLeaf: by, idCounter: Number(obj.idCounter) || 1, milestones };
 }
@@ -196,13 +200,34 @@ interface FullRow {
   leafId?: string; actIndex?: number;
 }
 
+// Agrupa los hitos SUELTOS (sin paquete) según dónde deben insertarse en el
+// listado: "start" = antes de la fase 1 (p. ej. un hito de inicio de
+// proyecto), "afterLeaf[id]" = justo después del paquete `id` (p. ej. el id
+// del último paquete produce un hito de fin de proyecto), "orphan" = su
+// afterLeafId apuntaba a un paquete que ya no existe (se muestra al final,
+// para no perder el dato, en vez de desaparecer en silencio). Un hito NUNCA
+// se agrupa en un capítulo aparte de tipo "Hitos del proyecto": cada uno
+// aparece exactamente donde el alumno lo posicionó.
+function placeLooseMilestones(milestones: MilestoneRow[], knownLeafIds: Record<string, boolean>): { start: MilestoneRow[]; afterLeaf: Record<string, MilestoneRow[]>; orphan: MilestoneRow[] } {
+  const start: MilestoneRow[] = [], orphan: MilestoneRow[] = [];
+  const afterLeaf: Record<string, MilestoneRow[]> = {};
+  milestones.filter((m) => !m.leafId).forEach((m) => {
+    if (!m.afterLeafId) start.push(m);
+    else if (knownLeafIds[m.afterLeafId]) (afterLeaf[m.afterLeafId] ||= []).push(m);
+    else orphan.push(m);
+  });
+  return { start, afterLeaf, orphan };
+}
+
 // Modelo de filas completo, estilo MS Project: fila 0 = proyecto (tarea
 // resumen), y N.º consecutivo para TODAS las filas (fases, paquetes,
 // actividades e hitos). Es la única fuente de numeración: la tabla, el
 // reporte y la plantilla exportada lo comparten para que nunca se
 // desalineen. level = nivel de esquema de MS Project (proyecto=1, sus
 // fases=2, …). Los hitos atados a un paquete se listan después de sus
-// actividades; los sueltos (sin paquete) van en una sección final propia.
+// actividades; los sueltos se intercalan en CUALQUIER posición del listado
+// (ver placeLooseMilestones) -- nunca en un bloque aparte ni con numeración
+// EDT propia.
 function fullRows(): FullRow[] {
   const w = wbsData(), st = state(), out: FullRow[] = [];
   if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
@@ -210,8 +235,12 @@ function fullRows(): FullRow[] {
   const rootName = ((w.nodes[w.rootId].name || "").trim()) || (document.getElementById("projectTitle") as HTMLInputElement).value || "Proyecto";
   out.push({ kind: "project", n: n++, code: "0", level: 1, name: rootName });
   const milestones = st.milestones || [];
-  const looseMilestones = milestones.filter((m) => !m.leafId);
-  treeRows().forEach((r) => {
+  const tree = treeRows();
+  const knownLeafIds: Record<string, boolean> = {};
+  tree.forEach((r) => { if (r.kind === "package") knownLeafIds[r.id] = true; });
+  const loose = placeLooseMilestones(milestones, knownLeafIds);
+  loose.start.forEach((m) => { out.push({ kind: "milestone", n: n++, code: m.code, level: 2, name: m.name, dur: 0 }); });
+  tree.forEach((r) => {
     if (r.kind === "phase") {
       out.push({ kind: "phase", n: n++, code: r.code, level: r.depth + 1, name: r.name, id: r.id });
     } else {
@@ -222,14 +251,12 @@ function fullRows(): FullRow[] {
       milestones.filter((m) => m.leafId === r.id).forEach((m) => {
         out.push({ kind: "milestone", n: n++, code: m.code, level: r.depth + 2, name: m.name, dur: 0, leafId: r.id });
       });
+      (loose.afterLeaf[r.id] || []).forEach((m) => {
+        out.push({ kind: "milestone", n: n++, code: m.code, level: r.depth + 1, name: m.name, dur: 0 });
+      });
     }
   });
-  if (looseMilestones.length) {
-    out.push({ kind: "phase", n: n++, code: "", level: 2, name: "Hitos del proyecto" });
-    looseMilestones.forEach((m) => {
-      out.push({ kind: "milestone", n: n++, code: m.code, level: 3, name: m.name, dur: 0 });
-    });
-  }
+  loose.orphan.forEach((m) => { out.push({ kind: "milestone", n: n++, code: m.code, level: 2, name: m.name, dur: 0 }); });
   return out;
 }
 
@@ -478,13 +505,17 @@ function sampleActivities(): ActivitiesState {
   by[I.p51] = [A("Pruebas de tableros y circuitos eléctricos", "pto", 120, 30), A("Pruebas hidráulicas de redes sanitarias", "glb", 1, 0.5)]; // 4 · 2
   by[I.p52] = [A("Capacitación operativa al personal del cliente", "hora", 40, 5), A("Elaboración de manuales de operación y mantenimiento", "doc", 2, 0.5)]; // 8 · 4
   by[I.p53] = [A("Elaboración de dossier de calidad y planos as-built", "doc", 1, 0.1), A("Acta de entrega y cierre del proyecto", "doc", 1, 0.5)]; // 10 · 2
-  // Dos hitos ilustrativos: uno atado a un paquete (demuestra el caso más
-  // común, un entregable intermedio con fecha objetivo) y uno suelto (hito
-  // del proyecto en general, sin depender de un paquete puntual) -- para que
-  // el ejemplo DISTRIB+ muestre ambos casos que soporta el modelo de datos.
+  // Tres hitos ilustrativos que cubren los casos que soporta el modelo:
+  // "H1" suelto AL PRINCIPIO de todo (afterLeafId null -- hito de inicio de
+  // proyecto), "H2" atado a un paquete (entregable intermedio con fecha
+  // objetivo), y "H3" suelto DESPUÉS del último paquete (afterLeafId =
+  // I.p53 -- hito de fin de proyecto). Ninguno forma parte de la EDT ni de
+  // su numeración; cada uno aparece exactamente donde está posicionado, no
+  // agrupados en un capítulo aparte.
   const milestones: MilestoneRow[] = [
-    { id: "m1", code: "H1", name: "Fin de Cimentaciones", leafId: I.p42 },
-    { id: "m2", code: "H2", name: "Cierre del Proyecto", leafId: null }
+    { id: "m1", code: "H1", name: "Inicio del Proyecto", leafId: null, afterLeafId: null },
+    { id: "m2", code: "H2", name: "Fin de Cimentaciones", leafId: I.p42 },
+    { id: "m3", code: "H3", name: "Cierre del Proyecto", leafId: null, afterLeafId: I.p53 }
   ];
   return { byLeaf: by, idCounter: n + 1, milestones };
 }
@@ -519,22 +550,31 @@ function wbsCodesOf(wbs: WbsModule): Record<string, string> {
 // Código de hito, Unidad, Metrado, Rendimiento, N.º de equipos) -- así
 // "Cargar ejemplo en el proyecto" puede reutilizar TAL CUAL la misma
 // reconciliación por código EDT que ya usa el import de Excel, en vez de
-// duplicar esa lógica (incluidos los hitos, atados o sueltos).
+// duplicar esa lógica (incluidos los hitos, atados o sueltos). El ORDEN de
+// las filas importa: reconcileImportRows deriva la posición de un hito
+// suelto del lugar donde aparece su fila respecto de las filas de paquete,
+// así que aquí se emite en el mismo orden que produciría placeLooseMilestones
+// (que ya usa fullRows()) para que el resultado sea idéntico.
 function sampleVirtualRows(): string[][] {
   const codes = wbsCodesOf(SAMPLE_WBS);
   const sample = sampleActivities();
   const rows: string[][] = [];
-  Object.keys(sample.byLeaf).forEach((leafId) => {
+  const packageIds = Object.keys(sample.byLeaf); // orden real de la EDT (depth-first)
+  const knownLeafIds: Record<string, boolean> = {}; packageIds.forEach((id) => { knownLeafIds[id] = true; });
+  const loose = placeLooseMilestones(sample.milestones, knownLeafIds);
+  loose.start.forEach((m) => { rows.push(["", "", m.name, "Hito", m.code, "", "", "", ""]); });
+  packageIds.forEach((leafId) => {
     const code = codes[leafId];
     if (!code) return;
     sample.byLeaf[leafId].forEach((a) => {
       rows.push([code, "", a.name, "", "", a.unit, String(a.qty), String(a.perf ?? ""), String(a.teams ?? "")]);
     });
+    sample.milestones.filter((m) => m.leafId === leafId).forEach((m) => {
+      rows.push([code, "", m.name, "Hito", m.code, "", "", "", ""]);
+    });
+    (loose.afterLeaf[leafId] || []).forEach((m) => { rows.push(["", "", m.name, "Hito", m.code, "", "", "", ""]); });
   });
-  sample.milestones.forEach((m) => {
-    const code = m.leafId ? (codes[m.leafId] || "") : "";
-    rows.push([code, "", m.name, "Hito", m.code, "", "", "", ""]);
-  });
+  loose.orphan.forEach((m) => { rows.push(["", "", m.name, "Hito", m.code, "", "", "", ""]); });
   return rows;
 }
 
@@ -739,6 +779,7 @@ function templateInstructions(): Array<Array<XlCell | null>> {
     ["2. Completa “Nombre de la actividad”, “Unidad”, “Metrado”, “Rendimiento (R)” y “N.º de equipos” para cada actividad del paquete.", 4],
     ["3. ¿Más de una actividad por el mismo paquete? Copia la fila completa (Ctrl+D en Excel) y repite el mismo “Código EDT” en la copia, cambiando el nombre de la actividad.", 4],
     ["4. Hitos: para marcar una fila como hito (duración cero) en vez de una actividad normal, escribe “Hito” en la columna “Tipo” y asígnale un código propio en “Código de hito” (por ejemplo “H1”, “H2”… la numeración la decides tú) — deja en blanco Unidad/Metrado/Rendimiento/N.º de equipos, no aplican a un hito. Si el hito pertenece a un paquete de trabajo, completa su “Código EDT”; si es un hito del proyecto en general (no depende de un paquete puntual), deja “Código EDT” en blanco.", 4],
+    ["4b. Un hito NUNCA forma parte de la EDT ni de su numeración: su posición en el listado es dónde insertes su fila en este archivo, respecto de las filas de paquete. Una fila de hito insertada ANTES de la primera fila de paquete aparece al principio de todo (p. ej. un hito de inicio de proyecto); insertada DESPUÉS de la última fila de paquete aparece al final de todo (p. ej. un hito de fin de proyecto); insertada entre dos paquetes cualesquiera, aparece justo ahí — no se agrupan todos juntos en un bloque aparte.", 4],
     ["5. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
     ["6. Guarda el archivo y vuelve a “Definir las Actividades” > botón “⇧ Importar actividades desde Excel” para subirlo.", 4],
     ["", 0],
@@ -928,12 +969,21 @@ interface ReconcileResult {
 // "Código de hito" no vacío (tolerante a que el alumno solo complete uno de
 // los dos) -- en ese caso Unidad/Metrado/Rendimiento/N.º de equipos se
 // ignoran y el Código EDT es opcional (vacío = hito suelto del proyecto).
+// Un hito suelto NUNCA se agrupa en un capítulo aparte: su posición en el
+// listado la determina dónde el alumno insertó su fila en el archivo --
+// `lastLeafId` rastrea el último paquete reconocido en el orden en que
+// aparecen las filas, así que un hito suelto insertado ANTES de la primera
+// fila de paquete queda "al principio de todo" (afterLeafId null, p. ej. un
+// hito de inicio de proyecto) y uno insertado DESPUÉS de la última fila de
+// paquete queda "al final de todo" (afterLeafId = ese último paquete, p. ej.
+// un hito de fin de proyecto).
 function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResult {
   const codeToId: Record<string, string> = {};
   leafRows().forEach((l) => { codeToId[l.code] = l.id; });
   const byLeaf: Record<string, ActivityRow[]> = {};
   const milestones: MilestoneRow[] = [];
   let n = 0, matched = 0, mn = 0, matchedMilestones = 0;
+  let lastLeafId: string | null = null;
   const unmatched = new Set<string>();
   const milestoneIssues: string[] = [];
   rows.forEach((row) => {
@@ -950,13 +1000,14 @@ function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResu
         leafId = codeToId[code] || null;
         if (!leafId) { milestoneIssues.push('Hito "' + milestoneCode + ' — ' + name + '": el Código EDT "' + code + '" no coincide con ningún paquete de la EDT actual, no se importó.'); return; }
       }
-      milestones.push({ id: "m" + (++mn), code: milestoneCode, name, leafId });
+      milestones.push({ id: "m" + (++mn), code: milestoneCode, name, leafId, afterLeafId: leafId ? null : lastLeafId });
       matchedMilestones++;
       return;
     }
     if (!code || !name) return; // fila de la plantilla sin completar: caso normal, se omite
     const leafId = codeToId[code];
     if (!leafId) { unmatched.add(code); return; }
+    lastLeafId = leafId; // ancla para el próximo hito suelto que aparezca después en el archivo
     const unit = colMap.unit != null ? String(row[colMap.unit] || "").trim() : "";
     const qty = colMap.qty != null ? (parseExcelNum(row[colMap.qty]) || "") : "";
     const perf = colMap.perf != null ? (parseExcelNum(row[colMap.perf]) || "") : "";

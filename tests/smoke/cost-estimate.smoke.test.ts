@@ -76,13 +76,20 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
     await new Promise((r) => setTimeout(r, 100));
     expect(doc.getElementById("modeChip")!.textContent).toBe("MODO EJEMPLO");
     expect(doc.querySelectorAll(".pkg-row").length).toBe(18); // los 18 paquetes de la EDT
-    // .act-row incluye las 43 actividades + los 2 hitos de ejemplo (H1 atado
-    // a Cimentaciones, H2 suelto) -- ver .milestone-row para distinguirlos.
-    expect(doc.querySelectorAll(".act-row").length).toBe(45);
-    expect(doc.querySelectorAll(".milestone-row").length).toBe(2);
+    // .act-row incluye las 43 actividades + los 3 hitos de ejemplo (H1 suelto
+    // al principio, H2 atado a Cimentaciones, H3 suelto al final) -- ver
+    // .milestone-row para distinguirlos.
+    expect(doc.querySelectorAll(".act-row").length).toBe(46);
+    expect(doc.querySelectorAll(".milestone-row").length).toBe(3);
+    const rows = Array.from(doc.querySelectorAll("#estBody tr"));
+    expect(rows[0].className).toMatch(/proj-row/);
+    expect(rows[1].className).toMatch(/milestone-row/); // hito suelto sin ancla: antes de la fase 1
+    expect(rows[1].textContent).toMatch(/Inicio del Proyecto/);
+    expect(rows[rows.length - 1].className).toMatch(/total-row/);
+    expect(rows[rows.length - 2].className).toMatch(/milestone-row/); // hito suelto anclado al último paquete: al final de todo
+    expect(rows[rows.length - 2].textContent).toMatch(/Cierre del Proyecto/);
     expect(doc.getElementById("estBody")!.textContent).toMatch(/Fin de Cimentaciones/);
-    expect(doc.getElementById("estBody")!.textContent).toMatch(/Hitos del proyecto/); // sección final para el suelto
-    expect(doc.getElementById("estBody")!.textContent).toMatch(/Cierre del Proyecto/);
+    expect(doc.getElementById("estBody")!.textContent).not.toMatch(/Hitos del proyecto/);
     expect(doc.getElementById("sbCov")!.textContent).toBe("42/43 actividades con precio");
     expect(doc.getElementById("sbPct")!.textContent).toBe("98%");
     // p43 (Estructura y cobertura) queda "parcial" a propósito: 2 de sus 3

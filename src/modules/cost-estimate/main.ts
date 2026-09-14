@@ -141,9 +141,27 @@ function milestonesOf(leafId: string): MilestoneItem[] {
   const acts = activitiesData();
   return ((acts && acts.milestones) || []).filter((m) => m.leafId === leafId);
 }
-function looseMilestones(): MilestoneItem[] {
+function allMilestones(): MilestoneItem[] {
   const acts = activitiesData();
-  return ((acts && acts.milestones) || []).filter((m) => !m.leafId);
+  return (acts && acts.milestones) || [];
+}
+// Agrupa los hitos SUELTOS (sin paquete) según dónde deben insertarse en el
+// listado -- NUNCA se agrupan en un capítulo aparte tipo "Hitos del
+// proyecto": "start" = antes de la fase 1 (p. ej. un hito de inicio de
+// proyecto), "afterLeaf[id]" = justo después del paquete `id` (p. ej. el id
+// del último paquete produce un hito de fin de proyecto), "orphan" = su
+// afterLeafId apuntaba a un paquete que ya no existe (se muestra al final,
+// para no perder el dato). Mismo criterio que placeLooseMilestones en
+// activities/main.ts (copia local deliberada, ver comentario de cabecera).
+function placeLooseMilestones(milestones: MilestoneItem[], knownLeafIds: Record<string, boolean>): { start: MilestoneItem[]; afterLeaf: Record<string, MilestoneItem[]>; orphan: MilestoneItem[] } {
+  const start: MilestoneItem[] = [], orphan: MilestoneItem[] = [];
+  const afterLeaf: Record<string, MilestoneItem[]> = {};
+  milestones.filter((m) => !m.leafId).forEach((m) => {
+    if (!m.afterLeafId) start.push(m);
+    else if (knownLeafIds[m.afterLeafId]) (afterLeaf[m.afterLeafId] ||= []).push(m);
+    else orphan.push(m);
+  });
+  return { start, afterLeaf, orphan };
 }
 
 // Limpia formatos numéricos de Excel: "4,800.50", "4.800,50", "12,5", "4 800".
@@ -227,15 +245,21 @@ interface FullRow {
 // actividades e hitos). La tabla, el reporte y el archivo exportado
 // comparten esta única fuente para no desalinearse nunca. Los hitos (de
 // "Definir las Actividades") se listan después de las actividades de su
-// paquete, o en una sección final "Hitos del proyecto" si van sueltos --
-// siempre de solo lectura, sin costo.
+// paquete si están atados, o se intercalan en CUALQUIER posición del
+// listado si van sueltos (ver placeLooseMilestones) -- nunca en un bloque
+// aparte -- siempre de solo lectura, sin costo.
 function fullRows(): FullRow[] {
   const w = wbsData(), out: FullRow[] = [];
   if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
   let n = 0;
   const rootName = ((w.nodes[w.rootId].name || "").trim()) || (document.getElementById("projectTitle") as HTMLInputElement).value || "Proyecto";
   out.push({ kind: "project", n: n++, code: "0", level: 1, name: rootName });
-  treeRows().forEach((r) => {
+  const tree = treeRows();
+  const knownLeafIds: Record<string, boolean> = {};
+  tree.forEach((r) => { if (r.kind === "package") knownLeafIds[r.id] = true; });
+  const loose = placeLooseMilestones(allMilestones(), knownLeafIds);
+  loose.start.forEach((m) => { out.push({ kind: "milestone", n: n++, code: m.code, level: 2, name: m.name }); });
+  tree.forEach((r) => {
     if (r.kind === "phase") {
       out.push({ kind: "phase", n: n++, code: r.code, level: r.depth + 1, name: r.name, id: r.id });
       return;
@@ -250,12 +274,11 @@ function fullRows(): FullRow[] {
     milestonesOf(r.id).forEach((m) => {
       out.push({ kind: "milestone", n: n++, code: m.code, level: r.depth + 2, name: m.name });
     });
+    (loose.afterLeaf[r.id] || []).forEach((m) => {
+      out.push({ kind: "milestone", n: n++, code: m.code, level: r.depth + 1, name: m.name });
+    });
   });
-  const loose = looseMilestones();
-  if (loose.length) {
-    out.push({ kind: "phase", n: n++, code: "", level: 2, name: "Hitos del proyecto" });
-    loose.forEach((m) => { out.push({ kind: "milestone", n: n++, code: m.code, level: 3, name: m.name }); });
-  }
+  loose.orphan.forEach((m) => { out.push({ kind: "milestone", n: n++, code: m.code, level: 2, name: m.name }); });
   return out;
 }
 
@@ -501,12 +524,14 @@ const SAMPLE_ACTIVITIES: ActivitiesModule = (function () {
   by[I.p51] = [A("Pruebas de tableros y circuitos eléctricos", "pto", 120, 30), A("Pruebas hidráulicas de redes sanitarias", "glb", 1, 0.5)];
   by[I.p52] = [A("Capacitación operativa al personal del cliente", "hora", 40, 5), A("Elaboración de manuales de operación y mantenimiento", "doc", 2, 0.5)];
   by[I.p53] = [A("Elaboración de dossier de calidad y planos as-built", "doc", 1, 0.1), A("Acta de entrega y cierre del proyecto", "doc", 1, 0.5)];
-  // Mismos dos hitos ilustrativos que src/modules/activities/main.ts (uno
-  // atado a un paquete, uno suelto) -- se muestran aquí de solo lectura, sin
-  // costo, para que el modo ejemplo de Estimar los Costos también los liste.
+  // Mismos tres hitos ilustrativos que src/modules/activities/main.ts (uno
+  // suelto al principio de todo, uno atado a un paquete, uno suelto al
+  // final de todo) -- se muestran aquí de solo lectura, sin costo, para que
+  // el modo ejemplo de Estimar los Costos también los liste en su posición.
   const milestones: MilestoneItem[] = [
-    { id: "m1", code: "H1", name: "Fin de Cimentaciones", leafId: I.p42 },
-    { id: "m2", code: "H2", name: "Cierre del Proyecto", leafId: null }
+    { id: "m1", code: "H1", name: "Inicio del Proyecto", leafId: null, afterLeafId: null },
+    { id: "m2", code: "H2", name: "Fin de Cimentaciones", leafId: I.p42 },
+    { id: "m3", code: "H3", name: "Cierre del Proyecto", leafId: null, afterLeafId: I.p53 }
   ];
   return { byLeaf: by, idCounter: n + 1, milestones };
 })();
@@ -801,11 +826,22 @@ function xlsxSheetXml(rows: Array<Array<XlCell | null>>, widths: number[], freez
 // referencia -- columna "Tipo"="Hito" y precios siempre en blanco -- para
 // que el archivo exportado los muestre junto a las actividades costeadas
 // sin que se confundan con ellas al reimportar (reconcileImportRows las
-// omite por completo al ver Tipo="Hito").
+// omite por completo al ver Tipo="Hito"). Nunca se agrupan en un bloque
+// aparte: un hito suelto sale en la misma posición que le asignó
+// placeLooseMilestones (antes del primer paquete, después de un paquete
+// concreto, o al final si su ancla ya no existe).
 function exportRowModel(): Array<Array<XlCell | null>> {
   const head: XlCell[] = TEMPLATE_HEADERS.map((h) => ({ v: h, t: "s", s: 1 }));
   const out: Array<Array<XlCell | null>> = [head];
-  leafRows().forEach((l) => {
+  const milestoneRow = (m: MilestoneItem): Array<XlCell | null> => [
+    null, null, { v: m.code + " — " + m.name, t: "s", s: 0 }, { v: "Hito", t: "s", s: 0 },
+    null, null, null, null
+  ];
+  const leaves = leafRows();
+  const knownLeafIds: Record<string, boolean> = {}; leaves.forEach((l) => { knownLeafIds[l.id] = true; });
+  const loose = placeLooseMilestones(allMilestones(), knownLeafIds);
+  loose.start.forEach((m) => { out.push(milestoneRow(m)); });
+  leaves.forEach((l) => {
     const list = activitiesOf(l.id);
     if (!list.length) {
       out.push([{ v: l.code, t: "s", s: 2 }, { v: l.name || "", t: "s", s: 0 }, null, null, null, null, null, null]);
@@ -833,10 +869,9 @@ function exportRowModel(): Array<Array<XlCell | null>> {
         null, null, null, null
       ]);
     });
+    (loose.afterLeaf[l.id] || []).forEach((m) => { out.push(milestoneRow(m)); });
   });
-  looseMilestones().forEach((m) => {
-    out.push([null, null, { v: m.code + " — " + m.name, t: "s", s: 0 }, { v: "Hito", t: "s", s: 0 }, null, null, null, null]);
-  });
+  loose.orphan.forEach((m) => { out.push(milestoneRow(m)); });
   return out;
 }
 
@@ -897,7 +932,12 @@ async function buildEstimateXlsxBlob(): Promise<Blob> {
 function buildEstimateCsv(): string {
   function cell(v: unknown): string { const s = String(v == null ? "" : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
   const lines = [TEMPLATE_HEADERS.join(";")];
-  leafRows().forEach((l) => {
+  const milestoneLine = (m: MilestoneItem): string => ["", "", cell(m.code + " — " + m.name), "Hito", "", "", "", ""].join(";");
+  const leaves = leafRows();
+  const knownLeafIds: Record<string, boolean> = {}; leaves.forEach((l) => { knownLeafIds[l.id] = true; });
+  const loose = placeLooseMilestones(allMilestones(), knownLeafIds);
+  loose.start.forEach((m) => { lines.push(milestoneLine(m)); });
+  leaves.forEach((l) => {
     const list = activitiesOf(l.id);
     if (!list.length) { lines.push([cell(l.code), cell(l.name || ""), "", "", "", "", "", ""].join(";")); }
     else {
@@ -911,10 +951,9 @@ function buildEstimateCsv(): string {
     milestonesOf(l.id).forEach((m) => {
       lines.push([cell(l.code), cell(l.name || ""), cell(m.code + " — " + m.name), "Hito", "", "", "", ""].join(";"));
     });
+    (loose.afterLeaf[l.id] || []).forEach((m) => { lines.push(milestoneLine(m)); });
   });
-  looseMilestones().forEach((m) => {
-    lines.push(["", "", cell(m.code + " — " + m.name), "Hito", "", "", "", ""].join(";"));
-  });
+  loose.orphan.forEach((m) => { lines.push(milestoneLine(m)); });
   return lines.join("\r\n");
 }
 

@@ -103,11 +103,18 @@ export interface ActivityItem {
 // Hito: actividad especial de duración cero, con codificación propia (no la
 // numeración automática del paquete) -- puede colgar de un paquete de
 // trabajo (leafId) o ir suelto, sin pertenecer a ninguno (hito de proyecto).
+// Un hito suelto NUNCA se agrupa en un capítulo aparte: se posiciona en
+// CUALQUIER lugar del listado mediante afterLeafId (el paquete de trabajo
+// después del cual se muestra) -- null/vacío = al principio de todo (p. ej.
+// un hito de inicio de proyecto); el id de un paquete existente = justo
+// después de ese paquete (p. ej. el id del último paquete = un hito de fin
+// de proyecto). afterLeafId nunca cuenta para la numeración EDT.
 export interface MilestoneItem {
   id: string;
   code: string;
   name: string;
   leafId?: string | null;
+  afterLeafId?: string | null;
 }
 
 export interface ActivitiesModule {

@@ -149,8 +149,9 @@ test("Estimar los Costos — el archivo que exporta se puede reimportar sin camb
 test("Estimar los Costos — un hito de Definir las Actividades se ve sin costo y el round-trip lo ignora silenciosamente", async ({ page }) => {
   const seedWithMilestone = JSON.parse(JSON.stringify(seedDb));
   seedWithMilestone.projects.p1.modules.activities.milestones = [
-    { id: "m1", code: "H1", name: "Fin de excavación", leafId: "w2" },
-    { id: "m2", code: "H2", name: "Cierre del proyecto", leafId: null }
+    { id: "m1", code: "H1", name: "Inicio del proyecto", leafId: null, afterLeafId: null },
+    { id: "m2", code: "H2", name: "Fin de excavación", leafId: "w2" },
+    { id: "m3", code: "H3", name: "Cierre del proyecto", leafId: null, afterLeafId: "w3" }
   ];
   // Precios ya cargados de antemano: el export/reimport de este caso debe
   // preservarlos igual, ignorando las filas de hito sin tocarlos.
@@ -158,12 +159,19 @@ test("Estimar los Costos — un hito de Definir las Actividades se ve sin costo 
   await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedWithMilestone);
   await page.goto("/Estimar_Costos.html");
 
-  // Los hitos aparecen (uno bajo su paquete, uno en "Hitos del proyecto") sin
-  // costo, y no alteran el total ni cuentan como actividades sin precio.
-  await expect(page.locator(".milestone-row")).toHaveCount(2);
+  // Los hitos aparecen sin costo, cada uno en su propia posición (nunca
+  // agrupados en un capítulo aparte), y no alteran el total ni cuentan como
+  // actividades sin precio.
+  await expect(page.locator(".milestone-row")).toHaveCount(3);
+  const rows = page.locator("#estBody tr");
+  const rowCount = await rows.count();
+  await expect(rows.first()).toHaveClass(/proj-row/);
+  await expect(rows.nth(1)).toHaveClass(/milestone-row/); // H1: antes de cualquier paquete
+  await expect(rows.nth(1)).toContainText("Inicio del proyecto");
+  await expect(rows.nth(rowCount - 2)).toHaveClass(/milestone-row/); // H3: después del último paquete (la última fila es el total)
+  await expect(rows.nth(rowCount - 2)).toContainText("Cierre del proyecto");
   await expect(page.locator("#estBody")).toContainText("Fin de excavación");
-  await expect(page.locator("#estBody")).toContainText("Hitos del proyecto");
-  await expect(page.locator("#estBody")).toContainText("Cierre del proyecto");
+  await expect(page.locator("#estBody")).not.toContainText("Hitos del proyecto");
 
   const [download] = await Promise.all([
     page.waitForEvent("download"),

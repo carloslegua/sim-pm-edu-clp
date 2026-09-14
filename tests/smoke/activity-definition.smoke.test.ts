@@ -79,12 +79,19 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
     expect(doc.getElementById("modeChip")!.textContent).toBe("MODO EJEMPLO");
     expect(doc.querySelectorAll(".pkg-row").length).toBeGreaterThan(5);
     expect(doc.querySelectorAll(".act-row").length).toBeGreaterThan(5);
-    // Dos hitos ilustrativos: uno atado a un paquete (H1, Cimentaciones) y
-    // uno suelto (H2, Cierre del Proyecto) -- ver sampleActivities().
-    expect(doc.querySelectorAll(".milestone-row").length).toBe(2);
+    // Tres hitos ilustrativos -- H1 suelto AL PRINCIPIO de todo, H2 atado a
+    // un paquete (Cimentaciones), H3 suelto AL FINAL de todo -- ver
+    // sampleActivities(). Ninguno se agrupa en un capítulo aparte: cada uno
+    // aparece exactamente en su posición dentro del listado.
+    expect(doc.querySelectorAll(".milestone-row").length).toBe(3);
+    const rows = Array.from(doc.querySelectorAll("#actsBody tr"));
+    expect(rows[0].className).toMatch(/proj-row/); // fila 0: tarea resumen del proyecto
+    expect(rows[1].className).toMatch(/milestone-row/); // el hito suelto sin ancla va justo después, antes de la fase 1
+    expect(rows[1].textContent).toMatch(/Inicio del Proyecto/);
+    expect(rows[rows.length - 1].className).toMatch(/milestone-row/); // el hito suelto anclado al último paquete queda al final de todo
+    expect(rows[rows.length - 1].textContent).toMatch(/Cierre del Proyecto/);
     expect(doc.getElementById("actsBody")!.textContent).toMatch(/Fin de Cimentaciones/);
-    expect(doc.getElementById("actsBody")!.textContent).toMatch(/Hitos del proyecto/);
-    expect(doc.getElementById("actsBody")!.textContent).toMatch(/Cierre del Proyecto/);
+    expect(doc.getElementById("actsBody")!.textContent).not.toMatch(/Hitos del proyecto/);
   });
 
   it("con proyecto activo real: la tabla muestra los paquetes de la EDT en modo solo lectura", async () => {

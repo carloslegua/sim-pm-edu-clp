@@ -22,10 +22,17 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
   En "Estimar los Costos" un hito aparece listado para trazabilidad
   pero nunca tiene costo (Unidad/Cantidad/Precio unitario/Subtotal en
   blanco, no suma al total) y se omite silenciosamente al reimportar el
-  archivo exportado. El ejemplo DISTRIB+ trae dos hitos ilustrativos:
-  "H1 Fin de Cimentaciones" (atado al paquete 4.2) y "H2 Cierre del
-  Proyecto" (suelto). Fuera de alcance deliberado: PERT y Cronograma
-  CPM no ven los hitos (siguen leyendo solo las actividades).
+  archivo exportado. **Un hito suelto puede ir en cualquier posición del
+  listado — nunca se agrupa en un capítulo aparte**: su posición la
+  determina dónde el alumno insertó su fila en el archivo respecto de
+  las filas de paquete (antes de la primera = al principio de todo, p.
+  ej. un hito de inicio de proyecto; después de la última = al final de
+  todo, p. ej. un hito de fin de proyecto). El ejemplo DISTRIB+ trae
+  tres hitos ilustrativos: "H1 Inicio del Proyecto" (suelto, al
+  principio), "H2 Fin de Cimentaciones" (atado al paquete 4.2) y "H3
+  Cierre del Proyecto" (suelto, al final). Fuera de alcance deliberado:
+  PERT y Cronograma CPM no ven los hitos (siguen leyendo solo las
+  actividades).
 
 - **Ejemplo DISTRIB+ de Actividades completo: los 18 paquetes de trabajo
   quedan desagregados**, no solo 8. Antes, 10 de los 18 paquetes se
