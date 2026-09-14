@@ -105,15 +105,11 @@ export interface ActivitiesModule {
   idCounter: number;
 }
 
-export interface CostEstimateItem {
-  unit?: string;
-  qty?: string | number;
-  unitPrice?: string | number;
-  [key: string]: unknown;
-}
-
+// Precio unitario por ACTIVIDAD (el id es el mismo que usa ActivitiesModule
+// en "Definir las Actividades" -- Estimar los Costos no vuelve a pedir
+// Unidad/Cantidad, las toma de ahí; solo agrega el precio).
 export interface CostEstimateModule {
-  byLeaf: Record<string, CostEstimateItem>;
+  byActivity: Record<string, string | number>;
 }
 
 export interface PertEntry {

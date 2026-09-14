@@ -1,14 +1,18 @@
 (function() {
 	//#region src/modules/cost-estimate/main.ts
 	var mode = "live";
-	var stateLive = { byLeaf: {} };
+	var stateLive = { byActivity: {} };
 	var stateSample = null;
 	var wbsLive = null;
+	var activitiesLive = null;
 	function state() {
 		return mode === "sample" ? stateSample : stateLive;
 	}
 	function wbsData() {
 		return mode === "sample" ? SAMPLE_WBS : wbsLive;
+	}
+	function activitiesData() {
+		return mode === "sample" ? SAMPLE_ACTIVITIES : activitiesLive;
 	}
 	function esc(s) {
 		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
@@ -24,16 +28,11 @@
 	}
 	function normalizeState(obj) {
 		obj = obj || {};
-		const by = {}, src = obj.byLeaf || {};
+		const by = {}, src = obj.byActivity || {};
 		Object.keys(src).forEach((k) => {
-			const it = src[k] || {};
-			by[k] = {
-				unit: it.unit || "",
-				qty: it.qty == null ? "" : it.qty,
-				unitPrice: it.unitPrice == null ? "" : it.unitPrice
-			};
+			if (src[k] != null && src[k] !== "") by[k] = src[k];
 		});
-		return { byLeaf: by };
+		return { byActivity: by };
 	}
 	function showModal(opts) {
 		return new Promise((resolve) => {
@@ -126,6 +125,10 @@
 	function leafRows() {
 		return treeRows().filter((r) => r.kind === "package");
 	}
+	function activitiesOf(leafId) {
+		const acts = activitiesData();
+		return acts && acts.byLeaf && acts.byLeaf[leafId] || [];
+	}
 	function parseExcelNum(s) {
 		let str = String(s == null ? "" : s).trim().replace(/[\s ]/g, "");
 		if (!str) return "";
@@ -145,9 +148,8 @@
 		const p = parseExcelNum(v);
 		return p === null || p === "" ? null : Number(p);
 	}
-	function subtotalOf(item) {
-		if (!item) return null;
-		const qty = numOrNull(item.qty), price = numOrNull(item.unitPrice);
+	function subtotalOf(a) {
+		const qty = numOrNull(a.qty), price = numOrNull(state().byActivity[a.id]);
 		return qty != null && price != null ? qty * price : null;
 	}
 	function fmtMoney(v) {
@@ -159,26 +161,39 @@
 		return n == null ? "—" : n.toLocaleString("es-PE", { maximumFractionDigits: 2 });
 	}
 	function stats() {
-		const st = state(), leaves = leafRows();
-		let totalCost = 0, covered = 0;
-		const uncovered = [];
+		const leaves = leafRows();
+		let totalCost = 0, totalActivities = 0, pricedActivities = 0, completeLeaves = 0, leavesWithActivities = 0;
+		const leavesWithoutActivities = [];
 		leaves.forEach((l) => {
-			const sub = subtotalOf(st.byLeaf[l.id]);
-			if (sub != null) {
-				covered++;
-				totalCost += sub;
-			} else uncovered.push(l);
+			const list = activitiesOf(l.id);
+			if (!list.length) {
+				leavesWithoutActivities.push(l);
+				return;
+			}
+			leavesWithActivities++;
+			let allPriced = true;
+			list.forEach((a) => {
+				totalActivities++;
+				const sub = subtotalOf(a);
+				if (sub != null) {
+					pricedActivities++;
+					totalCost += sub;
+				} else allPriced = false;
+			});
+			if (allPriced) completeLeaves++;
 		});
 		return {
 			totalCost,
-			leaves: leaves.length,
-			covered,
-			uncovered,
-			pct: leaves.length ? Math.round(covered / leaves.length * 100) : 0
+			totalActivities,
+			pricedActivities,
+			pct: totalActivities ? Math.round(pricedActivities / totalActivities * 100) : 0,
+			leavesWithActivities,
+			completeLeaves,
+			leavesWithoutActivities
 		};
 	}
 	function fullRows() {
-		const w = wbsData(), st = state(), out = [];
+		const w = wbsData(), out = [];
 		if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
 		let n = 0;
 		const rootName = (w.nodes[w.rootId].name || "").trim() || document.getElementById("projectTitle").value || "Proyecto";
@@ -190,29 +205,49 @@
 			name: rootName
 		});
 		treeRows().forEach((r) => {
-			if (r.kind === "phase") out.push({
-				kind: "phase",
-				n: n++,
-				code: r.code,
-				level: r.depth + 1,
-				name: r.name,
-				id: r.id
-			});
-			else {
-				const item = st.byLeaf[r.id];
+			if (r.kind === "phase") {
 				out.push({
-					kind: "package",
+					kind: "phase",
 					n: n++,
 					code: r.code,
 					level: r.depth + 1,
 					name: r.name,
-					id: r.id,
-					unit: item ? item.unit : "",
-					qty: item ? item.qty : "",
-					unitPrice: item ? item.unitPrice : "",
-					subtotal: subtotalOf(item)
+					id: r.id
 				});
+				return;
 			}
+			const list = activitiesOf(r.id);
+			let pkgSubtotal = 0, pkgComplete = list.length > 0;
+			list.forEach((a) => {
+				const sub = subtotalOf(a);
+				if (sub != null) pkgSubtotal += sub;
+				else pkgComplete = false;
+			});
+			out.push({
+				kind: "package",
+				n: n++,
+				code: r.code,
+				level: r.depth + 1,
+				name: r.name,
+				id: r.id,
+				activityCount: list.length,
+				pkgSubtotal: list.length ? pkgSubtotal : null,
+				pkgComplete
+			});
+			list.forEach((a, i) => {
+				out.push({
+					kind: "activity",
+					n: n++,
+					code: r.code + "." + (i + 1),
+					level: r.depth + 2,
+					name: a.name || "",
+					activityId: a.id,
+					unit: a.unit || "",
+					qty: a.qty,
+					unitPrice: state().byActivity[a.id],
+					subtotal: subtotalOf(a)
+				});
+			});
 		});
 		return out;
 	}
@@ -234,7 +269,7 @@
 		if (!rows.length) {
 			tbody.innerHTML = "";
 			empty.style.display = "";
-			empty.innerHTML = mode === "live" ? "<b>La EDT del proyecto activo está vacía.</b><br>Construye primero la estructura de desglose del trabajo en WBS Builder; este módulo estima el costo de sus paquetes de trabajo.<br><a class=\"btn\" href=\"WBS_Builder.html\">▦ Abrir WBS Builder</a><button class=\"btn primary\" id=\"btnSampleInner\">Explorar con el modo ejemplo</button>" : "<b>Sin EDT de ejemplo.</b>";
+			empty.innerHTML = mode === "live" ? "<b>La EDT del proyecto activo está vacía.</b><br>Construye primero la estructura de desglose del trabajo en WBS Builder; este módulo estima el costo de las actividades de cada paquete.<br><a class=\"btn\" href=\"WBS_Builder.html\">▦ Abrir WBS Builder</a><button class=\"btn primary\" id=\"btnSampleInner\">Explorar con el modo ejemplo</button>" : "<b>Sin EDT de ejemplo.</b>";
 			const bi = document.getElementById("btnSampleInner");
 			if (bi) bi.addEventListener("click", enterSample);
 			return;
@@ -244,10 +279,11 @@
 		rows.forEach((r) => {
 			if (r.kind === "project") html += "<tr class=\"proj-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"code-cell\" style=\"color:var(--ink-1)\">0</td><td colspan=\"5\">" + esc(r.name) + " <span class=\"proj-hint\">Fila 0</span></td></tr>";
 			else if (r.kind === "phase") html += "<tr class=\"phase-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"code-cell\">" + esc(r.code) + "</td><td colspan=\"5\" style=\"padding-left:" + (10 + Math.max(0, r.level - 2) * 16) + "px\">" + esc(r.name) + "</td></tr>";
-			else {
-				if (r.subtotal != null) total += r.subtotal;
-				html += "<tr class=\"pkg-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"pk-code\">" + esc(r.code) + "</td><td style=\"padding-left:" + (8 + Math.max(0, r.level - 2) * 16) + "px\"><span class=\"pk-name\">" + esc(r.name) + "</span></td><td>" + esc(r.unit || "—") + "</td><td class=\"num\">" + fmtQty(r.qty) + "</td><td class=\"num\">" + fmtQty(r.unitPrice) + "</td>" + (r.subtotal == null ? "<td class=\"sub-cell empty\" title=\"Faltan Cantidad y/o Precio unitario\">—</td>" : "<td class=\"sub-cell\" title=\"Subtotal = Cantidad × Precio unitario\">" + fmtMoney(r.subtotal) + "</td>") + "</tr>";
-			}
+			else if (r.kind === "package") {
+				if (r.pkgSubtotal != null) total += r.pkgSubtotal;
+				const sub = !r.activityCount ? "<td class=\"sub-cell empty\" title=\"Este paquete todavía no tiene actividades definidas en Definir las Actividades\">sin actividades</td>" : r.pkgComplete ? "<td class=\"sub-cell\" title=\"Suma del Subtotal de sus actividades\">" + fmtMoney(r.pkgSubtotal) + "</td>" : "<td class=\"sub-cell partial\" title=\"Suma parcial: todavía faltan precios en alguna actividad de este paquete\">" + fmtMoney(r.pkgSubtotal) + " ⚠</td>";
+				html += "<tr class=\"pkg-row\"><td class=\"n-cell\">" + r.n + "</td><td class=\"pk-code\">" + esc(r.code) + "</td><td colspan=\"4\" style=\"padding-left:" + (8 + Math.max(0, r.level - 2) * 16) + "px\"><span class=\"pk-name\">" + esc(r.name) + "</span><span class=\"pk-count" + (r.activityCount ? "" : " zero") + "\">" + (r.activityCount || 0) + " act.</span></td>" + sub + "</tr>";
+			} else html += "<tr class=\"act-row\"><td class=\"n-cell act-item\">" + r.n + "</td><td class=\"act-code\">" + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "</td><td>" + esc(r.unit || "—") + "</td><td class=\"num\">" + fmtQty(r.qty) + "</td><td class=\"num\">" + fmtQty(r.unitPrice) + "</td>" + (r.subtotal == null ? "<td class=\"sub-cell empty\" title=\"Falta el Precio unitario\">—</td>" : "<td class=\"sub-cell\" title=\"Subtotal = Cantidad × Precio unitario\">" + fmtMoney(r.subtotal) + "</td>") + "</tr>";
 		});
 		html += "<tr class=\"total-row\"><td colspan=\"6\" style=\"text-align:right\">Total estimado</td><td class=\"sub-cell\">" + fmtMoney(total) + "</td></tr>";
 		tbody.innerHTML = html;
@@ -258,17 +294,17 @@
 			setStatus("No hay tabla que copiar.");
 			return;
 		}
-		const lines = ["N.º	Código EDT	Paquete de trabajo	Unidad	Cantidad	Precio unitario	Subtotal"];
+		const lines = ["N.º	Código EDT	Paquete de trabajo / Actividad	Unidad	Cantidad	Precio unitario	Subtotal"];
 		rows.forEach((r) => {
-			const isPkg = r.kind === "package";
+			const isAct = r.kind === "activity";
 			lines.push([
 				r.n,
 				r.code,
 				r.name || "",
-				isPkg ? r.unit || "" : "",
-				isPkg ? r.qty == null ? "" : r.qty : "",
-				isPkg ? r.unitPrice == null ? "" : r.unitPrice : "",
-				isPkg && r.subtotal != null ? r.subtotal : ""
+				isAct ? r.unit || "" : "",
+				isAct ? r.qty == null ? "" : r.qty : "",
+				isAct ? r.unitPrice == null ? "" : r.unitPrice : "",
+				isAct && r.subtotal != null ? r.subtotal : r.kind === "package" && r.pkgSubtotal != null ? r.pkgSubtotal : ""
 			].join("	"));
 		});
 		const text = lines.join("\n");
@@ -295,23 +331,26 @@
 	function renderSidebar() {
 		const s = stats();
 		document.getElementById("sbTotal").textContent = fmtMoney(s.totalCost);
-		document.getElementById("sbCov").textContent = s.covered + "/" + s.leaves + " paquetes estimados";
+		document.getElementById("sbCov").textContent = s.pricedActivities + "/" + s.totalActivities + " actividades con precio";
 		document.getElementById("sbPct").textContent = s.pct + "%";
 		const bar = document.getElementById("sbBar");
 		bar.style.width = s.pct + "%";
 		bar.style.background = s.pct >= 100 ? "var(--good)" : s.pct >= 50 ? "var(--warn)" : "var(--act-a)";
+		document.getElementById("sbPkg").textContent = s.completeLeaves + "/" + s.leavesWithActivities + " paquetes con estimado completo";
 		const host = document.getElementById("missList");
-		if (!s.leaves) host.innerHTML = "<div style=\"font-size:11.5px;color:var(--ink-2)\">Sin EDT cargada.</div>";
-		else if (!s.uncovered.length) host.innerHTML = "<div class=\"miss-ok\">✓ Todos los paquetes de trabajo tienen un costo estimado.</div>";
-		else host.innerHTML = s.uncovered.map((l) => "<div class=\"miss-item\"><span class=\"mc\">" + esc(l.code) + "</span><span>" + esc(l.name) + "</span></div>").join("");
+		if (!s.leavesWithActivities && !s.leavesWithoutActivities.length) host.innerHTML = "<div style=\"font-size:11.5px;color:var(--ink-2)\">Sin EDT cargada.</div>";
+		else if (!s.leavesWithoutActivities.length) host.innerHTML = "<div class=\"miss-ok\">✓ Todos los paquetes de trabajo tienen actividades definidas.</div>";
+		else host.innerHTML = s.leavesWithoutActivities.map((l) => "<div class=\"miss-item\"><span class=\"mc\">" + esc(l.code) + "</span><span>" + esc(l.name) + "</span></div>").join("");
 	}
 	function renderOrphans() {
-		const st = state(), leaves = leafRows();
-		const leafIds = {};
-		leaves.forEach((l) => {
-			leafIds[l.id] = true;
+		const st = state();
+		const activityIds = {};
+		leafRows().forEach((l) => {
+			activitiesOf(l.id).forEach((a) => {
+				activityIds[a.id] = true;
+			});
 		});
-		const orphanKeys = Object.keys(st.byLeaf).filter((k) => !leafIds[k]);
+		const orphanKeys = Object.keys(st.byActivity).filter((k) => !activityIds[k]);
 		const bn = document.getElementById("orphanBanner");
 		if (!orphanKeys.length) {
 			bn.classList.remove("show");
@@ -319,14 +358,14 @@
 			return;
 		}
 		bn.classList.add("show");
-		bn.innerHTML = "<b>⚠ " + orphanKeys.length + " paquete(s) huérfano(s):</b> tienen un costo estimado guardado, pero su paquete de trabajo ya no existe en la EDT (o dejó de ser una hoja). No aparecen en la tabla ni en los conteos. <button class=\"btn sm danger\" id=\"btnOrphans\">Eliminar huérfanos</button>";
+		bn.innerHTML = "<b>⚠ " + orphanKeys.length + " precio(s) huérfano(s):</b> tienen un Precio Unitario guardado, pero esa actividad ya no existe en Definir las Actividades (se eliminó o cambió de paquete). No aparecen en la tabla ni en los conteos. <button class=\"btn sm danger\" id=\"btnOrphans\">Eliminar huérfanos</button>";
 		document.getElementById("btnOrphans").addEventListener("click", async () => {
-			if (!await showConfirm("Se eliminarán definitivamente los " + orphanKeys.length + " estimados huérfanos. Si en realidad la EDT cambió por error, corrígela primero en WBS Builder y vuelve a recargar.", "Eliminar estimados huérfanos")) return;
+			if (!await showConfirm("Se eliminarán definitivamente los " + orphanKeys.length + " precios huérfanos. Si en realidad las actividades cambiaron por error, corrígelas primero en Definir las Actividades y vuelve a recargar.", "Eliminar precios huérfanos")) return;
 			orphanKeys.forEach((k) => {
-				delete st.byLeaf[k];
+				delete st.byActivity[k];
 			});
 			onDirty(true);
-			setStatus("Estimados huérfanos eliminados.");
+			setStatus("Precios huérfanos eliminados.");
 		});
 	}
 	var dirtyTimer;
@@ -372,7 +411,7 @@
 				if (obj.course) document.getElementById("courseTitle").value = obj.course;
 				render();
 				gpiPush();
-				setStatus("Estimado importado. Los costos se enlazan a la EDT por el id de cada paquete.");
+				setStatus("Estimado importado. Los precios se enlazan a las actividades por su id.");
 			} else showAlert("No reconocí el formato: se esperaba una exportación de esta herramienta (gpi.costEstimate/v1).");
 		};
 		r.readAsText(file);
@@ -393,15 +432,24 @@
 		}
 		const root = N(null, "Proyecto DISTRIB+ S.A. — Almacén Lurín");
 		const f1 = N(root, "Dirección de Proyecto");
-		const p11 = N(f1, "Acta de constitución"), p12 = N(f1, "Plan de gestión del proyecto"), p13 = N(f1, "Informes de seguimiento y control");
+		const p11 = N(f1, "Acta de constitución"), p12 = N(f1, "Plan de gestión del proyecto");
+		N(f1, "Informes de seguimiento y control");
 		const f2 = N(root, "Ingeniería y Diseño");
-		const p21 = N(f2, "Estudio de suelos"), p22 = N(f2, "Diseño estructural"), p23 = N(f2, "Diseño eléctrico y sanitario"), p24 = N(f2, "Permisos y licencias municipales");
+		const p21 = N(f2, "Estudio de suelos"), p22 = N(f2, "Diseño estructural");
+		N(f2, "Diseño eléctrico y sanitario");
+		N(f2, "Permisos y licencias municipales");
 		const f3 = N(root, "Procura");
-		const p31 = N(f3, "Estructuras metálicas prefabricadas"), p32 = N(f3, "Materiales de construcción"), p33 = N(f3, "Equipos eléctricos e instalaciones");
+		N(f3, "Estructuras metálicas prefabricadas");
+		N(f3, "Materiales de construcción");
+		N(f3, "Equipos eléctricos e instalaciones");
 		const f4 = N(root, "Construcción");
-		const p41 = N(f4, "Movimiento de tierras"), p42 = N(f4, "Cimentaciones"), p43 = N(f4, "Estructura y cobertura"), p44 = N(f4, "Acabados y cerramientos"), p45 = N(f4, "Instalaciones MEP");
+		const p41 = N(f4, "Movimiento de tierras"), p42 = N(f4, "Cimentaciones"), p43 = N(f4, "Estructura y cobertura");
+		N(f4, "Acabados y cerramientos");
+		N(f4, "Instalaciones MEP");
 		const f5 = N(root, "Pruebas y Puesta en Marcha");
-		const p51 = N(f5, "Pruebas de instalaciones"), p52 = N(f5, "Capacitación al cliente"), p53 = N(f5, "Acta de entrega y cierre");
+		const p51 = N(f5, "Pruebas de instalaciones");
+		N(f5, "Capacitación al cliente");
+		N(f5, "Acta de entrega y cierre");
 		return {
 			rootId: root,
 			idCounter: k + 1,
@@ -409,60 +457,91 @@
 			ids: {
 				p11,
 				p12,
-				p13,
 				p21,
 				p22,
-				p23,
-				p24,
-				p31,
-				p32,
-				p33,
 				p41,
 				p42,
 				p43,
-				p44,
-				p45,
-				p51,
-				p52,
-				p53
+				p51
 			}
 		};
 	})();
-	function sampleEstimate() {
+	var SAMPLE_ACTIVITIES = (function() {
 		const I = SAMPLE_WBS.ids;
-		function E(unit, qty, unitPrice) {
+		const by = {};
+		let n = 0;
+		function A(name, unit, qty, perf, teams) {
 			return {
+				id: "a" + ++n,
+				name,
 				unit,
 				qty,
-				unitPrice
+				perf: perf == null ? "" : perf,
+				teams: teams == null ? 1 : teams
 			};
 		}
-		return { byLeaf: {
-			[I.p11]: E("glb", 1, 12e3),
-			[I.p12]: E("glb", 1, 38e3),
-			[I.p13]: E("glb", 1, 145e3),
-			[I.p21]: E("pto", 8, 3500),
-			[I.p22]: E("m²", 3e3, 55),
-			[I.p23]: E("pto", 980, 100),
-			[I.p24]: E("glb", 1, 64e3),
-			[I.p31]: E("ton", 260, 7e3),
-			[I.p32]: E("glb", 1, 715e3),
-			[I.p33]: E("glb", 1, 415e3),
-			[I.p41]: E("m³", 2e3, 190),
-			[I.p42]: E("m³", 1050, 700),
-			[I.p43]: E("m²", 2330, 500),
-			[I.p44]: E("m²", 2750, 200),
-			[I.p45]: E("pto", 970, 500),
-			[I.p51]: E("glb", 1, 145e3),
-			[I.p52]: E("hora", 96, 500),
-			[I.p53]: E("glb", 1, 92e3)
+		by[I.p11] = [A("Elaboración y aprobación del acta de constitución", "doc", 1, .25)];
+		by[I.p12] = [A("Plan para la dirección del proyecto (líneas base)", "doc", 1, .2), A("Planes subsidiarios de gestión", "doc", 6, .5)];
+		by[I.p21] = [
+			A("Calicatas exploratorias", "und", 8, 2),
+			A("Ensayos de laboratorio de suelos", "glb", 1, .1),
+			A("Informe geotécnico", "doc", 1, .25)
+		];
+		by[I.p22] = [A("Memoria de cálculo estructural", "doc", 1, .1), A("Planos estructurales", "lám", 24, 2)];
+		by[I.p41] = [
+			A("Corte y excavación masiva", "m³", 4800, 320, 2),
+			A("Relleno y compactación con material propio", "m³", 2100, 250),
+			A("Eliminación de material excedente", "m³", 2700, 300),
+			A("Nivelación y perfilado de plataforma", "m²", 6500, 1200)
+		];
+		by[I.p42] = [
+			A("Excavación de zanjas para zapatas", "m³", 620, 60, 2),
+			A("Solado de concreto e=10 cm", "m²", 480, 120),
+			A("Acero de refuerzo fy=4200 kg/cm²", "kg", 38500, 2500, 2),
+			A("Concreto f'c=280 kg/cm² en zapatas", "m³", 410, 45, 2),
+			A("Encofrado y desencofrado de cimentaciones", "m²", 950, 90, 2)
+		];
+		by[I.p43] = [
+			A("Montaje de columnas metálicas", "und", 48, 6),
+			A("Montaje de vigas y tijerales", "ton", 96, 8),
+			A("Instalación de cobertura TR-4", "m²", 5200, 350, 2)
+		];
+		by[I.p51] = [A("Pruebas de tableros y circuitos eléctricos", "pto", 120, 30), A("Pruebas hidráulicas de redes sanitarias", "glb", 1, .5)];
+		return {
+			byLeaf: by,
+			idCounter: n + 1
+		};
+	})();
+	function sampleEstimate() {
+		return { byActivity: {
+			a1: 12e3,
+			a2: 2e4,
+			a3: 3e3,
+			a4: 800,
+			a5: 15e3,
+			a6: 6600,
+			a7: 45e3,
+			a8: 5e3,
+			a9: 40,
+			a10: 35,
+			a11: 25,
+			a12: 7,
+			a13: 45,
+			a14: 60,
+			a15: 4.5,
+			a16: 550,
+			a17: 85,
+			a18: 3500,
+			a19: 6500,
+			a21: 350,
+			a22: 18e3
 		} };
 	}
 	function enterSample() {
 		mode = "sample";
 		if (!stateSample) stateSample = sampleEstimate();
 		render();
-		setStatus("Modo ejemplo: EDT y estimado de costos didácticos (no toca los datos del proyecto).");
+		setStatus("Modo ejemplo: EDT y actividades didácticas de DISTRIB+ (no toca los datos del proyecto).");
 	}
 	function enterLive() {
 		mode = "live";
@@ -497,29 +576,33 @@
 	}
 	function buildReport() {
 		const s = stats();
-		let body = (mode === "sample" ? "<p class=\"rep-note\"><b>Modo ejemplo:</b> este listado usa la EDT y el estimado didácticos, no los datos del proyecto activo.</p>" : "") + "<h2>1. Resumen</h2><table class=\"rep-kv\"><tr><td>Costo total estimado</td><td><b>" + fmtMoney(s.totalCost) + "</b></td></tr><tr><td>Cobertura de paquetes de trabajo</td><td>" + s.covered + " de " + s.leaves + " paquetes estimados (<b>" + s.pct + "%</b>)</td></tr></table><h2>2. Estimación de costos por paquete de trabajo</h2><p class=\"rep-note\">Numeración estilo MS Project: la fila 0 es la tarea resumen del proyecto y el N.º corre consecutivo por todas las filas. Subtotal = Cantidad × Precio unitario, valor calculado (nunca se ingresa directamente).</p><table><tr><th style=\"width:6%\">N.º</th><th style=\"width:9%\">Código EDT</th><th>Paquete de trabajo</th><th style=\"width:9%\">Unidad</th><th style=\"width:11%\">Cantidad</th><th style=\"width:12%\">Precio unitario</th><th style=\"width:12%\">Subtotal</th></tr>";
+		let body = (mode === "sample" ? "<p class=\"rep-note\"><b>Modo ejemplo:</b> este listado usa la EDT y las actividades didácticas, no los datos del proyecto activo.</p>" : "") + "<h2>1. Resumen</h2><table class=\"rep-kv\"><tr><td>Costo total estimado</td><td><b>" + fmtMoney(s.totalCost) + "</b></td></tr><tr><td>Actividades con precio</td><td>" + s.pricedActivities + " de " + s.totalActivities + " (<b>" + s.pct + "%</b>)</td></tr><tr><td>Paquetes con estimado completo</td><td>" + s.completeLeaves + " de " + s.leavesWithActivities + " paquetes con actividades definidas</td></tr>" + (s.leavesWithoutActivities.length ? "<tr><td>Paquetes sin actividades definidas</td><td>⚠ " + s.leavesWithoutActivities.length + " (no se pueden costear hasta definirlas en Definir las Actividades)</td></tr>" : "") + "</table><h2>2. Estimación de costos por actividad</h2><p class=\"rep-note\">Numeración estilo MS Project: la fila 0 es la tarea resumen del proyecto y el N.º corre consecutivo por todas las filas. Unidad y Cantidad vienen de Definir las Actividades; Subtotal = Cantidad × Precio unitario, valor calculado (nunca se ingresa directamente). El costo de un paquete es la suma del Subtotal de sus actividades.</p><table><tr><th style=\"width:6%\">N.º</th><th style=\"width:9%\">Código EDT</th><th>Paquete de trabajo / Actividad</th><th style=\"width:8%\">Unidad</th><th style=\"width:10%\">Cantidad</th><th style=\"width:11%\">Precio unitario</th><th style=\"width:11%\">Subtotal</th></tr>";
 		const repRows = fullRows();
 		let total = 0;
 		if (!repRows.length) body += "<tr><td colspan=\"7\" class=\"rep-note\">— Sin EDT cargada —</td></tr>";
 		repRows.forEach((r) => {
 			if (r.kind === "project") body += "<tr><td class=\"num rep-phase\" style=\"text-align:center\">0</td><td class=\"num rep-phase\">0</td><td class=\"rep-phase\" colspan=\"5\">" + esc(r.name) + " <span class=\"rep-note\">(tarea resumen del proyecto)</span></td></tr>";
 			else if (r.kind === "phase") body += "<tr><td class=\"num rep-phase\" style=\"text-align:center\">" + r.n + "</td><td class=\"num rep-phase\">" + esc(r.code) + "</td><td class=\"rep-phase\" colspan=\"5\">" + esc(r.name) + "</td></tr>";
-			else {
+			else if (r.kind === "package") {
+				const pkgTxt = !r.activityCount ? "<span class=\"rep-note\">sin actividades definidas</span>" : "<b>" + fmtMoney(r.pkgSubtotal) + "</b>" + (r.pkgComplete ? "" : " (parcial)");
+				body += "<tr><td class=\"num rep-pkg\" style=\"text-align:center\">" + r.n + "</td><td class=\"num rep-pkg\">" + esc(r.code) + "</td><td class=\"rep-pkg\">" + esc(r.name) + "</td><td class=\"rep-pkg\" colspan=\"3\">" + (r.activityCount || 0) + " actividad(es)</td><td class=\"num rep-pkg\" style=\"text-align:right\">" + pkgTxt + "</td></tr>";
+			} else {
 				if (r.subtotal != null) total += r.subtotal;
-				body += "<tr><td class=\"num\" style=\"text-align:center\">" + r.n + "</td><td class=\"num\">" + esc(r.code) + "</td><td>" + esc(r.name) + "</td><td>" + esc(r.unit || "—") + "</td><td class=\"num\" style=\"text-align:right\">" + fmtQty(r.qty) + "</td><td class=\"num\" style=\"text-align:right\">" + fmtQty(r.unitPrice) + "</td><td class=\"num\" style=\"text-align:right\"><b>" + fmtMoney(r.subtotal) + "</b></td></tr>";
+				body += "<tr><td class=\"num\" style=\"text-align:center\">" + r.n + "</td><td class=\"num\">" + esc(r.code) + "</td><td>" + (r.name ? esc(r.name) : "<span class=\"rep-note\">— sin nombre —</span>") + "</td><td>" + esc(r.unit || "—") + "</td><td class=\"num\" style=\"text-align:right\">" + fmtQty(r.qty) + "</td><td class=\"num\" style=\"text-align:right\">" + fmtQty(r.unitPrice) + "</td><td class=\"num\" style=\"text-align:right\">" + fmtMoney(r.subtotal) + "</td></tr>";
 			}
 		});
 		if (repRows.length) body += "<tr><td colspan=\"6\" style=\"text-align:right\"><b>Total estimado</b></td><td class=\"num\" style=\"text-align:right\"><b>" + fmtMoney(total) + "</b></td></tr>";
 		body += "</table>";
-		reportShell("Estimación de Costos por Paquete de Trabajo", "Estimar los Costos · Gestión de Costos", body);
+		reportShell("Estimación de Costos por Actividad", "Estimar los Costos · Gestión de Costos", body);
 	}
 	function xmlEsc(s) {
 		return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 	}
 	var TEMPLATE_HEADERS = [
 		"Código EDT",
-		"Nombre del paquete de trabajo/actividad",
-		"Unidad de medida",
+		"Paquete de trabajo",
+		"Nombre de la actividad",
+		"Unidad",
 		"Cantidad",
 		"Precio unitario",
 		"Subtotal"
@@ -557,43 +640,69 @@
 			t: "s",
 			s: 1
 		}))];
-		const st = state();
 		leafRows().forEach((l) => {
-			const item = st.byLeaf[l.id];
-			const qty = item ? numOrNull(item.qty) : null;
-			const unitPrice = item ? numOrNull(item.unitPrice) : null;
-			const subtotal = qty != null && unitPrice != null ? Math.round(qty * unitPrice * 100) / 100 : null;
-			out.push([
-				{
-					v: l.code,
-					t: "s",
-					s: 2
-				},
-				{
-					v: l.name || "",
-					t: "s",
-					s: 0
-				},
-				item && item.unit ? {
-					v: item.unit,
-					t: "s",
-					s: 0
-				} : null,
-				qty != null ? {
-					v: qty,
-					t: "n"
-				} : null,
-				unitPrice != null ? {
-					v: unitPrice,
-					t: "n",
-					s: 3
-				} : null,
-				subtotal != null ? {
-					v: subtotal,
-					t: "n",
-					s: 3
-				} : null
-			]);
+			const list = activitiesOf(l.id);
+			if (!list.length) {
+				out.push([
+					{
+						v: l.code,
+						t: "s",
+						s: 2
+					},
+					{
+						v: l.name || "",
+						t: "s",
+						s: 0
+					},
+					null,
+					null,
+					null,
+					null,
+					null
+				]);
+				return;
+			}
+			list.forEach((a) => {
+				const qty = numOrNull(a.qty);
+				const price = numOrNull(state().byActivity[a.id]);
+				const subtotal = qty != null && price != null ? Math.round(qty * price * 100) / 100 : null;
+				out.push([
+					{
+						v: l.code,
+						t: "s",
+						s: 2
+					},
+					{
+						v: l.name || "",
+						t: "s",
+						s: 0
+					},
+					{
+						v: a.name || "",
+						t: "s",
+						s: 0
+					},
+					a.unit ? {
+						v: a.unit,
+						t: "s",
+						s: 0
+					} : null,
+					qty != null ? {
+						v: qty,
+						t: "n"
+					} : null,
+					price != null ? {
+						v: price,
+						t: "n",
+						s: 3
+					} : null,
+					subtotal != null ? {
+						v: subtotal,
+						t: "n",
+						s: 3
+					} : null
+				]);
+			});
 		});
 		return out;
 	}
@@ -601,13 +710,14 @@
 		return [
 			["Cómo completar este archivo", 25],
 			["", 0],
-			["1. Cada fila es un paquete de trabajo de la EDT. Las columnas “Código EDT” y “Nombre del paquete de trabajo/actividad” son de referencia — no las edites ni las borres: son la clave con la que este simulador reconoce a qué paquete pertenece cada fila al importar el archivo de vuelta (deben coincidir AMBAS con la EDT actual).", 4],
-			["2. Completa “Unidad de medida”, “Cantidad” y “Precio unitario” para cada paquete.", 4],
+			["1. Cada fila es una ACTIVIDAD (no un paquete): las actividades ya están definidas en “Definir las Actividades”. Las columnas “Código EDT”, “Paquete de trabajo”, “Nombre de la actividad”, “Unidad” y “Cantidad” son de referencia -- no las edites: son la clave con la que este simulador reconoce a qué actividad pertenece cada precio al importar el archivo de vuelta (el Código EDT y el Nombre de la actividad deben coincidir con la EDT actual).", 4],
+			["2. Completa “Precio unitario” para cada actividad.", 4],
 			["3. La columna “Subtotal” es de referencia (Cantidad × Precio unitario): se recalcula sola al importar, no hace falta completarla ni editarla a mano.", 4],
-			["4. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
-			["5. Guarda el archivo y vuelve a “Estimar los Costos” > botón “⇧ Importar desde Excel” para subirlo.", 4],
+			["4. Un paquete que aparece sin filas de actividad (solo Código EDT y Paquete de trabajo) todavía no tiene actividades definidas -- complétalas primero en “Definir las Actividades”, no aquí.", 4],
+			["5. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
+			["6. Guarda el archivo y vuelve a “Estimar los Costos” > botón “⇧ Importar desde Excel” para subirlo.", 4],
 			["", 0],
-			["6. Este mismo archivo se puede volver a generar en cualquier momento con “⇩ Exportar a Excel”: si el proyecto ya tiene un estimado cargado, el archivo sale completo (no en blanco) y, si se reimporta sin tocarlo, reproduce exactamente los mismos datos.", 4],
+			["7. Este mismo archivo se puede volver a generar en cualquier momento con “⇩ Exportar a Excel”: si el proyecto ya tiene precios cargados, el archivo sale completo (no en blanco) y, si se reimporta sin tocarlo, reproduce exactamente los mismos datos.", 4],
 			["", 0],
 			["Generado por el simulador GPI — módulo Estimar los Costos.", 4]
 		].map((row) => [{
@@ -625,9 +735,10 @@
 		zip.file("xl/styles.xml", xlsxStylesXml());
 		zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(exportRowModel(), [
 			10,
+			26,
 			34,
-			14,
-			12,
+			10,
+			11,
 			14,
 			14
 		], true));
@@ -643,20 +754,34 @@
 			return /[";\n]/.test(s) ? "\"" + s.replace(/"/g, "\"\"") + "\"" : s;
 		}
 		const lines = [TEMPLATE_HEADERS.join(";")];
-		const st = state();
 		leafRows().forEach((l) => {
-			const item = st.byLeaf[l.id];
-			const qty = item ? numOrNull(item.qty) : null;
-			const unitPrice = item ? numOrNull(item.unitPrice) : null;
-			const subtotal = qty != null && unitPrice != null ? Math.round(qty * unitPrice * 100) / 100 : null;
-			lines.push([
-				cell(l.code),
-				cell(l.name || ""),
-				cell(item ? item.unit : ""),
-				cell(qty ?? ""),
-				cell(unitPrice ?? ""),
-				cell(subtotal ?? "")
-			].join(";"));
+			const list = activitiesOf(l.id);
+			if (!list.length) {
+				lines.push([
+					cell(l.code),
+					cell(l.name || ""),
+					"",
+					"",
+					"",
+					"",
+					""
+				].join(";"));
+				return;
+			}
+			list.forEach((a) => {
+				const qty = numOrNull(a.qty);
+				const price = numOrNull(state().byActivity[a.id]);
+				const subtotal = qty != null && price != null ? Math.round(qty * price * 100) / 100 : null;
+				lines.push([
+					cell(l.code),
+					cell(l.name || ""),
+					cell(a.name || ""),
+					cell(a.unit || ""),
+					cell(qty ?? ""),
+					cell(price ?? ""),
+					cell(subtotal ?? "")
+				].join(";"));
+			});
 		});
 		return lines.join("\r\n");
 	}
@@ -753,12 +878,8 @@
 			keywords: ["codigo edt", "edt"]
 		},
 		{
-			field: "name",
-			keywords: [
-				"nombre del paquete",
-				"paquete de trabajo",
-				"actividad"
-			]
+			field: "activityName",
+			keywords: ["nombre de la actividad"]
 		},
 		{
 			field: "unit",
@@ -783,7 +904,7 @@
 			const idx = norm.findIndex((h) => keywords.some((kw) => h.indexOf(kw) !== -1));
 			if (idx !== -1) map[field] = idx;
 		});
-		if (map.code == null || map.name == null) return null;
+		if (map.code == null || map.activityName == null) return null;
 		return map;
 	}
 	function reconcileImportRows(rows, colMap) {
@@ -792,43 +913,52 @@
 		leaves.forEach((l) => {
 			byCode[l.code] = l;
 		});
-		const byLeaf = {};
-		const presentIds = /* @__PURE__ */ new Set();
-		const orphanCodes = [], mismatchCodes = [];
+		const byActivity = {};
+		const orphanCodes = [];
+		const unmatchedActivities = [];
+		const pricedIds = /* @__PURE__ */ new Set();
 		let matched = 0;
 		rows.forEach((row) => {
 			const code = String(row[colMap.code] || "").trim();
 			if (!code) return;
-			const name = String(row[colMap.name] || "").trim();
+			const activityName = String(row[colMap.activityName] || "").trim();
+			if (!activityName) return;
 			const leaf = byCode[code];
 			if (!leaf) {
 				orphanCodes.push(code);
 				return;
 			}
-			if (name && normalizeHeader(name) !== normalizeHeader(leaf.name)) {
-				mismatchCodes.push(code);
+			const candidates = activitiesOf(leaf.id).filter((a) => normalizeHeader(a.name || "") === normalizeHeader(activityName));
+			if (!candidates.length) {
+				unmatchedActivities.push({
+					code,
+					name: activityName
+				});
 				return;
 			}
-			presentIds.add(leaf.id);
-			const unit = colMap.unit != null ? String(row[colMap.unit] || "").trim() : "";
-			const qty = colMap.qty != null ? parseExcelNum(row[colMap.qty]) || "" : "";
-			const unitPrice = colMap.unitPrice != null ? parseExcelNum(row[colMap.unitPrice]) || "" : "";
-			if (unit || qty || unitPrice) {
-				byLeaf[leaf.id] = {
-					unit,
-					qty,
-					unitPrice
-				};
-				matched++;
-			}
+			const price = colMap.unitPrice != null ? parseExcelNum(row[colMap.unitPrice]) || "" : "";
+			if (!price) return;
+			candidates.forEach((a) => {
+				byActivity[a.id] = price;
+				pricedIds.add(a.id);
+			});
+			matched += candidates.length;
 		});
-		const missingLeaves = leaves.filter((l) => !presentIds.has(l.id));
+		const missingActivities = [];
+		leaves.forEach((l) => {
+			activitiesOf(l.id).forEach((a) => {
+				if (!pricedIds.has(a.id)) missingActivities.push({
+					code: l.code,
+					name: a.name || ""
+				});
+			});
+		});
 		return {
-			byLeaf,
+			byActivity,
 			matched,
 			orphanCodes,
-			mismatchCodes,
-			missingLeaves
+			unmatchedActivities,
+			missingActivities
 		};
 	}
 	async function importEstimateExcel(file) {
@@ -845,24 +975,30 @@
 		}
 		const colMap = mapHeaderColumns(parsed.headers);
 		if (!colMap) {
-			await showAlert("No reconocí las columnas del archivo. Se esperan al menos «Código EDT» y «" + TEMPLATE_HEADERS[1] + "» — no renombres esas columnas.");
+			await showAlert("No reconocí las columnas del archivo. Se esperan al menos «Código EDT» y «Nombre de la actividad» — no renombres esas columnas.");
 			return;
 		}
 		const result = reconcileImportRows(parsed.rows, colMap);
-		if (!result.matched && !result.orphanCodes.length && !result.mismatchCodes.length) {
-			await showAlert("El archivo no tiene ninguna fila con datos: revisa que hayas completado Cantidad y Precio unitario.");
+		if (!result.matched && !result.orphanCodes.length && !result.unmatchedActivities.length) {
+			await showAlert("El archivo no tiene ninguna fila con datos: revisa que hayas completado el Precio unitario.");
 			return;
 		}
-		let msg = "Se reemplazará el estimado actual por " + result.matched + " paquete(s) con datos del archivo" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT no se toca.";
+		let msg = "Se reemplazará el estimado actual por precios para " + result.matched + " actividad(es) del archivo" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT y las actividades no se tocan.";
 		if (result.orphanCodes.length) msg += " " + result.orphanCodes.length + " fila(s) no se importaron por no coincidir con ningún código EDT actual: " + result.orphanCodes.slice(0, 8).join(", ") + (result.orphanCodes.length > 8 ? "…" : "") + ".";
-		if (result.mismatchCodes.length) msg += " " + result.mismatchCodes.length + " fila(s) no se importaron porque el nombre no coincide con el paquete de ese código EDT (¿la EDT cambió después de exportar?): " + result.mismatchCodes.slice(0, 8).join(", ") + (result.mismatchCodes.length > 8 ? "…" : "") + ".";
-		if (result.missingLeaves.length) msg += " ⚠ " + result.missingLeaves.length + " paquete(s) de la EDT actual no aparecen en el archivo: " + result.missingLeaves.slice(0, 8).map((l) => l.code).join(", ") + (result.missingLeaves.length > 8 ? "…" : "") + " — el estimado quedará incompleto para esos paquetes.";
+		if (result.unmatchedActivities.length) {
+			const ex = result.unmatchedActivities.slice(0, 8).map((u) => u.code + " \"" + u.name + "\"").join(", ");
+			msg += " " + result.unmatchedActivities.length + " fila(s) no se importaron porque no hay ninguna actividad con ese nombre bajo ese paquete (¿cambiaron en Definir las Actividades?): " + ex + (result.unmatchedActivities.length > 8 ? "…" : "") + ".";
+		}
+		if (result.missingActivities.length) {
+			const ex = result.missingActivities.slice(0, 8).map((u) => u.code).join(", ");
+			msg += " ⚠ " + result.missingActivities.length + " actividad(es) de la EDT actual quedan sin precio: " + ex + (result.missingActivities.length > 8 ? "…" : "") + ".";
+		}
 		if (!await showConfirm(msg, "Importar estimado desde Excel")) return;
-		if (mode === "sample") stateSample = { byLeaf: result.byLeaf };
-		else stateLive = { byLeaf: result.byLeaf };
+		if (mode === "sample") stateSample = { byActivity: result.byActivity };
+		else stateLive = { byActivity: result.byActivity };
 		onDirty(true);
-		const issues = result.orphanCodes.length + result.mismatchCodes.length;
-		setStatus(result.matched + " paquete(s) importado(s) desde Excel" + (issues ? " · " + issues + " fila(s) no reconciliada(s)" : "") + (result.missingLeaves.length ? " · " + result.missingLeaves.length + " paquete(s) sin fila en el archivo" : "") + ".");
+		const issues = result.orphanCodes.length + result.unmatchedActivities.length;
+		setStatus(result.matched + " actividad(es) con precio importado" + (issues ? " · " + issues + " fila(s) no reconciliada(s)" : "") + (result.missingActivities.length ? " · " + result.missingActivities.length + " actividad(es) sin precio" : "") + ".");
 	}
 	function wireToolbar() {
 		document.getElementById("btnExportJson").addEventListener("click", exportJson);
@@ -877,7 +1013,7 @@
 		document.getElementById("btnReload").addEventListener("click", () => {
 			gpiPullWbs();
 			render();
-			setStatus("EDT recargada desde el proyecto activo.");
+			setStatus("EDT y actividades recargadas desde el proyecto activo.");
 		});
 		document.getElementById("btnCopyTable").addEventListener("click", copyWholeTable);
 		document.getElementById("btnExportExcel").addEventListener("click", downloadEstimate);
@@ -896,9 +1032,9 @@
 		document.getElementById("btnSample").addEventListener("click", enterSample);
 		document.getElementById("btnLive").addEventListener("click", enterLive);
 		document.getElementById("btnClear").addEventListener("click", async () => {
-			if (!await showConfirm("Se eliminará el estimado de los " + stats().covered + " paquetes ya estimados" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT no se toca. ¿Continuar?", "Limpiar estimado")) return;
-			if (mode === "sample") stateSample = { byLeaf: {} };
-			else stateLive = { byLeaf: {} };
+			if (!await showConfirm("Se eliminará el precio de las " + stats().pricedActivities + " actividades ya con precio" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT y las actividades no se tocan. ¿Continuar?", "Limpiar estimado")) return;
+			if (mode === "sample") stateSample = { byActivity: {} };
+			else stateLive = { byActivity: {} };
 			onDirty(true);
 			setStatus("Estimado de costos vacío.");
 		});
@@ -906,6 +1042,7 @@
 	function gpiPullWbs() {
 		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
 		wbsLive = window.GPI.getModule("wbs") ?? null;
+		activitiesLive = window.GPI.getModule("activities") ?? null;
 	}
 	function gpiPush() {
 		if (mode === "sample") return;

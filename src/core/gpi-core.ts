@@ -438,12 +438,17 @@ export function applyScheduleToWbs(
   return { wbs: out, lockedLeafIds };
 }
 
-// Une la EDT con el módulo "Estimar los Costos" (una fila por paquete de
-// trabajo, igual granularidad que el WBS). El subtotal NUNCA se persiste —
-// se recalcula siempre como Cantidad × Precio unitario, mismo principio que
-// la Duración en Actividades/PERT. Paquetes sin Cantidad/Precio unitario
-// válidos (aún no estimados) devuelven `qty`/`unitPrice`/`subtotal` en null.
-export interface CostEstimateRow { id: string; code: string; name: string; unit: string; qty: number | null; unitPrice: number | null; subtotal: number | null; }
+// Une la EDT con las actividades de "Definir las Actividades" y con el
+// precio unitario de "Estimar los Costos" -- el costo vive a nivel de
+// ACTIVIDAD (el último nivel de planificación), no de paquete: un paquete
+// no tiene Unidad/Cantidad propias, son de sus actividades. El subtotal
+// NUNCA se persiste -- se recalcula siempre como Cantidad × Precio unitario,
+// mismo principio que la Duración en Actividades/PERT. Actividades sin
+// precio unitario cargado devuelven `unitPrice`/`subtotal` en null.
+export interface CostEstimateRow {
+  activityId: string; leafId: string; code: string; leafName: string;
+  name: string; unit: string; qty: number | null; unitPrice: number | null; subtotal: number | null;
+}
 
 function numOrNull(v: unknown): number | null {
   if (v === "" || v == null) return null;
@@ -451,41 +456,51 @@ function numOrNull(v: unknown): number | null {
   return isFinite(n) ? n : null;
 }
 
-export function costEstimateRows(estimate?: CostEstimateModule | null, wbs?: WbsModule | null): CostEstimateRow[] {
-  const byLeaf = (estimate && estimate.byLeaf) || {};
-  return wbsLeaves(wbs).map((l) => {
-    const item = byLeaf[l.id];
-    const qty = item ? numOrNull(item.qty) : null;
-    const unitPrice = item ? numOrNull(item.unitPrice) : null;
-    const subtotal = (qty != null && unitPrice != null) ? qty * unitPrice : null;
-    return { id: l.id, code: l.code, name: l.name, unit: (item && item.unit) || "", qty, unitPrice, subtotal };
+export function costEstimateRows(estimate?: CostEstimateModule | null, activities?: ActivitiesModule | null, wbs?: WbsModule | null): CostEstimateRow[] {
+  const byLeaf = (activities && activities.byLeaf) || {};
+  const byActivity = (estimate && estimate.byActivity) || {};
+  const out: CostEstimateRow[] = [];
+  wbsLeaves(wbs).forEach((l) => {
+    (byLeaf[l.id] || []).forEach((a) => {
+      const qty = numOrNull(a.qty);
+      const unitPrice = numOrNull(byActivity[a.id]);
+      const subtotal = (qty != null && unitPrice != null) ? qty * unitPrice : null;
+      out.push({ activityId: a.id, leafId: l.id, code: l.code, leafName: l.name, name: a.name || "", unit: a.unit || "", qty, unitPrice, subtotal });
+    });
   });
+  return out;
 }
 
 // Total estimado del proyecto (suma de subtotales válidos) — lo consume
 // Planificar la Gestión Financiera como fuente alterna a wbsRollup(wbs).cost.
-export function costEstimateTotal(estimate?: CostEstimateModule | null, wbs?: WbsModule | null): number {
-  return costEstimateRows(estimate, wbs).reduce((s, r) => s + (r.subtotal || 0), 0);
+export function costEstimateTotal(estimate?: CostEstimateModule | null, activities?: ActivitiesModule | null, wbs?: WbsModule | null): number {
+  return costEstimateRows(estimate, activities, wbs).reduce((s, r) => s + (r.subtotal || 0), 0);
 }
 
 export interface WbsCostEstimateSync { wbs: WbsModule; lockedLeafIds: string[]; }
 
 // Núcleo de la integración Estimar los Costos → WBS: análogo a
 // applyScheduleToWbs, pero para Costo en vez de fechas. Devuelve un WBS
-// clonado donde el costo de cada paquete (hoja) con Cantidad y Precio
-// unitario válidos (>0) en el estimado queda fijado a Cantidad×Precio
-// unitario. Los paquetes sin esos datos conservan su costo manual/estimado
+// clonado donde el costo de cada paquete (hoja) queda fijado a la suma de
+// los subtotales de SUS actividades -- pero solo si el paquete tiene al
+// menos una actividad y TODAS sus actividades tienen un subtotal válido
+// (Cantidad y Precio unitario > 0): un estimado parcial no bloquea el campo,
+// para no aparentar un costo real que en realidad está incompleto. Los
+// paquetes sin ese estimado completo conservan su costo manual/estimado
 // actual -- el WBS sigue siendo la fuente de la verdad para esos casos.
-export function applyCostEstimateToWbs(wbs?: WbsModule | null, estimate?: CostEstimateModule | null): WbsCostEstimateSync {
+export function applyCostEstimateToWbs(wbs?: WbsModule | null, estimate?: CostEstimateModule | null, activities?: ActivitiesModule | null): WbsCostEstimateSync {
   const out = wbs ? (JSON.parse(JSON.stringify(wbs)) as WbsModule) : (wbs as unknown as WbsModule);
-  if (!wbs || !wbs.nodes || !estimate || !estimate.byLeaf) return { wbs: out, lockedLeafIds: [] };
+  if (!wbs || !wbs.nodes || !activities || !activities.byLeaf) return { wbs: out, lockedLeafIds: [] };
+  const rows = costEstimateRows(estimate, activities, wbs);
+  const byLeaf: Record<string, CostEstimateRow[]> = {};
+  rows.forEach((r) => { (byLeaf[r.leafId] || (byLeaf[r.leafId] = [])).push(r); });
   const lockedLeafIds: string[] = [];
-  Object.keys(estimate.byLeaf).forEach((leafId) => {
-    const item = estimate.byLeaf[leafId];
-    if (!item || !out.nodes[leafId]) return;
-    const qty = numOrNull(item.qty), unitPrice = numOrNull(item.unitPrice);
-    if (qty == null || unitPrice == null || qty <= 0 || unitPrice <= 0) return;
-    out.nodes[leafId].cost = qty * unitPrice;
+  Object.keys(byLeaf).forEach((leafId) => {
+    const leafRows = byLeaf[leafId];
+    if (!leafRows.length || !out.nodes[leafId]) return;
+    const complete = leafRows.every((r) => r.subtotal != null && r.subtotal > 0);
+    if (!complete) return;
+    out.nodes[leafId].cost = leafRows.reduce((s, r) => s + (r.subtotal || 0), 0);
     lockedLeafIds.push(leafId);
   });
   return { wbs: out, lockedLeafIds };

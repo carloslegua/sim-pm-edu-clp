@@ -24,7 +24,7 @@
    sin gpi-core.js.
    ============================================================ */
 import type * as GpiCore from "../../core/gpi-core";
-import type { CostEstimateModule, CostModule, ProjectMeta, WbsModule } from "../../core/types";
+import type { ActivitiesModule, CostEstimateModule, CostModule, ProjectMeta, WbsModule } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -377,9 +377,10 @@ function pullFromCostEstimate(): void {
   if (!gpiOn()) { showToast("Abre este módulo desde el Panel de Control para conectar la EDT."); return; }
   userEdited = true;
   const wbs = (GPI as GpiApi).getModule("wbs") as WbsModule | null;
+  const activities = (GPI as GpiApi).getModule("activities") as ActivitiesModule | null;
   const estimate = (GPI as GpiApi).getModule("costEstimate") as CostEstimateModule | null;
-  const total = ((GPI as GpiApi).util && wbs) ? (GPI as GpiApi).util.costEstimateTotal(estimate, wbs) : 0;
-  if (!total) { showToast("Aún no hay paquetes con Cantidad y Precio unitario cargados en Estimar los Costos."); return; }
+  const total = ((GPI as GpiApi).util && wbs) ? (GPI as GpiApi).util.costEstimateTotal(estimate, activities, wbs) : 0;
+  if (!total) { showToast("Aún no hay actividades con Cantidad y Precio unitario cargados en Estimar los Costos."); return; }
   const v = Math.round(total); ($("baseCost") as HTMLInputElement).value = String(v); ($("actCostP1") as HTMLInputElement).value = String(v);
   save(); recalcCont(); flash();
 }

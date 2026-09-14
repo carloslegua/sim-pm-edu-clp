@@ -12,23 +12,30 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 ### Added
 
 - **Nuevo módulo "Estimar los Costos" (`Estimar_Costos.html`, clave
-  `costEstimate`)**: proceso PMBOK "Estimate Costs" — una fila por
-  paquete de trabajo de la EDT (Unidad, Cantidad, Precio unitario →
-  Subtotal, nunca persistido). Se completa importando un `.xlsx` que
-  valida cada fila por Código EDT **y** nombre contra la EDT actual y
-  avisa de paquetes sin fila en el archivo; "⇩ Exportar a Excel" siempre
-  reproduce el estado actual (plantilla en blanco si no hay estimado,
-  round-trip fiel si ya lo hay — probado en un test E2E real que
+  `costEstimate`)**: proceso PMBOK "Estimate Costs". El costo vive a
+  nivel de **actividad**, no de paquete de trabajo (un paquete no tiene
+  Unidad/Cantidad propias en PMBOK) — el módulo reutiliza las
+  actividades ya definidas en "Definir las Actividades" (mismo id/
+  nombre/unidad/metrado) y solo agrega el Precio Unitario por
+  actividad; el costo de un paquete es la suma del Subtotal de sus
+  actividades (Cantidad × Precio unitario, nunca persistido). Se
+  completa importando un `.xlsx` que valida cada fila por Código EDT
+  **y** Nombre de la actividad contra las actividades reales, y avisa
+  de actividades que quedan sin precio; "⇩ Exportar a Excel" siempre
+  reproduce el estado actual (plantilla en blanco si no hay precios,
+  round-trip fiel si ya los hay — probado en un test E2E real que
   descarga y reimporta el archivo). Mismo mecanismo de `.xlsx` hand-rolled
   (JSZip) construido para "Definir las Actividades".
   - `WBS_Builder.html`: el Costo de un paquete queda bloqueado
-    ("🔗 Tomado de Estimar los Costos") cuando ese paquete ya tiene un
-    costo real aquí — mismo patrón que Fechas↔Cronograma CPM.
+    ("🔗 Tomado de Estimar los Costos") solo cuando **todas** sus
+    actividades tienen un Subtotal válido — mismo patrón que
+    Fechas↔Cronograma CPM. Un estimado parcial no bloquea el campo.
   - `Cost-management.html` (Planificar la Gestión Financiera): nuevo
     botón "↧ Traer de Estimar los Costos", alternativo al ya existente
     "↧ Traer de la EDT".
   - Nuevas funciones de núcleo en `gpi-core.ts`: `costEstimateRows`,
-    `costEstimateTotal`, `applyCostEstimateToWbs`.
+    `costEstimateTotal`, `applyCostEstimateToWbs` (unen `wbs` +
+    `activities` + `costEstimate`).
 
 ### Changed
 

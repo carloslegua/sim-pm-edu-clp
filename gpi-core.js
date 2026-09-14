@@ -477,40 +477,50 @@ var GPI = (function(exports) {
 		const n = Number(v);
 		return isFinite(n) ? n : null;
 	}
-	function costEstimateRows(estimate, wbs) {
-		const byLeaf = estimate && estimate.byLeaf || {};
-		return wbsLeaves(wbs).map((l) => {
-			const item = byLeaf[l.id];
-			const qty = item ? numOrNull(item.qty) : null;
-			const unitPrice = item ? numOrNull(item.unitPrice) : null;
-			const subtotal = qty != null && unitPrice != null ? qty * unitPrice : null;
-			return {
-				id: l.id,
-				code: l.code,
-				name: l.name,
-				unit: item && item.unit || "",
-				qty,
-				unitPrice,
-				subtotal
-			};
+	function costEstimateRows(estimate, activities, wbs) {
+		const byLeaf = activities && activities.byLeaf || {};
+		const byActivity = estimate && estimate.byActivity || {};
+		const out = [];
+		wbsLeaves(wbs).forEach((l) => {
+			(byLeaf[l.id] || []).forEach((a) => {
+				const qty = numOrNull(a.qty);
+				const unitPrice = numOrNull(byActivity[a.id]);
+				const subtotal = qty != null && unitPrice != null ? qty * unitPrice : null;
+				out.push({
+					activityId: a.id,
+					leafId: l.id,
+					code: l.code,
+					leafName: l.name,
+					name: a.name || "",
+					unit: a.unit || "",
+					qty,
+					unitPrice,
+					subtotal
+				});
+			});
 		});
+		return out;
 	}
-	function costEstimateTotal(estimate, wbs) {
-		return costEstimateRows(estimate, wbs).reduce((s, r) => s + (r.subtotal || 0), 0);
+	function costEstimateTotal(estimate, activities, wbs) {
+		return costEstimateRows(estimate, activities, wbs).reduce((s, r) => s + (r.subtotal || 0), 0);
 	}
-	function applyCostEstimateToWbs(wbs, estimate) {
+	function applyCostEstimateToWbs(wbs, estimate, activities) {
 		const out = wbs ? JSON.parse(JSON.stringify(wbs)) : wbs;
-		if (!wbs || !wbs.nodes || !estimate || !estimate.byLeaf) return {
+		if (!wbs || !wbs.nodes || !activities || !activities.byLeaf) return {
 			wbs: out,
 			lockedLeafIds: []
 		};
+		const rows = costEstimateRows(estimate, activities, wbs);
+		const byLeaf = {};
+		rows.forEach((r) => {
+			(byLeaf[r.leafId] || (byLeaf[r.leafId] = [])).push(r);
+		});
 		const lockedLeafIds = [];
-		Object.keys(estimate.byLeaf).forEach((leafId) => {
-			const item = estimate.byLeaf[leafId];
-			if (!item || !out.nodes[leafId]) return;
-			const qty = numOrNull(item.qty), unitPrice = numOrNull(item.unitPrice);
-			if (qty == null || unitPrice == null || qty <= 0 || unitPrice <= 0) return;
-			out.nodes[leafId].cost = qty * unitPrice;
+		Object.keys(byLeaf).forEach((leafId) => {
+			const leafRows = byLeaf[leafId];
+			if (!leafRows.length || !out.nodes[leafId]) return;
+			if (!leafRows.every((r) => r.subtotal != null && r.subtotal > 0)) return;
+			out.nodes[leafId].cost = leafRows.reduce((s, r) => s + (r.subtotal || 0), 0);
 			lockedLeafIds.push(leafId);
 		});
 		return {

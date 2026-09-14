@@ -86,7 +86,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(saved.budget.baseCost).toBe(500000);
   });
 
-  it("pullFromCostEstimate trae el total de Estimar los Costos (Cantidad × Precio unitario), no el rollup del WBS", async () => {
+  it("pullFromCostEstimate trae el total de Estimar los Costos (suma de Cantidad × Precio unitario por actividad), no el rollup del WBS", async () => {
     const seedDb = {
       version: 1, activeId: "p1",
       projects: {
@@ -95,7 +95,8 @@ describe("Cost-management.html (migrado a cost.js)", () => {
           meta: { id: "p1", name: "Proyecto Costos", course: "GPI", currency: "USD", createdAt: 1, updatedAt: 1 },
           modules: {
             wbs: { rootId: "root", idCounter: 2, nodes: { root: { name: "P", children: ["w1"] }, w1: { name: "Paquete 1", children: [], cost: 500000 } } },
-            costEstimate: { byLeaf: { w1: { unit: "m³", qty: 2000, unitPrice: 190 } } }
+            activities: { byLeaf: { w1: [{ id: "a1", name: "Movimiento de tierras", unit: "m³", qty: 2000, perf: 190, teams: 1 }] }, idCounter: 2 },
+            costEstimate: { byActivity: { a1: 190 } }
           }
         }
       }

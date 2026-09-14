@@ -475,10 +475,11 @@
 		}
 		userEdited = true;
 		const wbs = GPI.getModule("wbs");
+		const activities = GPI.getModule("activities");
 		const estimate = GPI.getModule("costEstimate");
-		const total = GPI.util && wbs ? GPI.util.costEstimateTotal(estimate, wbs) : 0;
+		const total = GPI.util && wbs ? GPI.util.costEstimateTotal(estimate, activities, wbs) : 0;
 		if (!total) {
-			showToast("Aún no hay paquetes con Cantidad y Precio unitario cargados en Estimar los Costos.");
+			showToast("Aún no hay actividades con Cantidad y Precio unitario cargados en Estimar los Costos.");
 			return;
 		}
 		const v = Math.round(total);

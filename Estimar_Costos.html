@@ -109,6 +109,14 @@
   tr.pkg-row:hover td{background:#fcfdff;}
   tr.pkg-row .pk-code{font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--act-b);}
   tr.pkg-row .pk-name{font-weight:800; font-size:13px; color:var(--ink-0);}
+  .pk-count{font-family:var(--mono); font-size:10px; font-weight:700; color:var(--ink-2); background:#fff; border:1px solid var(--panel-border); padding:1px 8px; border-radius:12px; margin-left:8px;}
+  .pk-count.zero{color:#b25400; border-color:rgba(229,106,16,.4); background:var(--act-dim);}
+
+  tr.act-row td{background:#fff;}
+  tr.act-row:hover td{background:#fcfdff;}
+  .act-item{font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--ink-1); text-align:center;}
+  .act-code{font-family:var(--mono); font-size:11.5px; color:var(--ink-2);}
+  td.sub-cell.partial{color:#b25400; background:rgba(229,106,16,.14);}
 
   tr.total-row td{background:var(--bg-2); font-family:var(--display); font-weight:800; font-size:13px; color:var(--ink-0); border-top:2px solid var(--panel-border);}
   tr.total-row td.sub-cell{background:transparent; font-size:14px; color:var(--act-b);}
@@ -226,11 +234,11 @@
             <tr>
               <th class="col-item" title="Correlativo consecutivo de todas las filas, como el ID de MS Project: 0 = proyecto (tarea resumen)">N.º</th>
               <th class="col-code">Código EDT</th>
-              <th>Paquete de trabajo</th>
+              <th>Paquete de trabajo / Actividad</th>
               <th class="col-unit">Unidad</th>
-              <th class="col-qty">Cantidad</th>
+              <th class="col-qty" title="Metrado de la actividad, definido en Definir las Actividades">Cantidad</th>
               <th class="col-price">Precio unitario</th>
-              <th class="col-sub" title="Subtotal = Cantidad × Precio unitario (calculado, no se ingresa a mano)">Subtotal</th>
+              <th class="col-sub" title="Subtotal = Cantidad × Precio unitario (calculado, no se ingresa a mano). Para un paquete, es la suma del Subtotal de sus actividades.">Subtotal</th>
             </tr>
           </thead>
           <tbody id="estBody"></tbody>
@@ -246,16 +254,18 @@
       <div class="sb-big" id="sbTotal">0</div>
       <div class="sb-sub">costo total estimado</div>
       <div class="sb-bar-track"><div class="sb-bar-fill" id="sbBar"></div></div>
-      <div class="sb-mini"><span id="sbCov">0/0 paquetes estimados</span><span id="sbPct">0%</span></div>
+      <div class="sb-mini"><span id="sbCov">0/0 actividades con precio</span><span id="sbPct">0%</span></div>
+      <div class="sb-mini" style="margin-top:4px"><span id="sbPkg">0/0 paquetes con estimado completo</span></div>
     </div>
 
-    <h2>Paquetes sin estimado</h2>
+    <h2>Paquetes sin actividades definidas</h2>
     <div class="miss-list" id="missList"></div>
 
-    <div class="tip-box"><b>PMBOK — Estimar los Costos:</b> aproxima el costo de los recursos necesarios para completar cada paquete de trabajo de la EDT. La suma de estos estimados es la base para la línea base de costos (BAC) que calcula <a href="Cost-management.html" style="color:var(--cyan-dark); font-weight:700;">Planificar la Gestión Financiera ▸</a>.</div>
-    <div class="tip-box"><b>Cómo se carga el estimado:</b> <b>⇩ Exportar a Excel</b> genera un .xlsx con un renglón por paquete de trabajo (Código EDT + nombre, de referencia); si el proyecto no tiene estimado aún, sale en blanco y sirve de plantilla. Complétalo en Excel o MS Project agregando Unidad, Cantidad y Precio unitario, guarda y vuelve a subirlo con <b>⇧ Importar desde Excel</b>: reemplaza el estimado actual, verificando que cada fila coincida por Código EDT <b>y</b> por nombre con la EDT actual.</div>
+    <div class="tip-box"><b>PMBOK — Estimar los Costos:</b> el costo vive a nivel de <b>actividad</b>, no de paquete: un paquete de trabajo no tiene Unidad/Cantidad propias. Este módulo reutiliza las actividades ya definidas en <a href="Activity_Definition.html" style="color:var(--cyan-dark); font-weight:700;">Definir las Actividades ▸</a> y agrega el Precio Unitario de cada una; el costo de un paquete es la suma del Subtotal de sus actividades. Un paquete sin actividades definidas no puede costearse todavía.</div>
+    <div class="tip-box"><b>Cómo se carga el precio:</b> <b>⇩ Exportar a Excel</b> genera un .xlsx con un renglón por actividad (Código EDT, Paquete de trabajo, Nombre de la actividad, Unidad y Cantidad, de referencia); si el proyecto no tiene precios aún, sale en blanco y sirve de plantilla. Completa <b>Precio unitario</b>, guarda y vuelve a subirlo con <b>⇧ Importar desde Excel</b>: reemplaza el estimado actual, verificando que cada fila coincida por Código EDT <b>y</b> por Nombre de la actividad con las actividades actuales.</div>
     <div class="tip-box"><b>Round-trip:</b> el mismo botón <b>⇩ Exportar a Excel</b> sirve para respaldar o seguir editando afuera un estimado que ya existe: si reimportas ese archivo sin tocarlo, obtienes exactamente los mismos datos.</div>
-    <div class="tip-box">Como en MS Project: la fila <b>0</b> es la tarea resumen del proyecto (EDT <b>0</b>) y la columna <b>N.º</b> numera consecutivamente todas las filas — fases y paquetes.</div>
+    <div class="tip-box"><b>Paquete "completo" vs. "parcial":</b> un paquete solo se considera con estimado completo (y solo entonces WBS Builder bloquea su Costo) cuando <b>todas</b> sus actividades tienen precio. Si falta precio en alguna, el paquete muestra su suma parcial con ⚠ y el Costo del WBS sigue siendo editable a mano.</div>
+    <div class="tip-box">Como en MS Project: la fila <b>0</b> es la tarea resumen del proyecto (EDT <b>0</b>) y la columna <b>N.º</b> numera consecutivamente todas las filas — fases, paquetes y actividades.</div>
   </aside>
 </div>
 

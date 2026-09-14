@@ -315,15 +315,20 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
     la UI ("🔗 Tomado del Cronograma"). Sin esa ruta crítica calculable,
     los campos siguen editables a mano y se etiquetan "📐 Estimado".
     Mismo patrón que RACI→Responsable, pero para fechas.
-  - **Costo**: si el paquete ya tiene una Cantidad y un Precio unitario
-    válidos (>0) en `costEstimate` (Estimar_Costos.html),
-    `GPI.util.applyCostEstimateToWbs` fija `cost` = Cantidad × Precio
-    unitario y `costEstimateLocksCost` bloquea el campo ("🔗 Tomado de
-    Estimar los Costos") — mismo patrón que Fechas↔Cronograma CPM. Sin
-    ese dato, el campo sigue editable a mano y se etiqueta "📐 Estimado"
-    (estimación bottom-up ingresada en la propia EDT). El módulo `cost`
-    (Planificar la Gestión Financiera) puede a su vez traer su "costo
-    base" del rollup del WBS **o** directamente del total de
+  - **Costo**: el costo vive a nivel de ACTIVIDAD, no de paquete — un
+    paquete no tiene Unidad/Cantidad propias. Si el paquete tiene
+    actividades definidas (`activities`) y TODAS ellas tienen un
+    Subtotal válido en `costEstimate` (Estimar_Costos.html),
+    `GPI.util.applyCostEstimateToWbs` fija `cost` = suma de esos
+    Subtotales y `costEstimateLocksCost` bloquea el campo ("🔗 Tomado de
+    Estimar los Costos") — mismo patrón que Fechas↔Cronograma CPM. Un
+    estimado parcial (alguna actividad sin precio) NO bloquea el campo,
+    para no aparentar un costo real que está incompleto. Sin ese
+    estimado completo, el campo sigue editable a mano y se etiqueta
+    "📐 Estimado" (estimación bottom-up ingresada en la propia EDT). El
+    módulo `cost` (Planificar la Gestión Financiera) puede a su vez
+    traer su "costo base" del rollup del WBS **o** directamente del
+    total de
     `costEstimate` (`costEstimateTotal`) — ver su propia sección más
     abajo.
 
@@ -356,44 +361,68 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
 - Dos fuentes para el "costo base" de la estimación, ambas manuales
   (el alumno decide cuál traer, no hay auto-sincronización): "↧ Traer
   de la EDT" (`pullFromWBS`, rollup de costo del WBS — mezcla estimados
-  manuales y costos reales de `costEstimate` allí donde el WBS ya los
-  bloqueó) y "↧ Traer de Estimar los Costos" (`pullFromCostEstimate`,
-  `GPI.util.costEstimateTotal` — solo la suma de paquetes con Cantidad
-  y Precio unitario cargados ahí, ignora estimados manuales del WBS).
+  manuales y costos reales que `costEstimate` ya bloqueó ahí) y "↧ Traer
+  de Estimar los Costos" (`pullFromCostEstimate`,
+  `GPI.util.costEstimateTotal(estimate, activities, wbs)` — suma de
+  Subtotal de TODAS las actividades con precio, completas o no, ignora
+  estimados manuales del WBS).
 
 **Estimar_Costos.html** (módulo `costEstimate`, proceso PMBOK "Estimate
 Costs")
-- Mismo flujo que Activity_Definition.html (construido primero en la
-  misma sesión): tabla de solo lectura, una fila por paquete de trabajo
-  de la EDT, poblada por import/export de `.xlsx` — mismo mecanismo
-  hand-rolled de lectura/escritura OOXML vía `window.JSZip`
+- **El costo vive a nivel de ACTIVIDAD, no de paquete de trabajo**
+  (corregido tras la primera versión de este módulo, que costeaba
+  paquetes directamente — un paquete de trabajo no tiene Unidad ni
+  Cantidad propias en PMBOK, esos datos son de sus actividades). Este
+  módulo REUTILIZA las actividades ya definidas en
+  `Activity_Definition.html` (`activities.byLeaf`, mismo id/nombre/
+  unidad/metrado) y solo agrega el **Precio Unitario** por actividad;
+  `CostEstimateModule` es `{ byActivity: Record<activityId, precio> }`
+  — no vuelve a pedir Unidad/Cantidad/Nombre. El costo de un paquete es
+  la SUMA del Subtotal de sus actividades (`GPI.util.costEstimateRows`
+  en `gpi-core.ts` une `wbs` + `activities` + `costEstimate`).
+- Mismo flujo de `.xlsx` que Activity_Definition.html (construido
+  primero en la misma sesión): mismo mecanismo hand-rolled de lectura/
+  escritura OOXML vía `window.JSZip`
   (`xlsxStylesXml`/`xlsxSheetXml`/parseo de `sharedStrings.xml` e
   `inlineStr`/emparejamiento de columnas por texto de encabezado).
-  Columnas: Código EDT | Nombre del paquete de trabajo/actividad |
-  Unidad de medida | Cantidad | Precio unitario | Subtotal. El Subtotal
-  nunca se persiste — se recalcula siempre (Cantidad × Precio unitario),
-  mismo principio que la Duración en Actividades/PERT.
-- Diferencias clave con Actividades: granularidad 1 fila = 1 paquete
-  (no N filas por paquete — `EstimateState.byLeaf` es
-  `Record<id, EstimateItem>`, no un array), la exportación **no** es una
-  plantilla siempre en blanco sino una "foto" del estado actual
-  (`exportRowModel`) — en un proyecto sin estimado sale en blanco y
-  sirve de plantilla; con datos, reimportarla sin tocarla reproduce
-  exactamente lo mismo (round-trip, probado en
+  Columnas: Código EDT | Paquete de trabajo | Nombre de la actividad |
+  Unidad | Cantidad | Precio unitario | Subtotal — las primeras cinco
+  son de referencia (vienen de `wbs`/`activities`, no se editan aquí);
+  Precio unitario es el único dato nuevo; Subtotal nunca se persiste —
+  se recalcula siempre (Cantidad × Precio unitario), mismo principio
+  que la Duración en Actividades/PERT. Un paquete sin actividades
+  definidas aparece como una fila de solo referencia (Código EDT +
+  nombre, sin actividad) — recordatorio de que hace falta completarlo
+  primero en Definir las Actividades, no un dato a precificar.
+- La exportación **no** es una plantilla siempre en blanco sino una
+  "foto" del estado actual (`exportRowModel`) — en un proyecto sin
+  precios sale en blanco y sirve de plantilla; con datos, reimportarla
+  sin tocarla reproduce exactamente lo mismo (round-trip, probado en
   `tests/e2e/cost-estimate-import.spec.ts` capturando la descarga real
   con Playwright y volviendo a subirla).
 - Import más estricto que Actividades (a pedido explícito): cada fila
-  debe coincidir por Código EDT **y** por nombre (case/trim-insensible)
-  con el paquete actual — un código que existe pero con un nombre
-  distinto se descarta como "nombre no coincide", no se acepta a
-  ciegas. Además valida cobertura: todo paquete de la EDT sin ninguna
-  fila en el archivo se lista como "faltante" en el resumen de
+  debe coincidir por Código EDT **y** por Nombre de la actividad
+  (case/trim-insensible) contra las actividades reales de ese paquete
+  — un código existente con un nombre que no corresponde a ninguna
+  actividad ahí se descarta como "no reconocida", no se acepta a
+  ciegas. Además valida cobertura: toda actividad real que no quede con
+  precio tras el import (por fila ausente, código/nombre erróneo o
+  precio en blanco) se lista como "sin precio" en el resumen de
   confirmación (aviso, no bloqueo — el import parcial sigue
   permitido).
+- Un paquete queda "completo" (candidato a bloquear el Costo del WBS)
+  únicamente cuando **todas** sus actividades tienen un Subtotal válido
+  — un paquete con actividades parcialmente precificadas se muestra con
+  su suma parcial marcada ⚠ y NO bloquea el WBS (`pkgComplete` en
+  `fullRows()`, y el mismo criterio en `applyCostEstimateToWbs`).
 - Escribe `modules.costEstimate`; lo leen `WBS_Builder.html`
-  (`applyCostEstimateToWbs`, bloquea el Costo del paquete) y
-  `Cost-management.html` (`pullFromCostEstimate`, botón "Traer de
-  Estimar los Costos").
+  (`applyCostEstimateToWbs`, bloquea el Costo del paquete solo si está
+  completo) y `Cost-management.html` (`pullFromCostEstimate`, botón
+  "Traer de Estimar los Costos").
+- Modo ejemplo: copia literal de `SAMPLE_WBS`+`sampleActivities()` de
+  `activities/main.ts` (mismos 18 paquetes DISTRIB+, mismas 8 con
+  actividades definidas) — ver el catálogo canónico más abajo para los
+  precios de ejemplo y el total resultante.
 
 **RACI_Matrix.html**
 - Depende de `window.GPI.util` para su propia lógica en modo "live"
@@ -484,17 +513,22 @@ vez que se agrega o toca un módulo:
   5 Pruebas y Puesta en Marcha (5.1–5.3). Costo total del WBS: **S/
   7.100.000** (18 paquetes).
 - **Estimar los Costos** (`costEstimate`, `sampleEstimate()` en
-  `src/modules/cost-estimate/main.ts`): Cantidad/Unidad/Precio unitario
-  por paquete, calibrados para reproducir EXACTO el costo de cada
-  paquete del WBS de ejemplo — 1.1 glb 1×12.000 · 1.2 glb 1×38.000 · 1.3
-  glb 1×145.000 · 2.1 pto 8×3.500 · 2.2 m² 3.000×55 · 2.3 pto 980×100 ·
-  2.4 glb 1×64.000 · 3.1 ton 260×7.000 · 3.2 glb 1×715.000 · 3.3 glb
-  1×415.000 · 4.1 m³ 2.000×190 · 4.2 m³ 1.050×700 · 4.3 m² 2.330×500 ·
-  4.4 m² 2.750×200 · 4.5 pto 970×500 · 5.1 glb 1×145.000 · 5.2 hora
-  96×500 · 5.3 glb 1×92.000. Todos los paquetes quedan estimados (a
-  diferencia de Actividades, donde varios quedan sin actividades a
-  propósito): el estimado de costos se espera completo para calcular el
-  BAC. Total: **S/ 7.100.000**, idéntico al WBS.
+  `src/modules/cost-estimate/main.ts`): precio unitario **por
+  actividad** (no por paquete — corregido tras la primera versión de
+  este módulo). Reutiliza literalmente `SAMPLE_WBS` y
+  `sampleActivities()` de `activities/main.ts` (mismas 8 de los 18
+  paquetes con actividades definidas, a propósito, igual que
+  Actividades); los otros 10 paquetes no tienen actividades y por lo
+  tanto no se pueden costear todavía — esto ya no reproduce el total
+  del WBS (S/ 7.100.000), que quedó calibrado a nivel de paquete antes
+  de esta corrección. Precios de ejemplo: 21 de las 22 actividades de
+  esas 8 paquetes tienen precio (la actividad "Instalación de cobertura
+  TR-4" del paquete 4.3 se deja deliberadamente sin precio, para
+  demostrar el estado "parcial" — 4.3 es el único de los 8 paquetes que
+  NO queda con estimado completo). Resultado: **21/22 actividades con
+  precio (95%), 7/8 paquetes con estimado completo, total S/
+  2.009.700**. Ver `sampleEstimate()` para el precio unitario exacto de
+  cada actividad (ids `a1`…`a22`).
 - **OBS** (`obs`/`raci` la replican): Comité Directivo/Sponsor →
   Gerencia General DISTRIB+ · Director de Proyecto → PM · Jefe de
   Ingeniería/Ing. Civil → Geotecnia, Ing. Estructural, Ing. MEP · Jefe

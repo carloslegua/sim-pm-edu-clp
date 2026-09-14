@@ -202,7 +202,7 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
     expect(doc.getElementById("propsPanel")!.textContent).toMatch(/Estimado.*Este costo se ingresa aquí/);
   });
 
-  it("con un costo real en Estimar los Costos: el campo Costo del WBS queda bloqueado con ese valor", async () => {
+  it("con TODAS las actividades de un paquete con precio en Estimar los Costos: el Costo del WBS queda bloqueado con la suma", async () => {
     const seedDb = {
       version: 1, activeId: "p1",
       projects: {
@@ -217,7 +217,8 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
                 w1: { id: "w1", parentId: "root", name: "Paquete 1", duration: 5, cost: 999, resource: "", percent: 0, start: "", end: "", notes: "", children: [], collapsed: false, orientation: "spread" }
               }
             },
-            costEstimate: { byLeaf: { w1: { unit: "m³", qty: 100, unitPrice: 25 } } }
+            activities: { byLeaf: { w1: [{ id: "a1", name: "Excavar zanja", unit: "m³", qty: 100, perf: 25, teams: 1 }, { id: "a2", name: "Rellenar zanja", unit: "m³", qty: 50, perf: 25, teams: 1 }] }, idCounter: 3 },
+            costEstimate: { byActivity: { a1: 25, a2: 40 } } // 100x25 + 50x40 = 4500
           }
         }
       }
@@ -233,7 +234,43 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
     await new Promise((r) => setTimeout(r, 50));
     const cost = doc.getElementById("f_cost") as HTMLInputElement;
     expect(cost.disabled).toBe(true);
-    expect(cost.value).toBe("2500"); // 100 x 25, no el 999 sembrado a mano
+    expect(cost.value).toBe("4500"); // 100x25 + 50x40, no el 999 sembrado a mano
     expect(doc.getElementById("propsPanel")!.textContent).toMatch(/Tomado de Estimar los Costos/);
+  });
+
+  it("con SOLO ALGUNAS actividades del paquete con precio: el Costo del WBS sigue editable (estimado parcial no bloquea)", async () => {
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 2,
+              nodes: {
+                root: { id: "root", parentId: null, name: "P", children: ["w1"], duration: 0, cost: 0, resource: "", percent: 0, start: "", end: "", notes: "", collapsed: false, orientation: "spread" },
+                w1: { id: "w1", parentId: "root", name: "Paquete 1", duration: 5, cost: 700, resource: "", percent: 0, start: "", end: "", notes: "", children: [], collapsed: false, orientation: "spread" }
+              }
+            },
+            activities: { byLeaf: { w1: [{ id: "a1", name: "Excavar zanja", unit: "m³", qty: 100, perf: 25, teams: 1 }, { id: "a2", name: "Rellenar zanja", unit: "m³", qty: 50, perf: 25, teams: 1 }] }, idCounter: 3 },
+            costEstimate: { byActivity: { a1: 25 } } // a2 sin precio: paquete incompleto
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "WBS_Builder.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    const node = Array.from(doc.querySelectorAll("#canvas .node")).find((n) => n.textContent?.includes("Paquete 1")) as HTMLElement;
+    node.dispatchEvent(new dom.window.Event("click", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 50));
+    const cost = doc.getElementById("f_cost") as HTMLInputElement;
+    expect(cost.disabled).toBe(false);
+    expect(cost.value).toBe("700"); // conserva el valor manual sembrado, no se pisa con un estimado incompleto
+    expect(doc.getElementById("propsPanel")!.textContent).not.toMatch(/Tomado de Estimar los Costos/);
   });
 });

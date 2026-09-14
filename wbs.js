@@ -701,7 +701,7 @@
       <label>Notas / Descripción</label>
       <textarea id="f_notes">${escapeHtml(node.notes || "")}</textarea>
     </div>
-    ${costLocked ? `<div class="empty-hint">🔗 <b>Tomado de Estimar los Costos</b> (Cantidad × Precio unitario) para este paquete. Para cambiarlo, abre <a href="Estimar_Costos.html" style="color:var(--cyan-dark); font-weight:700;">Estimar los Costos ▸</a></div>` : isLeaf ? `<div class="empty-hint">📐 <b>Estimado.</b> Este costo se ingresa aquí (bottom-up) hasta que <a href="Estimar_Costos.html" style="color:var(--cyan-dark); font-weight:700;">Estimar los Costos ▸</a> calcule uno real para este paquete.</div>` : ""}
+    ${costLocked ? `<div class="empty-hint">🔗 <b>Tomado de Estimar los Costos</b> (suma del Subtotal de todas sus actividades). Para cambiarlo, abre <a href="Estimar_Costos.html" style="color:var(--cyan-dark); font-weight:700;">Estimar los Costos ▸</a></div>` : isLeaf ? `<div class="empty-hint">📐 <b>Estimado.</b> Este costo se ingresa aquí (bottom-up) hasta que <a href="Estimar_Costos.html" style="color:var(--cyan-dark); font-weight:700;">Estimar los Costos ▸</a> calcule uno real para este paquete.</div>` : ""}
     ${cpmLocked ? `<div class="empty-hint">🔗 <b>Tomado del Cronograma (CPM)</b> a partir de las actividades y la ruta crítica calculadas para este paquete. Para cambiarlo, abre <a href="Cronograma_CPM.html" style="color:var(--cyan-dark); font-weight:700;">Cronograma CPM ▸</a></div>` : hasDates ? `<div class="empty-hint">📐 <b>Estimado.</b> Duración calculada automáticamente a partir de las fechas (${rolled.duration} d). Borra alguna fecha para editarla manualmente.</div>` : isLeaf ? `<div class="empty-hint">📐 <b>Estimado.</b> Cuando definas las actividades de este paquete y calcules la ruta crítica en <a href="Cronograma_CPM.html" style="color:var(--cyan-dark); font-weight:700;">Cronograma CPM ▸</a>, la fecha real se toma automáticamente de ahí.</div>` : ""}
     ${!isLeaf ? `<div class="empty-hint">Este paquete agrupa subtareas: el costo se suma (estimación bottom-up), pero <b>la duración se calcula como el tramo entre el inicio más temprano y el fin más tardío</b> de sus subtareas — no la suma, porque pueden ejecutarse en paralelo.</div>` : ""}
     ${!isRoot ? `<div class="danger-zone"><button class="btn danger" id="f_delete" style="width:100%;">🗑 Eliminar este nodo y sus subtareas</button></div>` : ""}
@@ -1138,7 +1138,7 @@
 					wbs: modWbs,
 					lockedLeafIds: []
 				};
-				const costSync = GPI.util && GPI.util.applyCostEstimateToWbs ? GPI.util.applyCostEstimateToWbs(schedSync.wbs, gpiCostEstimateModule) : {
+				const costSync = GPI.util && GPI.util.applyCostEstimateToWbs ? GPI.util.applyCostEstimateToWbs(schedSync.wbs, gpiCostEstimateModule, gpiActivitiesModule) : {
 					wbs: schedSync.wbs,
 					lockedLeafIds: []
 				};
@@ -1233,13 +1233,14 @@
 			const p = GPI.active();
 			if (!p) return;
 			gpiCostEstimateModule = p.modules && p.modules.costEstimate || null;
+			gpiActivitiesModule = p.modules && p.modules.activities || null;
 			if (!GPI.util || !GPI.util.applyCostEstimateToWbs) return;
 			const snapshot = {
 				rootId,
 				idCounter,
 				nodes
 			};
-			const costSync = GPI.util.applyCostEstimateToWbs(snapshot, gpiCostEstimateModule);
+			const costSync = GPI.util.applyCostEstimateToWbs(snapshot, gpiCostEstimateModule, gpiActivitiesModule);
 			costEstimateLockedLeafIds = new Set(costSync.lockedLeafIds);
 			let changed = false;
 			costSync.lockedLeafIds.forEach((id) => {
