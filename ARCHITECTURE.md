@@ -511,21 +511,42 @@ Costs")
   escritura OOXML vía `window.JSZip`
   (`xlsxStylesXml`/`xlsxSheetXml`/parseo de `sharedStrings.xml` e
   `inlineStr`/emparejamiento de columnas por texto de encabezado).
-  Columnas: Código EDT | Paquete de trabajo | Nombre de la actividad |
-  Unidad | Cantidad | Precio unitario | Subtotal — las primeras cinco
-  son de referencia (vienen de `wbs`/`activities`, no se editan aquí);
-  Precio unitario es el único dato nuevo; Subtotal nunca se persiste —
-  se recalcula siempre (Cantidad × Precio unitario), mismo principio
-  que la Duración en Actividades/PERT. Un paquete sin actividades
-  definidas aparece como una fila de solo referencia (Código EDT +
-  nombre, sin actividad) — recordatorio de que hace falta completarlo
-  primero en Definir las Actividades, no un dato a precificar.
+  Columnas: Id. | Código EDT | Paquete de trabajo | Nombre de la
+  actividad | Tipo | Unidad | Cantidad | Precio unitario | Subtotal —
+  Id./Código EDT/Paquete/Nombre/Unidad/Cantidad son de referencia
+  (vienen de `wbs`/`activities`, no se editan aquí); Precio unitario es
+  el único dato nuevo; Subtotal nunca se persiste — se recalcula
+  siempre (Cantidad × Precio unitario), mismo principio que la Duración
+  en Actividades/PERT. Un paquete sin actividades definidas aparece
+  como una fila de solo referencia (Código EDT + nombre, sin actividad)
+  — recordatorio de que hace falta completarlo primero en Definir las
+  Actividades, no un dato a precificar.
+- **`exportRowModel()`/`buildEstimateCsv()` (el `.xlsx` y su CSV de
+  reserva sin `window.JSZip`) derivan de `fullRows()`** — la MISMA
+  fuente que la tabla en pantalla y el reporte impreso — en vez de
+  reconstruir las filas por su cuenta. Bug corregido (a pedido
+  explícito del usuario): antes SÍ las reconstruían aparte, lo que
+  producía dos fallas simultáneas en el archivo exportado — (1) **no
+  traía ninguna columna "Id."** (se agregó a las otras tres vistas en
+  un cambio anterior, pero nunca a la exportación) y (2) el "Código
+  EDT" de cada ACTIVIDAD repetía el código del PAQUETE ("1.1" en las
+  dos filas de un paquete con dos actividades) en vez del código propio
+  de cada una ("1.1.1"/"1.1.2", el que sí muestra la tabla en
+  pantalla). Al derivar de `fullRows()` ambas quedan resueltas de raíz
+  y automáticamente alineadas con lo que el alumno ve. Consecuencia en
+  el import: `reconcileImportRows()` ahora resuelve el paquete de una
+  fila con `resolveLeaf()`, que acepta tanto el código del paquete
+  ("1.1", archivos viejos) como el de una actividad ("1.1.1", el que
+  genera el export de hoy) — quita el último segmento `.N` si el código
+  exacto no es un paquete.
 - La exportación **no** es una plantilla siempre en blanco sino una
   "foto" del estado actual (`exportRowModel`) — en un proyecto sin
   precios sale en blanco y sirve de plantilla; con datos, reimportarla
   sin tocarla reproduce exactamente lo mismo (round-trip, probado en
   `tests/e2e/cost-estimate-import.spec.ts` capturando la descarga real
-  con Playwright y volviendo a subirla).
+  con Playwright y volviendo a subirla — incluye un test que
+  descomprime el `.xlsx` real y compara celda por celda, y otro que
+  bloquea la carga de `window.JSZip` para probar el CSV de reserva).
 - Import más estricto que Actividades (a pedido explícito): cada fila
   debe coincidir por Código EDT **y** por Nombre de la actividad
   (case/trim-insensible) contra las actividades reales de ese paquete

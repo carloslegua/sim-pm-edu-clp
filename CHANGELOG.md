@@ -9,6 +9,25 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ## [Unreleased]
 
+### Fixed
+
+- **"⇩ Exportar a Excel" en Estimar los Costos no traía la columna "Id."
+  y repetía el Código EDT del paquete en cada actividad.** El `.xlsx`
+  (y su CSV de reserva sin `window.JSZip`) reconstruía las filas por su
+  cuenta en vez de usar la misma `fullRows()` que ya alimenta la tabla
+  en pantalla y el reporte impreso -- por eso le faltaba la columna
+  "Id." (agregada a las otras vistas en un cambio anterior, nunca a la
+  exportación) y el "Código EDT" de una actividad como "Corte de zanja"
+  (paquete 1.1, segunda de dos) salía como "1.1" en vez de "1.1.2", el
+  código propio que sí se ve en pantalla. Ahora ambas funciones derivan
+  directamente de `fullRows()`, así que el archivo exportado es
+  idéntico a lo que el alumno ve. El import se ajustó para seguir
+  aceptando tanto el código del paquete (archivos viejos) como el de la
+  actividad (los que genera el export de hoy). Probado con un test E2E
+  que descomprime el `.xlsx` real generado por el botón y compara celda
+  por celda, y otro que fuerza el CSV de reserva bloqueando la carga de
+  JSZip.
+
 ### Changed
 
 - **La columna "N.º" de Definir las Actividades, Estimar los Costos,

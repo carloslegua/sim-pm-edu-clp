@@ -238,6 +238,11 @@ interface FullRow {
   n: number; code: string; level: number; name: string;
   id?: string; activityId?: string; unit?: string; qty?: string | number; unitPrice?: string | number; subtotal?: number | null;
   activityCount?: number; pkgSubtotal?: number | null; pkgComplete?: boolean;
+  // Solo en filas "milestone": id del paquete al que está ATADO el hito (no
+  // el paquete después del cual va posicionado uno suelto) -- undefined =
+  // hito suelto. Lo usa exportRowModel()/buildEstimateCsv() para decidir si
+  // repetir el Código EDT/Paquete de trabajo del contexto o dejarlos en blanco.
+  leafId?: string;
 }
 
 // Modelo de filas completo, estilo MS Project: fila 0 = proyecto (tarea
@@ -276,7 +281,7 @@ function fullRows(): FullRow[] {
       out.push({ kind: "activity", n: n++, code: r.code + "." + (i + 1), level: r.depth + 2, name: a.name || "", activityId: a.id, unit: a.unit || "", qty: a.qty, unitPrice: state().byActivity[a.id], subtotal: subtotalOf(a) });
     });
     milestonesOf(r.id).forEach((m) => {
-      out.push({ kind: "milestone", n: n++, code: m.code, level: r.depth + 2, name: m.name });
+      out.push({ kind: "milestone", n: n++, code: m.code, level: r.depth + 2, name: m.name, leafId: r.id });
     });
     (loose.afterLeaf[r.id] || []).forEach((m) => {
       out.push({ kind: "milestone", n: n++, code: m.code, level: r.depth + 1, name: m.name });
@@ -760,7 +765,7 @@ function xmlEsc(s: unknown): string { return String(s == null ? "" : s).replace(
 
 interface XlCell { v: string | number; t: "s" | "n"; s?: number; }
 
-const TEMPLATE_HEADERS = ["Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Unidad", "Cantidad", "Precio unitario", "Subtotal"];
+const TEMPLATE_HEADERS = ["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Unidad", "Cantidad", "Precio unitario", "Subtotal"];
 
 // Estilos: 0 normal · 1 encabezado · 2 centrado · 3 número · 4 nota/instrucciones · 25 título
 function xlsxStylesXml(): string {
@@ -818,14 +823,19 @@ function xlsxSheetXml(rows: Array<Array<XlCell | null>>, widths: number[], freez
     + '</worksheet>';
 }
 
-// Modelo de filas del archivo exportado: SIEMPRE el estado actual completo
-// (Código EDT + Paquete de trabajo + Nombre de la actividad de referencia,
-// más Unidad/Cantidad -- de "Definir las Actividades" -- y Precio
-// unitario/Subtotal si ya existen). Un paquete sin actividades definidas
-// aparece como una fila de solo referencia (recordatorio, no de precio). En
-// un proyecto sin precios, esto produce filas en blanco -- funciona como
-// plantilla. Con datos, reproduce exactamente lo que se importaría de
-// vuelta (round-trip).
+// Modelo de filas del archivo exportado: SIEMPRE deriva de fullRows() (la
+// MISMA fuente que la tabla en pantalla y el reporte impreso), para que el
+// Id., el Código EDT y todo lo demás sean IDÉNTICOS a lo que el alumno ve
+// en pantalla -- antes esta función reconstruía las filas por su cuenta
+// (repitiendo el código del PAQUETE en cada actividad, nunca el propio de
+// cada una, y sin ninguna columna de Id.), lo que producía un archivo
+// desalineado con la tabla y con Definir las Actividades/PERT/Cronograma-
+// CPM. Un paquete sin actividades definidas aparece como una fila de solo
+// referencia (recordatorio, no de precio). En un proyecto sin precios,
+// esto produce filas en blanco -- funciona como plantilla. Con datos,
+// reproduce exactamente lo que se importaría de vuelta (round-trip); ver
+// resolveLeaf() en reconcileImportRows(), que acepta tanto el Código EDT
+// del paquete como el de la actividad al reimportar.
 // Los hitos (de "Definir las Actividades") se agregan como filas de solo
 // referencia -- columna "Tipo"="Hito" y precios siempre en blanco -- para
 // que el archivo exportado los muestre junto a las actividades costeadas
@@ -833,49 +843,48 @@ function xlsxSheetXml(rows: Array<Array<XlCell | null>>, widths: number[], freez
 // omite por completo al ver Tipo="Hito"). Nunca se agrupan en un bloque
 // aparte: un hito suelto sale en la misma posición que le asignó
 // placeLooseMilestones (antes del primer paquete, después de un paquete
-// concreto, o al final si su ancla ya no existe).
+// concreto, o al final si su ancla ya no existe); uno ATADO repite el
+// Código EDT/Paquete de trabajo de su paquete (de referencia, nunca su
+// propia numeración EDT), uno SUELTO los deja en blanco.
 function exportRowModel(): Array<Array<XlCell | null>> {
   const head: XlCell[] = TEMPLATE_HEADERS.map((h) => ({ v: h, t: "s", s: 1 }));
   const out: Array<Array<XlCell | null>> = [head];
-  const milestoneRow = (m: MilestoneItem): Array<XlCell | null> => [
-    null, null, { v: m.code + " — " + m.name, t: "s", s: 0 }, { v: "Hito", t: "s", s: 0 },
-    null, null, null, null
-  ];
-  const leaves = leafRows();
-  const knownLeafIds: Record<string, boolean> = {}; leaves.forEach((l) => { knownLeafIds[l.id] = true; });
-  const loose = placeLooseMilestones(allMilestones(), knownLeafIds);
-  loose.start.forEach((m) => { out.push(milestoneRow(m)); });
-  leaves.forEach((l) => {
-    const list = activitiesOf(l.id);
-    if (!list.length) {
-      out.push([{ v: l.code, t: "s", s: 2 }, { v: l.name || "", t: "s", s: 0 }, null, null, null, null, null, null]);
-    } else {
-      list.forEach((a) => {
-        const qty = numOrNull(a.qty);
-        const price = numOrNull(state().byActivity[a.id]);
-        const subtotal = (qty != null && price != null) ? Math.round(qty * price * 100) / 100 : null;
-        out.push([
-          { v: l.code, t: "s", s: 2 },
-          { v: l.name || "", t: "s", s: 0 },
-          { v: a.name || "", t: "s", s: 0 },
-          null,
-          a.unit ? { v: a.unit, t: "s", s: 0 } : null,
-          qty != null ? { v: qty, t: "n" } : null,
-          price != null ? { v: price, t: "n", s: 3 } : null,
-          subtotal != null ? { v: subtotal, t: "n", s: 3 } : null
-        ]);
-      });
+  let pkgCode = "", pkgName = "";
+  fullRows().forEach((r) => {
+    if (r.kind === "project" || r.kind === "phase") return; // el archivo lista paquetes/actividades/hitos, no fases ni la fila de proyecto
+    if (r.kind === "package") {
+      pkgCode = r.code; pkgName = r.name;
+      if (!r.activityCount) {
+        out.push([{ v: r.n, t: "n" }, { v: r.code, t: "s", s: 2 }, { v: r.name || "", t: "s", s: 0 }, null, null, null, null, null, null]);
+      }
+      return;
     }
-    milestonesOf(l.id).forEach((m) => {
+    if (r.kind === "milestone") {
+      const tied = r.leafId != null;
       out.push([
-        { v: l.code, t: "s", s: 2 }, { v: l.name || "", t: "s", s: 0 },
-        { v: m.code + " — " + m.name, t: "s", s: 0 }, { v: "Hito", t: "s", s: 0 },
+        { v: r.n, t: "n" },
+        tied ? { v: pkgCode, t: "s", s: 2 } : null,
+        tied ? { v: pkgName, t: "s", s: 0 } : null,
+        { v: r.code + " — " + r.name, t: "s", s: 0 },
+        { v: "Hito", t: "s", s: 0 },
         null, null, null, null
       ]);
-    });
-    (loose.afterLeaf[l.id] || []).forEach((m) => { out.push(milestoneRow(m)); });
+      return;
+    }
+    // activity
+    const qty = numOrNull(r.qty), price = numOrNull(r.unitPrice), subtotal = r.subtotal ?? null;
+    out.push([
+      { v: r.n, t: "n" },
+      { v: r.code, t: "s", s: 2 },
+      { v: pkgName, t: "s", s: 0 },
+      { v: r.name || "", t: "s", s: 0 },
+      null,
+      r.unit ? { v: r.unit, t: "s", s: 0 } : null,
+      qty != null ? { v: qty, t: "n" } : null,
+      price != null ? { v: price, t: "n", s: 3 } : null,
+      subtotal != null ? { v: subtotal, t: "n", s: 3 } : null
+    ]);
   });
-  loose.orphan.forEach((m) => { out.push(milestoneRow(m)); });
   return out;
 }
 
@@ -884,6 +893,7 @@ function templateInstructions(): Array<Array<XlCell | null>> {
     ["Cómo completar este archivo", 25],
     ["", 0],
     ["1. Cada fila es una ACTIVIDAD (no un paquete): las actividades ya están definidas en “Definir las Actividades”. Las columnas “Código EDT”, “Paquete de trabajo”, “Nombre de la actividad”, “Unidad” y “Cantidad” son de referencia -- no las edites: son la clave con la que este simulador reconoce a qué actividad pertenece cada precio al importar el archivo de vuelta (el Código EDT y el Nombre de la actividad deben coincidir con la EDT actual).", 4],
+    ["1b. La columna “Id.” es el mismo correlativo consecutivo (sin saltos, como el Task ID de MS Project) que ves en pantalla y en Definir las Actividades -- es solo de referencia para ubicar cada fila, no se usa para reconciliar al importar.", 4],
     ["2. Completa “Precio unitario” para cada actividad.", 4],
     ["3. La columna “Subtotal” es de referencia (Cantidad × Precio unitario): se recalcula sola al importar, no hace falta completarla ni editarla a mano.", 4],
     ["4. Un paquete que aparece sin filas de actividad (solo Código EDT y Paquete de trabajo) todavía no tiene actividades definidas -- complétalas primero en “Definir las Actividades”, no aquí.", 4],
@@ -928,36 +938,33 @@ async function buildEstimateXlsxBlob(): Promise<Blob> {
     + '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
     + '</Relationships>');
   zip.file("xl/styles.xml", xlsxStylesXml());
-  zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(exportRowModel(), [10, 26, 34, 8, 10, 11, 14, 14], true));
+  zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(exportRowModel(), [6, 10, 26, 34, 8, 10, 11, 14, 14], true));
   zip.file("xl/worksheets/sheet2.xml", xlsxSheetXml(templateInstructions(), [115], false));
   return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
 
+// Mismo criterio que exportRowModel() (ver su comentario): deriva de
+// fullRows() para que el Id., el Código EDT y todo lo demás sean idénticos
+// a los del .xlsx y a los de la tabla en pantalla -- es el CSV de reserva
+// cuando window.JSZip no está disponible.
 function buildEstimateCsv(): string {
   function cell(v: unknown): string { const s = String(v == null ? "" : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
   const lines = [TEMPLATE_HEADERS.join(";")];
-  const milestoneLine = (m: MilestoneItem): string => ["", "", cell(m.code + " — " + m.name), "Hito", "", "", "", ""].join(";");
-  const leaves = leafRows();
-  const knownLeafIds: Record<string, boolean> = {}; leaves.forEach((l) => { knownLeafIds[l.id] = true; });
-  const loose = placeLooseMilestones(allMilestones(), knownLeafIds);
-  loose.start.forEach((m) => { lines.push(milestoneLine(m)); });
-  leaves.forEach((l) => {
-    const list = activitiesOf(l.id);
-    if (!list.length) { lines.push([cell(l.code), cell(l.name || ""), "", "", "", "", "", ""].join(";")); }
-    else {
-      list.forEach((a) => {
-        const qty = numOrNull(a.qty);
-        const price = numOrNull(state().byActivity[a.id]);
-        const subtotal = (qty != null && price != null) ? Math.round(qty * price * 100) / 100 : null;
-        lines.push([cell(l.code), cell(l.name || ""), cell(a.name || ""), "", cell(a.unit || ""), cell(qty ?? ""), cell(price ?? ""), cell(subtotal ?? "")].join(";"));
-      });
+  let pkgCode = "", pkgName = "";
+  fullRows().forEach((r) => {
+    if (r.kind === "project" || r.kind === "phase") return;
+    if (r.kind === "package") {
+      pkgCode = r.code; pkgName = r.name;
+      if (!r.activityCount) { lines.push([cell(r.n), cell(r.code), cell(r.name || ""), "", "", "", "", "", ""].join(";")); }
+      return;
     }
-    milestonesOf(l.id).forEach((m) => {
-      lines.push([cell(l.code), cell(l.name || ""), cell(m.code + " — " + m.name), "Hito", "", "", "", ""].join(";"));
-    });
-    (loose.afterLeaf[l.id] || []).forEach((m) => { lines.push(milestoneLine(m)); });
+    if (r.kind === "milestone") {
+      const tied = r.leafId != null;
+      lines.push([cell(r.n), tied ? cell(pkgCode) : "", tied ? cell(pkgName) : "", cell(r.code + " — " + r.name), "Hito", "", "", "", ""].join(";"));
+      return;
+    }
+    lines.push([cell(r.n), cell(r.code), cell(pkgName), cell(r.name || ""), "", cell(r.unit || ""), cell(numOrNull(r.qty) ?? ""), cell(numOrNull(r.unitPrice) ?? ""), cell(r.subtotal ?? "")].join(";"));
   });
-  loose.orphan.forEach((m) => { lines.push(milestoneLine(m)); });
   return lines.join("\r\n");
 }
 
@@ -1100,9 +1107,21 @@ interface ReconcileResult {
 // actividades reales quedan sin precio tras el import (verificación de
 // cobertura, a pedido explícito): no importa si falta la fila entera o si
 // la fila estaba pero sin precio completado, ambos casos son "faltante".
+// El Código EDT de una fila puede venir en dos formas -- ambas válidas: el
+// código del PAQUETE ("4.2", como en archivos exportados antes de que el
+// export reprodujera el código propio de cada actividad) o el código de la
+// ACTIVIDAD misma ("4.2.1", el que exportRowModel()/buildEstimateCsv()
+// escriben hoy, igual que muestra la tabla en pantalla) -- resolveLeaf()
+// acepta ambos: si el código exacto no es un paquete, prueba con el prefijo
+// resultante de quitarle el último ".N".
 function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResult {
   const leaves = leafRows();
   const byCode: Record<string, TreeRow> = {}; leaves.forEach((l) => { byCode[l.code] = l; });
+  function resolveLeaf(code: string): TreeRow | undefined {
+    if (byCode[code]) return byCode[code];
+    const idx = code.lastIndexOf(".");
+    return idx > 0 ? byCode[code.slice(0, idx)] : undefined;
+  }
   const byActivity: Record<string, string | number> = {};
   const orphanCodes: string[] = [];
   const unmatchedActivities: { code: string; name: string }[] = [];
@@ -1115,7 +1134,7 @@ function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResu
     if (!code) return; // fila totalmente vacía: caso normal, se omite
     const activityName = String(row[colMap.activityName] || "").trim();
     if (!activityName) return; // fila de referencia de un paquete sin actividades: normal, se omite
-    const leaf = byCode[code];
+    const leaf = resolveLeaf(code);
     if (!leaf) { orphanCodes.push(code); return; }
     const candidates = activitiesOf(leaf.id).filter((a) => normalizeHeader(a.name || "") === normalizeHeader(activityName));
     if (!candidates.length) { unmatchedActivities.push({ code, name: activityName }); return; }

@@ -291,7 +291,8 @@
 					n: n++,
 					code: m.code,
 					level: r.depth + 2,
-					name: m.name
+					name: m.name,
+					leafId: r.id
 				});
 			});
 			(loose.afterLeaf[r.id] || []).forEach((m) => {
@@ -815,6 +816,7 @@
 		return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 	}
 	var TEMPLATE_HEADERS = [
+		"Id.",
 		"Código EDT",
 		"Paquete de trabajo",
 		"Nombre de la actividad",
@@ -857,109 +859,55 @@
 			t: "s",
 			s: 1
 		}))];
-		const milestoneRow = (m) => [
-			null,
-			null,
-			{
-				v: m.code + " — " + m.name,
-				t: "s",
-				s: 0
-			},
-			{
-				v: "Hito",
-				t: "s",
-				s: 0
-			},
-			null,
-			null,
-			null,
-			null
-		];
-		const leaves = leafRows();
-		const knownLeafIds = {};
-		leaves.forEach((l) => {
-			knownLeafIds[l.id] = true;
-		});
-		const loose = placeLooseMilestones(allMilestones(), knownLeafIds);
-		loose.start.forEach((m) => {
-			out.push(milestoneRow(m));
-		});
-		leaves.forEach((l) => {
-			const list = activitiesOf(l.id);
-			if (!list.length) out.push([
-				{
-					v: l.code,
-					t: "s",
-					s: 2
-				},
-				{
-					v: l.name || "",
-					t: "s",
-					s: 0
-				},
-				null,
-				null,
-				null,
-				null,
-				null,
-				null
-			]);
-			else list.forEach((a) => {
-				const qty = numOrNull(a.qty);
-				const price = numOrNull(state().byActivity[a.id]);
-				const subtotal = qty != null && price != null ? Math.round(qty * price * 100) / 100 : null;
-				out.push([
+		let pkgCode = "", pkgName = "";
+		fullRows().forEach((r) => {
+			if (r.kind === "project" || r.kind === "phase") return;
+			if (r.kind === "package") {
+				pkgCode = r.code;
+				pkgName = r.name;
+				if (!r.activityCount) out.push([
 					{
-						v: l.code,
+						v: r.n,
+						t: "n"
+					},
+					{
+						v: r.code,
 						t: "s",
 						s: 2
 					},
 					{
-						v: l.name || "",
-						t: "s",
-						s: 0
-					},
-					{
-						v: a.name || "",
+						v: r.name || "",
 						t: "s",
 						s: 0
 					},
 					null,
-					a.unit ? {
-						v: a.unit,
-						t: "s",
-						s: 0
-					} : null,
-					qty != null ? {
-						v: qty,
-						t: "n"
-					} : null,
-					price != null ? {
-						v: price,
-						t: "n",
-						s: 3
-					} : null,
-					subtotal != null ? {
-						v: subtotal,
-						t: "n",
-						s: 3
-					} : null
+					null,
+					null,
+					null,
+					null,
+					null
 				]);
-			});
-			milestonesOf(l.id).forEach((m) => {
+				return;
+			}
+			if (r.kind === "milestone") {
+				const tied = r.leafId != null;
 				out.push([
 					{
-						v: l.code,
+						v: r.n,
+						t: "n"
+					},
+					tied ? {
+						v: pkgCode,
 						t: "s",
 						s: 2
-					},
-					{
-						v: l.name || "",
+					} : null,
+					tied ? {
+						v: pkgName,
 						t: "s",
 						s: 0
-					},
+					} : null,
 					{
-						v: m.code + " — " + m.name,
+						v: r.code + " — " + r.name,
 						t: "s",
 						s: 0
 					},
@@ -973,13 +921,50 @@
 					null,
 					null
 				]);
-			});
-			(loose.afterLeaf[l.id] || []).forEach((m) => {
-				out.push(milestoneRow(m));
-			});
-		});
-		loose.orphan.forEach((m) => {
-			out.push(milestoneRow(m));
+				return;
+			}
+			const qty = numOrNull(r.qty), price = numOrNull(r.unitPrice), subtotal = r.subtotal ?? null;
+			out.push([
+				{
+					v: r.n,
+					t: "n"
+				},
+				{
+					v: r.code,
+					t: "s",
+					s: 2
+				},
+				{
+					v: pkgName,
+					t: "s",
+					s: 0
+				},
+				{
+					v: r.name || "",
+					t: "s",
+					s: 0
+				},
+				null,
+				r.unit ? {
+					v: r.unit,
+					t: "s",
+					s: 0
+				} : null,
+				qty != null ? {
+					v: qty,
+					t: "n"
+				} : null,
+				price != null ? {
+					v: price,
+					t: "n",
+					s: 3
+				} : null,
+				subtotal != null ? {
+					v: subtotal,
+					t: "n",
+					s: 3
+				} : null
+			]);
 		});
 		return out;
 	}
@@ -988,6 +973,7 @@
 			["Cómo completar este archivo", 25],
 			["", 0],
 			["1. Cada fila es una ACTIVIDAD (no un paquete): las actividades ya están definidas en “Definir las Actividades”. Las columnas “Código EDT”, “Paquete de trabajo”, “Nombre de la actividad”, “Unidad” y “Cantidad” son de referencia -- no las edites: son la clave con la que este simulador reconoce a qué actividad pertenece cada precio al importar el archivo de vuelta (el Código EDT y el Nombre de la actividad deben coincidir con la EDT actual).", 4],
+			["1b. La columna “Id.” es el mismo correlativo consecutivo (sin saltos, como el Task ID de MS Project) que ves en pantalla y en Definir las Actividades -- es solo de referencia para ubicar cada fila, no se usa para reconciliar al importar.", 4],
 			["2. Completa “Precio unitario” para cada actividad.", 4],
 			["3. La columna “Subtotal” es de referencia (Cantidad × Precio unitario): se recalcula sola al importar, no hace falta completarla ni editarla a mano.", 4],
 			["4. Un paquete que aparece sin filas de actividad (solo Código EDT y Paquete de trabajo) todavía no tiene actividades definidas -- complétalas primero en “Definir las Actividades”, no aquí.", 4],
@@ -1012,6 +998,7 @@
 		zip.file("xl/_rels/workbook.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>");
 		zip.file("xl/styles.xml", xlsxStylesXml());
 		zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(exportRowModel(), [
+			6,
 			10,
 			26,
 			34,
@@ -1033,70 +1020,51 @@
 			return /[";\n]/.test(s) ? "\"" + s.replace(/"/g, "\"\"") + "\"" : s;
 		}
 		const lines = [TEMPLATE_HEADERS.join(";")];
-		const milestoneLine = (m) => [
-			"",
-			"",
-			cell(m.code + " — " + m.name),
-			"Hito",
-			"",
-			"",
-			"",
-			""
-		].join(";");
-		const leaves = leafRows();
-		const knownLeafIds = {};
-		leaves.forEach((l) => {
-			knownLeafIds[l.id] = true;
-		});
-		const loose = placeLooseMilestones(allMilestones(), knownLeafIds);
-		loose.start.forEach((m) => {
-			lines.push(milestoneLine(m));
-		});
-		leaves.forEach((l) => {
-			const list = activitiesOf(l.id);
-			if (!list.length) lines.push([
-				cell(l.code),
-				cell(l.name || ""),
-				"",
-				"",
-				"",
-				"",
-				"",
-				""
-			].join(";"));
-			else list.forEach((a) => {
-				const qty = numOrNull(a.qty);
-				const price = numOrNull(state().byActivity[a.id]);
-				const subtotal = qty != null && price != null ? Math.round(qty * price * 100) / 100 : null;
-				lines.push([
-					cell(l.code),
-					cell(l.name || ""),
-					cell(a.name || ""),
+		let pkgCode = "", pkgName = "";
+		fullRows().forEach((r) => {
+			if (r.kind === "project" || r.kind === "phase") return;
+			if (r.kind === "package") {
+				pkgCode = r.code;
+				pkgName = r.name;
+				if (!r.activityCount) lines.push([
+					cell(r.n),
+					cell(r.code),
+					cell(r.name || ""),
 					"",
-					cell(a.unit || ""),
-					cell(qty ?? ""),
-					cell(price ?? ""),
-					cell(subtotal ?? "")
+					"",
+					"",
+					"",
+					"",
+					""
 				].join(";"));
-			});
-			milestonesOf(l.id).forEach((m) => {
+				return;
+			}
+			if (r.kind === "milestone") {
+				const tied = r.leafId != null;
 				lines.push([
-					cell(l.code),
-					cell(l.name || ""),
-					cell(m.code + " — " + m.name),
+					cell(r.n),
+					tied ? cell(pkgCode) : "",
+					tied ? cell(pkgName) : "",
+					cell(r.code + " — " + r.name),
 					"Hito",
 					"",
 					"",
 					"",
 					""
 				].join(";"));
-			});
-			(loose.afterLeaf[l.id] || []).forEach((m) => {
-				lines.push(milestoneLine(m));
-			});
-		});
-		loose.orphan.forEach((m) => {
-			lines.push(milestoneLine(m));
+				return;
+			}
+			lines.push([
+				cell(r.n),
+				cell(r.code),
+				cell(pkgName),
+				cell(r.name || ""),
+				"",
+				cell(r.unit || ""),
+				cell(numOrNull(r.qty) ?? ""),
+				cell(numOrNull(r.unitPrice) ?? ""),
+				cell(r.subtotal ?? "")
+			].join(";"));
 		});
 		return lines.join("\r\n");
 	}
@@ -1232,6 +1200,11 @@
 		leaves.forEach((l) => {
 			byCode[l.code] = l;
 		});
+		function resolveLeaf(code) {
+			if (byCode[code]) return byCode[code];
+			const idx = code.lastIndexOf(".");
+			return idx > 0 ? byCode[code.slice(0, idx)] : void 0;
+		}
 		const byActivity = {};
 		const orphanCodes = [];
 		const unmatchedActivities = [];
@@ -1243,7 +1216,7 @@
 			if (!code) return;
 			const activityName = String(row[colMap.activityName] || "").trim();
 			if (!activityName) return;
-			const leaf = byCode[code];
+			const leaf = resolveLeaf(code);
 			if (!leaf) {
 				orphanCodes.push(code);
 				return;

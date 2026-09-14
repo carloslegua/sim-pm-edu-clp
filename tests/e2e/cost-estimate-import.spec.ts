@@ -7,8 +7,32 @@
 // la LECTURA de contenido de un zip (`.async(...)`) dentro de jsdom -- ver
 // CLAUDE.md, "Trampas ya encontradas" (mismo hallazgo documentado para
 // Activity_Definition). Un navegador real no tiene ese problema.
+import { readFileSync } from "node:fs";
 import { test, expect } from "@playwright/test";
 import JSZip from "jszip";
+
+// Lee el .xlsx REAL que el propio módulo genera (no un fixture armado a
+// mano) y lo vuelve a un arreglo de filas por columna (A..J) -- para poder
+// verificar el contenido real de "⇩ Exportar a Excel": que trae la columna
+// "Id." y que el "Código EDT" de cada actividad es el suyo propio
+// (p. ej. "1.1.2"), no el del paquete repetido en cada fila.
+async function readXlsxRows(filePath: string): Promise<string[][]> {
+  const buf = readFileSync(filePath);
+  const zip = await JSZip.loadAsync(buf);
+  const xml = await zip.file("xl/worksheets/sheet1.xml")!.async("string");
+  const COLS = "ABCDEFGHIJ".split("");
+  const rows: string[][] = [];
+  const rowRe = /<row r="\d+">([\s\S]*?)<\/row>/g;
+  let rm: RegExpExecArray | null;
+  while ((rm = rowRe.exec(xml))) {
+    const cellRe = /<c r="([A-Z]+)\d+"[^>]*>(?:<v>([^<]*)<\/v>|<is><t[^>]*>([^<]*)<\/t><\/is>)<\/c>/g;
+    const cellMap: Record<string, string> = {};
+    let cm: RegExpExecArray | null;
+    while ((cm = cellRe.exec(rm[1]))) { cellMap[cm[1]] = cm[2] ?? cm[3] ?? ""; }
+    rows.push(COLS.map((c) => cellMap[c] ?? ""));
+  }
+  return rows;
+}
 
 const seedDb = {
   version: 1, activeId: "p1",
@@ -192,4 +216,85 @@ test("Estimar los Costos — un hito de Definir las Actividades se ve sin costo 
 
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("gpi_db") as string));
   expect(saved.projects.p1.modules.costEstimate.byActivity).toMatchObject({ a1: "190", a2: "40" });
+});
+
+test("Estimar los Costos — '⇩ Exportar a Excel' trae la columna Id. y el Código EDT propio de cada actividad (no el del paquete repetido)", async ({ page }) => {
+  // Antes, exportRowModel() reconstruía las filas por su cuenta: repetía el
+  // Código EDT del PAQUETE ("1.1") en cada una de sus actividades (nunca el
+  // propio, "1.1.1"/"1.1.2", el que sí muestra la tabla en pantalla) y no
+  // traía ninguna columna de Id. -- este test exporta un caso con un
+  // paquete de 2 actividades y hitos (uno suelto al principio, uno atado,
+  // uno suelto al final) y verifica el .xlsx real generado, celda por celda.
+  const seedWithMilestone = JSON.parse(JSON.stringify(seedDb));
+  seedWithMilestone.projects.p1.modules.activities.milestones = [
+    { id: "m1", code: "H1", name: "Inicio del proyecto", leafId: null, afterLeafId: null },
+    { id: "m2", code: "H2", name: "Fin de excavación", leafId: "w2" },
+    { id: "m3", code: "H3", name: "Cierre del proyecto", leafId: null, afterLeafId: "w3" }
+  ];
+  seedWithMilestone.projects.p1.modules.costEstimate = { byActivity: { a1: "190", a2: "40" } };
+  await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedWithMilestone);
+  await page.goto("/Estimar_Costos.html");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#btnExportExcel").click()
+  ]);
+  const exportedPath = await download.path();
+  expect(exportedPath).toBeTruthy();
+  const rows = await readXlsxRows(exportedPath as string);
+
+  // Encabezado: Id., Código EDT, Paquete de trabajo, Nombre de la actividad, Tipo, Unidad, Cantidad, Precio unitario, Subtotal
+  expect(rows[0].slice(0, 9)).toEqual(["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Unidad", "Cantidad", "Precio unitario", "Subtotal"]);
+
+  // 0=proyecto y 1=fase NO se exportan (el archivo es de paquetes/actividades/
+  // hitos); el primero en el archivo es H1 (hito suelto sin ancla, Id 1).
+  expect(rows[1].slice(0, 5)).toEqual(["1", "", "", "H1 — Inicio del proyecto", "Hito"]);
+
+  // a1 y a2: cada una con SU PROPIO Código EDT ("1.1.1"/"1.1.2"), no "1.1"
+  // repetido -- el paquete "1.1" nunca aparece como fila propia porque SÍ
+  // tiene actividades.
+  const a1 = rows.find((r) => r[3] === "Corte de zanja")!;
+  expect(a1.slice(0, 9)).toEqual(["4", "1.1.1", "Excavación de zanjas", "Corte de zanja", "", "m³", "2000", "190", "380000"]);
+  const a2 = rows.find((r) => r[3] === "Eliminación de material")!;
+  expect(a2.slice(0, 9)).toEqual(["5", "1.1.2", "Excavación de zanjas", "Eliminación de material", "", "m³", "500", "40", "20000"]);
+
+  // H2: hito ATADO a 1.1 -- repite el Código EDT/Paquete del paquete (de
+  // referencia, nunca su propia numeración EDT), Id consecutivo (6).
+  const h2 = rows.find((r) => r[3] === "H2 — Fin de excavación")!;
+  expect(h2.slice(0, 5)).toEqual(["6", "1.1", "Excavación de zanjas", "H2 — Fin de excavación", "Hito"]);
+
+  // a3: única actividad de 1.2, sin precio (queda en blanco a propósito).
+  const a3 = rows.find((r) => r[3] === "Encofrado de zapatas")!;
+  expect(a3.slice(0, 9)).toEqual(["8", "1.2.1", "Encofrado de cimentaciones", "Encofrado de zapatas", "", "m²", "300", "", ""]);
+
+  // H3: hito suelto anclado al ÚLTIMO paquete (1.2) -- Código EDT/Paquete en
+  // blanco (no está atado a ningún paquete), Id al final de todo (9).
+  const h3 = rows.find((r) => r[3] === "H3 — Cierre del proyecto")!;
+  expect(h3.slice(0, 5)).toEqual(["9", "", "", "H3 — Cierre del proyecto", "Hito"]);
+});
+
+test("Estimar los Costos — el CSV de reserva (sin window.JSZip) también trae Id. y el Código EDT propio de cada actividad", async ({ page }) => {
+  // downloadEstimate() cae a buildEstimateCsv() cuando window.JSZip no está
+  // disponible (sin conexión, o el CDN bloqueado) -- bloquear el <script>
+  // de JSZip fuerza esa ruta sin tocar el código de la app.
+  await page.route("**/jszip*.js", (route) => route.abort());
+  await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedDb);
+  await page.goto("/Estimar_Costos.html");
+  await expect(page.locator(".act-row")).toHaveCount(3);
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#btnExportExcel").click()
+  ]);
+  const csvPath = await download.path();
+  expect(csvPath).toBeTruthy();
+  expect(download.suggestedFilename()).toMatch(/\.csv$/);
+
+  const csv = readFileSync(csvPath as string, "utf-8").replace(/^﻿/, "");
+  const lines = csv.split("\r\n").filter(Boolean).map((l) => l.split(";"));
+  expect(lines[0]).toEqual(["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Unidad", "Cantidad", "Precio unitario", "Subtotal"]);
+  const a1 = lines.find((l) => l[3] === "Corte de zanja")!;
+  expect(a1).toEqual(["3", "1.1.1", "Excavación de zanjas", "Corte de zanja", "", "m³", "2000", "", ""]);
+  const a2 = lines.find((l) => l[3] === "Eliminación de material")!;
+  expect(a2).toEqual(["4", "1.1.2", "Excavación de zanjas", "Eliminación de material", "", "m³", "500", "", ""]);
 });
