@@ -539,13 +539,19 @@ Costs")
   de sus actividades), así que el export era solo un listado de
   actividades, no un reflejo fiel de la tabla. Las filas de
   proyecto/fase/paquete son de solo referencia (columna "Tipo" =
-  "Proyecto"/"Fase"/"Paquete", "Nombre de la actividad" en blanco —
-  por eso `reconcileImportRows()` las descarta solas al reimportar,
-  mismo criterio que ya usaba para "fila sin completar"); la fila de un
-  paquete SÍ trae su Subtotal acumulado (`pkgSubtotal`, igual que en
-  pantalla, incluso en `0` cuando está "parcial"). Consecuencia en el
-  import: `reconcileImportRows()` resuelve el paquete de una fila de
-  actividad con `resolveLeaf()`, que acepta tanto el código del paquete
+  "Proyecto"/"Fase"/"Paquete") y **repiten su propio nombre también en
+  "Nombre de la actividad"** (a pedido explícito del usuario: la
+  columna nunca queda vacía, para que el archivo funcione bien como
+  tabla dinámica en Excel — antes de esta corrección esa celda salía
+  vacía en esas filas) — `reconcileImportRows()` las descarta solas al
+  reimportar por su columna "Tipo" (constante `NON_ACTIVITY_TYPES` =
+  `["hito","proyecto","fase","paquete"]`), **nunca** porque "Nombre de
+  la actividad" esté vacío (ya no es un indicador confiable de eso); la
+  fila de un paquete SÍ trae su Subtotal acumulado (`pkgSubtotal`,
+  igual que en pantalla, incluso en `0` cuando está "parcial").
+  Consecuencia en el import: `reconcileImportRows()` resuelve el
+  paquete de una fila de actividad con `resolveLeaf()`, que acepta
+  tanto el código del paquete
   ("1.1", archivos viejos) como el de una actividad ("1.1.1", el que
   genera el export de hoy) — quita el último segmento `.N` si el código
   exacto no es un paquete.

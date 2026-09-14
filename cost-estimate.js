@@ -877,7 +877,11 @@
 						t: "s",
 						s: 0
 					},
-					null,
+					{
+						v: r.name || "",
+						t: "s",
+						s: 0
+					},
 					{
 						v: "Proyecto",
 						t: "s",
@@ -906,7 +910,11 @@
 						t: "s",
 						s: 0
 					},
-					null,
+					{
+						v: r.name || "",
+						t: "s",
+						s: 0
+					},
 					{
 						v: "Fase",
 						t: "s",
@@ -937,7 +945,11 @@
 						t: "s",
 						s: 0
 					},
-					null,
+					{
+						v: r.name || "",
+						t: "s",
+						s: 0
+					},
 					{
 						v: "Paquete",
 						t: "s",
@@ -1038,7 +1050,7 @@
 			["Cómo completar este archivo", 25],
 			["", 0],
 			["1. Este archivo es un reflejo COMPLETO de la tabla: trae una fila por cada fila que ves en pantalla -- el proyecto (Tipo=“Proyecto”), cada fase (Tipo=“Fase”), cada paquete de trabajo (Tipo=“Paquete”, con su Subtotal acumulado si ya tiene precios) y, debajo de cada paquete, sus actividades. Solo las filas de ACTIVIDAD llevan precio: para completar el precio de una, ubícala por su “Código EDT” y “Nombre de la actividad” (ya vienen de “Definir las Actividades”, no las edites) -- si además cambias “Paquete de trabajo”, debe seguir siendo el nombre real de ese paquete: si no coincide, la fila se rechaza al importar (protección contra mezclar filas de otro proyecto).", 4],
-			["1b. Las filas de Proyecto/Fase/Paquete son de referencia (no tienen “Nombre de la actividad”): se ignoran solas al reimportar el archivo, no hace falta tocarlas ni borrarlas.", 4],
+			["1b. Las filas de Proyecto/Fase/Paquete son de referencia -- repiten su propio nombre también en “Nombre de la actividad” (para que esa columna nunca quede vacía, útil si armas una tabla dinámica en Excel), pero se identifican y se ignoran solas al reimportar por su columna “Tipo”, no hace falta tocarlas ni borrarlas.", 4],
 			["1c. La columna “Id.” es el mismo correlativo consecutivo (sin saltos, como el Task ID de MS Project) que ves en pantalla y en Definir las Actividades -- es solo de referencia para ubicar cada fila, no se usa para reconciliar al importar.", 4],
 			["2. Completa “Precio unitario” para cada actividad.", 4],
 			["3. La columna “Subtotal” es de referencia (Cantidad × Precio unitario, o la suma de sus actividades en la fila de un paquete): se recalcula sola al importar, no hace falta completarla ni editarla a mano.", 4],
@@ -1093,7 +1105,7 @@
 					cell(r.n),
 					cell(r.code),
 					cell(r.name || ""),
-					"",
+					cell(r.name || ""),
 					"Proyecto",
 					"",
 					"",
@@ -1107,7 +1119,7 @@
 					cell(r.n),
 					cell(r.code),
 					cell(r.name || ""),
-					"",
+					cell(r.name || ""),
 					"Fase",
 					"",
 					"",
@@ -1123,7 +1135,7 @@
 					cell(r.n),
 					cell(r.code),
 					cell(r.name || ""),
-					"",
+					cell(r.name || ""),
 					"Paquete",
 					"",
 					"",
@@ -1248,6 +1260,12 @@
 			rows: allRows.slice(1)
 		};
 	}
+	var NON_ACTIVITY_TYPES = [
+		"hito",
+		"proyecto",
+		"fase",
+		"paquete"
+	];
 	var HEADER_KEYWORDS = [
 		{
 			field: "code",
@@ -1309,7 +1327,8 @@
 		const pricedIds = /* @__PURE__ */ new Set();
 		let matched = 0;
 		rows.forEach((row) => {
-			if ((colMap.type != null ? normalizeHeader(String(row[colMap.type] || "")) : "").indexOf("hito") !== -1) return;
+			const type = colMap.type != null ? normalizeHeader(String(row[colMap.type] || "")) : "";
+			if (NON_ACTIVITY_TYPES.some((t) => type.indexOf(t) !== -1)) return;
 			const code = String(row[colMap.code] || "").trim();
 			if (!code) return;
 			const activityName = String(row[colMap.activityName] || "").trim();

@@ -283,12 +283,14 @@ test("Estimar los Costos — '⇩ Exportar a Excel' trae la columna Id. y el Có
   // El archivo lista TODO lo que se ve en pantalla, en el mismo orden y con
   // el mismo Id.: proyecto (fila 0), el hito suelto sin ancla (antes de
   // todo), la fase, y CADA paquete como su propia fila (con su Subtotal
-  // acumulado) -- ya no solo sus actividades.
-  expect(rows[1].slice(0, 5)).toEqual(["0", "0", "Proyecto Live", "", "Proyecto"]);
+  // acumulado) -- ya no solo sus actividades. "Nombre de la actividad"
+  // repite el nombre de proyecto/fase/paquete en esas filas (nunca queda
+  // vacía, para que el archivo sirva de tabla dinámica).
+  expect(rows[1].slice(0, 5)).toEqual(["0", "0", "Proyecto Live", "Proyecto Live", "Proyecto"]);
   expect(rows[2].slice(0, 5)).toEqual(["1", "", "", "H1 — Inicio del proyecto", "Hito"]);
-  expect(rows[3].slice(0, 5)).toEqual(["2", "1", "Fase 1", "", "Fase"]);
+  expect(rows[3].slice(0, 5)).toEqual(["2", "1", "Fase 1", "Fase 1", "Fase"]);
   // Paquete 1.1: sus dos actividades están priceadas -- Subtotal = 380000 + 20000.
-  expect(rows[4].slice(0, 9)).toEqual(["3", "1.1", "Excavación de zanjas", "", "Paquete", "", "", "", "400000"]);
+  expect(rows[4].slice(0, 9)).toEqual(["3", "1.1", "Excavación de zanjas", "Excavación de zanjas", "Paquete", "", "", "", "400000"]);
 
   // a1 y a2: cada una con SU PROPIO Código EDT ("1.1.1"/"1.1.2"), no "1.1"
   // repetido.
@@ -305,7 +307,7 @@ test("Estimar los Costos — '⇩ Exportar a Excel' trae la columna Id. y el Có
   // Paquete 1.2: su única actividad no tiene precio -- Subtotal acumulado 0
   // (parcial, igual que se ve en pantalla con la advertencia ⚠).
   const pkgB = rows.find((r) => r[2] === "Encofrado de cimentaciones" && r[4] === "Paquete")!;
-  expect(pkgB.slice(0, 9)).toEqual(["7", "1.2", "Encofrado de cimentaciones", "", "Paquete", "", "", "", "0"]);
+  expect(pkgB.slice(0, 9)).toEqual(["7", "1.2", "Encofrado de cimentaciones", "Encofrado de cimentaciones", "Paquete", "", "", "", "0"]);
 
   // a3: única actividad de 1.2, sin precio (queda en blanco a propósito).
   const a3 = rows.find((r) => r[3] === "Encofrado de zapatas")!;
@@ -344,7 +346,7 @@ test("Estimar los Costos — el CSV de reserva (sin window.JSZip) también trae 
   // El CSV también trae el paquete como su propia fila (Tipo="Paquete"), no
   // solo sus actividades -- fiel reflejo de la tabla, igual que el .xlsx.
   const pkgA = lines.find((l) => l[2] === "Excavación de zanjas" && l[4] === "Paquete")!;
-  expect(pkgA).toEqual(["2", "1.1", "Excavación de zanjas", "", "Paquete", "", "", "", "0"]);
+  expect(pkgA).toEqual(["2", "1.1", "Excavación de zanjas", "Excavación de zanjas", "Paquete", "", "", "", "0"]);
 });
 
 test("Estimar los Costos — un archivo completamente ajeno (ninguna fila corresponde a la EDT/actividades reales) se rechaza y no toca el estimado existente", async ({ page }) => {

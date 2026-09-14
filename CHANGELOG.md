@@ -56,6 +56,17 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Changed
 
+- **En Estimar los Costos, "Nombre de la actividad" ya no queda vacía en
+  las filas de Proyecto/Fase/Paquete del archivo exportado** — repite el
+  nombre de esa fila (a pedido explícito del usuario, para que la
+  columna funcione como un "concepto" uniforme al usar el archivo como
+  tabla dinámica en Excel: una columna con celdas vacías intercaladas
+  rompe el agrupado). La distinción entre una fila de referencia y una
+  de actividad real para reconciliar al importar pasa a depender
+  siempre de la columna "Tipo" (`NON_ACTIVITY_TYPES` =
+  `["hito","proyecto","fase","paquete"]`), nunca de si "Nombre de la
+  actividad" está vacía o no -- ya no es un indicador confiable de eso.
+
 - **La columna "N.º" de Definir las Actividades, Estimar los Costos,
   Análisis PERT y Cronograma/CPM pasa a llamarse "Id."** y es siempre
   **consecutiva, sin saltos** — igual que el Task ID que MS Project
