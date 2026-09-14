@@ -224,11 +224,11 @@
 					notes: ""
 				},
 				{
-					name: "Fin de Procura (entrega de estructuras metálicas)",
+					name: "Fin de Procura (entrega de equipos eléctricos e instalaciones)",
 					date: "2026-08-26",
 					type: "contractual",
 					constraint: "FNLT",
-					notes: "Hito contractual con el Proveedor A."
+					notes: "Paquete que cierra la fase (Proveedor C); las estructuras metálicas (Proveedor A) ya se entregaron el 19/08."
 				},
 				{
 					name: "Fin de cimentaciones",

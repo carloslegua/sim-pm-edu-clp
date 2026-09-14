@@ -36,8 +36,18 @@ raíz son generados y commiteados — nunca se editan a mano.**
    DISTRIB+ sobre el proyecto activo sin una acción explícita del alumno
    (botón "Cargar ejemplo"). Un módulo sin datos arranca **en blanco**,
    nunca con el ejemplo precargado.
-6. Sin frameworks de componentes (React/Vue/Svelte). Vanilla + TypeScript.
-7. Cambios módulo por módulo: el repo queda desplegable y funcional
+6. **Los 12 "Cargar ejemplo" son UN SOLO proyecto coherente** ("DISTRIB+
+   S.A. — Almacén Lurín"): mismos códigos EDT, mismas personas del OBS,
+   mismas fechas de hito, mismo presupuesto/moneda entre TODOS los
+   módulos — ver el catálogo canónico en ARCHITECTURE.md ("Dataset de
+   referencia (DISTRIB+)"). Al agregar un módulo o función nueva que
+   necesite datos de ejemplo, **AMPLÍA ese mismo caso** (reutiliza sus
+   códigos/personas/fechas ya existentes) en vez de inventar uno propio;
+   si agregas un elemento genuinamente nuevo al caso (fase, cargo,
+   interesado, hito), documéntalo también ahí para que la próxima
+   ampliación lo encuentre coherente.
+7. Sin frameworks de componentes (React/Vue/Svelte). Vanilla + TypeScript.
+8. Cambios módulo por módulo: el repo queda desplegable y funcional
    después de cada commit.
 
 ## Comandos esenciales

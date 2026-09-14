@@ -404,3 +404,68 @@ regresión end-to-end. Resultado esperado del cronograma (12
 actividades, 13 enlaces): **53 días laborables, fin 2026-09-16, ruta
 crítica `a1-a2-a3-a4-a8-a9-a10-a11-a12`**. Si este número cambia sin un
 cambio deliberado en `cpm()` o en el dataset, algo se rompió.
+
+### Regla: UN SOLO proyecto ejemplo coherente en los 12 módulos
+
+Cada módulo (excepto `panel-control`) genera su propio "Cargar ejemplo"
+/ "Modo ejemplo" de forma **independiente en su propio código** — no
+hay un proyecto DISTRIB+ único guardado una vez en `localStorage` que
+todos lean; cada `main.ts` tiene su propia función (`loadSample()`,
+`SAMPLE`, `sampleState()`, `buildSample()`...). Por diseño, **todas
+deben describir el MISMO proyecto ficticio** ("DISTRIB+ S.A. — Almacén
+Lurín"), con los mismos códigos, nombres, personas y fechas — auditado
+end-to-end el 2026-09-13 (12/12 módulos coherentes; ver detalle de la
+corrida en el historial de conversación si hace falta el detalle
+completo). Catálogo canónico para no tener que releer los 12 archivos
+cada vez que se agrega o toca un módulo:
+
+- **Proyecto**: "DISTRIB+ S.A. — Almacén Lurín" (Lima), 12.000 m² en
+  Lurín. Código de manager `DPLU-2026`. Inicio **2026-07-06**, cierre
+  **2026-11-06**. CAPEX **USD 8.500.000** (moneda del proyecto: USD en
+  todos los módulos que la mencionan — `cost` debe arrancar en USD por
+  defecto también, no en PEN, aunque su monto base 7.100.000 numérico
+  coincida con el total del WBS).
+- **EDT** (`wbs`/`activities`/`pert`/`cronograma-cpm`/`raci` la
+  replican tal cual): 1 Dirección de Proyecto (1.1–1.3) · 2 Ingeniería
+  y Diseño (2.1 Estudio de suelos, 2.2 Diseño estructural, 2.3 Diseño
+  eléctrico y sanitario, **2.4 Permisos y licencias municipales**) · 3
+  Procura (3.1 Estructuras metálicas, 3.2 Materiales de construcción,
+  3.3 Equipos eléctricos e instalaciones) · 4 Construcción (4.1–4.5) ·
+  5 Pruebas y Puesta en Marcha (5.1–5.3). Costo total del WBS: **S/
+  7.100.000** (18 paquetes).
+- **OBS** (`obs`/`raci` la replican): Comité Directivo/Sponsor →
+  Gerencia General DISTRIB+ · Director de Proyecto → PM · Jefe de
+  Ingeniería/Ing. Civil → Geotecnia, Ing. Estructural, Ing. MEP · Jefe
+  de Logística/Logística → Proveedor A/B/C · Residente de Obra →
+  Cuadrilla A–D, Subcontrata MEP · Control de Calidad/QA-QC · Asesoría
+  Legal/Legal. `raci/main.ts` agrega a propósito un cargo "Coordinador
+  HSE" que NO existe en `obs` — es un error didáctico deliberado (ver
+  el comentario "Nota didáctica" en `SAMPLE_ASSIGNMENTS`, dispara la
+  regla SR-03 del Velocímetro de Gobernanza); no es una incoherencia a
+  corregir.
+- **Interesados** (`stakeholder-studio`, ids `s1`…`s12`, referenciados
+  por id desde `requirements`): Gerencia General DISTRIB+ (s1), Banco
+  financista/BCP, Constructora/Contratista EPC, Municipalidad de Lurín
+  (s4), OEFA, SUNAFIL (s6), Junta de vecinos, Sindicato de construcción
+  civil, Futuros operarios (s9), Clientes/distribuidores (s10),
+  Proveedor de estructuras/Proveedor A, Prensa/medios locales.
+- **Requisitos/Alcance** (`project-charter` RAN.01–RAN.04 →
+  `requirements` `ran1`-`ran4`/`q#` → `scope-statement` deliverables):
+  encadenados por id, no por texto — cualquier módulo nuevo que agregue
+  un requisito o entregable del caso debe seguir esa misma cadena de
+  ids en vez de inventar los suyos.
+- **Hitos/fechas clave** (`schedule-plan`, calzan con `wbs`/`charter`):
+  aprobación del plan 2026-07-20, fin Ingeniería 2026-08-14, permisos
+  2026-08-21, fin Procura 2026-08-26 (lo cierra 3.3, no 3.1 — 3.1
+  termina antes, el 08-19), fin cimentaciones 2026-09-04, entrega final
+  2026-11-06. Feriados de ejemplo: 2026-07-28/29, 2026-08-30.
+
+**Regla para trabajo futuro**: al agregar un módulo o una función
+nueva que necesite datos de ejemplo, el ejemplo se **AMPLÍA** a partir
+de este mismo caso (mismos códigos EDT, mismas personas del OBS,
+mismas fechas, mismo proyecto) — nunca se inventa un escenario nuevo
+ni se cambia un dato ya usado por otro módulo sin propagar el cambio a
+todos los que lo referencian. Si la ampliación agrega un elemento
+verdaderamente nuevo al caso (una fase, un cargo, un interesado, un
+hito), se documenta aquí mismo para que la próxima ampliación lo
+encuentre.

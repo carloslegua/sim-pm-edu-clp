@@ -41,7 +41,9 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     // Valores de ejemplo documentados: base 7,100,000 -> BAC 8,075,181 (Clase 3, P70).
-    expect(doc.getElementById("kBAC")!.textContent).toBe("S/ 8,075,181");
+    // Moneda por defecto USD (coherente con el CAPEX del caso DISTRIB+ en Charter/
+    // Alcance/Cronograma, todos en USD -- ver ARCHITECTURE.md, "Dataset de referencia").
+    expect(doc.getElementById("kBAC")!.textContent).toBe("$ 8,075,181");
     expect(doc.querySelectorAll("#coBody tr").length).toBe(2); // SAMPLE_CO
 
     for (const fn of ["exportJSON", "importJSON", "save", "recalcCont", "onBaseInput", "pullFromWBS", "addCO", "coStatus", "delCO", "buildDoc"]) {

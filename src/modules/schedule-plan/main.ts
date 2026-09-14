@@ -147,7 +147,7 @@ function sampleState(): ScheduleState {
       { name: "Aprobación del Plan de Gestión del Proyecto", date: "2026-07-20", type: "interno", constraint: "FNLT", notes: "Cierra la fase de Dirección de Proyecto (línea base inicial)." },
       { name: "Permisos y licencias municipales aprobados", date: "2026-08-21", type: "regulatorio", constraint: "FNET", notes: "Habilita el inicio de movimiento de tierras." },
       { name: "Fin de Ingeniería y Diseño", date: "2026-08-14", type: "interno", constraint: "FNLT", notes: "" },
-      { name: "Fin de Procura (entrega de estructuras metálicas)", date: "2026-08-26", type: "contractual", constraint: "FNLT", notes: "Hito contractual con el Proveedor A." },
+      { name: "Fin de Procura (entrega de equipos eléctricos e instalaciones)", date: "2026-08-26", type: "contractual", constraint: "FNLT", notes: "Paquete que cierra la fase (Proveedor C); las estructuras metálicas (Proveedor A) ya se entregaron el 19/08." },
       { name: "Fin de cimentaciones", date: "2026-09-04", type: "interno", constraint: "FNLT", notes: "" },
       { name: "Entrega final y acta de cierre", date: "2026-11-06", type: "contractual", constraint: "FNLT", notes: "Fin de Pruebas y Puesta en Marcha; cierre contractual con el cliente." }
     ],
