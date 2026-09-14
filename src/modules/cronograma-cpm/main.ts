@@ -137,7 +137,12 @@ interface Row {
 
 // Snapshot de filas estilo MS Project (0=proyecto, luego fases/paquetes/
 // actividades) — la instantánea que consume GPI.util.buildScheduleLinks y
-// la fuente de la numeración N.º. Las actividades llevan activityId+dur+te.
+// la fuente del Id. (netId). Las actividades llevan activityId+dur+te. Este
+// Id. debe coincidir con el de Definir las Actividades/Estimar los Costos/
+// PERT para el mismo paquete/actividad -- los cuatro recorren la MISMA EDT
+// y las MISMAS actividades, en el MISMO orden (project → fases → paquetes →
+// actividades), sin que los hitos (que Cronograma-CPM no procesa) alteren
+// la cuenta en ninguno de los otros tres.
 function fullRowsSnapshot(): Row[] {
   const w = wbsData(), act = actsData(), idx = pertIndex(), out: Row[] = [];
   if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
@@ -554,7 +559,7 @@ function analyzePaste(text: string) {
   lines.forEach((ln) => {
     const c = ln.split("\t");
     const netStr = (c[0] || "").trim();
-    if (!/^\d+$/.test(netStr)) return; // salta encabezados o filas sin N.º numérico
+    if (!/^\d+$/.test(netStr)) return; // salta encabezados o filas sin Id. numérico
     const cols = c.length;
     let name = (c[1] || "").trim();
     const start = parseDateCell(cols >= 5 ? c[3] : "");
@@ -573,13 +578,13 @@ type AnalyzeResult = ReturnType<typeof analyzePaste>;
 const REASON: Record<string, string> = {
   "enlace-a-resumen": "Enlace a una tarea resumen (fase/paquete): enlaza las actividades detalle.",
   "enlace-a-proyecto": "Enlace al proyecto (fila 0): no admitido.",
-  "colgante": "Referencia a un N.º que no existe entre las actividades.",
+  "colgante": "Referencia a un Id. que no existe entre las actividades.",
   "auto-enlace": "La actividad dependería de sí misma.",
-  "fila-sin-correspondencia": "N.º sin correspondencia con una actividad (re-exporta la plantilla).",
-  "nombre-no-coincide": "El nombre no coincide con la actividad de ese N.º — ¿editaste la EDT? Re-exporta la plantilla.",
+  "fila-sin-correspondencia": "Id. sin correspondencia con una actividad (re-exporta la plantilla).",
+  "nombre-no-coincide": "El nombre no coincide con la actividad de ese Id. — ¿editaste la EDT? Re-exporta la plantilla.",
   "predecesoras-en-resumen": "Predecesoras escritas en una fila resumen (ignoradas).",
   "predecesoras-en-proyecto": "Predecesoras escritas en la fila del proyecto (ignoradas).",
-  "sin-id": "No se pudo leer el N.º de la predecesora.",
+  "sin-id": "No se pudo leer el Id. de la predecesora.",
   "sintaxis": "Sintaxis de predecesora no reconocida.",
   "desfase": "Desfase (lag) sin número válido."
 };
@@ -589,19 +594,19 @@ function previewHTML(a: AnalyzeResult): string {
   }
   const nm = nameOf(a.snap as Row[]), nn = netMap(a.snap as Row[]);
   const okList = a.links.map((l) => { const lg = Number(l.lag) ? (l.lag > 0 ? "+" : "") + l.lag + unitTag(l.lagUnit) : ""; return "<div class='row'><span>" + esc((nn[l.from] != null ? nn[l.from] : "?") + " " + (nm[l.from] || "") + " → " + (nn[l.to] != null ? nn[l.to] : "?") + " " + (nm[l.to] || "")) + " <b style='color:#6c5ce7'>[" + l.type + lg + "]</b></span></div>"; }).join("");
-  function errList(arr: Array<{ toName?: string; name?: string; fromNet?: number; reason: string }>): string { return arr.map((e) => { const who = (e.toName || e.name || (e.fromNet != null ? "N.º " + e.fromNet : "")); return "<div class='row'><span>" + esc(who) + "</span><span class='reason'>" + esc(REASON[e.reason] || e.reason) + "</span></div>"; }).join(""); }
+  function errList(arr: Array<{ toName?: string; name?: string; fromNet?: number; reason: string }>): string { return arr.map((e) => { const who = (e.toName || e.name || (e.fromNet != null ? "Id. " + e.fromNet : "")); return "<div class='row'><span>" + esc(who) + "</span><span class='reason'>" + esc(REASON[e.reason] || e.reason) + "</span></div>"; }).join(""); }
   const datesN = Object.keys(a.dates).length;
   let html = "<p style='margin-bottom:10px'>Se interpretaron <b>" + a.pastedCount + "</b> fila(s). Nada se guarda hasta que confirmes.</p>";
   html += sec("✔ Enlaces a crear", a.links.length, "cnt-ok", okList);
   if (a.rejected.length) html += sec("✖ Enlaces rechazados", a.rejected.length, "cnt-bad", errList(a.rejected));
   if (a.rowErrors.length) html += sec("⚠ Filas con problema", a.rowErrors.length, "cnt-warn", errList(a.rowErrors));
-  if (a.parseErrors.length) html += sec("⚠ Predecesoras no interpretables", a.parseErrors.length, "cnt-warn", a.parseErrors.map((e) => "<div class='row'><span>N.º " + e.netId + " · «" + esc(e.raw) + "»</span><span class='reason warn'>" + esc(REASON[e.reason] || e.reason) + "</span></div>").join(""));
+  if (a.parseErrors.length) html += sec("⚠ Predecesoras no interpretables", a.parseErrors.length, "cnt-warn", a.parseErrors.map((e) => "<div class='row'><span>Id. " + e.netId + " · «" + esc(e.raw) + "»</span><span class='reason warn'>" + esc(REASON[e.reason] || e.reason) + "</span></div>").join(""));
   if (a.duplicates.length) html += sec("● Duplicados (colapsados)", a.duplicates.length, "cnt-warn", "");
   html += sec("📅 Fechas para auditoría", datesN, "cnt-ok", "");
   if (a.canApply) {
     html += "<div class='radio-row'><label><input type='radio' name='mergeMode' value='merge' checked> Fusionar con lo existente</label><label><input type='radio' name='mergeMode' value='replace'> Reemplazar todo</label></div>";
   } else {
-    html += "<div class='issue warn' style='margin-top:8px'><span class='ic'>⚠</span><span>No hay nada aplicable. Revisa que pegaste la columna <b>Predecesoras</b> con los N.º de esta plantilla.</span></div>";
+    html += "<div class='issue warn' style='margin-top:8px'><span class='ic'>⚠</span><span>No hay nada aplicable. Revisa que pegaste la columna <b>Predecesoras</b> con los Id. de esta plantilla.</span></div>";
   }
   return html;
 }
@@ -621,8 +626,8 @@ function applyPaste(a: AnalyzeResult, mergeMode: string): void {
 }
 function openPaste(): void {
   const html =
-    "<p>Pega desde Excel o MS Project las columnas de tu cronograma. La <b>llave de unión es el N.º</b> (0 = proyecto), tal como aparece en la plantilla (botón «⧉ Copiar plantilla»). Orden esperado:</p>" +
-    "<div style='font-family:var(--mono);font-size:11px;background:var(--bg-2);border:1px solid var(--panel-border);border-radius:8px;padding:8px 10px;margin-bottom:10px'>N.º &nbsp;·&nbsp; Nombre &nbsp;·&nbsp; Dur &nbsp;·&nbsp; Comienzo &nbsp;·&nbsp; Fin &nbsp;·&nbsp; Predecesoras</div>" +
+    "<p>Pega desde Excel o MS Project las columnas de tu cronograma. La <b>llave de unión es el Id.</b> (0 = proyecto), tal como aparece en la plantilla (botón «⧉ Copiar plantilla»). Orden esperado:</p>" +
+    "<div style='font-family:var(--mono);font-size:11px;background:var(--bg-2);border:1px solid var(--panel-border);border-radius:8px;padding:8px 10px;margin-bottom:10px'>Id. &nbsp;·&nbsp; Nombre &nbsp;·&nbsp; Dur &nbsp;·&nbsp; Comienzo &nbsp;·&nbsp; Fin &nbsp;·&nbsp; Predecesoras</div>" +
     "<textarea class='paste-zone' id='pasteTA' placeholder='Pega aquí (Ctrl+V)…'></textarea>" +
     "<div style='font-size:11px;color:#8992a3;margin-top:8px'>Sintaxis de predecesoras: <b>3</b>, <b>3FS+2d</b>, <b>7CC</b> (SS), <b>9FC-1d</b> (lead). Separadores <b>;</b> o <b>,</b>. Se pega la <b>topología</b>; el simulador recalcula las fechas — las fechas pegadas son solo auditoría.</div>";
   showModalHTML({
@@ -643,7 +648,7 @@ function openPaste(): void {
 // ============================ PLANTILLA / EXPORT / IMPORT ============================
 function copyTemplate(): void {
   const snap = fullRowsSnapshot(), nn = netMap(snap);
-  const rows = [["N.º", "Nombre", "Dur (d)", "Comienzo", "Fin", "Predecesoras"].join("\t")];
+  const rows = [["Id.", "Nombre", "Dur (d)", "Comienzo", "Fin", "Predecesoras"].join("\t")];
   snap.forEach((r) => {
     let dur: string | number = "", preds = "";
     if (r.kind === "activity") {
@@ -653,7 +658,7 @@ function copyTemplate(): void {
     rows.push([r.netId, r.name, dur, "", "", preds].join("\t"));
   });
   const tsv = rows.join("\n");
-  function ok() { setStatus("Plantilla copiada al portapapeles — pégala en Excel o MS Project."); showAlert("Plantilla copiada. Pégala en Excel o MS Project, completa Comienzo/Fin y Predecesoras usando los N.º, y vuelve a pegarla aquí con «📋 Pegar cronograma».", "Plantilla copiada"); }
+  function ok() { setStatus("Plantilla copiada al portapapeles — pégala en Excel o MS Project."); showAlert("Plantilla copiada. Pégala en Excel o MS Project, completa Comienzo/Fin y Predecesoras usando los Id., y vuelve a pegarla aquí con «📋 Pegar cronograma».", "Plantilla copiada"); }
   if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(tsv).then(ok, () => { fallbackCopy(tsv); ok(); }); } else { fallbackCopy(tsv); ok(); }
 }
 function fallbackCopy(t: string): void { const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); } catch (_) { /* noop */ } ta.remove(); }
@@ -703,7 +708,7 @@ function buildReport(): void {
     const path = cpm.criticalIds.map((id) => (cmap[id] || "") + " " + (nmap[id] || ""));
     h += "<h2>Ruta crítica</h2><p class='num'>" + esc(path.join("  →  ")) + "</p>";
   }
-  h += "<h2>Actividades (CPM)</h2><table><tr><th>N.º</th><th>EDT</th><th>Actividad</th><th>Dur</th><th>IC</th><th>TC</th><th>IL</th><th>TL</th><th>H.T.</th><th>Crítica</th></tr>";
+  h += "<h2>Actividades (CPM)</h2><table><tr><th>Id.</th><th>EDT</th><th>Actividad</th><th>Dur</th><th>IC</th><th>TC</th><th>IL</th><th>TL</th><th>H.T.</th><th>Crítica</th></tr>";
   snap.filter((r) => r.kind === "activity").forEach((r) => {
     const row = cpm.ok ? cpm.rows[r.activityId as string] : null;
     const dur = (durMode === "pert" && r.te != null) ? r.te : r.det;

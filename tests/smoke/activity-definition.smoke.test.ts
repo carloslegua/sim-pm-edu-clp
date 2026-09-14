@@ -94,6 +94,55 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
     expect(doc.getElementById("actsBody")!.textContent).not.toMatch(/Hitos del proyecto/);
   });
 
+  it("un hito NUNCA consume Id: el correlativo de fases/paquetes/actividades sigue igual con o sin hitos de por medio", async () => {
+    // w2 (1.1) tiene 2 actividades + 1 hito atado (se lista después de sus
+    // actividades); w3 (1.2) tiene 1 actividad más. Si el hito consumiera un
+    // número, w3 y su actividad quedarían corridos en 1 -- justo lo que este
+    // test evita, porque ese Id debe coincidir con el que ven Estimar los
+    // Costos, PERT y Cronograma/CPM (que nunca ven los hitos).
+    const seedWithMilestone = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 4,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] },
+                w1: { id: "w1", parentId: "root", name: "Fase 1", children: ["w2", "w3"] },
+                w2: { id: "w2", parentId: "w1", name: "Paquete A", children: [] },
+                w3: { id: "w3", parentId: "w1", name: "Paquete B", children: [] }
+              }
+            },
+            activities: {
+              byLeaf: {
+                w2: [{ id: "a1", name: "Actividad 1", unit: "m³", qty: 10, perf: 5, teams: 1 }, { id: "a2", name: "Actividad 2", unit: "m³", qty: 10, perf: 5, teams: 1 }],
+                w3: [{ id: "a3", name: "Actividad 3", unit: "m³", qty: 10, perf: 5, teams: 1 }]
+              },
+              idCounter: 4,
+              milestones: [{ id: "m1", code: "H1", name: "Hito intermedio", leafId: "w2" }]
+            }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Activity_Definition.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedWithMilestone)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    const rows = Array.from(doc.querySelectorAll("#actsBody tr"));
+    const idOf = (row: Element) => row.querySelector(".n-cell")!.textContent;
+    // 0=proyecto, 1=Fase 1, 2=Paquete A, 3=Actividad 1, 4=Actividad 2,
+    // (hito: "—", no consume), 5=Paquete B, 6=Actividad 3.
+    expect(rows.map(idOf)).toEqual(["0", "1", "2", "3", "4", "—", "5", "6"]);
+    expect(rows[5].className).toMatch(/milestone-row/);
+    expect(rows[6].textContent).toMatch(/Paquete B/);
+  });
+
   it("con proyecto activo real: la tabla muestra los paquetes de la EDT en modo solo lectura", async () => {
     const dom = await JSDOM.fromURL(base + "Activity_Definition.html", {
       runScripts: "dangerously", resources: "usable",

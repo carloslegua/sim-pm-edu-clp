@@ -9,6 +9,25 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ## [Unreleased]
 
+### Changed
+
+- **La columna "N.º" de Definir las Actividades, Estimar los Costos,
+  Análisis PERT y Cronograma/CPM pasa a llamarse "Id."** — y ahora es
+  garantizado consistente entre los cuatro: como los cuatro módulos
+  recorren la MISMA EDT y las MISMAS actividades en el mismo orden, ese
+  Id. permite a un alumno verificar que la fila 7 de una tabla es
+  exactamente el mismo paquete/actividad que la fila 7 de otra. Esto
+  expuso (y corrige) un desajuste real: los hitos, agregados en el
+  cambio anterior, sí consumían un número en Definir las
+  Actividades/Estimar los Costos, pero PERT y Cronograma/CPM nunca los
+  ven — así que, con hitos de por medio, el mismo paquete terminaba con
+  un Id. distinto en cada tabla (percibido como "PERT no está jalando la
+  información de Definir las Actividades"). Ahora los hitos no consumen
+  ese correlativo en ninguna tabla (muestran "—" en la columna Id.), así
+  que el número siempre coincide entre las cuatro. Cubierto por un test
+  cruzado en cada uno de los cuatro smoke tests, sembrando el mismo
+  proyecto y comparando la secuencia de Id. resultante.
+
 ### Added
 
 - **Hitos en Definir las Actividades y Estimar los Costos**: nuevo tipo

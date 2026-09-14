@@ -673,7 +673,7 @@ function copyWholeTable(): void {
   const rows = fullRows();
   if (!rows.length) { setStatus("No hay tabla que copiar."); return; }
   const pct = state().inputMode === "pct";
-  const lines = ["N.º\tEDT\tActividad\tDur base\tO" + (pct ? " (%M)" : " (días)") + "\tM (días)\tP" + (pct ? " (%M)" : " (días)") + "\tTE\tσ\tσ²"];
+  const lines = ["Id.\tEDT\tActividad\tDur base\tO" + (pct ? " (%M)" : " (días)") + "\tM (días)\tP" + (pct ? " (%M)" : " (días)") + "\tTE\tσ\tσ²"];
   rows.forEach((r) => {
     if (r.kind === "activity") {
       const c = r.c as CalcResult, e = c.entry;
@@ -749,8 +749,8 @@ function buildReport(): void {
     + '<tr><td>Probabilidad de cumplimiento</td><td>Pendiente de la ruta crítica: se activa con el módulo Cronograma/CPM (Z = (plazo − ΣTE) / √Σσ² sobre la ruta).</td></tr>'
     + '</table>'
     + '<h2>2. Análisis por actividad</h2>'
-    + '<p class="rep-note">TE = (O + 4M + P) / 6 · σ = (P − O) / 6 · σ² = σ². La M automática sigue a la duración determinística Dur = Met ÷ (#Eq × R) del módulo Definir las Actividades; las M fijadas a mano se marcan con *. Valores de O/M/P mostrados en días.</p>'
-    + '<table><tr><th style="width:5%">N.º</th><th style="width:9%">EDT</th><th>Actividad</th><th style="width:7%">Dur</th><th style="width:7%">O</th><th style="width:7%">M</th><th style="width:7%">P</th><th style="width:7%">TE</th><th style="width:7%">σ</th><th style="width:7%">σ²</th></tr>';
+    + '<p class="rep-note">TE = (O + 4M + P) / 6 · σ = (P − O) / 6 · σ² = σ². La M automática sigue a la duración determinística Dur = Met ÷ (#Eq × R) del módulo Definir las Actividades; las M fijadas a mano se marcan con *. Valores de O/M/P mostrados en días. El Id de cada fila coincide con el de Definir las Actividades, Estimar los Costos y Cronograma/CPM (mismo paquete/actividad).</p>'
+    + '<table><tr><th style="width:5%">Id.</th><th style="width:9%">EDT</th><th>Actividad</th><th style="width:7%">Dur</th><th style="width:7%">O</th><th style="width:7%">M</th><th style="width:7%">P</th><th style="width:7%">TE</th><th style="width:7%">σ</th><th style="width:7%">σ²</th></tr>';
   fullRows().forEach((r) => {
     if (r.kind === "project") {
       body += '<tr><td class="num rep-phase" style="text-align:center">0</td><td class="num rep-phase">0</td><td class="rep-phase" colspan="8">' + esc(r.name) + '</td></tr>';

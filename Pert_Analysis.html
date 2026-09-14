@@ -231,7 +231,7 @@
         <table class="acts" id="actsTable">
           <thead>
             <tr>
-              <th class="col-item" title="Correlativo consecutivo, como el ID de MS Project: 0 = proyecto">N.º</th>
+              <th class="col-item" title="Correlativo consecutivo, como el ID de MS Project: 0 = proyecto. Identifica el mismo paquete/actividad en Definir las Actividades, Estimar los Costos y Cronograma/CPM.">Id.</th>
               <th class="col-code">Código EDT</th>
               <th>Actividad</th>
               <th class="col-dur" title="Duración determinística del módulo Definir las Actividades: Met ÷ (#Eq × R), redondeada al entero superior. Solo lectura.">Dur base</th>
@@ -281,6 +281,7 @@
 
     <div class="tip-box"><b>PERT:</b> por cada actividad estima <b>O</b>ptimista, <b>M</b>ás probable y <b>P</b>esimista. TE = (O+4M+P)/6 pondera la incertidumbre: cuando P se aleja de M más que O (lo típico en construcción), <b>TE &gt; Dur base</b> — el riesgo alarga la esperanza. La regla <b>O ≤ M ≤ P</b> es obligatoria: las ternas rotas se pintan en rojo.</div>
     <div class="tip-box"><b>Trabaja como en Excel:</b> <b>Ctrl+V</b> pega bloques (O, M, P se reparten hacia abajo y a la derecha), <b>Enter</b> y ↑ ↓ navegan la columna, <b>Shift+clic</b> selecciona un rango y <b>Ctrl+C</b> lo copia. <b>Clic derecho</b> abre el menú contextual para pegar desde Excel, copiar o volver M al modo automático.</div>
+    <div class="tip-box">Como en MS Project: la fila <b>0</b> es la tarea resumen del proyecto y la columna <b>Id.</b> numera consecutivamente fases, paquetes y actividades — las mismas que definiste en Definir las Actividades. Este mismo Id. identifica al mismo paquete/actividad en Estimar los Costos y Cronograma/CPM: úsalo para verificar que es la misma fila en cada tabla.</div>
   </aside>
 </div>
 

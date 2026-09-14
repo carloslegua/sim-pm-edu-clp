@@ -182,6 +182,43 @@ uniforme antes de tocar un archivo:
    depende incondicionalmente de `gpi-core.js`, así que no necesita
    `GPI?`/`GPI!` en cada uno de sus ~90 sitios de uso).
 
+## El "Id." compartido entre Definir las Actividades, Estimar los Costos, Análisis PERT y Cronograma/CPM
+
+Los cuatro módulos del cronograma leen la MISMA EDT (`wbs`) y las MISMAS
+actividades (`activities.byLeaf`) en vivo desde gpi-core, y cada uno
+arma su propia `fullRows()`/`fullRowsSnapshot()` recorriendo esa EDT con
+el mismo algoritmo MS Project: fila 0 = proyecto, luego cada fase,
+paquete y actividad en orden jerárquico, con un correlativo (`n`/`netId`)
+que antes se llamaba "N.º" y ahora se muestra como **"Id."** en la
+cabecera de las cuatro tablas. La razón del cambio de nombre: ese Id. es
+la clave con la que un alumno verifica que la fila 7 de Definir las
+Actividades es EXACTAMENTE el mismo paquete/actividad que la fila 7 de
+Estimar los Costos, de Análisis PERT y de Cronograma/CPM — por eso debe
+coincidir número por número entre los cuatro para el mismo proyecto.
+
+Esto impone una regla al agregar cualquier cosa nueva a `fullRows()` en
+Definir las Actividades o Estimar los Costos (los únicos dos que hoy
+muestran más que fase/paquete/actividad): **si el elemento nuevo no
+existe también en PERT/Cronograma-CPM, su fila NUNCA debe incrementar el
+contador de Id.** — se le asigna un Id. propio fuera de ese correlativo
+(mostrado como "—" o su propio código) para no correr la numeración de
+todo lo que viene después. Los **hitos** son el caso ya resuelto así:
+viven en `activities.milestones` (que PERT y Cronograma-CPM ni siquiera
+leen), se muestran con su propio código (H1, H2…) y "—" en la columna
+Id., y `placeLooseMilestones()`/las líneas `milestones.filter(...)` en
+`fullRows()` de ambos módulos pasan `n: -1` en vez de `n: n++` — ver el
+detalle en la sección de Activity_Definition.html más abajo. Cualquier
+elemento futuro con la misma asimetría (visible en un módulo, ausente en
+los otros) debe seguir el mismo patrón, no el de fase/paquete/actividad.
+
+Cubierto por tests cruzados: `tests/smoke/activity-definition.smoke.test.ts`,
+`cost-estimate.smoke.test.ts`, `pert-analysis.smoke.test.ts` y
+`cronograma-cpm.smoke.test.ts` siembran el MISMO proyecto (EDT de 2
+paquetes + 3 actividades + 1 hito en el medio) y verifican que las
+cuatro tablas producen la secuencia de Id. `0,1,2,3,4,5,6` — con el hito
+mostrando "—" en Definir las Actividades/Estimar los Costos, y sin
+aparecer siquiera en PERT/Cronograma-CPM.
+
 ## Patrones y particularidades por módulo
 
 Convenciones que comparten los 14 (no se repiten abajo salvo que un
@@ -344,6 +381,12 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
     su paquete; siempre con Duración "0" (valor por definición, nunca
     "—" de dato faltante) e ícono ◆ distintivo
     (`.milestone-row`/`.milestone-code`).
+  - **Un hito nunca consume el "Id." compartido** con Estimar los
+    Costos/PERT/Cronograma-CPM (ver la sección general más arriba): sus
+    filas pasan `n: -1` en vez de `n: n++`, y la celda Id. muestra "—".
+    Si consumiera un número, el paquete/actividad que viene después
+    quedaría con un Id. distinto al que le asignan PERT y Cronograma-CPM
+    (que no ven hitos), rompiendo la verificación cruzada entre tablas.
   - El modo ejemplo trae tres hitos ilustrativos: "H1 Inicio del
     Proyecto" (suelto, `afterLeafId: null`, al principio de todo), "H2
     Fin de Cimentaciones" (atado a 4.2), "H3 Cierre del Proyecto"

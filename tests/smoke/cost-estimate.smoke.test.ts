@@ -101,6 +101,50 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
     expect(doc.getElementById("missList")!.textContent).toMatch(/Todos los paquetes de trabajo tienen actividades definidas/);
   });
 
+  it("un hito NUNCA consume Id: el correlativo coincide con el que muestra Definir las Actividades para la misma EDT", async () => {
+    // Mismo seed (EDT + actividades + hito) que su equivalente en
+    // tests/smoke/activity-definition.smoke.test.ts -- el Id de cada fila
+    // debe coincidir EXACTO entre ambos módulos para el mismo paquete/
+    // actividad, sin que el hito corra la numeración de w3/a3.
+    const seedWithMilestone = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 4,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] },
+                w1: { id: "w1", parentId: "root", name: "Fase 1", children: ["w2", "w3"] },
+                w2: { id: "w2", parentId: "w1", name: "Paquete A", children: [] },
+                w3: { id: "w3", parentId: "w1", name: "Paquete B", children: [] }
+              }
+            },
+            activities: {
+              byLeaf: {
+                w2: [{ id: "a1", name: "Actividad 1", unit: "m³", qty: 10, perf: 5, teams: 1 }, { id: "a2", name: "Actividad 2", unit: "m³", qty: 10, perf: 5, teams: 1 }],
+                w3: [{ id: "a3", name: "Actividad 3", unit: "m³", qty: 10, perf: 5, teams: 1 }]
+              },
+              idCounter: 4,
+              milestones: [{ id: "m1", code: "H1", name: "Hito intermedio", leafId: "w2" }]
+            }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Estimar_Costos.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedWithMilestone)); }
+    });
+    await new Promise((r) => setTimeout(r, 900));
+    const doc = dom.window.document;
+    const rows = Array.from(doc.querySelectorAll("#estBody tr")).filter((r) => !r.className.includes("total-row"));
+    const idOf = (row: Element) => row.querySelector(".n-cell")!.textContent;
+    expect(rows.map(idOf)).toEqual(["0", "1", "2", "3", "4", "—", "5", "6"]);
+  });
+
   it("con proyecto activo real: la tabla muestra el paquete y su actividad en modo solo lectura", async () => {
     const dom = await JSDOM.fromURL(base + "Estimar_Costos.html", {
       runScripts: "dangerously", resources: "usable",

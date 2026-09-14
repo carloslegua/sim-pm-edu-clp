@@ -106,4 +106,49 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
     expect(sch.links.length).toBe(1);
     expect(sch.links[0]).toMatchObject({ from: "a1", to: "a2", type: "FS" });
   });
+
+  it("el Id de cada fila coincide con el de Definir las Actividades/Estimar los Costos/PERT para la misma EDT (los hitos, que Cronograma-CPM no procesa, no corren la numeración)", async () => {
+    // Mismo seed (EDT + actividades + hito en 'activities') que su
+    // equivalente en activity-definition/cost-estimate/pert-analysis
+    // .smoke.test.ts -- Cronograma-CPM ni siquiera lee
+    // "activities.milestones", así que su numeración (netId) debe coincidir
+    // exactamente: 0,1,2,3,4,5,6.
+    const seedWithMilestone = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 4,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] },
+                w1: { id: "w1", parentId: "root", name: "Fase 1", children: ["w2", "w3"] },
+                w2: { id: "w2", parentId: "w1", name: "Paquete A", children: [] },
+                w3: { id: "w3", parentId: "w1", name: "Paquete B", children: [] }
+              }
+            },
+            activities: {
+              byLeaf: {
+                w2: [{ id: "a1", name: "Actividad 1", unit: "m³", qty: 10, perf: 5, teams: 1 }, { id: "a2", name: "Actividad 2", unit: "m³", qty: 10, perf: 5, teams: 1 }],
+                w3: [{ id: "a3", name: "Actividad 3", unit: "m³", qty: 10, perf: 5, teams: 1 }]
+              },
+              idCounter: 4,
+              milestones: [{ id: "m1", code: "H1", name: "Hito intermedio", leafId: "w2" }]
+            }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Cronograma_CPM.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedWithMilestone)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    const rows = Array.from(doc.querySelectorAll("#cpmBody tr"));
+    const idOf = (row: Element) => row.querySelector(".n-cell")!.textContent;
+    expect(rows.map(idOf)).toEqual(["0", "1", "2", "3", "4", "5", "6"]);
+  });
 });
