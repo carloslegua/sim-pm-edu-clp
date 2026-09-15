@@ -200,6 +200,7 @@
     <button class="btn sm" id="btnImport">⭱ Importar proyecto</button>
     <input type="file" id="fileProject" accept=".json">
     <button class="btn sm" id="btnExport">⭳ Exportar proyecto</button>
+    <button class="btn sm" id="btnTemplateAll" title="Genera un .xlsx con una hoja por cada módulo que importa desde Excel (WBS Builder, Definir las Actividades, Estimar los Costos), cada una con el nombre exacto y los encabezados que ese módulo espera">⇩ Plantilla combinada (.xlsx)</button>
     <button class="btn sm" id="btnReport">📄 Reporte</button>
   </div>
 
@@ -243,6 +244,13 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<!-- JSZip: genera la plantilla combinada .xlsx (varias hojas, una por módulo
+     que importa desde Excel). integrity: hash SRI oficial de cdnjs para esta
+     versión exacta -- si el CDN sirviera contenido distinto, el navegador
+     rechaza el script en vez de ejecutarlo. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+        integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="gpi-core.js"></script>
 <script src="panel-control.js"></script>
 </body>

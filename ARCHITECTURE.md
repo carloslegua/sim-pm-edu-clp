@@ -298,6 +298,33 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   `raciCoverage`, `charterAudit`, `schedulePlanAudit` y `scheduleStats`
   en una sola vista — los 10 cálculos de auditoría/agregación del
   núcleo, todos cubiertos por Vitest.
+- **"⇩ Plantilla combinada (.xlsx)"** (a pedido explícito del usuario):
+  genera un libro con una hoja por cada módulo que importa desde Excel
+  (hoy: "WBS" de WBS Builder, "EDT" de Definir las Actividades,
+  "Estimado" de Estimar los Costos, más una hoja "Instrucciones"), cada
+  una con el nombre EXACTO y los encabezados EXACTOS que ese módulo
+  exige al importar — así el alumno completa todo en un solo libro y,
+  al subirlo por separado en cada módulo, ese módulo encuentra su hoja
+  por nombre sin ambigüedad (mismo mecanismo `resolveDataSheetPath()` ya
+  implementado en los tres). Este es el ÚNICO módulo, aparte de esos
+  tres, que carga `window.JSZip` — con la MISMA interfaz mínima
+  (`JSZipInstance`/`JSZipCtor`) copiada literal, a propósito: `declare
+  global` fusiona la declaración de `Window.JSZip` de los cuatro
+  archivos en una sola pasada de `tsc`, así que una interfaz distinta
+  en cualquiera de ellos (por chica que sea la diferencia, p. ej.
+  omitir `loadAsync` porque este módulo solo ESCRIBE el .xlsx, nunca lo
+  lee) rompe la fusión con un error de tipos — ver el comentario en el
+  código. Los arreglos `WBS_HEADERS`/`ACTIVITIES_HEADERS`/
+  `COST_ESTIMATE_HEADERS` son una copia literal de `TEMPLATE_HEADERS`
+  de cada módulo (Panel de Control no importa el `.ts` de ningún
+  módulo, mismo criterio de "cada módulo funciona sin depender de
+  otro" del resto de la suite) — si algún módulo cambia su plantilla,
+  hay que actualizar la copia aquí también. Probado en
+  `tests/e2e/panel-control-template.spec.ts`: verifica hojas/
+  encabezados exactos, y además completa la hoja "WBS" descargada con
+  una fila real y la reimporta tal cual en WBS Builder — prueba de que
+  el encabezado generado aquí es aceptado de verdad por ese módulo, no
+  solo "se parece".
 
 **Project_Charter.html**
 - Único módulo con **binding genérico por ruta de puntos**: los campos

@@ -125,6 +125,16 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Panel de Control — "⇩ Plantilla combinada (.xlsx)"**: a pedido
+  explícito del usuario, un solo libro con una hoja por cada módulo que
+  importa desde Excel ("WBS", "EDT", "Estimado", más una hoja de
+  instrucciones), cada una con el nombre y los encabezados EXACTOS que
+  ese módulo exige — para que el alumno complete todo el proyecto en un
+  único archivo y cada módulo, al importar, encuentre su propia hoja
+  sin ambigüedad. Probado en `tests/e2e/panel-control-template.spec.ts`,
+  incluido un round-trip real: completa la hoja "WBS" de la plantilla
+  descargada y la reimporta tal cual en WBS Builder.
+
 - **WBS Builder ahora puede exportar/importar la EDT completa como
   `.xlsx`** — a pedido explícito del usuario, con la misma lógica que ya
   usan Definir las Actividades y Estimar los Costos: hoja de datos con

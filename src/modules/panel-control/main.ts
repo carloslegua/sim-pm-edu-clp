@@ -719,6 +719,172 @@ function handleFile(file: File, mode: string): void {
   r.readAsText(file);
 }
 
+// ---------- plantilla combinada (.xlsx con una hoja por módulo) ----------
+// A pedido explícito del usuario: un solo archivo, con una hoja por cada
+// módulo que importa datos desde Excel (hoy: WBS Builder, Definir las
+// Actividades, Estimar los Costos), cada una con el nombre EXACTO y los
+// encabezados EXACTOS que ese módulo espera -- así el alumno completa todo
+// en un único libro y, al importar cada hoja en su propio módulo, ese
+// módulo la encuentra por nombre sin ambigüedad (mismo mecanismo de
+// resolveDataSheetPath()/DATA_SHEET_NAME ya implementado en los tres, ver
+// ARCHITECTURE.md). Los arreglos de encabezados de abajo son una copia
+// literal de TEMPLATE_HEADERS de cada módulo -- si alguno cambia su
+// plantilla, hay que actualizar la copia aquí también (mismo criterio de
+// "cada módulo funciona sin depender de otro" que ya usa el resto de la
+// suite: Panel de Control no importa el .ts de ningún módulo).
+// Mismo tipado que ya usan Definir las Actividades/Estimar los Costos/WBS
+// Builder (idéntico a propósito: `declare global` combina las
+// declaraciones de `Window.JSZip` de TODOS los módulos que se compilan
+// juntos en esta pasada de tsc, y exige que el tipo sea el mismo en cada
+// una -- una interfaz más chica aquí, aunque este módulo no necesite
+// `loadAsync`/leer, rompería esa fusión).
+interface JSZipFileEntry { async(type: "string"): Promise<string>; }
+interface JSZipInstance {
+  file(name: string, content: string): void;
+  file(name: string): JSZipFileEntry | null;
+  generateAsync(opts: { type: "blob"; mimeType: string }): Promise<Blob>;
+}
+interface JSZipCtor { new (): JSZipInstance; loadAsync(data: ArrayBuffer): Promise<JSZipInstance>; }
+declare global { interface Window { JSZip?: JSZipCtor; } }
+
+function xmlEsc(s: unknown): string { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+interface XlCell { v: string | number; t: "s" | "n"; s?: number; }
+
+const WBS_SHEET_NAME = "WBS";
+const WBS_HEADERS = ["Código EDT", "Paquete de trabajo", "Nivel", "Duración", "Inicio", "Fin", "Costo", "Responsable", "Avance"];
+const ACTIVITIES_SHEET_NAME = "EDT";
+const ACTIVITIES_HEADERS = ["Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Código de hito", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"];
+const COST_ESTIMATE_SHEET_NAME = "Estimado";
+const COST_ESTIMATE_HEADERS = ["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Unidad", "Cantidad", "Precio unitario", "Subtotal"];
+
+function xlsxStylesXml(): string {
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<fonts count="3">'
+    + '<font><sz val="11"/><name val="Calibri"/></font>'
+    + '<font><b/><sz val="11"/><name val="Calibri"/></font>'
+    + '<font><b/><sz val="12"/><name val="Calibri"/></font>'
+    + '</fonts>'
+    + '<fills count="3">'
+    + '<fill><patternFill patternType="none"/></fill>'
+    + '<fill><patternFill patternType="gray125"/></fill>'
+    + '<fill><patternFill patternType="solid"><fgColor rgb="FFDDEBF7"/><bgColor indexed="64"/></patternFill></fill>'
+    + '</fills>'
+    + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'
+    + '<border><left style="thin"><color rgb="FFB9C6D2"/></left><right style="thin"><color rgb="FFB9C6D2"/></right><top style="thin"><color rgb="FFB9C6D2"/></top><bottom style="thin"><color rgb="FFB9C6D2"/></bottom><diagonal/></border></borders>'
+    + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+    + '<cellXfs count="3">'
+    + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>'
+    + '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'
+    + '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" applyFont="1"/>'
+    + '</cellXfs>'
+    + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+    + '</styleSheet>';
+}
+
+// rows: [[{v, t:"s"|"n", s}]], widths: [n]
+function xlsxSheetXml(rows: Array<Array<XlCell | null>>, widths: number[]): string {
+  const COLS = "ABCDEFGHIJ";
+  const cols = widths.map((w, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>').join("");
+  const body = rows.map((cells, ri) => {
+    const cs = cells.map((c, ci) => {
+      if (c == null || c.v === "" || c.v == null) return "";
+      const ref = COLS[ci] + (ri + 1), st = c.s ? ' s="' + c.s + '"' : "";
+      if (c.t === "n") return '<c r="' + ref + '"' + st + '><v>' + c.v + '</v></c>';
+      return '<c r="' + ref + '"' + st + ' t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(c.v) + '</t></is></c>';
+    }).join("");
+    return '<row r="' + (ri + 1) + '">' + cs + '</row>';
+  }).join("");
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+    + '<cols>' + cols + '</cols>'
+    + '<sheetData>' + body + '</sheetData>'
+    + '</worksheet>';
+}
+
+function headerRowSheet(headers: string[], widths: number[]): string {
+  return xlsxSheetXml([headers.map((h) => ({ v: h, t: "s", s: 1 } as XlCell))], widths);
+}
+
+function templateInstructionsXml(): string {
+  const L: [string, number][] = [
+    ["Cómo completar este libro", 2],
+    ["", 0],
+    ["Este archivo trae una hoja por cada módulo que importa datos desde Excel: “" + WBS_SHEET_NAME + "” (WBS Builder), “" + ACTIVITIES_SHEET_NAME + "” (Definir las Actividades) y “" + COST_ESTIMATE_SHEET_NAME + "” (Estimar los Costos). NO renombres ninguna hoja: cada módulo busca la suya por ese nombre exacto y, si no la encuentra, rechaza el archivo (evita que un módulo confunda su hoja con la de otro).", 0],
+    ["Tampoco renombres ni abrevies los encabezados de la primera fila de cada hoja: deben coincidir EXACTAMENTE con lo que espera cada módulo (sí puedes reordenar las columnas dentro de una misma hoja).", 0],
+    ["Orden recomendado, porque la EDT (WBS Builder) es la que manda sobre los otros dos: 1) completa “" + WBS_SHEET_NAME + "” con las fases y paquetes de trabajo; 2) completa “" + ACTIVITIES_SHEET_NAME + "” con las actividades de cada paquete; 3) completa “" + COST_ESTIMATE_SHEET_NAME + "” con el precio de cada actividad.", 0],
+    ["Sube este MISMO archivo por separado en cada módulo, con su propio botón “Importar desde Excel” — cada uno copia solo su hoja e ignora las demás.", 0],
+    ["", 0],
+    ["Generado por el simulador GPI — Panel de Control.", 0]
+  ];
+  return xlsxSheetXml(L.map(([text, s]) => [{ v: text, t: "s", s: s === 2 ? 2 : 0 } as XlCell]), [110]);
+}
+
+async function buildCombinedTemplateXlsxBlob(): Promise<Blob> {
+  const zip = new (window.JSZip as JSZipCtor)();
+  zip.file("[Content_Types].xml",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    + '<Default Extension="xml" ContentType="application/xml"/>'
+    + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+    + '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+    + '<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+    + '<Override PartName="/xl/worksheets/sheet4.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+    + '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+    + '</Types>');
+  zip.file("_rels/.rels",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+    + '</Relationships>');
+  zip.file("xl/workbook.xml",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+    + '<sheets>'
+    + '<sheet name="Instrucciones" sheetId="1" r:id="rId1"/>'
+    + '<sheet name="' + xmlEsc(WBS_SHEET_NAME) + '" sheetId="2" r:id="rId2"/>'
+    + '<sheet name="' + xmlEsc(ACTIVITIES_SHEET_NAME) + '" sheetId="3" r:id="rId3"/>'
+    + '<sheet name="' + xmlEsc(COST_ESTIMATE_SHEET_NAME) + '" sheetId="4" r:id="rId4"/>'
+    + '</sheets>'
+    + '</workbook>');
+  zip.file("xl/_rels/workbook.xml.rels",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+    + '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>'
+    + '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>'
+    + '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet4.xml"/>'
+    + '<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+    + '</Relationships>');
+  zip.file("xl/styles.xml", xlsxStylesXml());
+  zip.file("xl/worksheets/sheet1.xml", templateInstructionsXml());
+  zip.file("xl/worksheets/sheet2.xml", headerRowSheet(WBS_HEADERS, [12, 34, 8, 10, 11, 11, 12, 20, 10]));
+  zip.file("xl/worksheets/sheet3.xml", headerRowSheet(ACTIVITIES_HEADERS, [12, 22, 30, 10, 14, 10, 10, 14, 12]));
+  zip.file("xl/worksheets/sheet4.xml", headerRowSheet(COST_ESTIMATE_HEADERS, [6, 12, 22, 30, 8, 10, 11, 14, 12]));
+  return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+async function downloadCombinedTemplate(): Promise<void> {
+  if (!window.JSZip) {
+    toast("No se pudo cargar la librería de Excel (¿sin conexión?). Puedes descargar la plantilla de cada módulo por separado, desde su propio botón.");
+    return;
+  }
+  const m = GPI.meta();
+  const safe = ((m && m.name) || "proyecto").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
+  try {
+    const blob = await buildCombinedTemplateXlsxBlob();
+    const url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = "plantilla_importacion_" + safe + ".xlsx";
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    toast("Plantilla combinada descargada (hojas: " + WBS_SHEET_NAME + " / " + ACTIVITIES_SHEET_NAME + " / " + COST_ESTIMATE_SHEET_NAME + ").");
+  } catch (_) {
+    toast("No se pudo generar la plantilla combinada.");
+  }
+}
+
 // ---------- modal ----------
 interface BaseModalOpts { title?: string; msg?: string; prompt?: string; okText?: string; danger?: boolean; }
 function baseModal(opts: BaseModalOpts): Promise<string | boolean | null> {
@@ -785,6 +951,7 @@ function wire(): void {
     toast("Proyecto exportado");
   });
   document.getElementById("btnImport")!.addEventListener("click", () => { const fi = document.getElementById("fileProject") as HTMLInputElement & { _mode?: string }; fi.value = ""; fi._mode = "project"; fi.click(); });
+  document.getElementById("btnTemplateAll")!.addEventListener("click", downloadCombinedTemplate);
   document.getElementById("fileProject")!.addEventListener("change", (e) => { const files = (e.target as HTMLInputElement & { _mode?: string }).files; if (files && files[0]) handleFile(files[0], (e.target as HTMLInputElement & { _mode?: string })._mode || "project"); });
 }
 
