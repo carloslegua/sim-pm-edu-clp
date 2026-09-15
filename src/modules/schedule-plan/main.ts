@@ -773,31 +773,6 @@ function wireImportMilestones(): void {
   });
 }
 
-// ---------- EXPORT / IMPORT JSON ----------
-function exportJson(): void {
-  const data = { kind: "gpi.schedulePlan/v1", title: (document.getElementById("projectTitle") as HTMLInputElement).value, course: (document.getElementById("courseTitle") as HTMLInputElement).value, data: state };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob), a = document.createElement("a");
-  a.href = url; a.download = "plan_gestion_cronograma.json"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  setStatus("Plan exportado como .json.");
-}
-function importJson(file: File): void {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    let obj: any;
-    try { obj = JSON.parse((e.target as FileReader).result as string); } catch (err) { showAlert("No se pudo leer el archivo. Verifica que sea un JSON válido."); return; }
-    const payload = (obj && obj.kind === "gpi.schedulePlan/v1" && obj.data) ? obj.data : (obj && obj.methodology ? obj : null);
-    if (!payload) { showAlert("No reconozco el formato de este archivo. Debe ser un .json exportado por esta misma herramienta."); return; }
-    state = mergeWithDefaults(payload);
-    if (obj.title) (document.getElementById("projectTitle") as HTMLInputElement).value = obj.title;
-    if (obj.course) (document.getElementById("courseTitle") as HTMLInputElement).value = obj.course;
-    fullRender();
-    if (typeof window.GPI !== "undefined" && window.GPI.available() && window.GPI.active()) window.GPI.setModule("schedulePlan", state);
-    setStatus("Plan importado correctamente.");
-  };
-  reader.readAsText(file);
-}
-
 // ---------- INIT ----------
 function init(): void {
   state = normalizeState(sampleState());
@@ -814,9 +789,6 @@ function init(): void {
     renderThresholds(); onDirty();
   });
 
-  document.getElementById("btnExportJson")!.addEventListener("click", exportJson);
-  document.getElementById("btnImportJson")!.addEventListener("click", () => { (document.getElementById("fileInput") as HTMLInputElement).click(); });
-  document.getElementById("fileInput")!.addEventListener("change", (e) => { const files = (e.target as HTMLInputElement).files; if (files && files[0]) importJson(files[0]); (e.target as HTMLInputElement).value = ""; });
   document.getElementById("btnPrint")!.addEventListener("click", () => { window.print(); });
   document.getElementById("btnSample")!.addEventListener("click", async () => {
     const ok = await showConfirm("Esto reemplazará el plan actual por el ejemplo DISTRIB+ S.A. ¿Continuar?", "Cargar ejemplo");

@@ -822,27 +822,6 @@ function renderDiff(): void {
   host.innerHTML = h;
 }
 
-/* ===================== Export / Import ===================== */
-function exportJSON(): void {
-  const payload = {
-    kind: "gpi.requirements/v1", title: (gpiOn() && (GPI as GpiApi).meta() && (GPI as GpiApi).meta()!.name) || "Recopilar Requisitos",
-    course: (gpiOn() && (GPI as GpiApi).meta() && (GPI as GpiApi).meta()!.course) || undefined, data: collect()
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "gpi_requirements.json"; a.click();
-}
-function importJSON(ev: Event): void {
-  const f = (ev.target as HTMLInputElement).files?.[0]; if (!f) return; const r = new FileReader();
-  r.onload = () => {
-    try {
-      const obj = JSON.parse(r.result as string); const data = (obj && obj.kind === "gpi.requirements/v1" && obj.data) ? obj.data : obj;
-      applyData(data); userEdited = true; save(); flash(); renderAll(); (document.querySelector('.tab[data-p="p1"]') as HTMLElement).click();
-      showToast("Requisitos importados.");
-    } catch (e) { showToast("Archivo inválido: no pude leer ese .json como módulo de Requisitos."); }
-  };
-  r.readAsText(f); (ev.target as HTMLInputElement).value = "";
-}
-
 /* ===================== Badge flotante ===================== */
 function gpiBadge(): void {
   if ($("gpiBadge")) return;
@@ -878,6 +857,6 @@ init();
 // onclick/onchange inline, varios generados dinámicamente en filas/tarjetas
 // (ver el comentario detallado en src/modules/cost/main.ts).
 Object.assign(window, {
-  exportJSON, importJSON, openItemEditor, loadSampleClick, removeItem, promoteToRan,
+  openItemEditor, loadSampleClick, removeItem, promoteToRan,
   freezeBaseline, rebaseline, openModEditor, setActiveMod, removeMod, setModStatus, updateCcr
 });

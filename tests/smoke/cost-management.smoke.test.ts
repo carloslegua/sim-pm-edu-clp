@@ -46,7 +46,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(doc.getElementById("kBAC")!.textContent).toBe("$ 8,075,181");
     expect(doc.querySelectorAll("#coBody tr").length).toBe(2); // SAMPLE_CO
 
-    for (const fn of ["exportJSON", "importJSON", "save", "recalcCont", "onBaseInput", "pullFromWBS", "pullFromCostEstimate", "addCO", "coStatus", "delCO", "buildDoc"]) {
+    for (const fn of ["save", "recalcCont", "onBaseInput", "pullFromWBS", "pullFromCostEstimate", "addCO", "coStatus", "delCO", "buildDoc"]) {
       expect(typeof (dom.window as any)[fn]).toBe("function");
     }
 

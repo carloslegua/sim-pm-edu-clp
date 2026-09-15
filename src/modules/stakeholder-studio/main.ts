@@ -811,49 +811,7 @@ function showModal({ title, message, confirmText, cancelText, danger }: ShowModa
   });
 }
 function showConfirm(message: string, title?: string): Promise<boolean> { return showModal({ title: title || "Confirmar acción", message, confirmText: "Eliminar", cancelText: "Cancelar", danger: true }); }
-function showAlert(message: string, title?: string): Promise<boolean> { return showModal({ title: title || "Aviso", message, confirmText: "Entendido", cancelText: null, danger: false }); }
 
-// ---------- SERIALIZACIÓN ----------
-function exportJson(): void {
-  const data = {
-    title: (document.getElementById("projectTitle") as HTMLInputElement).value,
-    course: (document.getElementById("courseTitle") as HTMLInputElement).value,
-    idCounter, powerWeights, interestWeights, stakeholders
-  };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const safe = (data.title || "analisis").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-  a.href = url; a.download = `interesados_${safe}.json`;
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  setStatus("Análisis exportado como JSON.");
-}
-function importJson(file: File): void {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const data = JSON.parse((e.target as FileReader).result as string);
-      if (!Array.isArray(data.stakeholders)) throw new Error("Formato inválido");
-      stakeholders = data.stakeholders; idCounter = data.idCounter || (stakeholders.length + 1);
-      if (data.powerWeights) Object.assign(powerWeights, data.powerWeights);
-      if (data.interestWeights) Object.assign(interestWeights, data.interestWeights);
-      // asegurar criterios y recalcular poder e interés derivados (compatibilidad con archivos antiguos)
-      stakeholders.forEach((s) => {
-        s.powerCriteria = Object.assign({ pos: 3, res: 3, net: 3, veto: 3, expert: 3 }, s.powerCriteria || {});
-        s.interestCriteria = Object.assign({ afect: 3, stake: 3, align: 3, prox: 3, atten: 3 }, s.interestCriteria || {});
-        recomputePower(s); recomputeInterest(s);
-      });
-      selectedId = stakeholders.length ? stakeholders[0].id : null;
-      expandedIds = new Set();
-      (document.getElementById("projectTitle") as HTMLInputElement).value = data.title || "Análisis de interesados";
-      (document.getElementById("courseTitle") as HTMLInputElement).value = data.course || "Gestión de Proyectos de Ingeniería";
-      render(); setStatus("Análisis cargado correctamente.");
-    } catch (err) {
-      showAlert("No se pudo leer el archivo. Verifica que sea un JSON exportado por esta herramienta.");
-    }
-  };
-  reader.readAsText(file);
-}
 function exportCsv(): void {
   const cols: (keyof Stakeholder)[] = ["name", "org", "role", "category", "power", "interest", "legitimacy", "urgency"];
   const head = ["Nombre", "Organizacion", "Rol", "Categoria", "Poder", "Interes", "Legitimidad", "Urgencia",
@@ -892,9 +850,6 @@ function wireToolbar(): void {
   document.querySelectorAll<HTMLElement>("#viewGroup .btn").forEach((b) => {
     b.addEventListener("click", () => { currentView = b.dataset.view as typeof currentView; render(); const m = document.getElementById("mainArea"); if (m) m.scrollTop = 0; });
   });
-  document.getElementById("btnExportJson")!.addEventListener("click", exportJson);
-  document.getElementById("btnImportJson")!.addEventListener("click", () => (document.getElementById("fileInput") as HTMLInputElement).click());
-  document.getElementById("fileInput")!.addEventListener("change", (e) => { const files = (e.target as HTMLInputElement).files; if (files && files[0]) importJson(files[0]); (e.target as HTMLInputElement).value = ""; });
   document.getElementById("btnExportCsv")!.addEventListener("click", exportCsv);
   document.getElementById("btnPrint")!.addEventListener("click", () => window.print());
   document.getElementById("btnSample")!.addEventListener("click", () => {

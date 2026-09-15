@@ -687,34 +687,6 @@ function copyWholeTable(): void {
   copyText(lines.join("\n"), "Tabla copiada al portapapeles (" + rows.length + " filas + encabezado): pégala en Excel con Ctrl+V.");
 }
 
-// ---------- export / import ----------
-function exportJson(): void {
-  const data = { kind: "gpi.pert/v1", title: (document.getElementById("projectTitle") as HTMLInputElement).value, course: (document.getElementById("courseTitle") as HTMLInputElement).value, data: state() };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob), a = document.createElement("a");
-  const safe = (data.title || "pert").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-  a.href = url; a.download = "pert_" + safe + ".json";
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  setStatus("Análisis PERT exportado como .json.");
-}
-function importJson(file: File): void {
-  const r = new FileReader();
-  r.onload = (e) => {
-    let obj: any; try { obj = JSON.parse((e.target as FileReader).result as string); } catch (_) { showAlert("El archivo no es un .json válido."); return; }
-    if (obj && obj.kind === "gpi.pert/v1" && obj.data) {
-      if (mode === "sample") stateSample = normalizeState(obj.data);
-      else stateLive = normalizeState(obj.data);
-      if (obj.title) (document.getElementById("projectTitle") as HTMLInputElement).value = obj.title;
-      if (obj.course) (document.getElementById("courseTitle") as HTMLInputElement).value = obj.course;
-      render(); gpiPush();
-      setStatus("Análisis PERT importado (las ternas se enlazan por el id de cada actividad).");
-    } else {
-      showAlert("No reconocí el formato: se esperaba una exportación de esta herramienta (gpi.pert/v1).");
-    }
-  };
-  r.readAsText(file);
-}
-
 // ---------- REPORTE ----------
 function reportShell(docTitle: string, moduleName: string, bodyHtml: string): void {
   const el = document.getElementById("gpiReport") as HTMLElement;
@@ -853,9 +825,6 @@ function enterLive(): void { mode = "live"; render(); setStatus("De vuelta a las
 
 // ---------- toolbar ----------
 function wireToolbar(): void {
-  document.getElementById("btnExportJson")!.addEventListener("click", exportJson);
-  document.getElementById("btnImportJson")!.addEventListener("click", () => { (document.getElementById("fileInput") as HTMLInputElement).click(); });
-  document.getElementById("fileInput")!.addEventListener("change", (e) => { const files = (e.target as HTMLInputElement).files; if (files && files[0]) importJson(files[0]); (e.target as HTMLInputElement).value = ""; });
   document.getElementById("inputModeSel")!.addEventListener("change", (e) => { switchInputMode((e.target as HTMLSelectElement).value as "dias" | "pct"); });
   document.getElementById("btnCopyTable")!.addEventListener("click", copyWholeTable);
   document.getElementById("btnReport")!.addEventListener("click", buildReport);

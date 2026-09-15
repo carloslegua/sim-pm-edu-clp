@@ -723,43 +723,6 @@
 			setTimeout(done, 500);
 		}, 60);
 	}
-	function exportJson() {
-		const data = {
-			kind: "gpi.scopeStatement/v1",
-			title: $("projectTitle").value,
-			course: $("courseTitle").value,
-			data: serialize()
-		};
-		const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-		const url = URL.createObjectURL(blob), a = document.createElement("a");
-		const safe = (data.title || "proyecto").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-		a.href = url;
-		a.download = "alcance_" + safe + ".json";
-		document.body.appendChild(a);
-		a.click();
-		a.remove();
-		URL.revokeObjectURL(url);
-		setStatus("Enunciado del alcance exportado.");
-	}
-	function importJson(file) {
-		const r = new FileReader();
-		r.onload = (e) => {
-			let obj;
-			try {
-				obj = JSON.parse(e.target.result);
-			} catch (_) {
-				toast("Archivo no válido");
-				return;
-			}
-			state = normalize(obj && obj.kind === "gpi.scopeStatement/v1" && obj.data ? obj.data : obj);
-			if (obj.title) $("projectTitle").value = obj.title;
-			if (obj.course) $("courseTitle").value = obj.course;
-			persist();
-			render();
-			toast("Enunciado del alcance cargado");
-		};
-		r.readAsText(file);
-	}
 	function setTab(t) {
 		document.querySelectorAll("#tabs .tab").forEach((b) => {
 			b.classList.toggle("active", b.dataset.tab === t);
@@ -816,15 +779,6 @@
 					if (ta) ta.focus();
 				}, 30);
 			};
-		});
-		$("btnExport").onclick = exportJson;
-		$("btnImport").onclick = () => {
-			$("fileInput").click();
-		};
-		$("fileInput").addEventListener("change", (e) => {
-			const files = e.target.files;
-			if (files && files[0]) importJson(files[0]);
-			e.target.value = "";
 		});
 		$("btnReport").onclick = buildReport;
 		$("btnSample").onclick = () => {

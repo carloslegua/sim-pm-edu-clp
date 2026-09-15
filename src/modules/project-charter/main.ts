@@ -603,33 +603,6 @@ function onDirty(): void {
   setStatus("Cambios sin exportar — se sincronizan solos con el Panel.");
 }
 
-// ---------- export / import ----------
-function exportJson(): void {
-  const data = { kind: "gpi.charter/v1", title: (document.getElementById("projectTitle") as HTMLInputElement).value, course: (document.getElementById("courseTitle") as HTMLInputElement).value, data: state };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob), a = document.createElement("a");
-  const safe = (data.title || "acta").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-  a.href = url; a.download = "acta_constitucion_" + safe + ".json";
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  setStatus("Acta exportada como .json.");
-}
-function importJson(file: File): void {
-  const r = new FileReader();
-  r.onload = (e) => {
-    let obj: any; try { obj = JSON.parse((e.target as FileReader).result as string); } catch (_) { showAlert("El archivo no es un .json válido."); return; }
-    if (obj && obj.kind === "gpi.charter/v1" && obj.data) {
-      state = normalizeState(obj.data);
-      if (obj.title) (document.getElementById("projectTitle") as HTMLInputElement).value = obj.title;
-      if (obj.course) (document.getElementById("courseTitle") as HTMLInputElement).value = obj.course;
-      renderAll(); gpiPush();
-      setStatus("Acta importada.");
-    } else {
-      showAlert("No reconocí el formato: se esperaba una exportación de esta herramienta (gpi.charter/v1).");
-    }
-  };
-  r.readAsText(file);
-}
-
 // ---------- importar hitos desde la EDT ----------
 async function importMilestonesFromWbs(): Promise<void> {
   if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.util || !window.GPI.active()) {
@@ -822,9 +795,6 @@ function buildReport(): void {
 
 // ---------- toolbar ----------
 function wireToolbar(): void {
-  document.getElementById("btnExportJson")!.addEventListener("click", exportJson);
-  document.getElementById("btnImportJson")!.addEventListener("click", () => { (document.getElementById("fileInput") as HTMLInputElement).click(); });
-  document.getElementById("fileInput")!.addEventListener("change", (e) => { const files = (e.target as HTMLInputElement).files; if (files && files[0]) importJson(files[0]); (e.target as HTMLInputElement).value = ""; });
   document.getElementById("btnImportMilestones")!.addEventListener("click", importMilestonesFromWbs);
   document.getElementById("btnImportStakeholders")!.addEventListener("click", importKeyStakeholders);
   document.getElementById("btnReport")!.addEventListener("click", buildReport);

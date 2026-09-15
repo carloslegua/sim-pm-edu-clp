@@ -191,6 +191,12 @@ function detectTool(obj: any): DetectedTool | null {
   if (obj.kind === "gpi.activities/v1" && obj.data) {
     return { module: "activities", data: { byLeaf: obj.data.byLeaf || {}, idCounter: obj.data.idCounter || 1 } };
   }
+  if (obj.kind === "gpi.requirements/v1" && obj.data) {
+    return { module: "requirements", data: obj.data };
+  }
+  if (obj.kind === "gpi.costEstimate/v1" && obj.data) {
+    return { module: "costEstimate", data: { byActivity: obj.data.byActivity || {} } };
+  }
   if (obj.kind === "gpi.pert/v1" && obj.data) {
     return { module: "pert", data: { byActivity: obj.data.byActivity || {}, inputMode: obj.data.inputMode === "pct" ? "pct" : "dias" } };
   }

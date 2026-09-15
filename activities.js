@@ -440,46 +440,6 @@
 		dirtyTimer = setTimeout(gpiPush, 800);
 		setStatus("Cambios sin exportar — se sincronizan solos con el Panel.");
 	}
-	function exportJson() {
-		const data = {
-			kind: "gpi.activities/v1",
-			title: document.getElementById("projectTitle").value,
-			course: document.getElementById("courseTitle").value,
-			data: state()
-		};
-		const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-		const url = URL.createObjectURL(blob), a = document.createElement("a");
-		const safe = (data.title || "actividades").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-		a.href = url;
-		a.download = "actividades_" + safe + ".json";
-		document.body.appendChild(a);
-		a.click();
-		a.remove();
-		URL.revokeObjectURL(url);
-		setStatus("Lista de actividades exportada como .json.");
-	}
-	function importJson(file) {
-		const r = new FileReader();
-		r.onload = (e) => {
-			let obj;
-			try {
-				obj = JSON.parse(e.target.result);
-			} catch (_) {
-				showAlert("El archivo no es un .json válido.");
-				return;
-			}
-			if (obj && obj.kind === "gpi.activities/v1" && obj.data) {
-				if (mode === "sample") stateSample = normalizeState(obj.data);
-				else stateLive = normalizeState(obj.data);
-				if (obj.title) document.getElementById("projectTitle").value = obj.title;
-				if (obj.course) document.getElementById("courseTitle").value = obj.course;
-				render();
-				gpiPush();
-				setStatus("Lista de actividades importada. Las actividades se enlazan a la EDT por el id de cada paquete.");
-			} else showAlert("No reconocí el formato: se esperaba una exportación de esta herramienta (gpi.activities/v1).");
-		};
-		r.readAsText(file);
-	}
 	var SAMPLE_WBS = (function() {
 		const nodes = {};
 		let k = 0;
@@ -1191,15 +1151,6 @@
 		setStatus(result.matched + " actividad(es)" + (result.matchedMilestones ? " y " + result.matchedMilestones + " hito(s)" : "") + " importado(s) desde Excel" + (issues ? " · " + issues + " fila(s) no reconciliada(s)" : "") + ".");
 	}
 	function wireToolbar() {
-		document.getElementById("btnExportJson").addEventListener("click", exportJson);
-		document.getElementById("btnImportJson").addEventListener("click", () => {
-			document.getElementById("fileInput").click();
-		});
-		document.getElementById("fileInput").addEventListener("change", (e) => {
-			const files = e.target.files;
-			if (files && files[0]) importJson(files[0]);
-			e.target.value = "";
-		});
 		document.getElementById("btnReload").addEventListener("click", () => {
 			gpiPullWbs();
 			render();

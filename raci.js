@@ -823,52 +823,6 @@
 			danger: false
 		});
 	}
-	function exportJson() {
-		const data = {
-			kind: "gpi.raci/v1",
-			title: document.getElementById("projectTitle").value,
-			course: document.getElementById("courseTitle").value,
-			assignments,
-			rowsSnapshot: rows,
-			colsSnapshot: cols
-		};
-		const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-		const url = URL.createObjectURL(blob), a = document.createElement("a");
-		const safeName = (data.title || "proyecto").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-		a.href = url;
-		a.download = `raci_${safeName}.json`;
-		document.body.appendChild(a);
-		a.click();
-		a.remove();
-		URL.revokeObjectURL(url);
-		setStatus("Matriz RACI exportada como JSON.");
-	}
-	function importJson(file) {
-		const reader = new FileReader();
-		reader.onload = (e) => {
-			try {
-				const data = JSON.parse(e.target.result);
-				if (!data.assignments) throw new Error("Formato inválido");
-				assignments = data.assignments || {};
-				if (Array.isArray(data.rowsSnapshot) && data.rowsSnapshot.length) {
-					rows = data.rowsSnapshot;
-					mode = "sample";
-				}
-				if (Array.isArray(data.colsSnapshot) && data.colsSnapshot.length) {
-					cols = data.colsSnapshot;
-					mode = "sample";
-				}
-				if (data.title) document.getElementById("projectTitle").value = data.title;
-				if (data.course) document.getElementById("courseTitle").value = data.course;
-				syncToGpi();
-				render();
-				setStatus("Matriz RACI importada correctamente.");
-			} catch (err) {
-				showAlert("No se pudo leer el archivo. Verifica que sea un JSON exportado por esta herramienta.");
-			}
-		};
-		reader.readAsText(file);
-	}
 	function exportCsv() {
 		const lines = [["Código", "Paquete de trabajo"].concat(cols.map((c) => c.person && c.person.trim() || c.role))];
 		rows.forEach((r) => {
@@ -904,13 +858,6 @@
 				render();
 				setStatus("Asignaciones borradas.");
 			}
-		});
-		document.getElementById("btnExportJson").addEventListener("click", exportJson);
-		document.getElementById("btnImportJson").addEventListener("click", () => document.getElementById("fileInput").click());
-		document.getElementById("fileInput").addEventListener("change", (e) => {
-			const files = e.target.files;
-			if (files && files[0]) importJson(files[0]);
-			e.target.value = "";
 		});
 		document.getElementById("btnExportCsv").addEventListener("click", exportCsv);
 		document.getElementById("btnPrint").addEventListener("click", () => window.print());

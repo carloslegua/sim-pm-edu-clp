@@ -217,6 +217,14 @@ var GPI = (function(exports) {
 				idCounter: obj.data.idCounter || 1
 			}
 		};
+		if (obj.kind === "gpi.requirements/v1" && obj.data) return {
+			module: "requirements",
+			data: obj.data
+		};
+		if (obj.kind === "gpi.costEstimate/v1" && obj.data) return {
+			module: "costEstimate",
+			data: { byActivity: obj.data.byActivity || {} }
+		};
 		if (obj.kind === "gpi.pert/v1" && obj.data) return {
 			module: "pert",
 			data: {

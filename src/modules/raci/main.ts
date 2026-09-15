@@ -445,34 +445,6 @@ function showModal({ title, message, confirmText, cancelText, danger }: ShowModa
 function showConfirm(message: string, title?: string): Promise<boolean> { return showModal({ title: title || "Confirmar acción", message, confirmText: "Continuar", cancelText: "Cancelar", danger: true }); }
 function showAlert(message: string, title?: string): Promise<boolean> { return showModal({ title: title || "Aviso", message, confirmText: "Entendido", cancelText: null, danger: false }); }
 
-// ---------- SERIALIZATION ----------
-function exportJson(): void {
-  const data = { kind: "gpi.raci/v1", title: (document.getElementById("projectTitle") as HTMLInputElement).value, course: (document.getElementById("courseTitle") as HTMLInputElement).value, assignments, rowsSnapshot: rows, colsSnapshot: cols };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob), a = document.createElement("a");
-  const safeName = (data.title || "proyecto").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-  a.href = url; a.download = `raci_${safeName}.json`;
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  setStatus("Matriz RACI exportada como JSON.");
-}
-function importJson(file: File): void {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const data = JSON.parse((e.target as FileReader).result as string);
-      if (!data.assignments) throw new Error("Formato inválido");
-      assignments = data.assignments || {};
-      if (Array.isArray(data.rowsSnapshot) && data.rowsSnapshot.length) { rows = data.rowsSnapshot; mode = "sample"; }
-      if (Array.isArray(data.colsSnapshot) && data.colsSnapshot.length) { cols = data.colsSnapshot; mode = "sample"; }
-      if (data.title) (document.getElementById("projectTitle") as HTMLInputElement).value = data.title;
-      if (data.course) (document.getElementById("courseTitle") as HTMLInputElement).value = data.course;
-      syncToGpi();
-      render();
-      setStatus("Matriz RACI importada correctamente.");
-    } catch (err) { showAlert("No se pudo leer el archivo. Verifica que sea un JSON exportado por esta herramienta."); }
-  };
-  reader.readAsText(file);
-}
 function exportCsv(): void {
   const header = ["Código", "Paquete de trabajo"].concat(cols.map((c) => (c.person && c.person.trim()) || c.role));
   const lines: string[][] = [header];
@@ -502,9 +474,6 @@ function init(): void {
     const ok = await showConfirm("¿Borrar todas las asignaciones R/A/C/I de la matriz actual? La estructura de filas y columnas no se modifica.", "Limpiar asignaciones");
     if (ok) { assignments = {}; syncToGpi(); render(); setStatus("Asignaciones borradas."); }
   });
-  document.getElementById("btnExportJson")!.addEventListener("click", exportJson);
-  document.getElementById("btnImportJson")!.addEventListener("click", () => (document.getElementById("fileInput") as HTMLInputElement).click());
-  document.getElementById("fileInput")!.addEventListener("change", (e) => { const files = (e.target as HTMLInputElement).files; if (files && files[0]) importJson(files[0]); (e.target as HTMLInputElement).value = ""; });
   document.getElementById("btnExportCsv")!.addEventListener("click", exportCsv);
   document.getElementById("btnPrint")!.addEventListener("click", () => window.print());
   document.getElementById("btnSample")!.addEventListener("click", async () => {

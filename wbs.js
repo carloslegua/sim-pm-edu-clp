@@ -911,47 +911,6 @@
 		zoom = Math.max(zoom, .25);
 		applyZoom();
 	}
-	function exportJson() {
-		const data = {
-			title: document.getElementById("projectTitle").value,
-			course: document.getElementById("courseTitle").value,
-			rootId,
-			idCounter,
-			nodes
-		};
-		const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement("a");
-		const safeName = (data.title || "proyecto").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-		a.href = url;
-		a.download = `wbs_${safeName}.json`;
-		document.body.appendChild(a);
-		a.click();
-		a.remove();
-		URL.revokeObjectURL(url);
-		setStatus("Proyecto exportado como JSON.");
-	}
-	function importJson(file) {
-		const reader = new FileReader();
-		reader.onload = (e) => {
-			try {
-				const data = JSON.parse(e.target.result);
-				if (!data.nodes || !data.rootId) throw new Error("Formato inválido");
-				nodes = data.nodes;
-				rootId = data.rootId;
-				idCounter = data.idCounter || 1;
-				selectedId = rootId;
-				document.getElementById("projectTitle").value = data.title || "Proyecto sin título";
-				document.getElementById("courseTitle").value = data.course || "Gestión de Proyectos de Ingeniería";
-				render();
-				setTimeout(fitToScreen, 50);
-				setStatus("Proyecto cargado correctamente.");
-			} catch (err) {
-				showAlert("No se pudo leer el archivo. Verifica que sea un JSON exportado por esta herramienta.");
-			}
-		};
-		reader.readAsText(file);
-	}
 	function setView(v) {
 		currentView = v;
 		document.getElementById("canvasWrap").style.display = v === "tree" ? "block" : "none";
@@ -1071,13 +1030,6 @@
 			});
 			render();
 			setTimeout(fitToScreen, 50);
-		});
-		document.getElementById("btnExportJson").addEventListener("click", exportJson);
-		document.getElementById("btnImportJson").addEventListener("click", () => document.getElementById("fileInput").click());
-		document.getElementById("fileInput").addEventListener("change", (e) => {
-			const files = e.target.files;
-			if (files && files[0]) importJson(files[0]);
-			e.target.value = "";
 		});
 		document.getElementById("btnPrint").addEventListener("click", () => window.print());
 		document.getElementById("btnSample").addEventListener("click", async () => {

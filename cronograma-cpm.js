@@ -946,44 +946,6 @@
 		} catch (_) {}
 		ta.remove();
 	}
-	function exportJson() {
-		const data = {
-			kind: "gpi.schedule/v1",
-			title: document.getElementById("projectTitle").value,
-			course: document.getElementById("courseTitle").value,
-			data: state()
-		};
-		const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-		const url = URL.createObjectURL(blob), a = document.createElement("a");
-		const safe = (data.title || "cronograma").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-		a.href = url;
-		a.download = "cronograma_" + safe + ".json";
-		document.body.appendChild(a);
-		a.click();
-		a.remove();
-		URL.revokeObjectURL(url);
-		setStatus("Cronograma exportado como .json.");
-	}
-	function importJson(file) {
-		const r = new FileReader();
-		r.onload = (e) => {
-			let obj;
-			try {
-				obj = JSON.parse(e.target.result);
-			} catch (_) {
-				showAlert("El archivo no es un .json válido.");
-				return;
-			}
-			if (obj && obj.kind === "gpi.schedule/v1" && obj.data) {
-				if (mode === "sample") stateSample = normSchedule(obj.data);
-				else stateLive = normSchedule(obj.data);
-				if (obj.title) document.getElementById("projectTitle").value = obj.title;
-				if (obj.course) document.getElementById("courseTitle").value = obj.course;
-				commit("Cronograma importado.");
-			} else showAlert("No reconocí el formato: se esperaba una exportación de esta herramienta (gpi.schedule/v1).");
-		};
-		r.readAsText(file);
-	}
 	function clearLinks() {
 		showConfirm("Se eliminarán todos los enlaces y las fechas de auditoría de este cronograma. Las actividades y la EDT no se tocan. ¿Continuar?", "Limpiar cronograma").then((ok) => {
 			if (!ok) return;
@@ -1045,15 +1007,6 @@
 		});
 	}
 	function wireToolbar() {
-		document.getElementById("btnExportJson").addEventListener("click", exportJson);
-		document.getElementById("btnImportJson").addEventListener("click", () => {
-			document.getElementById("fileInput").click();
-		});
-		document.getElementById("fileInput").addEventListener("change", (e) => {
-			const files = e.target.files;
-			if (files && files[0]) importJson(files[0]);
-			e.target.value = "";
-		});
 		document.getElementById("btnTemplate").addEventListener("click", copyTemplate);
 		document.getElementById("btnPaste").addEventListener("click", openPaste);
 		document.getElementById("btnAddLink").addEventListener("click", openAddLink);

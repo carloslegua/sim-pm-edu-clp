@@ -872,46 +872,6 @@
 		});
 		copyText(lines.join("\n"), "Tabla copiada al portapapeles (" + rows.length + " filas + encabezado): pégala en Excel con Ctrl+V.");
 	}
-	function exportJson() {
-		const data = {
-			kind: "gpi.pert/v1",
-			title: document.getElementById("projectTitle").value,
-			course: document.getElementById("courseTitle").value,
-			data: state()
-		};
-		const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-		const url = URL.createObjectURL(blob), a = document.createElement("a");
-		const safe = (data.title || "pert").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-		a.href = url;
-		a.download = "pert_" + safe + ".json";
-		document.body.appendChild(a);
-		a.click();
-		a.remove();
-		URL.revokeObjectURL(url);
-		setStatus("Análisis PERT exportado como .json.");
-	}
-	function importJson(file) {
-		const r = new FileReader();
-		r.onload = (e) => {
-			let obj;
-			try {
-				obj = JSON.parse(e.target.result);
-			} catch (_) {
-				showAlert("El archivo no es un .json válido.");
-				return;
-			}
-			if (obj && obj.kind === "gpi.pert/v1" && obj.data) {
-				if (mode === "sample") stateSample = normalizeState(obj.data);
-				else stateLive = normalizeState(obj.data);
-				if (obj.title) document.getElementById("projectTitle").value = obj.title;
-				if (obj.course) document.getElementById("courseTitle").value = obj.course;
-				render();
-				gpiPush();
-				setStatus("Análisis PERT importado (las ternas se enlazan por el id de cada actividad).");
-			} else showAlert("No reconocí el formato: se esperaba una exportación de esta herramienta (gpi.pert/v1).");
-		};
-		r.readAsText(file);
-	}
 	function reportShell(docTitle, moduleName, bodyHtml) {
 		const el = document.getElementById("gpiReport");
 		let meta = {};
@@ -1230,15 +1190,6 @@
 		setStatus("De vuelta a las actividades del proyecto.");
 	}
 	function wireToolbar() {
-		document.getElementById("btnExportJson").addEventListener("click", exportJson);
-		document.getElementById("btnImportJson").addEventListener("click", () => {
-			document.getElementById("fileInput").click();
-		});
-		document.getElementById("fileInput").addEventListener("change", (e) => {
-			const files = e.target.files;
-			if (files && files[0]) importJson(files[0]);
-			e.target.value = "";
-		});
 		document.getElementById("inputModeSel").addEventListener("change", (e) => {
 			switchInputMode(e.target.value);
 		});

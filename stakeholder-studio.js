@@ -1354,76 +1354,6 @@
 			danger: true
 		});
 	}
-	function showAlert(message, title) {
-		return showModal({
-			title: title || "Aviso",
-			message,
-			confirmText: "Entendido",
-			cancelText: null,
-			danger: false
-		});
-	}
-	function exportJson() {
-		const data = {
-			title: document.getElementById("projectTitle").value,
-			course: document.getElementById("courseTitle").value,
-			idCounter,
-			powerWeights,
-			interestWeights,
-			stakeholders
-		};
-		const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement("a");
-		const safe = (data.title || "analisis").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-		a.href = url;
-		a.download = `interesados_${safe}.json`;
-		document.body.appendChild(a);
-		a.click();
-		a.remove();
-		URL.revokeObjectURL(url);
-		setStatus("Análisis exportado como JSON.");
-	}
-	function importJson(file) {
-		const reader = new FileReader();
-		reader.onload = (e) => {
-			try {
-				const data = JSON.parse(e.target.result);
-				if (!Array.isArray(data.stakeholders)) throw new Error("Formato inválido");
-				stakeholders = data.stakeholders;
-				idCounter = data.idCounter || stakeholders.length + 1;
-				if (data.powerWeights) Object.assign(powerWeights, data.powerWeights);
-				if (data.interestWeights) Object.assign(interestWeights, data.interestWeights);
-				stakeholders.forEach((s) => {
-					s.powerCriteria = Object.assign({
-						pos: 3,
-						res: 3,
-						net: 3,
-						veto: 3,
-						expert: 3
-					}, s.powerCriteria || {});
-					s.interestCriteria = Object.assign({
-						afect: 3,
-						stake: 3,
-						align: 3,
-						prox: 3,
-						atten: 3
-					}, s.interestCriteria || {});
-					recomputePower(s);
-					recomputeInterest(s);
-				});
-				selectedId = stakeholders.length ? stakeholders[0].id : null;
-				expandedIds = /* @__PURE__ */ new Set();
-				document.getElementById("projectTitle").value = data.title || "Análisis de interesados";
-				document.getElementById("courseTitle").value = data.course || "Gestión de Proyectos de Ingeniería";
-				render();
-				setStatus("Análisis cargado correctamente.");
-			} catch (err) {
-				showAlert("No se pudo leer el archivo. Verifica que sea un JSON exportado por esta herramienta.");
-			}
-		};
-		reader.readAsText(file);
-	}
 	function exportCsv() {
 		const cols = [
 			"name",
@@ -1500,13 +1430,6 @@
 				const m = document.getElementById("mainArea");
 				if (m) m.scrollTop = 0;
 			});
-		});
-		document.getElementById("btnExportJson").addEventListener("click", exportJson);
-		document.getElementById("btnImportJson").addEventListener("click", () => document.getElementById("fileInput").click());
-		document.getElementById("fileInput").addEventListener("change", (e) => {
-			const files = e.target.files;
-			if (files && files[0]) importJson(files[0]);
-			e.target.value = "";
 		});
 		document.getElementById("btnExportCsv").addEventListener("click", exportCsv);
 		document.getElementById("btnPrint").addEventListener("click", () => window.print());

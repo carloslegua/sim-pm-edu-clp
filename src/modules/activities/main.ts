@@ -429,34 +429,6 @@ function onDirty(rerender: boolean): void {
   setStatus("Cambios sin exportar — se sincronizan solos con el Panel.");
 }
 
-// ---------- export / import (.json — respaldo íntegro del módulo) ----------
-function exportJson(): void {
-  const data = { kind: "gpi.activities/v1", title: (document.getElementById("projectTitle") as HTMLInputElement).value, course: (document.getElementById("courseTitle") as HTMLInputElement).value, data: state() };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob), a = document.createElement("a");
-  const safe = (data.title || "actividades").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-  a.href = url; a.download = "actividades_" + safe + ".json";
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  setStatus("Lista de actividades exportada como .json.");
-}
-function importJson(file: File): void {
-  const r = new FileReader();
-  r.onload = (e) => {
-    let obj: any; try { obj = JSON.parse((e.target as FileReader).result as string); } catch (_) { showAlert("El archivo no es un .json válido."); return; }
-    if (obj && obj.kind === "gpi.activities/v1" && obj.data) {
-      if (mode === "sample") { stateSample = normalizeState(obj.data); }
-      else { stateLive = normalizeState(obj.data); }
-      if (obj.title) (document.getElementById("projectTitle") as HTMLInputElement).value = obj.title;
-      if (obj.course) (document.getElementById("courseTitle") as HTMLInputElement).value = obj.course;
-      render(); gpiPush();
-      setStatus("Lista de actividades importada. Las actividades se enlazan a la EDT por el id de cada paquete.");
-    } else {
-      showAlert("No reconocí el formato: se esperaba una exportación de esta herramienta (gpi.activities/v1).");
-    }
-  };
-  r.readAsText(file);
-}
-
 // ---------- EDT y actividades DE EJEMPLO (demo independiente) ----------
 // Réplica compacta de la EDT de ejemplo de WBS Builder. El modo ejemplo es
 // autocontenido: nunca escribe sobre los datos reales del proyecto activo.
@@ -1090,9 +1062,6 @@ async function importActivitiesExcel(file: File): Promise<void> {
 
 // ---------- toolbar ----------
 function wireToolbar(): void {
-  document.getElementById("btnExportJson")!.addEventListener("click", exportJson);
-  document.getElementById("btnImportJson")!.addEventListener("click", () => { (document.getElementById("fileInput") as HTMLInputElement).click(); });
-  document.getElementById("fileInput")!.addEventListener("change", (e) => { const files = (e.target as HTMLInputElement).files; if (files && files[0]) importJson(files[0]); (e.target as HTMLInputElement).value = ""; });
   document.getElementById("btnReload")!.addEventListener("click", () => {
     gpiPullWbs(); render();
     setStatus("EDT recargada desde el proyecto activo.");

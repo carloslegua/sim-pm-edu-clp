@@ -56,6 +56,18 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Changed
 
+- **Se retiraron los botones "⭳ Guardar (.json)" / "⭱ Abrir (.json)" de
+  los 13 módulos-herramienta** — a pedido explícito del usuario: cada
+  módulo tenía su propio respaldo/restauración de SOLO su porción de
+  datos, coexistiendo sin explicación con el "Exportar/Importar
+  proyecto" de Panel de Control y generando confusión sobre cuál usar.
+  Guardar/Abrir `.json` pasa a ser responsabilidad exclusiva de Panel
+  de Control: "⭳ Exportar proyecto" / "⭱ Importar proyecto" para el
+  archivo completo, y el ya existente "⭱ Importar .json" de cada
+  tarjeta del lanzador para el `.json` de un solo módulo (mismo formato
+  que cada herramienta seguía generando). Detalle completo, incluida
+  una excepción deliberada de alcance en RACI, en ARCHITECTURE.md.
+
 - **En Estimar los Costos, "Nombre de la actividad" ya no queda vacía en
   las filas de Proyecto/Fase/Paquete del archivo exportado** — repite el
   nombre de esa fila (a pedido explícito del usuario, para que la
@@ -85,6 +97,18 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
   ARCHITECTURE.md. Cubierto por tests en los cuatro smoke tests.
 
 ### Added
+
+- **`detectTool()` (gpi-core.ts) reconoce ahora los 13 formatos de
+  exportación de módulo, no 11.** Al retirar el import propio de cada
+  herramienta (ver arriba) y dejar "Importar .json" de Panel de Control
+  como único punto de entrada por módulo, se detectó que
+  "Recopilar Requisitos" (`gpi.requirements/v1`) y "Estimar los Costos"
+  (`gpi.costEstimate/v1`) nunca habían tenido caso en `detectTool()`:
+  ese botón existía en sus tarjetas pero fallaba en silencio
+  (`unknown-format`) para esos dos módulos. Corregido junto con la
+  centralización, no de forma separada. Cubierto por
+  `tests/unit/tool-export-import.test.ts`, nuevo, que fija los 13
+  formatos reconocidos (más `unknown-format`/`no-active`).
 
 - **Al importar un .xlsx en Definir las Actividades y en Estimar los
   Costos, se verifica que la HOJA y los ENCABEZADOS del archivo sean

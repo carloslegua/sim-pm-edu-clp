@@ -163,6 +163,49 @@ Si TypeScript marca una de estas ramas como "código muerto" o
 `.json` real y antiguo todavía la necesita (ver la nota equivalente en
 MIGRATION.md, Fase 1).
 
+### Guardar/Abrir `.json` es responsabilidad EXCLUSIVA de Panel de Control
+
+Hasta hace poco, cada uno de los 13 módulos-herramienta tenía su propio
+par de botones "⭳ Guardar (.json)" / "⭱ Abrir (.json)" (respaldo de
+SOLO la porción de datos de ese módulo). A pedido explícito del
+usuario, se retiraron de los 13 módulos por generar confusión: no
+quedaba claro si ese `.json` era "el respaldo del proyecto" o algo
+aparte, y coexistía con el propio flujo de Panel de Control sin que
+ninguno de los dos se explicara — ver el razonamiento completo en la
+conversación que originó este cambio. El respaldo/restauración de datos
+ahora vive ÚNICAMENTE en `Panel_Control.html`, con dos niveles:
+
+- **"⭳ Exportar proyecto" / "⭱ Importar proyecto"** (`btnExport`/
+  `btnImport` + `fileProject`, `_mode = "project"`): el archivo
+  completo, TODOS los módulos juntos (`importProject()`/`exportActive()`).
+- **"⭱ Importar .json" en cada tarjeta del lanzador** (`data-import`,
+  `importToolInto()` → `_mode = "module"` → `GPI.ingestToolExport()`):
+  acepta el `.json` de UN SOLO módulo — el mismo formato que cada
+  herramienta seguía sabiendo generar únicamente en la mente de quien
+  ya tuviera un archivo viejo guardado — y lo enchufa solo en esa
+  porción del proyecto activo, vía `detectTool()`. Como esta acción
+  vive en el Panel y no en el módulo, **`detectTool()` tiene que
+  reconocer la exportación de los 13 módulos sin excepción** — retirar
+  el import propio de "Recopilar Requisitos" y "Estimar los Costos"
+  expuso que sus formatos (`gpi.requirements/v1`, `gpi.costEstimate/v1`)
+  nunca habían tenido caso en `detectTool()`: el botón "Importar .json"
+  de esas dos tarjetas existía pero fallaba en silencio
+  (`unknown-format`). Se agregaron los dos casos que faltaban al mismo
+  tiempo que se retiraban los botones — ver `tests/unit/tool-export-import.test.ts`,
+  que fija los 13 formatos reconocidos uno por uno (más los casos
+  `unknown-format`/`no-active`).
+- **Excepción deliberada, no un descuido**: la matriz RACI
+  (`RACI_Matrix.html`) restauraba antes, desde su propio `.json`, no
+  solo `assignments` sino también un "congelado" (`rowsSnapshot`/
+  `colsSnapshot`) de las filas/columnas tal como estaban al exportar —
+  útil para reabrir una matriz vieja aunque el WBS/OBS actual ya haya
+  cambiado. `detectTool()` para `gpi.raci/v1` solo extrae
+  `assignments`; el congelado NO se replicó al centralizar (reimportar
+  vía Panel de Control siempre recalcula filas/columnas contra el
+  WBS/OBS VIVOS, igual que el modo "live" normal del módulo) — un
+  recorte de alcance consciente, no un bug, documentado aquí para no
+  "redescubrirlo" como regresión.
+
 ## Las tres formas de referenciar el núcleo
 
 Cada módulo referencia `GPI` de una de tres formas — no asumir que es

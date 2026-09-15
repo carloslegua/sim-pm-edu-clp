@@ -553,28 +553,6 @@ function buildReport(): void {
   setTimeout(() => { window.print(); setTimeout(done, 500); }, 60);
 }
 
-/* ---------- export / import archivo ---------- */
-function exportJson(): void {
-  const data = { kind: "gpi.scopeStatement/v1", title: ($("projectTitle") as HTMLInputElement).value, course: ($("courseTitle") as HTMLInputElement).value, data: serialize() };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob), a = document.createElement("a");
-  const safe = (data.title || "proyecto").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-  a.href = url; a.download = "alcance_" + safe + ".json"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  setStatus("Enunciado del alcance exportado.");
-}
-function importJson(file: File): void {
-  const r = new FileReader();
-  r.onload = (e) => {
-    let obj: any; try { obj = JSON.parse((e.target as FileReader).result as string); } catch (_) { toast("Archivo no válido"); return; }
-    const payload = (obj && obj.kind === "gpi.scopeStatement/v1" && obj.data) ? obj.data : obj;
-    state = normalize(payload);
-    if (obj.title) ($("projectTitle") as HTMLInputElement).value = obj.title;
-    if (obj.course) ($("courseTitle") as HTMLInputElement).value = obj.course;
-    persist(); render(); toast("Enunciado del alcance cargado");
-  };
-  r.readAsText(file);
-}
-
 /* ---------- tabs ---------- */
 function setTab(t: string): void {
   document.querySelectorAll("#tabs .tab").forEach((b) => { b.classList.toggle("active", (b as HTMLElement).dataset.tab === t); });
@@ -603,9 +581,6 @@ function wire(): void {
       setTimeout(() => { const ta = document.querySelector('#' + k + 'Host textarea[data-i="' + (state[k].length - 1) + '"]') as HTMLElement | null; if (ta) ta.focus(); }, 30);
     };
   });
-  ($("btnExport") as HTMLElement).onclick = exportJson;
-  ($("btnImport") as HTMLElement).onclick = () => { ($("fileInput") as HTMLInputElement).click(); };
-  $("fileInput").addEventListener("change", (e) => { const files = (e.target as HTMLInputElement).files; if (files && files[0]) importJson(files[0]); (e.target as HTMLInputElement).value = ""; });
   ($("btnReport") as HTMLElement).onclick = buildReport;
   ($("btnSample") as HTMLElement).onclick = () => {
     confirmModal("Cargar ejemplo", "Esto reemplazará el contenido actual por el caso DISTRIB+ S.A. ¿Continuar?", "Cargar ejemplo", true).then((ok) => {

@@ -1290,40 +1290,6 @@
 		h += "</div></div>";
 		host.innerHTML = h;
 	}
-	function exportJSON() {
-		const payload = {
-			kind: "gpi.requirements/v1",
-			title: gpiOn() && GPI.meta() && GPI.meta().name || "Recopilar Requisitos",
-			course: gpiOn() && GPI.meta() && GPI.meta().course || void 0,
-			data: collect()
-		};
-		const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-		const a = document.createElement("a");
-		a.href = URL.createObjectURL(blob);
-		a.download = "gpi_requirements.json";
-		a.click();
-	}
-	function importJSON(ev) {
-		const f = ev.target.files?.[0];
-		if (!f) return;
-		const r = new FileReader();
-		r.onload = () => {
-			try {
-				const obj = JSON.parse(r.result);
-				applyData(obj && obj.kind === "gpi.requirements/v1" && obj.data ? obj.data : obj);
-				userEdited = true;
-				save();
-				flash();
-				renderAll();
-				document.querySelector(".tab[data-p=\"p1\"]").click();
-				showToast("Requisitos importados.");
-			} catch (e) {
-				showToast("Archivo inválido: no pude leer ese .json como módulo de Requisitos.");
-			}
-		};
-		r.readAsText(f);
-		ev.target.value = "";
-	}
 	function gpiBadge() {
 		if ($("gpiBadge")) return;
 		const name = gpiOn() && GPI.meta() && GPI.meta().name || "—";
@@ -1369,8 +1335,6 @@
 	}
 	init();
 	Object.assign(window, {
-		exportJSON,
-		importJSON,
 		openItemEditor,
 		loadSampleClick,
 		removeItem,

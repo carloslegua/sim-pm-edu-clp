@@ -516,34 +516,6 @@ function fitToScreen(): void {
   applyZoom();
 }
 
-// ---------- SERIALIZATION ----------
-function exportJson(): void {
-  const data = { kind: "gpi.obs/v1", title: (document.getElementById("projectTitle") as HTMLInputElement).value, course: (document.getElementById("courseTitle") as HTMLInputElement).value, rootId, idCounter, nodes };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const safeName = (data.title || "organizacion").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
-  a.href = url; a.download = `obs_${safeName}.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
-  setStatus("Organigrama exportado como JSON.");
-}
-function importJson(file: File): void {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const data = JSON.parse((e.target as FileReader).result as string);
-      if (!data.nodes || !data.rootId) throw new Error("Formato inválido");
-      nodes = data.nodes; rootId = data.rootId; idCounter = data.idCounter || 1;
-      selectedId = rootId;
-      (document.getElementById("projectTitle") as HTMLInputElement).value = data.title || "Organización del Proyecto";
-      (document.getElementById("courseTitle") as HTMLInputElement).value = data.course || "Gestión de Proyectos de Ingeniería";
-      render(); setTimeout(fitToScreen, 50);
-      setStatus("Organigrama cargado correctamente.");
-    } catch (err) { showAlert("No se pudo leer el archivo. Verifica que sea un JSON exportado por esta herramienta."); }
-  };
-  reader.readAsText(file);
-}
 function exportCsv(): void {
   const codes = computeCodes();
   const rows: string[][] = [["Código", "Rol/Puesto", "Persona", "Tipo", "Correo", "ReportaA"]];
@@ -607,9 +579,6 @@ function init(): void {
   document.getElementById("btnCollapseAll")!.addEventListener("click", () => { Object.values(nodes).forEach((n) => { if (n.children.length > 0) n.collapsed = true; }); render(); setTimeout(fitToScreen, 50); });
   document.getElementById("btnExpandAll")!.addEventListener("click", () => { Object.values(nodes).forEach((n) => { n.collapsed = false; }); render(); setTimeout(fitToScreen, 50); });
 
-  document.getElementById("btnExportJson")!.addEventListener("click", exportJson);
-  document.getElementById("btnImportJson")!.addEventListener("click", () => (document.getElementById("fileInput") as HTMLInputElement).click());
-  document.getElementById("fileInput")!.addEventListener("change", (e) => { const files = (e.target as HTMLInputElement).files; if (files && files[0]) importJson(files[0]); (e.target as HTMLInputElement).value = ""; });
   document.getElementById("btnExportCsv")!.addEventListener("click", exportCsv);
   document.getElementById("btnPrint")!.addEventListener("click", () => window.print());
 

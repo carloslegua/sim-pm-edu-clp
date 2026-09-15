@@ -7,7 +7,7 @@
 
    IMPORTANTE — a diferencia de OBS/RACI: el HTML de este módulo usa
    atributos onclick/onchange/oninput INLINE (no addEventListener) para
-   ~11 funciones (exportJSON, importJSON, save, recalcCont, onBaseInput,
+   ~9 funciones (save, recalcCont, onBaseInput,
    pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc), incluidas dos
    generadas dinámicamente en filas de tabla (coStatus, delCO). Vite
    compila este módulo en su propio closure: esas funciones NO quedan
@@ -451,31 +451,6 @@ function load(): void {
   if (d) applyData(d);
   else state.co = JSON.parse(JSON.stringify(SAMPLE_CO));
 }
-function exportJSON(): void {
-  const payload = {
-    kind: "gpi.cost/v1", title: (gpiOn() && (GPI as GpiApi).meta() && (GPI as GpiApi).meta()!.name) || "Plan de Gestión Financiera",
-    course: (gpiOn() && (GPI as GpiApi).meta() && (GPI as GpiApi).meta()!.course) || undefined, data: collect()
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = "gpi_cost.json"; a.click();
-}
-function importJSON(ev: Event): void {
-  const f = (ev.target as HTMLInputElement).files?.[0]; if (!f) return;
-  const r = new FileReader();
-  r.onload = () => {
-    try {
-      const obj = JSON.parse(r.result as string);
-      const data = (obj && obj.kind === "gpi.cost/v1" && obj.data) ? obj.data : obj; // acepta envuelto o crudo
-      applyData(data);
-      document.querySelectorAll("#classbar button").forEach((x) => x.classList.toggle("on", +(x as HTMLElement).dataset.c! === state.curClass));
-      renderClass(); renderCO(); recalcCont(); buildDoc(); save();
-      (document.querySelector('[data-p="p1"]') as HTMLElement).click(); flash();
-    } catch (e) { showToast("Archivo inválido: no pude leer ese .json como Plan de Costos."); }
-  };
-  r.readAsText(f);
-}
-
 /* ---------- Barra de proyecto (badge flotante) ---------- */
 function gpiBadge(): void {
   if (document.getElementById("gpiBadge")) return;
@@ -533,4 +508,4 @@ init(false);
 // archivo) que buscan estas funciones POR NOMBRE en el ámbito global.
 // Sin esto, Vite las deja encerradas en el closure del bundle y cada
 // clic tira "x is not defined".
-Object.assign(window, { exportJSON, importJSON, save, recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc });
+Object.assign(window, { save, recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc });

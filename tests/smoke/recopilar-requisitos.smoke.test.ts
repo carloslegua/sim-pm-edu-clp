@@ -35,12 +35,12 @@ beforeAll(async () => {
 afterAll(() => { server.close(); });
 
 const ONCLICK_FNS = [
-  "exportJSON", "importJSON", "openItemEditor", "loadSampleClick", "removeItem", "promoteToRan",
+  "openItemEditor", "loadSampleClick", "removeItem", "promoteToRan",
   "freezeBaseline", "rebaseline", "openModEditor", "setActiveMod", "removeMod", "setModStatus", "updateCcr"
 ];
 
 describe("Recopilar_Requisitos.html (migrado a requirements.js)", () => {
-  it("standalone: carga la demo DISTRIB+ (6 requisitos) y expone las 13 funciones onclick inline", async () => {
+  it("standalone: carga la demo DISTRIB+ (6 requisitos) y expone las 11 funciones onclick inline", async () => {
     const dom = await JSDOM.fromURL(base + "Recopilar_Requisitos.html", { runScripts: "dangerously", resources: "usable" });
     await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;

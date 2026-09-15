@@ -1262,47 +1262,6 @@
 			setStatus(added ? "Se importaron " + added + " hito(s) desde la EDT." : "Los hitos de las fases actuales ya estaban registrados.");
 		});
 	}
-	function exportJson() {
-		const data = {
-			kind: "gpi.schedulePlan/v1",
-			title: document.getElementById("projectTitle").value,
-			course: document.getElementById("courseTitle").value,
-			data: state
-		};
-		const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-		const url = URL.createObjectURL(blob), a = document.createElement("a");
-		a.href = url;
-		a.download = "plan_gestion_cronograma.json";
-		document.body.appendChild(a);
-		a.click();
-		a.remove();
-		URL.revokeObjectURL(url);
-		setStatus("Plan exportado como .json.");
-	}
-	function importJson(file) {
-		const reader = new FileReader();
-		reader.onload = (e) => {
-			let obj;
-			try {
-				obj = JSON.parse(e.target.result);
-			} catch (err) {
-				showAlert("No se pudo leer el archivo. Verifica que sea un JSON válido.");
-				return;
-			}
-			const payload = obj && obj.kind === "gpi.schedulePlan/v1" && obj.data ? obj.data : obj && obj.methodology ? obj : null;
-			if (!payload) {
-				showAlert("No reconozco el formato de este archivo. Debe ser un .json exportado por esta misma herramienta.");
-				return;
-			}
-			state = mergeWithDefaults(payload);
-			if (obj.title) document.getElementById("projectTitle").value = obj.title;
-			if (obj.course) document.getElementById("courseTitle").value = obj.course;
-			fullRender();
-			if (typeof window.GPI !== "undefined" && window.GPI.available() && window.GPI.active()) window.GPI.setModule("schedulePlan", state);
-			setStatus("Plan importado correctamente.");
-		};
-		reader.readAsText(file);
-	}
 	function init() {
 		state = normalizeState(sampleState());
 		wireScalarFields();
@@ -1329,15 +1288,6 @@
 			});
 			renderThresholds();
 			onDirty();
-		});
-		document.getElementById("btnExportJson").addEventListener("click", exportJson);
-		document.getElementById("btnImportJson").addEventListener("click", () => {
-			document.getElementById("fileInput").click();
-		});
-		document.getElementById("fileInput").addEventListener("change", (e) => {
-			const files = e.target.files;
-			if (files && files[0]) importJson(files[0]);
-			e.target.value = "";
 		});
 		document.getElementById("btnPrint").addEventListener("click", () => {
 			window.print();
