@@ -300,7 +300,7 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   núcleo, todos cubiertos por Vitest.
 - **"⇩ Plantilla combinada (.xlsx)"** (a pedido explícito del usuario):
   genera un libro con una hoja por cada módulo que importa desde Excel
-  (hoy: "WBS" de WBS Builder, "EDT" de Definir las Actividades,
+  (hoy: "WBS" de WBS Builder, "Actividades" de Definir las Actividades,
   "Estimado" de Estimar los Costos, más una hoja "Instrucciones"), cada
   una con el nombre EXACTO y los encabezados EXACTOS que ese módulo
   exige al importar — así el alumno completa todo en un solo libro y,
@@ -323,7 +323,7 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   (`templateInstructionsXml()`) no es solo texto: trae, para cada una
   de las tres hojas de datos, un bloque con el encabezado real y 1-2
   filas de ejemplo ya completadas (p. ej. una fase + un paquete en
-  "WBS", una actividad + un hito en "EDT") — a pedido explícito del
+  "WBS", una actividad + un hito en "Actividades") — a pedido explícito del
   usuario, para que el alumno vea el formato esperado sin tener que
   adivinarlo. Probado en
   `tests/e2e/panel-control-template.spec.ts`: verifica hojas/
@@ -420,10 +420,11 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   TODAS las hojas del libro (`resolveDataSheetPath()`, nunca
   `getElementsByTagName("sheet")[0]`) — necesario para que un alumno
   pueda juntar en un solo `.xlsx` las hojas de varios módulos (p. ej.
-  "EDT" + "Estimado") sin que este módulo tome por error la hoja de
+  "Actividades" + "Estimado") sin que este módulo tome por error la hoja de
   otro; se rechaza con un aviso (listando qué hojas sí tiene el
-  archivo) si ninguna hoja se llama exactamente "EDT" (`DATA_SHEET_NAME`,
-  el mismo nombre que ya escribe `buildTemplateXlsxBlob()`). Soporta
+  archivo) si ninguna hoja se llama exactamente "Actividades"
+  (`DATA_SHEET_NAME`, el mismo nombre que ya escribe
+  `buildTemplateXlsxBlob()`). Soporta
   tanto `xl/sharedStrings.xml` (formato real de Excel) como
   `t="inlineStr"` (el propio formato de exportación de este proyecto).
   La duración sigue sin persistirse: se recalcula en pantalla igual que
@@ -444,6 +445,36 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   de trabajo" desactualizado (por ejemplo, el paquete se renombró en
   WBS Builder después de descargar la plantilla) se reconciliaba igual,
   sin avisar.
+- **Hoja de datos renombrada de "EDT" a "Actividades" y columna "Id."
+  agregada a la plantilla** (a pedido explícito del usuario, "para que
+  sea compatible" con el resto de la suite): `DATA_SHEET_NAME` pasa de
+  `"EDT"` a `"Actividades"` (sincronizado también en
+  `ACTIVITIES_SHEET_NAME` de `panel-control/main.ts`, la plantilla
+  combinada). `TEMPLATE_HEADERS` gana `"Id."` como primera columna —
+  `templateRowModel()`/`buildTemplateCsv()` ya no derivan de
+  `leafRows()` sino de `fullRows().filter(r => r.kind === "package")`,
+  para poder incluir el `.n` (mismo correlativo que ya se ve en
+  pantalla) de cada fila de paquete.
+  **Semántica deliberadamente distinta a la de Estimar los Costos**: ahí
+  cada fila del archivo tiene un Id. propio y único (una por actividad
+  real existente); aquí, en cambio, la plantilla invita a **duplicar**
+  la fila de un paquete para agregar más de una actividad (Ctrl+D, ver
+  `templateInstructions()`), así que varias filas del archivo pueden
+  compartir legítimamente el mismo Id. — el Id. de la plantilla
+  identifica al PAQUETE, no a la actividad. Por eso
+  `reconcileImportRows()` contrasta el Id. contra `Código EDT` (nunca
+  contra `Nombre de la actividad`, que sí varía entre las copias de una
+  misma fila): construye `currentPkgById` desde `fullRows()` COMPLETO
+  (todas las filas, no solo paquetes) a propósito — si, por ejemplo, se
+  insertó un hito antes de un paquete, ese paquete corre de Id. sin que
+  su propio Código EDT cambie, y la posición vieja queda ocupada por el
+  hito (con un código H1/H2… que nunca va a coincidir) — filtrar solo a
+  paquetes habría dejado ese caso sin detectar. Aviso, no bloqueo
+  (`idMismatches` en `ReconcileResult`), mismo criterio ya establecido
+  para Estimar los Costos. Probado en
+  `tests/e2e/activity-definition-import.spec.ts` con un archivo que
+  representa el estado ANTES de que existiera un hito insertado más
+  tarde (corre el Id. de un paquete posterior sin tocar su Código EDT).
 - **`GPI.onChange()` + `gpiPullWbs()` mantienen la EDT sincronizada en
   vivo**: no solo al cargar la página o al pulsar "Recargar EDT" — cada
   vez que otra pestaña cambia el proyecto activo (p. ej. un rename en
@@ -568,8 +599,8 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
 - **Import/export `.xlsx`** (a pedido explícito del usuario, "misma lógica"
   que Definir las Actividades/Estimar los Costos): mismo mecanismo
   hand-rolled vía `window.JSZip`, hoja de datos llamada exactamente "WBS"
-  (distinta de "EDT"/"Estimado" de esos dos módulos, para que un libro con
-  las tres hojas no sea ambiguo) y emparejamiento de columnas por texto
+  (distinta de "Actividades"/"Estimado" de esos dos módulos, para que un
+  libro con las tres hojas no sea ambiguo) y emparejamiento de columnas por texto
   EXACTO contra `TEMPLATE_HEADERS`. Columnas: Código EDT | Paquete de
   trabajo | Nivel | Duración | Inicio | Fin | Costo | Responsable | Avance
   — el mismo modelo que ya muestra la vista "Tabla / Diccionario"
@@ -700,7 +731,7 @@ Costs")
   entre TODAS las del libro — mismo mecanismo que Activity_Definition.html,
   ver esa sección para el porqué: un alumno puede juntar varias hojas de
   varios módulos en un solo `.xlsx`, y "Estimado" es el nombre esperado
-  aquí (`DATA_SHEET_NAME`) frente a "EDT" en Actividades).
+  aquí (`DATA_SHEET_NAME`) frente a "Actividades" en Definir las Actividades).
   Columnas: Id. | Código EDT | Paquete de trabajo | Nombre de la
   actividad | Tipo | Unidad | Cantidad | Precio unitario | Subtotal —
   Id./Código EDT/Paquete/Nombre/Unidad/Cantidad son de referencia

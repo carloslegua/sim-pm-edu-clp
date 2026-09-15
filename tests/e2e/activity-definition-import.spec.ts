@@ -59,7 +59,7 @@ async function buildFixtureXlsx(): Promise<Buffer> {
     + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
   zip.file("xl/workbook.xml",
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-    + '<sheets><sheet name="EDT" sheetId="1" r:id="rId1"/></sheets></workbook>');
+    + '<sheets><sheet name="Actividades" sheetId="1" r:id="rId1"/></sheets></workbook>');
   zip.file("xl/_rels/workbook.xml.rels",
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
     + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
@@ -70,7 +70,7 @@ async function buildFixtureXlsx(): Promise<Buffer> {
 // Igual que buildFixtureXlsx() pero con filas y nombre de hoja arbitrarios
 // -- para el caso de una hoja con OTRO nombre o encabezados abreviados, que
 // ahora deben rechazarse (ver resolveDataSheetPath()/mapHeaderColumns()).
-async function buildRowsXlsx(headerRow: string[], rows: string[][], sheetName = "EDT"): Promise<Buffer> {
+async function buildRowsXlsx(headerRow: string[], rows: string[][], sheetName = "Actividades"): Promise<Buffer> {
   const zip = new JSZip();
   const allRows = [headerRow, ...rows];
   const COLS = "ABCDEFGHIJ";
@@ -158,7 +158,7 @@ async function buildMilestonesFixtureXlsx(): Promise<Buffer> {
     + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
   zip.file("xl/workbook.xml",
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-    + '<sheets><sheet name="EDT" sheetId="1" r:id="rId1"/></sheets></workbook>');
+    + '<sheets><sheet name="Actividades" sheetId="1" r:id="rId1"/></sheets></workbook>');
   zip.file("xl/_rels/workbook.xml.rels",
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
     + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
@@ -204,11 +204,11 @@ test("Activity_Definition — importar hitos (atado, suelto y con código faltan
   expect(byCode.H2).toMatchObject({ name: "Cierre del proyecto", leafId: null, afterLeafId: "w3" });
 });
 
-test("Activity_Definition — un .xlsx con la hoja de datos llamada distinto a «EDT» se rechaza (caso: un solo libro con varios módulos)", async ({ page }) => {
+test("Activity_Definition — un .xlsx con la hoja de datos llamada distinto a «Actividades» se rechaza (caso: un solo libro con varios módulos)", async ({ page }) => {
   // Si el alumno junta en un mismo archivo las hojas de varios módulos
-  // (p. ej. "EDT" de este y "Estimado" de Estimar los Costos), ya no basta
-  // con leer la PRIMERA hoja del libro -- hay que confirmar que la hoja que
-  // se está por importar aquí es, por su NOMBRE, la de Definir las
+  // (p. ej. "Actividades" de este y "Estimado" de Estimar los Costos), ya no
+  // basta con leer la PRIMERA hoja del libro -- hay que confirmar que la
+  // hoja que se está por importar aquí es, por su NOMBRE, la de Definir las
   // Actividades. Este archivo trae una única hoja, pero llamada "Estimado"
   // (headers por lo demás perfectamente válidos): debe rechazarse igual.
   await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedDb);
@@ -224,7 +224,7 @@ test("Activity_Definition — un .xlsx con la hoja de datos llamada distinto a �
 
   await expect(page.locator("#modalOverlay")).toHaveClass(/open/);
   const msg = await page.locator("#modalMsg").textContent();
-  expect(msg).toMatch(/No encontré una hoja llamada «EDT»/);
+  expect(msg).toMatch(/No encontré una hoja llamada «Actividades»/);
   expect(msg).toMatch(/Estimado/);
   await page.locator("#modalOk").click();
 
@@ -282,4 +282,58 @@ test("Activity_Definition — una fila con Código EDT y Nombre correctos pero P
 
   await expect(page.locator(".act-row")).toHaveCount(1);
   await expect(page.locator(".act-row")).toContainText("Excavar zanja");
+});
+
+test("Activity_Definition — un archivo exportado ANTES de agregar un hito avisa que el Id. de las filas posteriores ya no coincide", async ({ page }) => {
+  // El proyecto YA tiene, desde el inicio, un hito atado a w1 (simula que se
+  // agregó DESPUÉS de exportar el archivo que se va a reimportar). Sin ese
+  // hito, fullRows() habría sido: 0=proyecto, 1=w1, 2=w2 -- con él, w2 corre
+  // a Id. 3 (el hito ocupa el 2), aunque su propio Código EDT ("2") y su
+  // nombre no cambiaron en absoluto.
+  const seedDb = {
+    version: 1, activeId: "p1",
+    projects: {
+      p1: {
+        schema: "gpi.project/v1",
+        meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+        modules: {
+          wbs: {
+            rootId: "root", idCounter: 3,
+            nodes: {
+              root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1", "w2"] },
+              w1: { id: "w1", parentId: "root", name: "Excavación", children: [] },
+              w2: { id: "w2", parentId: "root", name: "Encofrado", children: [] }
+            }
+          },
+          activities: { byLeaf: {}, idCounter: 1, milestones: [{ id: "m1", code: "H1", name: "Fin de excavación", leafId: "w1" }] }
+        }
+      }
+    }
+  };
+  await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedDb);
+  await page.goto("/Activity_Definition.html");
+  await expect(page.locator(".pkg-row")).toHaveCount(2);
+  await expect(page.locator(".milestone-row")).toHaveCount(1);
+
+  // El archivo "viejo" trae los Id. de ANTES de que existiera el hito: w1=1,
+  // w2=2 (nunca llegó a verlo, se exportó antes).
+  const buffer = await buildRowsXlsx(
+    ["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"],
+    [
+      ["1", "1", "Excavación", "Corte de zanja", "m³", "100", "25", ""],
+      ["2", "2", "Encofrado", "Armado de encofrado", "m²", "50", "10", ""]
+    ]
+  );
+  await page.setInputFiles("#xlsxFileInput", { name: "actividades.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer });
+
+  await expect(page.locator("#modalOverlay")).toHaveClass(/open/);
+  const msg = await page.locator("#modalMsg").textContent();
+  // Ambas actividades se importan igual (Código EDT + Paquete de trabajo
+  // resuelven bien por su cuenta) -- el Id. desactualizado es solo un aviso.
+  expect(msg).toMatch(/2 actividad\(es\)/);
+  expect(msg).toMatch(/1 fila\(s\) tienen un Id\. que ya no coincide/);
+  await page.locator("#modalOk").click();
+
+  await expect(page.locator(".act-row")).toHaveCount(2);
+  await expect(page.locator(".act-row")).toContainText(["Corte de zanja", "Armado de encofrado"]);
 });

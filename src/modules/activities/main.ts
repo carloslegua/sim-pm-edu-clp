@@ -677,13 +677,15 @@ function xmlEsc(s: unknown): string { return String(s == null ? "" : s).replace(
 
 interface XlCell { v: string | number; t: "s" | "n"; s?: number; }
 
-const TEMPLATE_HEADERS = ["Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Código de hito", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"];
+const TEMPLATE_HEADERS = ["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Código de hito", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"];
 // Nombre EXACTO de la hoja de datos dentro del .xlsx (el mismo que escribe
 // buildTemplateXlsxBlob() más abajo). Si el alumno junta varios módulos en
 // un solo libro de Excel, esta es la única forma confiable de saber cuál
 // hoja es la de Definir las Actividades -- nunca "la primera hoja del
-// archivo".
-const DATA_SHEET_NAME = "EDT";
+// archivo". Antes se llamaba "EDT"; renombrada a "Actividades" a pedido
+// explícito del usuario para que el nombre describa el módulo, no la EDT
+// (que es la hoja propia de WBS Builder).
+const DATA_SHEET_NAME = "Actividades";
 
 // Estilos: 0 normal · 1 encabezado · 2 centrado · 4 nota/instrucciones · 25 título
 function xlsxStylesXml(): string {
@@ -741,13 +743,21 @@ function xlsxSheetXml(rows: Array<Array<XlCell | null>>, widths: number[], freez
     + '</worksheet>';
 }
 
+// Id. = el mismo correlativo consecutivo (fullRows().n) que ya se ve en
+// pantalla -- se completa solo para la fila de PAQUETE (referencia, igual
+// que Código EDT/Paquete de trabajo). Si duplicas la fila para agregar más
+// de una actividad al mismo paquete, las copias conservan el mismo Id.: al
+// importar, ese Id. se contrasta contra Código EDT + Paquete de trabajo
+// (nunca contra el nombre de la actividad), así que duplicar la fila no
+// genera un aviso falso -- ver reconcileImportRows().
 function templateRowModel(): Array<Array<XlCell | null>> {
   const head: XlCell[] = TEMPLATE_HEADERS.map((h) => ({ v: h, t: "s", s: 1 }));
   const out: Array<Array<XlCell | null>> = [head];
-  leafRows().forEach((l) => {
+  fullRows().filter((r) => r.kind === "package").forEach((r) => {
     out.push([
-      { v: l.code, t: "s", s: 2 },
-      { v: l.name || "", t: "s", s: 0 },
+      { v: r.n, t: "n" },
+      { v: r.code, t: "s", s: 2 },
+      { v: r.name || "", t: "s", s: 0 },
       null, null, null, null, null, null, null
     ]);
   });
@@ -759,9 +769,9 @@ function templateInstructions(): Array<Array<XlCell | null>> {
     ["Cómo completar esta plantilla", 25],
     ["", 0],
     ["0. Si guardas todo el proyecto en un solo libro de Excel (varias hojas para varios módulos), esta hoja debe llamarse exactamente “" + DATA_SHEET_NAME + "” y sus encabezados deben coincidir EXACTAMENTE con los de esta plantilla (se puede reordenar columnas, pero no renombrarlas ni abreviarlas): al importar se verifican ambas cosas y se rechaza el archivo si no calzan, para no mezclar datos de otro módulo por error.", 4],
-    ["1. Cada fila es un paquete de trabajo de la EDT. Las columnas “Código EDT” y “Paquete de trabajo” son de referencia — no las edites ni las borres: son la clave con la que este simulador reconoce a qué paquete pertenece cada actividad al importar el archivo de vuelta. La EDT (WBS Builder) es la que manda sobre este módulo: si “Paquete de trabajo” no coincide con el nombre real de ese Código EDT en WBS Builder ahora mismo, esa fila se rechaza al importar (por ejemplo, si el paquete se renombró en WBS Builder después de descargar esta plantilla — vuelve a descargarla).", 4],
+    ["1. Cada fila es un paquete de trabajo de la EDT. Las columnas “Id.”, “Código EDT” y “Paquete de trabajo” son de referencia — no las edites ni las borres: son la clave con la que este simulador reconoce a qué paquete pertenece cada actividad al importar el archivo de vuelta. La EDT (WBS Builder) es la que manda sobre este módulo: si “Paquete de trabajo” no coincide con el nombre real de ese Código EDT en WBS Builder ahora mismo, esa fila se rechaza al importar (por ejemplo, si el paquete se renombró en WBS Builder después de descargar esta plantilla — vuelve a descargarla). Si el “Id.” de una fila ya no corresponde, en la EDT actual, a ese mismo Código EDT (por ejemplo, se agregó una fase o un paquete antes en WBS Builder y todo lo de después corrió de número), se avisa igual al importar — es solo un aviso, no bloquea la fila.", 4],
     ["2. Completa “Nombre de la actividad”, “Unidad”, “Metrado”, “Rendimiento (R)” y “N.º de equipos” para cada actividad del paquete.", 4],
-    ["3. ¿Más de una actividad por el mismo paquete? Copia la fila completa (Ctrl+D en Excel) y repite el mismo “Código EDT” en la copia, cambiando el nombre de la actividad.", 4],
+    ["3. ¿Más de una actividad por el mismo paquete? Copia la fila completa (Ctrl+D en Excel) y repite el mismo “Código EDT” en la copia, cambiando el nombre de la actividad — deja el “Id.” tal cual quedó copiado, no hace falta cambiarlo (varias filas del mismo paquete comparten el mismo Id., es normal).", 4],
     ["4. Hitos: para marcar una fila como hito (duración cero) en vez de una actividad normal, escribe “Hito” en la columna “Tipo” y asígnale un código propio en “Código de hito” (por ejemplo “H1”, “H2”… la numeración la decides tú) — deja en blanco Unidad/Metrado/Rendimiento/N.º de equipos, no aplican a un hito. Si el hito pertenece a un paquete de trabajo, completa su “Código EDT”; si es un hito del proyecto en general (no depende de un paquete puntual), deja “Código EDT” en blanco.", 4],
     ["4b. Un hito NUNCA forma parte de la EDT ni de su numeración: su posición en el listado es dónde insertes su fila en este archivo, respecto de las filas de paquete. Una fila de hito insertada ANTES de la primera fila de paquete aparece al principio de todo (p. ej. un hito de inicio de proyecto); insertada DESPUÉS de la última fila de paquete aparece al final de todo (p. ej. un hito de fin de proyecto); insertada entre dos paquetes cualesquiera, aparece justo ahí — no se agrupan todos juntos en un bloque aparte.", 4],
     ["5. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
@@ -794,7 +804,7 @@ async function buildTemplateXlsxBlob(): Promise<Blob> {
   zip.file("xl/workbook.xml",
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-    + '<sheets><sheet name="EDT" sheetId="1" r:id="rId1"/><sheet name="Instrucciones" sheetId="2" r:id="rId2"/></sheets>'
+    + '<sheets><sheet name="Actividades" sheetId="1" r:id="rId1"/><sheet name="Instrucciones" sheetId="2" r:id="rId2"/></sheets>'
     + '</workbook>');
   zip.file("xl/_rels/workbook.xml.rels",
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -804,7 +814,7 @@ async function buildTemplateXlsxBlob(): Promise<Blob> {
     + '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
     + '</Relationships>');
   zip.file("xl/styles.xml", xlsxStylesXml());
-  zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(templateRowModel(), [10, 30, 30, 8, 12, 10, 11, 14, 12], true));
+  zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(templateRowModel(), [6, 10, 30, 30, 8, 12, 10, 11, 14, 12], true));
   zip.file("xl/worksheets/sheet2.xml", xlsxSheetXml(templateInstructions(), [115], false));
   return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
@@ -812,7 +822,7 @@ async function buildTemplateXlsxBlob(): Promise<Blob> {
 function buildTemplateCsv(): string {
   function cell(v: unknown): string { const s = String(v == null ? "" : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
   const lines = [TEMPLATE_HEADERS.join(";")];
-  leafRows().forEach((l) => { lines.push([cell(l.code), cell(l.name || ""), "", "", "", "", "", "", ""].join(";")); });
+  fullRows().filter((r) => r.kind === "package").forEach((r) => { lines.push([cell(r.n), cell(r.code), cell(r.name || ""), "", "", "", "", "", "", ""].join(";")); });
   return lines.join("\r\n");
 }
 
@@ -929,14 +939,21 @@ async function parseActivitiesXlsx(file: File): Promise<ParsedXlsx> {
   return { kind: "ok", headers: allRows[0], rows: allRows.slice(1) };
 }
 
-interface ColumnMap { code: number; name: number; pkgName?: number; unit?: number; qty?: number; perf?: number; teams?: number; type?: number; milestoneCode?: number; }
+interface ColumnMap { code: number; name: number; id?: number; pkgName?: number; unit?: number; qty?: number; perf?: number; teams?: number; type?: number; milestoneCode?: number; }
 // Posición por posición con TEMPLATE_HEADERS. "Paquete de trabajo" SÍ se lee
 // (pkgName) -- ver reconcileImportRows(): la EDT (WBS Builder) es la capa
 // que manda sobre este módulo, así que además de resolver el paquete por
 // Código EDT, se verifica que el nombre del archivo coincida con el nombre
 // REAL de ese paquete ahora mismo en WBS Builder -- mismo criterio, y mismo
-// motivo, que ya usa Estimar los Costos.
-const TEMPLATE_HEADER_FIELDS: (keyof ColumnMap | null)[] = ["code", "pkgName", "name", "type", "milestoneCode", "unit", "qty", "perf", "teams"];
+// motivo, que ya usa Estimar los Costos. "Id." también se lee -- ver
+// reconcileImportRows(): verifica, para ese mismo Id., que el Código EDT y
+// el Paquete de trabajo del archivo sigan correspondiendo a lo que hay
+// AHORA MISMO en esa posición (detecta un archivo desactualizado, p. ej.
+// exportado antes de que WBS Builder corriera la numeración) -- aviso, no
+// bloqueo, y a propósito NUNCA se contrasta contra el nombre de la
+// actividad (que sí puede repetirse en varias filas si se duplicó la fila
+// del paquete para más de una actividad).
+const TEMPLATE_HEADER_FIELDS: (keyof ColumnMap | null)[] = ["id", "code", "pkgName", "name", "type", "milestoneCode", "unit", "qty", "perf", "teams"];
 function normalizeHeader(s: string): string {
   return String(s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
@@ -965,6 +982,7 @@ interface ReconcileResult {
   byLeaf: Record<string, ActivityRow[]>; idCounter: number; matched: number; unmatchedCodes: string[];
   milestones: MilestoneRow[]; matchedMilestones: number; milestoneIssues: string[];
   packageMismatches: { code: string; fileName: string; realName: string }[];
+  idMismatches: { id: number; code: string }[];
 }
 // Agrupa las filas del archivo por el id real del paquete de trabajo
 // (emparejado por código EDT, calculado localmente con leafRows() -- nunca
@@ -985,6 +1003,14 @@ function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResu
   const codeToId: Record<string, string> = {};
   const codeToName: Record<string, string> = {};
   leafRows().forEach((l) => { codeToId[l.code] = l.id; codeToName[l.code] = l.name; });
+  // Id. -> {code, name} de LO QUE SEA que ocupe esa posición AHORA MISMO
+  // (paquete, fase, hito...) -- deliberadamente no se filtra a solo
+  // paquetes: si, por ejemplo, se insertó un hito antes de un paquete, ese
+  // paquete corre de Id. sin que su propio Código EDT cambie, y la posición
+  // vieja pasa a estar ocupada por el hito (con un código H1/H2… muy
+  // distinto) -- eso también debe detectarse como drift.
+  const currentPkgById = new Map<number, { code: string; name: string }>();
+  fullRows().forEach((r) => { currentPkgById.set(r.n, { code: r.code, name: r.name }); });
   const byLeaf: Record<string, ActivityRow[]> = {};
   const milestones: MilestoneRow[] = [];
   let n = 0, matched = 0, mn = 0, matchedMilestones = 0;
@@ -992,6 +1018,7 @@ function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResu
   const unmatched = new Set<string>();
   const milestoneIssues: string[] = [];
   const packageMismatches: { code: string; fileName: string; realName: string }[] = [];
+  const idMismatches: { id: number; code: string }[] = [];
   rows.forEach((row) => {
     const code = String(row[colMap.code] || "").trim();
     const name = String(row[colMap.name] || "").trim();
@@ -1021,6 +1048,17 @@ function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResu
         return; // la EDT (WBS Builder) manda: no se asume el paquete solo por el código
       }
     }
+    if (colMap.id != null) {
+      const idStr = String(row[colMap.id] || "").trim();
+      const idNum = idStr === "" ? NaN : Number(idStr);
+      if (!Number.isNaN(idNum)) {
+        const current = currentPkgById.get(idNum);
+        // Solo avisa si esa posición existe pero corresponde a OTRO paquete
+        // -- nunca contra el nombre de la actividad (varias filas duplicadas
+        // del mismo paquete comparten Id. a propósito, ver templateRowModel()).
+        if (current && current.code !== code) idMismatches.push({ id: idNum, code });
+      }
+    }
     lastLeafId = leafId; // ancla para el próximo hito suelto que aparezca después en el archivo
     const unit = colMap.unit != null ? String(row[colMap.unit] || "").trim() : "";
     const qty = colMap.qty != null ? (parseExcelNum(row[colMap.qty]) || "") : "";
@@ -1030,7 +1068,7 @@ function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResu
     byLeaf[leafId].push({ id: "a" + (++n), name, unit, qty, perf, teams: teams || 1 });
     matched++;
   });
-  return { byLeaf, idCounter: n + 1, matched, unmatchedCodes: Array.from(unmatched), milestones, matchedMilestones, milestoneIssues, packageMismatches };
+  return { byLeaf, idCounter: n + 1, matched, unmatchedCodes: Array.from(unmatched), milestones, matchedMilestones, milestoneIssues, packageMismatches, idMismatches };
 }
 
 async function importActivitiesExcel(file: File): Promise<void> {
@@ -1069,13 +1107,17 @@ async function importActivitiesExcel(file: File): Promise<void> {
   if (result.milestoneIssues.length) {
     msg += " " + result.milestoneIssues.length + " hito(s) con problemas: " + result.milestoneIssues.slice(0, 5).join(" ") + (result.milestoneIssues.length > 5 ? "…" : "");
   }
+  if (result.idMismatches.length) {
+    const codes = Array.from(new Set(result.idMismatches.map((m) => m.code))).slice(0, 8);
+    msg += " ⚠ " + result.idMismatches.length + " fila(s) tienen un Id. que ya no coincide con lo que hay ahora mismo en esa posición (¿se editó la EDT en WBS Builder después de exportar este archivo?): " + codes.join(", ") + (result.idMismatches.length > 8 ? "…" : "") + ". Las filas igual se importan si el Código EDT y el Paquete de trabajo resuelven bien por su cuenta.";
+  }
   const ok = await showConfirm(msg, "Importar actividades desde Excel");
   if (!ok) return;
   if (mode === "sample") stateSample = { byLeaf: result.byLeaf, idCounter: result.idCounter, milestones: result.milestones };
   else stateLive = { byLeaf: result.byLeaf, idCounter: result.idCounter, milestones: result.milestones };
   onDirty(true);
   const issues = result.unmatchedCodes.length + result.packageMismatches.length + result.milestoneIssues.length;
-  setStatus(result.matched + " actividad(es)" + (result.matchedMilestones ? " y " + result.matchedMilestones + " hito(s)" : "") + " importado(s) desde Excel" + (issues ? (" · " + issues + " fila(s) no reconciliada(s)") : "") + ".");
+  setStatus(result.matched + " actividad(es)" + (result.matchedMilestones ? " y " + result.matchedMilestones + " hito(s)" : "") + " importado(s) desde Excel" + (issues ? (" · " + issues + " fila(s) no reconciliada(s)") : "") + (result.idMismatches.length ? (" · " + result.idMismatches.length + " fila(s) con Id. desactualizado") : "") + ".");
 }
 
 // ---------- toolbar ----------

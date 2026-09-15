@@ -812,8 +812,9 @@
 		"Responsable",
 		"Avance"
 	];
-	var ACTIVITIES_SHEET_NAME = "EDT";
+	var ACTIVITIES_SHEET_NAME = "Actividades";
 	var ACTIVITIES_HEADERS = [
+		"Id.",
 		"Código EDT",
 		"Paquete de trabajo",
 		"Nombre de la actividad",
@@ -888,9 +889,9 @@
 		};
 		text("Cómo completar este libro", 2);
 		blank();
-		text("Este archivo trae una hoja por cada módulo que importa datos desde Excel: “WBS” (WBS Builder), “EDT” (Definir las Actividades) y “Estimado” (Estimar los Costos). NO renombres ninguna hoja: cada módulo busca la suya por ese nombre exacto y, si no la encuentra, rechaza el archivo (evita que un módulo confunda su hoja con la de otro).");
+		text("Este archivo trae una hoja por cada módulo que importa datos desde Excel: “WBS” (WBS Builder), “Actividades” (Definir las Actividades) y “Estimado” (Estimar los Costos). NO renombres ninguna hoja: cada módulo busca la suya por ese nombre exacto y, si no la encuentra, rechaza el archivo (evita que un módulo confunda su hoja con la de otro).");
 		text("Tampoco renombres ni abrevies los encabezados de la primera fila de cada hoja: deben coincidir EXACTAMENTE con lo que espera cada módulo (sí puedes reordenar las columnas dentro de una misma hoja).");
-		text("Orden recomendado, porque la EDT (WBS Builder) es la que manda sobre los otros dos: 1) completa “WBS” con las fases y paquetes de trabajo; 2) completa “EDT” con las actividades de cada paquete; 3) completa “Estimado” con el precio de cada actividad.");
+		text("Orden recomendado, porque la EDT (WBS Builder) es la que manda sobre los otros dos: 1) completa “WBS” con las fases y paquetes de trabajo; 2) completa “Actividades” con las actividades de cada paquete; 3) completa “Estimado” con el precio de cada actividad.");
 		text("Sube este MISMO archivo por separado en cada módulo, con su propio botón “Importar desde Excel” — cada uno copia solo su hoja e ignora las demás. Las filas de ejemplo de abajo son solo referencia: bórralas de cada hoja antes de completar la tuya.");
 		blank();
 		text("Ejemplo — hoja “WBS” (WBS Builder)", 3);
@@ -919,10 +920,11 @@
 			"50"
 		]);
 		blank();
-		text("Ejemplo — hoja “EDT” (Definir las Actividades)", 3);
-		text("Cada fila es una actividad dentro de un paquete (mismo “Código EDT” y “Paquete de trabajo” que le diste en la hoja “WBS”). Para un hito (duración cero, como la segunda fila del ejemplo): escribe “Hito” en “Tipo” y asígnale un código propio en “Código de hito” (p. ej. “H1”); completa “Código EDT” solo si está atado a un paquete, o déjalo en blanco si es un hito suelto del proyecto.");
+		text("Ejemplo — hoja “Actividades” (Definir las Actividades)", 3);
+		text("Cada fila es una actividad dentro de un paquete (mismo “Código EDT” y “Paquete de trabajo” que le diste en la hoja “WBS”). “Id.” es el mismo correlativo consecutivo que ya se ve en pantalla — se completa solo para la fila del paquete (referencia; si duplicas la fila para más de una actividad, las copias comparten el mismo Id., no hace falta cambiarlo). Para un hito (duración cero, como la última fila del ejemplo): escribe “Hito” en “Tipo” y asígnale un código propio en “Código de hito” (p. ej. “H1”); completa “Código EDT” solo si está atado a un paquete, o déjalo en blanco si es un hito suelto del proyecto.");
 		headerRow(ACTIVITIES_HEADERS);
 		dataRow([
+			"2",
 			"1.1",
 			"Excavación de zanjas",
 			"Corte de zanja",
@@ -934,6 +936,7 @@
 			"1"
 		]);
 		dataRow([
+			"",
 			"1.1",
 			"Excavación de zanjas",
 			"Fin de excavación",
@@ -946,10 +949,10 @@
 		]);
 		blank();
 		text("Ejemplo — hoja “Estimado” (Estimar los Costos)", 3);
-		text("Cada fila es el precio de una actividad (mismo “Código EDT”, “Paquete de trabajo” y “Nombre de la actividad” que en la hoja “EDT”). Completa solo “Precio unitario” — “Subtotal” se calcula solo (Cantidad × Precio unitario) y “Id.” es opcional, de referencia.");
+		text("Cada fila es el precio de una actividad (mismo “Código EDT”, “Paquete de trabajo” y “Nombre de la actividad” que en la hoja “Actividades”). Completa solo “Precio unitario” — “Subtotal” se calcula solo (Cantidad × Precio unitario) y “Id.” es opcional, de referencia.");
 		headerRow(COST_ESTIMATE_HEADERS);
 		dataRow([
-			"2",
+			"3",
 			"1.1",
 			"Excavación de zanjas",
 			"Corte de zanja",
@@ -970,7 +973,8 @@
 			10,
 			10,
 			12,
-			10
+			10,
+			12
 		]);
 	}
 	async function buildCombinedTemplateXlsxBlob() {
@@ -993,6 +997,7 @@
 			10
 		]));
 		zip.file("xl/worksheets/sheet3.xml", headerRowSheet(ACTIVITIES_HEADERS, [
+			6,
 			12,
 			22,
 			30,
@@ -1035,7 +1040,7 @@
 			a.click();
 			a.remove();
 			URL.revokeObjectURL(url);
-			toast("Plantilla combinada descargada (hojas: WBS / EDT / Estimado).");
+			toast("Plantilla combinada descargada (hojas: WBS / Actividades / Estimado).");
 		} catch (_) {
 			toast("No se pudo generar la plantilla combinada.");
 		}

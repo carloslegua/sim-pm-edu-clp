@@ -83,6 +83,27 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Changed
 
+- **Definir las Actividades: la hoja del `.xlsx` se renombró de "EDT" a
+  "Actividades"** — a pedido explícito del usuario, "para que sea
+  compatible" con el resto de la suite (WBS Builder ya usa "WBS",
+  Estimar los Costos ya usa "Estimado" — "EDT" quedaba ambiguo frente al
+  módulo que realmente ES la EDT). Sincronizado en la plantilla
+  combinada de Panel de Control (`ACTIVITIES_SHEET_NAME`). La plantilla
+  también gana una columna **"Id."** (primera columna, como ya tienen
+  Estimar los Costos/PERT/Cronograma-CPM): se completa para la fila de
+  cada paquete (el mismo correlativo que ya se ve en pantalla) y, al
+  importar, si ya no corresponde a esa misma posición en la EDT actual
+  (p. ej. se insertó un hito antes de ese paquete después de exportar
+  el archivo), se avisa — aviso, no bloqueo, mismo criterio que ya
+  tenía Estimar los Costos. A diferencia de ahí, el Id. de esta
+  plantilla identifica al PAQUETE, no a la actividad (la plantilla
+  invita a duplicar la fila del paquete para agregar más de una
+  actividad, así que varias filas legítimamente comparten el mismo
+  Id.) — la verificación contrasta el Id. contra el Código EDT, nunca
+  contra el nombre de la actividad. Detalle completo en
+  ARCHITECTURE.md. Probado en `tests/e2e/activity-definition-import.spec.ts`
+  y `tests/e2e/panel-control-template.spec.ts`.
+
 - **Cronograma/CPM: los encabezados de la tabla ("EDT", "Dur", "IC",
   "TC", "IL", "TL", "H.T.", "H.L.", "Auditoría") no eran explícitos** —
   a pedido explícito del usuario, que no entendía qué significaban;

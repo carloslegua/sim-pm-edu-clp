@@ -11,7 +11,7 @@ import { test, expect } from "@playwright/test";
 import JSZip from "jszip";
 
 const WBS_HEADERS = ["Código EDT", "Paquete de trabajo", "Nivel", "Duración", "Inicio", "Fin", "Costo", "Responsable", "Avance"];
-const ACTIVITIES_HEADERS = ["Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Código de hito", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"];
+const ACTIVITIES_HEADERS = ["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Código de hito", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"];
 const COST_ESTIMATE_HEADERS = ["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Unidad", "Cantidad", "Precio unitario", "Subtotal"];
 
 // Lee los encabezados (primera fila) de una hoja del .xlsx real descargado.
@@ -47,7 +47,7 @@ test("Panel de Control — 'Plantilla combinada' genera un .xlsx con una hoja po
   const zip = await JSZip.loadAsync(readFileSync(path as string));
   const wbXml = await zip.file("xl/workbook.xml")!.async("string");
   const sheetNames = Array.from(wbXml.matchAll(/<sheet name="([^"]+)"/g)).map((m) => m[1]);
-  expect(sheetNames).toEqual(["Instrucciones", "WBS", "EDT", "Estimado"]);
+  expect(sheetNames).toEqual(["Instrucciones", "WBS", "Actividades", "Estimado"]);
 
   const sheet2 = await zip.file("xl/worksheets/sheet2.xml")!.async("string");
   const sheet3 = await zip.file("xl/worksheets/sheet3.xml")!.async("string");
@@ -94,4 +94,53 @@ test("Panel de Control — la hoja «WBS» de la plantilla combinada, completada
   await expect(page.locator("#canvas .node")).toHaveCount(2);
   await page.locator("#viewTableBtn").click();
   await expect(page.locator(".wbs-table tbody tr")).toContainText(["Excavación"]);
+});
+
+test("Panel de Control — la hoja «Actividades» de la plantilla combinada, completada, se puede importar tal cual en Definir las Actividades", async ({ page }, testInfo) => {
+  const seedDb = {
+    version: 1, activeId: "p1",
+    projects: {
+      p1: {
+        schema: "gpi.project/v1",
+        meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+        modules: {
+          wbs: {
+            rootId: "root", idCounter: 2,
+            nodes: {
+              root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] },
+              w1: { id: "w1", parentId: "root", name: "Excavación", children: [] }
+            }
+          }
+        }
+      }
+    }
+  };
+  await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedDb);
+  await page.goto("/Panel_Control.html");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#btnTemplateAll").click()
+  ]);
+  const path = await download.path();
+  const zip = await JSZip.loadAsync(readFileSync(path as string));
+  const sheet3 = await zip.file("xl/worksheets/sheet3.xml")!.async("string");
+
+  // Completa una fila real (sin Id., como una actividad genuinamente nueva)
+  // bajo los encabezados exactos que trajo la plantilla -- prueba que ese
+  // texto de encabezado es aceptado de verdad por Definir las Actividades.
+  zip.file("xl/worksheets/sheet3.xml", withDataRow(sheet3, ["", "1", "Excavación", "Corte de zanja", "", "", "m³", "100", "25", "1"]));
+  const filledPath = testInfo.outputPath("plantilla_actividades_completada.xlsx");
+  writeFileSync(filledPath, await zip.generateAsync({ type: "nodebuffer" }));
+
+  await page.goto("/Activity_Definition.html");
+  await expect(page.locator(".pkg-row")).toHaveCount(1);
+  await page.setInputFiles("#xlsxFileInput", filledPath);
+
+  await expect(page.locator("#modalOverlay")).toHaveClass(/open/);
+  const msg = await page.locator("#modalMsg").textContent();
+  expect(msg).toMatch(/1 actividad\(es\)/);
+  await page.locator("#modalOk").click();
+
+  await expect(page.locator(".act-row")).toHaveCount(1);
+  await expect(page.locator(".act-row")).toContainText("Corte de zanja");
 });

@@ -752,8 +752,8 @@ interface XlCell { v: string | number; t: "s" | "n"; s?: number; }
 
 const WBS_SHEET_NAME = "WBS";
 const WBS_HEADERS = ["Código EDT", "Paquete de trabajo", "Nivel", "Duración", "Inicio", "Fin", "Costo", "Responsable", "Avance"];
-const ACTIVITIES_SHEET_NAME = "EDT";
-const ACTIVITIES_HEADERS = ["Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Código de hito", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"];
+const ACTIVITIES_SHEET_NAME = "Actividades";
+const ACTIVITIES_HEADERS = ["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Código de hito", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"];
 const COST_ESTIMATE_SHEET_NAME = "Estimado";
 const COST_ESTIMATE_HEADERS = ["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Unidad", "Cantidad", "Precio unitario", "Subtotal"];
 
@@ -834,20 +834,20 @@ function templateInstructionsXml(): string {
   blank();
 
   text("Ejemplo — hoja “" + ACTIVITIES_SHEET_NAME + "” (Definir las Actividades)", 3);
-  text("Cada fila es una actividad dentro de un paquete (mismo “Código EDT” y “Paquete de trabajo” que le diste en la hoja “" + WBS_SHEET_NAME + "”). Para un hito (duración cero, como la segunda fila del ejemplo): escribe “Hito” en “Tipo” y asígnale un código propio en “Código de hito” (p. ej. “H1”); completa “Código EDT” solo si está atado a un paquete, o déjalo en blanco si es un hito suelto del proyecto.");
+  text("Cada fila es una actividad dentro de un paquete (mismo “Código EDT” y “Paquete de trabajo” que le diste en la hoja “" + WBS_SHEET_NAME + "”). “Id.” es el mismo correlativo consecutivo que ya se ve en pantalla — se completa solo para la fila del paquete (referencia; si duplicas la fila para más de una actividad, las copias comparten el mismo Id., no hace falta cambiarlo). Para un hito (duración cero, como la última fila del ejemplo): escribe “Hito” en “Tipo” y asígnale un código propio en “Código de hito” (p. ej. “H1”); completa “Código EDT” solo si está atado a un paquete, o déjalo en blanco si es un hito suelto del proyecto.");
   headerRow(ACTIVITIES_HEADERS);
-  dataRow(["1.1", "Excavación de zanjas", "Corte de zanja", "", "", "m³", "100", "25", "1"]);
-  dataRow(["1.1", "Excavación de zanjas", "Fin de excavación", "Hito", "H1", "", "", "", ""]);
+  dataRow(["2", "1.1", "Excavación de zanjas", "Corte de zanja", "", "", "m³", "100", "25", "1"]);
+  dataRow(["", "1.1", "Excavación de zanjas", "Fin de excavación", "Hito", "H1", "", "", "", ""]);
   blank();
 
   text("Ejemplo — hoja “" + COST_ESTIMATE_SHEET_NAME + "” (Estimar los Costos)", 3);
   text("Cada fila es el precio de una actividad (mismo “Código EDT”, “Paquete de trabajo” y “Nombre de la actividad” que en la hoja “" + ACTIVITIES_SHEET_NAME + "”). Completa solo “Precio unitario” — “Subtotal” se calcula solo (Cantidad × Precio unitario) y “Id.” es opcional, de referencia.");
   headerRow(COST_ESTIMATE_HEADERS);
-  dataRow(["2", "1.1", "Excavación de zanjas", "Corte de zanja", "", "m³", "100", "45", "4500"]);
+  dataRow(["3", "1.1", "Excavación de zanjas", "Corte de zanja", "", "m³", "100", "45", "4500"]);
   blank();
 
   text("Generado por el simulador GPI — Panel de Control.");
-  return xlsxSheetXml(rows, [16, 26, 22, 12, 12, 10, 10, 12, 10]);
+  return xlsxSheetXml(rows, [16, 26, 22, 12, 12, 10, 10, 12, 10, 12]);
 }
 
 async function buildCombinedTemplateXlsxBlob(): Promise<Blob> {
@@ -891,7 +891,7 @@ async function buildCombinedTemplateXlsxBlob(): Promise<Blob> {
   zip.file("xl/styles.xml", xlsxStylesXml());
   zip.file("xl/worksheets/sheet1.xml", templateInstructionsXml());
   zip.file("xl/worksheets/sheet2.xml", headerRowSheet(WBS_HEADERS, [12, 34, 8, 10, 11, 11, 12, 20, 10]));
-  zip.file("xl/worksheets/sheet3.xml", headerRowSheet(ACTIVITIES_HEADERS, [12, 22, 30, 10, 14, 10, 10, 14, 12]));
+  zip.file("xl/worksheets/sheet3.xml", headerRowSheet(ACTIVITIES_HEADERS, [6, 12, 22, 30, 10, 14, 10, 10, 14, 12]));
   zip.file("xl/worksheets/sheet4.xml", headerRowSheet(COST_ESTIMATE_HEADERS, [6, 12, 22, 30, 8, 10, 11, 14, 12]));
   return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
