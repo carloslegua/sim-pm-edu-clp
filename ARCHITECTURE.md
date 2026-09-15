@@ -395,6 +395,31 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   `t="inlineStr"` (el propio formato de exportación de este proyecto).
   La duración sigue sin persistirse: se recalcula en pantalla igual que
   en `pert`/`cronograma-cpm`.
+- **La EDT (WBS Builder) es la capa que manda sobre este módulo, nunca al
+  revés** (a pedido explícito del usuario): la tabla es de solo lectura
+  para nombres/códigos de fase/paquete (no hay forma de editarlos desde
+  aquí, siempre vienen de `GPI.getModule("wbs")`), y al importar,
+  además de resolver el paquete por Código EDT (`codeToId`), si la
+  columna "Paquete de trabajo" está presente su texto debe coincidir
+  (case/trim-insensible, `pkgName` en `ColumnMap`) con el nombre REAL
+  de ese paquete en la EDT actual — si no coincide, esa fila se
+  rechaza (`packageMismatches` en `ReconcileResult`), mismo criterio
+  que ya usaba Estimar los Costos desde antes. Antes esta columna
+  existía en la plantilla pero se ignoraba por completo al reconciliar
+  (`TEMPLATE_HEADER_FIELDS` la mapeaba a `null` a propósito) — quedaba
+  un hueco real: un archivo con un Código EDT correcto pero un "Paquete
+  de trabajo" desactualizado (por ejemplo, el paquete se renombró en
+  WBS Builder después de descargar la plantilla) se reconciliaba igual,
+  sin avisar.
+- **`GPI.onChange()` + `gpiPullWbs()` mantienen la EDT sincronizada en
+  vivo**: no solo al cargar la página o al pulsar "Recargar EDT" — cada
+  vez que otra pestaña cambia el proyecto activo (p. ej. un rename en
+  WBS Builder) y `mode === "live"`, este módulo vuelve a leer la EDT y
+  re-renderiza sin acción del alumno. Esto ya funcionaba así antes de
+  este cambio; lo nuevo es que WBS Builder ahora también EMPUJA sus
+  cambios con la misma rapidez (ver su propia sección, "guardado con
+  debounce") — antes de eso, un rename en WBS Builder podía tardar en
+  llegar aquí hasta que esa pestaña se ocultara o cerrara.
 - **"⇩ Cargar ejemplo en el proyecto" (`loadSampleIntoProject`) — distinto
   de "Modo ejemplo"**: "Modo ejemplo" es un sandbox que nunca toca el
   proyecto activo (documentado desde su rediseño). Pero eso dejaba un
@@ -470,6 +495,40 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
     aparece en la red ni en el Gantt de esos dos módulos.
 
 **WBS_Builder.html** — el de mayor fan-out.
+- **Es la capa que MANDA sobre Definir las Actividades y Estimar los
+  Costos, nunca al revés** (a pedido explícito del usuario, "capas de
+  información" — el superior modifica a los inferiores pero no al
+  revés): fases y paquetes de trabajo (nombre + Código EDT) se definen
+  ÚNICAMENTE aquí; los otros dos módulos los leen en vivo y no ofrecen
+  ninguna forma de editarlos desde su propia UI.
+- **Guardado con debounce (`markDirty()`)**: hasta hace poco este
+  módulo era el único de los 14 que NO seguía el patrón "onDirty" del
+  resto (guardar en GPI ~800ms después del último cambio) — solo
+  escribía a `GPI.setModule("wbs", ...)` al ocultar la pestaña o al
+  salir (`push()`, cableado a `visibilitychange`/`beforeunload` dentro
+  de `gpiBridge()`). Eso dejaba una ventana real de datos
+  desactualizados: si el alumno renombraba una fase/paquete y pasaba a
+  otro módulo sin que esta pestaña llegara a "esconderse" (p. ej. abrir
+  una pestaña nueva sin quitarle el foco a esta), Definir las
+  Actividades/Estimar los Costos podían seguir mostrando el nombre
+  viejo un rato — justo lo que la EDT como capa "que manda" no debería
+  permitir. `markDirty()` (con el mismo debounce de 800ms que ya usan
+  los demás módulos) se dispara ahora desde cada punto donde `nodes`
+  cambia: el `bind()`/`bindDate()` genérico del panel de propiedades
+  (nombre, fechas, costo, responsable, notas, avance, duración),
+  agregar/eliminar un nodo, reasignar de padre (`reparent()`, drag &
+  drop), Cargar ejemplo/Nuevo proyecto, e importar un `.xlsx` — nunca
+  desde cambios puramente de vista (zoom, orientación, colapsar/
+  expandir), que ningún otro módulo lee. `requestGpiPush` es la
+  referencia a `push()` que `gpiBridge()` deja asignada para que
+  `markDirty()` (definida arriba en el archivo, antes de que
+  `gpiBridge()` exista) pueda invocarla sin acoplarse a su clausura.
+  Probado en `tests/e2e/wbs-authority-propagation.spec.ts`: renombra un
+  paquete con las pestañas de Definir las Actividades y Estimar los
+  Costos YA abiertas (sin recargarlas ni tocar la de WBS Builder) y
+  verifica que ambas reflejan el nombre nuevo solas, vía el mismo
+  `storage`/`GPI.onChange()` que ya prueba
+  `tests/e2e/http-cross-module.spec.ts`.
 - Lee `raci` (bloquea "Responsable" si la RACI ya asignó un "R" —
   `raciLocksResource`), `obs` y `scopeStatement` (siembra de entregables
   como ramas de nivel 1, `seedFromScope`).

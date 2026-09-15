@@ -11,6 +11,33 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **WBS Builder solo guardaba en el Panel al ocultar o cerrar la
+  pestaña, nunca al editar** — a pedido explícito del usuario, que pidió
+  garantizar que WBS Builder sea la capa "que manda": un rename de fase
+  o paquete debe reflejarse en Definir las Actividades y Estimar los
+  Costos sin depender de que el alumno cambiara de pestaña de cierta
+  forma. Ahora guarda con el mismo debounce de 800ms que ya usan los
+  demás 13 módulos (`markDirty()`), disparado desde cada edición real
+  (nombre, fechas, costo, responsable, notas, avance, agregar/eliminar/
+  reasignar un nodo, Cargar ejemplo/Nuevo proyecto, importar `.xlsx`).
+  Detalle en ARCHITECTURE.md. Probado en
+  `tests/e2e/wbs-authority-propagation.spec.ts` con las pestañas de
+  Definir las Actividades y Estimar los Costos ya abiertas, sin
+  recargarlas ni ocultar la de WBS Builder.
+
+- **Importar un .xlsx en Definir las Actividades no verificaba que la
+  columna "Paquete de trabajo" coincidiera con el nombre real del
+  paquete en la EDT** — mismo hueco, y misma corrección, que ya tenía
+  Estimar los Costos: la columna existía en la plantilla pero se
+  ignoraba por completo al reconciliar (nunca se leía). Ahora, si está
+  presente, su texto debe coincidir con el nombre REAL de ese Código
+  EDT en WBS Builder ahora mismo, o la fila se rechaza
+  (`packageMismatches`) — a pedido explícito del usuario: la EDT es la
+  capa que manda sobre este módulo, así que un archivo desactualizado
+  (paquete renombrado en WBS Builder después de descargar la plantilla)
+  ya no se reconcilia en silencio contra el Código EDT solo. Probado en
+  `tests/e2e/activity-definition-import.spec.ts`.
+
 - **Importar un .xlsx en Estimar los Costos no rechazaba un archivo cuando
   NINGUNA fila correspondía a la EDT/actividades reales del proyecto
   activo.** La validación por Código EDT + Nombre de la actividad ya

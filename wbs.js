@@ -29,6 +29,14 @@
 	var draggedId = null;
 	var currentView = "tree";
 	var idCounter = 1;
+	var requestGpiPush = null;
+	var dirtyTimer;
+	function markDirty() {
+		clearTimeout(dirtyTimer);
+		dirtyTimer = setTimeout(() => {
+			if (requestGpiPush) requestGpiPush();
+		}, 800);
+	}
 	function uid() {
 		return "n" + idCounter++;
 	}
@@ -600,6 +608,7 @@
 		newParent.children.push(childId);
 		selectedId = childId;
 		render();
+		markDirty();
 		setStatus(`"${child.name}" reasignado bajo "${newParent.name}"`);
 	}
 	function renderTable(rolled, codes) {
@@ -712,6 +721,7 @@
 			el.addEventListener("input", () => {
 				node[key] = isNum ? parseFloat(el.value) || 0 : el.value;
 				refreshValues();
+				markDirty();
 			});
 		};
 		bind("f_name", "name", false);
@@ -726,6 +736,7 @@
 			el.addEventListener("change", () => {
 				node[key] = el.value;
 				render();
+				markDirty();
 			});
 		};
 		bindDate("f_start", "start");
@@ -736,6 +747,7 @@
 				deleteSubtree(selectedId);
 				selectedId = rootId;
 				render();
+				markDirty();
 			}
 		});
 	}
@@ -1371,6 +1383,7 @@
 		applyWbsRows(result.placed);
 		render();
 		setTimeout(fitToScreen, 50);
+		markDirty();
 		const issues = result.invalidCodes.length + result.duplicateCodes.length + result.blankNames.length + result.orphanCodes.length;
 		setStatus(result.placed.length + " nodo(s) importado(s) desde Excel" + (issues ? " · " + issues + " fila(s) no importada(s)" : "") + ".");
 	}
@@ -1466,11 +1479,13 @@
 			selectedId = newNode(rootId, "Nueva fase");
 			render();
 			focusNameField();
+			markDirty();
 		});
 		document.getElementById("btnAddChild").addEventListener("click", () => {
 			selectedId = newNode(selectedId || rootId, "Nueva subtarea");
 			render();
 			focusNameField();
+			markDirty();
 		});
 		document.getElementById("btnSeedScope").addEventListener("click", seedFromScope);
 		document.getElementById("btnDelete").addEventListener("click", async () => {
@@ -1482,6 +1497,7 @@
 				deleteSubtree(selectedId);
 				selectedId = rootId;
 				render();
+				markDirty();
 			}
 		});
 		document.getElementById("zoomIn").addEventListener("click", () => {
@@ -1526,6 +1542,7 @@
 				loadSample();
 				render();
 				setTimeout(fitToScreen, 50);
+				markDirty();
 			}
 		});
 		document.getElementById("btnReset").addEventListener("click", async () => {
@@ -1533,6 +1550,7 @@
 				blankProject();
 				render();
 				setTimeout(fitToScreen, 50);
+				markDirty();
 			}
 		});
 		document.getElementById("canvasWrap").addEventListener("click", () => {
@@ -1546,6 +1564,7 @@
 					deleteSubtree(selectedId);
 					selectedId = rootId;
 					render();
+					markDirty();
 				}
 			}
 		});
@@ -1613,6 +1632,7 @@
 				course: courseEl.value
 			});
 		}
+		requestGpiPush = push;
 		function refreshRaciSync() {
 			const p = GPI.active();
 			if (!p) return;

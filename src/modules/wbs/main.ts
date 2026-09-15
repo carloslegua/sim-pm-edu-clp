@@ -70,6 +70,29 @@ let draggedId: string | null = null;
 let currentView: "tree" | "table" = "tree";
 let idCounter = 1;
 
+// ---------- SINCRONIZACIÓN CON EL PANEL (guardado con debounce) ----------
+// A diferencia de los demás módulos (que sincronizan con GPI 800ms después
+// de cada cambio, patrón "onDirty"), este módulo históricamente solo
+// guardaba al ocultar la pestaña o al salir (ver gpiBridge() más abajo,
+// beforeunload/visibilitychange). Eso deja una ventana real de datos
+// desactualizados: si el alumno renombra una fase/paquete aquí y pasa a
+// Definir las Actividades o Estimar los Costos sin que esta pestaña llegue
+// a "esconderse", esos módulos pueden leer el nombre viejo un rato -- y la
+// EDT es la capa que manda sobre las demás (a pedido explícito del
+// usuario). requestGpiPush lo asigna gpiBridge() una vez que confirma que
+// hay un proyecto activo; markDirty() lo dispara con el mismo debounce de
+// 800ms que usan Definir las Actividades/Estimar los Costos, desde
+// cualquier punto del archivo donde se edite nombre, valores, estructura
+// (agregar/eliminar/reordenar nodos) o se importe un .xlsx -- nunca desde
+// cambios puramente de vista (zoom, orientación, colapsar/expandir), que
+// no son datos que otros módulos lean.
+let requestGpiPush: (() => void) | null = null;
+let dirtyTimer: ReturnType<typeof setTimeout> | undefined;
+function markDirty(): void {
+  clearTimeout(dirtyTimer);
+  dirtyTimer = setTimeout(() => { if (requestGpiPush) requestGpiPush(); }, 800);
+}
+
 function uid(): string { return "n" + (idCounter++); }
 
 function newNode(parentId: string | null, name?: string, overrides?: Partial<WbsUiNode>): string {
@@ -523,6 +546,7 @@ function reparent(childId: string, newParentId: string): void {
   newParent.children.push(childId);
   selectedId = childId;
   render();
+  markDirty();
   setStatus(`"${child.name}" reasignado bajo "${newParent.name}"`);
 }
 
@@ -654,6 +678,7 @@ function renderProps(rolledAll: Record<string, RolledNode>): void {
     el.addEventListener("input", () => {
       (node as unknown as Record<string, unknown>)[key] = isNum ? (parseFloat(el.value) || 0) : el.value;
       refreshValues();
+      markDirty();
     });
   };
   bind("f_name", "name", false);
@@ -668,7 +693,7 @@ function renderProps(rolledAll: Record<string, RolledNode>): void {
   const bindDate = (id: string, key: "start" | "end"): void => {
     const el = document.getElementById(id) as HTMLInputElement | null;
     if (!el || !datesEditable) return;
-    el.addEventListener("change", () => { node[key] = el.value; render(); });
+    el.addEventListener("change", () => { node[key] = el.value; render(); markDirty(); });
   };
   bindDate("f_start", "start");
   bindDate("f_end", "end");
@@ -680,6 +705,7 @@ function renderProps(rolledAll: Record<string, RolledNode>): void {
       deleteSubtree(selectedId as string);
       selectedId = rootId;
       render();
+      markDirty();
     }
   });
 }
@@ -1311,6 +1337,7 @@ async function importWbsExcel(file: File): Promise<void> {
   applyWbsRows(result.placed);
   render();
   setTimeout(fitToScreen, 50);
+  markDirty();
   const issues = result.invalidCodes.length + result.duplicateCodes.length + result.blankNames.length + result.orphanCodes.length;
   setStatus(result.placed.length + " nodo(s) importado(s) desde Excel" + (issues ? (" · " + issues + " fila(s) no importada(s)") : "") + ".");
 }
@@ -1415,12 +1442,12 @@ function init(): void {
 
   document.getElementById("btnAddPhase")!.addEventListener("click", () => {
     const id = newNode(rootId, "Nueva fase");
-    selectedId = id; render(); focusNameField();
+    selectedId = id; render(); focusNameField(); markDirty();
   });
   document.getElementById("btnAddChild")!.addEventListener("click", () => {
     const parent = selectedId || rootId;
     const id = newNode(parent, "Nueva subtarea");
-    selectedId = id; render(); focusNameField();
+    selectedId = id; render(); focusNameField(); markDirty();
   });
   document.getElementById("btnSeedScope")!.addEventListener("click", seedFromScope);
   document.getElementById("btnDelete")!.addEventListener("click", async () => {
@@ -1430,6 +1457,7 @@ function init(): void {
       deleteSubtree(selectedId);
       selectedId = rootId;
       render();
+      markDirty();
     }
   });
 
@@ -1464,11 +1492,11 @@ function init(): void {
 
   document.getElementById("btnSample")!.addEventListener("click", async () => {
     const ok = await showConfirm("Esto reemplazará el proyecto actual por el ejemplo DISTRIB+ S.A. ¿Continuar?", "Cargar ejemplo");
-    if (ok) { loadSample(); render(); setTimeout(fitToScreen, 50); }
+    if (ok) { loadSample(); render(); setTimeout(fitToScreen, 50); markDirty(); }
   });
   document.getElementById("btnReset")!.addEventListener("click", async () => {
     const ok = await showConfirm("Esto borrará el proyecto actual. ¿Continuar?", "Nuevo proyecto");
-    if (ok) { blankProject(); render(); setTimeout(fitToScreen, 50); }
+    if (ok) { blankProject(); render(); setTimeout(fitToScreen, 50); markDirty(); }
   });
 
   document.getElementById("canvasWrap")!.addEventListener("click", () => { selectedId = rootId; render(); });
@@ -1478,7 +1506,7 @@ function init(): void {
     if (modalOpen) return; // el propio modal maneja Enter/Escape; evita confirmaciones anidadas
     if (e.key === "Delete" && selectedId && selectedId !== rootId && (document.activeElement as HTMLElement).tagName !== "INPUT" && (document.activeElement as HTMLElement).tagName !== "TEXTAREA") {
       const ok = await showConfirm(`¿Eliminar "${nodes[selectedId].name}"?`);
-      if (ok) { deleteSubtree(selectedId); selectedId = rootId; render(); }
+      if (ok) { deleteSubtree(selectedId); selectedId = rootId; render(); markDirty(); }
     }
   });
 }
@@ -1541,6 +1569,11 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
     GPI.setModule("wbs", { rootId, idCounter, nodes });
     GPI.patchMeta({ name: titleEl.value, course: courseEl.value });
   }
+  // Deja push() disponible para markDirty() (ver su comentario al inicio del
+  // archivo) -- así cualquier edición, en cualquier parte del módulo, llega
+  // al Panel con el mismo debounce de 800ms que usan los demás módulos, sin
+  // depender solo de ocultar la pestaña o cerrarla.
+  requestGpiPush = push;
   // Sincronización ligera: si la Matriz RACI cambia en OTRA pestaña (p. ej. se
   // asigna un nuevo "R"), refresca solo los campos "Responsable" ya afectados —
   // sin tocar selección, zoom ni el resto de campos que el usuario esté editando.

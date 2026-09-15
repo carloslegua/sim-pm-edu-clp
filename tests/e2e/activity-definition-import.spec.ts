@@ -254,3 +254,32 @@ test("Activity_Definition — encabezados abreviados/renombrados (no coinciden E
 
   await expect(page.locator(".act-row")).toHaveCount(0);
 });
+
+test("Activity_Definition — una fila con Código EDT y Nombre correctos pero Paquete de trabajo equivocado se rechaza (la EDT de WBS Builder manda sobre este módulo, no se asume el paquete solo por el código)", async ({ page }) => {
+  await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedDb);
+  await page.goto("/Activity_Definition.html");
+  await expect(page.locator(".pkg-row")).toHaveCount(2);
+
+  // "1.1"/"Excavar zanja" son correctos (coinciden con w2), y se importan.
+  // "1.2" es correcto como código, pero el archivo dice "Paquete B viejo" en
+  // vez del nombre real actual de w3 ("Paquete B") -- se rechaza esa fila
+  // sola, sin bloquear la que sí es válida.
+  const buffer = await buildRowsXlsx(
+    ["Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"],
+    [
+      ["1.1", "Paquete A", "Excavar zanja", "m³", "100", "25", ""],
+      ["1.2", "Paquete B viejo", "Rellenar zanja", "m³", "100", "25", ""]
+    ]
+  );
+  await page.setInputFiles("#xlsxFileInput", { name: "actividades.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer });
+
+  await expect(page.locator("#modalOverlay")).toHaveClass(/open/);
+  const msg = await page.locator("#modalMsg").textContent();
+  expect(msg).toMatch(/1 actividad\(es\)/);
+  expect(msg).toMatch(/1 fila\(s\) no se importaron porque el Paquete de trabajo del archivo no coincide/);
+  expect(msg).toMatch(/"Paquete B viejo" ≠ "Paquete B"/);
+  await page.locator("#modalOk").click();
+
+  await expect(page.locator(".act-row")).toHaveCount(1);
+  await expect(page.locator(".act-row")).toContainText("Excavar zanja");
+});

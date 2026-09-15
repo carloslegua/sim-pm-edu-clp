@@ -840,7 +840,7 @@
 			["Cómo completar esta plantilla", 25],
 			["", 0],
 			["0. Si guardas todo el proyecto en un solo libro de Excel (varias hojas para varios módulos), esta hoja debe llamarse exactamente “EDT” y sus encabezados deben coincidir EXACTAMENTE con los de esta plantilla (se puede reordenar columnas, pero no renombrarlas ni abreviarlas): al importar se verifican ambas cosas y se rechaza el archivo si no calzan, para no mezclar datos de otro módulo por error.", 4],
-			["1. Cada fila es un paquete de trabajo de la EDT. Las columnas “Código EDT” y “Paquete de trabajo” son de referencia — no las edites ni las borres: son la clave con la que este simulador reconoce a qué paquete pertenece cada actividad al importar el archivo de vuelta.", 4],
+			["1. Cada fila es un paquete de trabajo de la EDT. Las columnas “Código EDT” y “Paquete de trabajo” son de referencia — no las edites ni las borres: son la clave con la que este simulador reconoce a qué paquete pertenece cada actividad al importar el archivo de vuelta. La EDT (WBS Builder) es la que manda sobre este módulo: si “Paquete de trabajo” no coincide con el nombre real de ese Código EDT en WBS Builder ahora mismo, esa fila se rechaza al importar (por ejemplo, si el paquete se renombró en WBS Builder después de descargar esta plantilla — vuelve a descargarla).", 4],
 			["2. Completa “Nombre de la actividad”, “Unidad”, “Metrado”, “Rendimiento (R)” y “N.º de equipos” para cada actividad del paquete.", 4],
 			["3. ¿Más de una actividad por el mismo paquete? Copia la fila completa (Ctrl+D en Excel) y repite el mismo “Código EDT” en la copia, cambiando el nombre de la actividad.", 4],
 			["4. Hitos: para marcar una fila como hito (duración cero) en vez de una actividad normal, escribe “Hito” en la columna “Tipo” y asígnale un código propio en “Código de hito” (por ejemplo “H1”, “H2”… la numeración la decides tú) — deja en blanco Unidad/Metrado/Rendimiento/N.º de equipos, no aplican a un hito. Si el hito pertenece a un paquete de trabajo, completa su “Código EDT”; si es un hito del proyecto en general (no depende de un paquete puntual), deja “Código EDT” en blanco.", 4],
@@ -1006,7 +1006,7 @@
 	}
 	var TEMPLATE_HEADER_FIELDS = [
 		"code",
-		null,
+		"pkgName",
 		"name",
 		"type",
 		"milestoneCode",
@@ -1034,8 +1034,10 @@
 	}
 	function reconcileImportRows(rows, colMap) {
 		const codeToId = {};
+		const codeToName = {};
 		leafRows().forEach((l) => {
 			codeToId[l.code] = l.id;
+			codeToName[l.code] = l.name;
 		});
 		const byLeaf = {};
 		const milestones = [];
@@ -1043,6 +1045,7 @@
 		let lastLeafId = null;
 		const unmatched = /* @__PURE__ */ new Set();
 		const milestoneIssues = [];
+		const packageMismatches = [];
 		rows.forEach((row) => {
 			const code = String(row[colMap.code] || "").trim();
 			const name = String(row[colMap.name] || "").trim();
@@ -1078,6 +1081,18 @@
 				unmatched.add(code);
 				return;
 			}
+			if (colMap.pkgName != null) {
+				const fileName = String(row[colMap.pkgName] || "").trim();
+				const realName = codeToName[code] || "";
+				if (fileName && normalizeHeader(fileName) !== normalizeHeader(realName)) {
+					packageMismatches.push({
+						code,
+						fileName,
+						realName
+					});
+					return;
+				}
+			}
 			lastLeafId = leafId;
 			const unit = colMap.unit != null ? String(row[colMap.unit] || "").trim() : "";
 			const qty = colMap.qty != null ? parseExcelNum(row[colMap.qty]) || "" : "";
@@ -1101,7 +1116,8 @@
 			unmatchedCodes: Array.from(unmatched),
 			milestones,
 			matchedMilestones,
-			milestoneIssues
+			milestoneIssues,
+			packageMismatches
 		};
 	}
 	async function importActivitiesExcel(file) {
@@ -1134,6 +1150,10 @@
 		const s = stats();
 		let msg = "Se reemplazarán las " + (s.total + s.orphans) + " actividades de la lista actual por " + result.matched + " actividad(es)" + (result.matchedMilestones ? " y " + result.matchedMilestones + " hito(s)" : "") + " importado(s) del archivo" + (mode === "sample" ? " (modo ejemplo)" : "") + ". La EDT no se toca.";
 		if (result.unmatchedCodes.length) msg += " " + result.unmatchedCodes.length + " fila(s) no se importaron por no coincidir con ningún código EDT actual: " + result.unmatchedCodes.slice(0, 8).join(", ") + (result.unmatchedCodes.length > 8 ? "…" : "") + ".";
+		if (result.packageMismatches.length) {
+			const ex = result.packageMismatches.slice(0, 8).map((u) => u.code + " (\"" + u.fileName + "\" ≠ \"" + u.realName + "\")").join(", ");
+			msg += " " + result.packageMismatches.length + " fila(s) no se importaron porque el Paquete de trabajo del archivo no coincide con el nombre real de ese Código EDT en la EDT actual: " + ex + (result.packageMismatches.length > 8 ? "…" : "") + ".";
+		}
 		if (result.milestoneIssues.length) msg += " " + result.milestoneIssues.length + " hito(s) con problemas: " + result.milestoneIssues.slice(0, 5).join(" ") + (result.milestoneIssues.length > 5 ? "…" : "");
 		if (!await showConfirm(msg, "Importar actividades desde Excel")) return;
 		if (mode === "sample") stateSample = {
@@ -1147,7 +1167,7 @@
 			milestones: result.milestones
 		};
 		onDirty(true);
-		const issues = result.unmatchedCodes.length + result.milestoneIssues.length;
+		const issues = result.unmatchedCodes.length + result.packageMismatches.length + result.milestoneIssues.length;
 		setStatus(result.matched + " actividad(es)" + (result.matchedMilestones ? " y " + result.matchedMilestones + " hito(s)" : "") + " importado(s) desde Excel" + (issues ? " · " + issues + " fila(s) no reconciliada(s)" : "") + ".");
 	}
 	function wireToolbar() {
