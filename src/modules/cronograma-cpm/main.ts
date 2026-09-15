@@ -688,7 +688,7 @@ function buildReport(): void {
     const path = cpm.criticalIds.map((id) => (cmap[id] || "") + " " + (nmap[id] || ""));
     h += "<h2>Ruta crítica</h2><p class='num'>" + esc(path.join("  →  ")) + "</p>";
   }
-  h += "<h2>Actividades (CPM)</h2><table><tr><th>Id.</th><th>Código EDT</th><th>Actividad</th><th>Dur. (d)</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>H.T.</th><th>Crítica</th></tr>";
+  h += "<h2>Actividades (CPM)</h2><table><tr><th>Id.</th><th>Código EDT</th><th>Actividad</th><th>Duración</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>Holgura Total</th><th>Crítica</th></tr>";
   snap.filter((r) => r.kind === "activity").forEach((r) => {
     const row = cpm.ok ? cpm.rows[r.activityId as string] : null;
     const dur = (durMode === "pert" && r.te != null) ? r.te : r.det;
@@ -698,7 +698,7 @@ function buildReport(): void {
       "<td class='num'>" + (row ? fmt(row.tf) : "—") + "</td><td>" + (row && row.critical ? "●" : "") + "</td></tr>";
   });
   h += "</table>";
-  h += "<p class='rep-note'>ES = Inicio Temprano (Early Start) · EF = Fin Temprano (Early Finish) · LS = Inicio Tardío (Late Start) · LF = Fin Tardío (Late Finish) · H.T. = Holgura Total (LS − ES; 0 = actividad crítica).</p>";
+  h += "<p class='rep-note'>ES = Inicio Temprano (Early Start) · EF = Fin Temprano (Early Finish) · LS = Inicio Tardío (Late Start) · LF = Fin Tardío (Late Finish). Holgura Total = LS − ES; 0 = actividad crítica.</p>";
   if (s.allValid) h += "<p class='rep-note'>Ruta crítica: ΣTE = " + fmt(s.sumTe) + " d, Σσ² = " + fmt(s.sumVar) + " (base para la probabilidad de plazo PERT).</p>";
   rep.innerHTML = h;
 }

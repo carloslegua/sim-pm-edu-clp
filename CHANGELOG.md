@@ -85,26 +85,23 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 - **Cronograma/CPM: los encabezados de la tabla ("EDT", "Dur", "IC",
   "TC", "IL", "TL", "H.T.", "H.L.", "Auditoría") no eran explícitos** —
-  a pedido explícito del usuario, que no entendía qué significaban.
-  Ahora dicen "Código EDT" / "Dur. (d)" / "Inicio Temprano (ES)" / "Fin
-  Temprano (EF)" / "Inicio Tardío (LS)" / "Fin Tardío (LF)" / "Holgura
-  Total (H.T.)" / "Holgura Libre (H.L.)" / "Auditoría MS Project" —
-  conservando la sigla estándar entre paréntesis (se sigue usando en la
-  caja del diagrama de red y en la jerga de CPM) y manteniendo
-  compatibilidad textual con las columnas que vienen de otros módulos:
-  "Código EDT" y "Actividad" coinciden ahora exactamente con Definir
-  las Actividades/Análisis PERT (las tres primeras columnas de esta
-  tabla vienen de ahí, nunca se editan aquí), y "Dur. (d)" con Definir
-  las Actividades. Las siglas de ES/EF/LS/LF (Early Start/Early
-  Finish/Late Start/Late Finish) son las inglesas estándar de CPM, a
-  pedido explícito del usuario, en vez de las iniciales en español
-  (IC/TC/IL/TL) usadas en un primer paso de esta misma corrección. El
-  reporte imprimible (`buildReport()`) tenía la misma tabla abreviada
-  por separado — se corrigió igual ("Código EDT", "Dur. (d)", "ES",
-  "EF", "LS", "LF") y se le agregó una leyenda con el significado de
-  ES/EF/LS/LF/H.T. (se mantienen abreviadas ahí por espacio en la
-  versión impresa, mismo criterio que ya usa Análisis PERT con su
-  propia fórmula O/M/P/TE/σ/σ² al pie del reporte).
+  a pedido explícito del usuario, que no entendía qué significaban;
+  ajustado en tres pasadas sucesivas hasta el encabezado final que
+  también pidió explícitamente: **Id. | Código EDT | Actividad |
+  Duración | ES | EF | LS | LF | Holgura Total | Holgura Libre |
+  Predecesoras | Auditoría**. "Código EDT" y "Actividad" coinciden
+  ahora exactamente con Definir las Actividades/Análisis PERT (las
+  tres primeras columnas de esta tabla vienen de ahí, nunca se editan
+  aquí). ES/EF/LS/LF (Early Start/Early Finish/Late Start/Late Finish)
+  son las siglas inglesas estándar de CPM — se conservan bien cortas a
+  pedido explícito, a diferencia de "Holgura Total"/"Holgura Libre"/
+  "Duración"/"Auditoría", que quedaron en su nombre completo en
+  español sin sigla. El reporte imprimible (`buildReport()`) tenía la
+  misma tabla armada por separado — se corrigió igual ("Código EDT",
+  "Duración", "ES", "EF", "LS", "LF", "Holgura Total") y trae una
+  leyenda .rep-note con el significado de ES/EF/LS/LF en inglés, mismo
+  criterio que ya usa Análisis PERT con su propia fórmula O/M/P/TE/
+  σ/σ² al pie del reporte.
 
 - **Se retiraron los botones "⭳ Guardar (.json)" / "⭱ Abrir (.json)" de
   los 13 módulos-herramienta** — a pedido explícito del usuario: cada

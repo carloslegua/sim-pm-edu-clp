@@ -220,15 +220,15 @@
                 <th title="Id. consecutivo sin saltos, estilo Task ID de MS Project (0 = proyecto). Coincide con el de Análisis PERT siempre (tampoco lista hitos); con el de Definir las Actividades/Estimar los Costos, hasta el primer hito del proyecto (ahí sí ocupa un número).">Id.</th>
                 <th title="Código EDT del paquete de trabajo, definido en WBS Builder — igual que en Definir las Actividades/Análisis PERT/Estimar los Costos.">Código EDT</th>
                 <th style="text-align:left" title="Nombre de la actividad, definida en Definir las Actividades — igual que en Análisis PERT.">Actividad</th>
-                <th title="Duración (días laborables). Fuente conmutable: determinística Met/Rend (de Definir las Actividades) o PERT TE. Igual campo que “Dur. (d)” en Definir las Actividades.">Dur. (d)</th>
-                <th title="Inicio Temprano (Early Start, ES): fecha/offset más temprano en que la actividad podría empezar, en días laborables.">Inicio Temprano (ES)</th>
-                <th title="Fin Temprano (Early Finish, EF): fecha/offset más temprano en que la actividad podría terminar.">Fin Temprano (EF)</th>
-                <th title="Inicio Tardío (Late Start, LS): fecha/offset más tarde en que la actividad puede empezar sin retrasar el proyecto.">Inicio Tardío (LS)</th>
-                <th title="Fin Tardío (Late Finish, LF): fecha/offset más tarde en que la actividad puede terminar sin retrasar el proyecto.">Fin Tardío (LF)</th>
-                <th title="Holgura Total (H.T.) = LS − ES: cuántos días se puede atrasar la actividad sin retrasar el proyecto. 0 = actividad crítica.">Holgura Total (H.T.)</th>
-                <th title="Holgura Libre (H.L.): cuántos días se puede atrasar la actividad sin retrasar el inicio temprano de sus sucesoras.">Holgura Libre (H.L.)</th>
+                <th title="Duración (días laborables). Fuente conmutable: determinística Met/Rend (de Definir las Actividades) o PERT TE. Igual campo que “Dur. (d)” en Definir las Actividades.">Duración</th>
+                <th title="Inicio Temprano (Early Start, ES): fecha/offset más temprano en que la actividad podría empezar, en días laborables.">ES</th>
+                <th title="Fin Temprano (Early Finish, EF): fecha/offset más temprano en que la actividad podría terminar.">EF</th>
+                <th title="Inicio Tardío (Late Start, LS): fecha/offset más tarde en que la actividad puede empezar sin retrasar el proyecto.">LS</th>
+                <th title="Fin Tardío (Late Finish, LF): fecha/offset más tarde en que la actividad puede terminar sin retrasar el proyecto.">LF</th>
+                <th title="Holgura Total = LS − ES: cuántos días se puede atrasar la actividad sin retrasar el proyecto. 0 = actividad crítica.">Holgura Total</th>
+                <th title="Holgura Libre: cuántos días se puede atrasar la actividad sin retrasar el inicio temprano de sus sucesoras.">Holgura Libre</th>
                 <th title="Predecesoras (sintaxis MS Project): Id. de la(s) actividad(es) de las que depende esta.">Predecesoras</th>
-                <th title="Auditoría MS Project: contraste de la fecha calculada por el simulador vs. la fecha pegada de MS Project (✓ coincide / ✗ difiere).">Auditoría MS Project</th>
+                <th title="Auditoría MS Project: contraste de la fecha calculada por el simulador vs. la fecha pegada de MS Project (✓ coincide / ✗ difiere).">Auditoría</th>
               </tr>
             </thead>
             <tbody id="cpmBody"></tbody>
