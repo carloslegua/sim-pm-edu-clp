@@ -29,7 +29,7 @@ declare global { interface Window { GPI?: GpiApi; } }
 // ============================ ESTADO ============================
 // El módulo LEE actividades (module "activities"), EDT (module "wbs") y
 // PERT (module "pert") en vivo desde gpi-core, y GUARDA solo su rebanada
-// "schedule" (enlaces + auditoría). Nada derivado (IC/TC/…) se persiste.
+// "schedule" (enlaces + auditoría). Nada derivado (ES/EF/…) se persiste.
 interface Link { id: string; from: string; to: string; type: ScheduleLinkType; lag: number; lagUnit: ScheduleLagUnit; source: "manual" | "paste"; }
 interface ImportInfo { at: number; tool: string; rowMap: Record<number, string>; dates: Record<string, { start: string; finish: string }>; }
 interface ScheduleState { links: Link[]; linkCounter: number; import: ImportInfo | null; baseline: unknown | null; }
@@ -398,7 +398,7 @@ function renderNet(R: RunCpmResult): void {
     const dur = row.ef - row.es;
     svg += "<g>";
     svg += "<rect x='" + p.x + "' y='" + p.y + "' width='" + NW + "' height='" + NH + "' rx='9' fill='" + fill + "' stroke='" + stroke + "' stroke-width='" + (crit ? 2 : 1.3) + "'/>";
-    // banda superior IC | Dur | TC
+    // banda superior ES | Dur | EF
     svg += "<rect x='" + p.x + "' y='" + p.y + "' width='" + NW + "' height='19' rx='9' fill='" + band + "'/><rect x='" + p.x + "' y='" + (p.y + 10) + "' width='" + NW + "' height='9' fill='" + band + "'/>";
     svg += "<text x='" + (p.x + 14) + "' y='" + (p.y + 13.5) + "' font-size='10.5' font-weight='700' fill='#fff'>" + fmt(row.es) + "</text>";
     svg += "<text x='" + (p.x + NW / 2) + "' y='" + (p.y + 13.5) + "' font-size='10.5' font-weight='800' fill='#fff' text-anchor='middle'>" + fmt(dur) + "d</text>";
@@ -406,7 +406,7 @@ function renderNet(R: RunCpmResult): void {
     // nombre + código
     svg += "<text x='" + (p.x + NW / 2) + "' y='" + (p.y + 37) + "' font-size='11' font-weight='700' fill='#1a2027' text-anchor='middle' style='font-family:var(--display)'>" + esc(nmS) + "</text>";
     svg += "<text x='" + (p.x + NW / 2) + "' y='" + (p.y + 50) + "' font-size='9' fill='#6c5ce7' text-anchor='middle'>EDT " + esc(cmap[id] || "") + "</text>";
-    // banda inferior IL | H.T. | TL
+    // banda inferior LS | H.T. | LF
     svg += "<line x1='" + p.x + "' y1='" + (p.y + NH - 22) + "' x2='" + (p.x + NW) + "' y2='" + (p.y + NH - 22) + "' stroke='#e4eaf1'/>";
     svg += "<text x='" + (p.x + 14) + "' y='" + (p.y + NH - 8) + "' font-size='10' font-weight='700' fill='#4d5768'>" + fmt(row.ls) + "</text>";
     svg += "<text x='" + (p.x + NW / 2) + "' y='" + (p.y + NH - 8) + "' font-size='10' font-weight='800' fill='" + (crit ? "#ff5470" : "#4d5768") + "' text-anchor='middle'>H" + fmt(row.tf) + "</text>";
@@ -688,7 +688,7 @@ function buildReport(): void {
     const path = cpm.criticalIds.map((id) => (cmap[id] || "") + " " + (nmap[id] || ""));
     h += "<h2>Ruta crítica</h2><p class='num'>" + esc(path.join("  →  ")) + "</p>";
   }
-  h += "<h2>Actividades (CPM)</h2><table><tr><th>Id.</th><th>Código EDT</th><th>Actividad</th><th>Dur. (d)</th><th>IC</th><th>TC</th><th>IL</th><th>TL</th><th>H.T.</th><th>Crítica</th></tr>";
+  h += "<h2>Actividades (CPM)</h2><table><tr><th>Id.</th><th>Código EDT</th><th>Actividad</th><th>Dur. (d)</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>H.T.</th><th>Crítica</th></tr>";
   snap.filter((r) => r.kind === "activity").forEach((r) => {
     const row = cpm.ok ? cpm.rows[r.activityId as string] : null;
     const dur = (durMode === "pert" && r.te != null) ? r.te : r.det;
@@ -698,7 +698,7 @@ function buildReport(): void {
       "<td class='num'>" + (row ? fmt(row.tf) : "—") + "</td><td>" + (row && row.critical ? "●" : "") + "</td></tr>";
   });
   h += "</table>";
-  h += "<p class='rep-note'>IC = Inicio Temprano · TC = Fin Temprano · IL = Inicio Tardío · TL = Fin Tardío · H.T. = Holgura Total (IL − IC; 0 = actividad crítica).</p>";
+  h += "<p class='rep-note'>ES = Inicio Temprano (Early Start) · EF = Fin Temprano (Early Finish) · LS = Inicio Tardío (Late Start) · LF = Fin Tardío (Late Finish) · H.T. = Holgura Total (LS − ES; 0 = actividad crítica).</p>";
   if (s.allValid) h += "<p class='rep-note'>Ruta crítica: ΣTE = " + fmt(s.sumTe) + " d, Σσ² = " + fmt(s.sumVar) + " (base para la probabilidad de plazo PERT).</p>";
   rep.innerHTML = h;
 }

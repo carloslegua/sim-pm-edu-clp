@@ -86,8 +86,8 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 - **Cronograma/CPM: los encabezados de la tabla ("EDT", "Dur", "IC",
   "TC", "IL", "TL", "H.T.", "H.L.", "Auditoría") no eran explícitos** —
   a pedido explícito del usuario, que no entendía qué significaban.
-  Ahora dicen "Código EDT" / "Dur. (d)" / "Inicio Temprano (IC)" / "Fin
-  Temprano (TC)" / "Inicio Tardío (IL)" / "Fin Tardío (TL)" / "Holgura
+  Ahora dicen "Código EDT" / "Dur. (d)" / "Inicio Temprano (ES)" / "Fin
+  Temprano (EF)" / "Inicio Tardío (LS)" / "Fin Tardío (LF)" / "Holgura
   Total (H.T.)" / "Holgura Libre (H.L.)" / "Auditoría MS Project" —
   conservando la sigla estándar entre paréntesis (se sigue usando en la
   caja del diagrama de red y en la jerga de CPM) y manteniendo
@@ -95,10 +95,14 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
   "Código EDT" y "Actividad" coinciden ahora exactamente con Definir
   las Actividades/Análisis PERT (las tres primeras columnas de esta
   tabla vienen de ahí, nunca se editan aquí), y "Dur. (d)" con Definir
-  las Actividades. El reporte imprimible (`buildReport()`) tenía la
-  misma tabla abreviada por separado — se corrigió igual ("Código EDT",
-  "Dur. (d)") y se le agregó una leyenda con el significado de
-  IC/TC/IL/TL/H.T. (se mantienen abreviadas ahí por espacio en la
+  las Actividades. Las siglas de ES/EF/LS/LF (Early Start/Early
+  Finish/Late Start/Late Finish) son las inglesas estándar de CPM, a
+  pedido explícito del usuario, en vez de las iniciales en español
+  (IC/TC/IL/TL) usadas en un primer paso de esta misma corrección. El
+  reporte imprimible (`buildReport()`) tenía la misma tabla abreviada
+  por separado — se corrigió igual ("Código EDT", "Dur. (d)", "ES",
+  "EF", "LS", "LF") y se le agregó una leyenda con el significado de
+  ES/EF/LS/LF/H.T. (se mantienen abreviadas ahí por espacio en la
   versión impresa, mismo criterio que ya usa Análisis PERT con su
   propia fórmula O/M/P/TE/σ/σ² al pie del reporte).
 
