@@ -766,6 +766,11 @@ function xmlEsc(s: unknown): string { return String(s == null ? "" : s).replace(
 interface XlCell { v: string | number; t: "s" | "n"; s?: number; }
 
 const TEMPLATE_HEADERS = ["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Unidad", "Cantidad", "Precio unitario", "Subtotal"];
+// Nombre EXACTO de la hoja de datos dentro del .xlsx (el mismo que escribe
+// buildEstimateXlsxBlob() más abajo). Si el alumno junta varios módulos en
+// un solo libro de Excel, esta es la única forma confiable de saber cuál
+// hoja es la de Estimar los Costos -- nunca "la primera hoja del archivo".
+const DATA_SHEET_NAME = "Estimado";
 
 // Estilos: 0 normal · 1 encabezado · 2 centrado · 3 número · 4 nota/instrucciones · 25 título
 function xlsxStylesXml(): string {
@@ -910,6 +915,7 @@ function templateInstructions(): Array<Array<XlCell | null>> {
   const L: Array<[string, number]> = [
     ["Cómo completar este archivo", 25],
     ["", 0],
+    ["0. Si guardas todo el proyecto en un solo libro de Excel (varias hojas para varios módulos), esta hoja debe llamarse exactamente “" + DATA_SHEET_NAME + "” y sus encabezados deben coincidir EXACTAMENTE con los de esta plantilla (se puede reordenar columnas, pero no renombrarlas ni abreviarlas): al importar se verifican ambas cosas y se rechaza el archivo si no calzan, para no mezclar datos de otro módulo por error.", 4],
 ["1. Este archivo es un reflejo COMPLETO de la tabla: trae una fila por cada fila que ves en pantalla -- el proyecto (Tipo=“Proyecto”), cada fase (Tipo=“Fase”), cada paquete de trabajo (Tipo=“Paquete”, con su Subtotal acumulado si ya tiene precios) y, debajo de cada paquete, sus actividades. Solo las filas de ACTIVIDAD llevan precio: para completar el precio de una, ubícala por su “Código EDT” y “Nombre de la actividad” (ya vienen de “Definir las Actividades”, no las edites) -- si además cambias “Paquete de trabajo”, debe seguir siendo el nombre real de ese paquete: si no coincide, la fila se rechaza al importar (protección contra mezclar filas de otro proyecto).", 4],
     ["1b. Las filas de Proyecto/Fase/Paquete son de referencia -- repiten su propio nombre también en “Nombre de la actividad” (para que esa columna nunca quede vacía, útil si armas una tabla dinámica en Excel), pero se identifican y se ignoran solas al reimportar por su columna “Tipo”, no hace falta tocarlas ni borrarlas.", 4],
     ["1c. La columna “Id.” es el mismo correlativo consecutivo (sin saltos, como el Task ID de MS Project) que ves en pantalla y en Definir las Actividades -- Código EDT y Nombre de la actividad siguen siendo la clave para reconciliar el precio, pero si el Id. de una fila ya no corresponde, en el proyecto actual, al mismo Código EDT/Nombre que trae el archivo (por ejemplo, porque editaste la EDT o las actividades después de exportarlo), se avisa igual: revisa esas filas antes de confiar en el resultado.", 4],
@@ -1026,19 +1032,30 @@ function colIndexFromRef(ref: string): number {
   return n - 1;
 }
 
-async function resolveFirstSheetPath(zip: JSZipInstance): Promise<string | null> {
+type SheetResolution = { kind: "found"; path: string } | { kind: "not-found"; sheetNames: string[] } | { kind: "invalid" };
+
+// Busca, ENTRE TODAS las hojas del libro (no solo la primera), la que se
+// llama exactamente DATA_SHEET_NAME (insensible a mayúsculas/acentos vía
+// normalizeHeader). Antes se asumía que la hoja de datos siempre era
+// getElementsByTagName("sheet")[0] -- eso rompe en cuanto el alumno junta
+// en un solo .xlsx las hojas de varios módulos (EDT, Estimado, etc.): la
+// primera hoja del libro ya no es necesariamente la de este módulo.
+async function resolveDataSheetPath(zip: JSZipInstance, expectedName: string): Promise<SheetResolution> {
   const wbEntry = zip.file("xl/workbook.xml");
-  if (!wbEntry) return null;
+  if (!wbEntry) return { kind: "invalid" };
   const doc = new DOMParser().parseFromString(await wbEntry.async("string"), "application/xml");
-  const sheetEl = doc.getElementsByTagName("sheet")[0];
-  const rId = sheetEl ? sheetEl.getAttribute("r:id") : null;
+  const sheets = Array.from(doc.getElementsByTagName("sheet"));
+  const wanted = normalizeHeader(expectedName);
+  const sheetEl = sheets.find((s) => normalizeHeader(s.getAttribute("name") || "") === wanted);
+  if (!sheetEl) return { kind: "not-found", sheetNames: sheets.map((s) => s.getAttribute("name") || "").filter(Boolean) };
+  const rId = sheetEl.getAttribute("r:id");
   const relsEntry = zip.file("xl/_rels/workbook.xml.rels");
-  if (!rId || !relsEntry) return null;
+  if (!rId || !relsEntry) return { kind: "invalid" };
   const relsDoc = new DOMParser().parseFromString(await relsEntry.async("string"), "application/xml");
   const rel = Array.from(relsDoc.getElementsByTagName("Relationship")).find((r) => r.getAttribute("Id") === rId);
   const target = rel ? rel.getAttribute("Target") || "" : "";
-  if (!target) return null;
-  return target.startsWith("/") ? target.slice(1) : "xl/" + target;
+  if (!target) return { kind: "invalid" };
+  return { kind: "found", path: target.startsWith("/") ? target.slice(1) : "xl/" + target };
 }
 
 async function loadSharedStrings(zip: JSZipInstance): Promise<string[]> {
@@ -1074,17 +1091,20 @@ function parseSheetRows(xmlText: string, sharedStrings: string[]): string[][] {
   });
 }
 
-async function parseEstimateXlsx(file: File): Promise<{ headers: string[]; rows: string[][] } | null> {
+type ParsedXlsx = { kind: "ok"; headers: string[]; rows: string[][] } | { kind: "empty" } | { kind: "sheet-not-found"; sheetNames: string[] };
+
+async function parseEstimateXlsx(file: File): Promise<ParsedXlsx> {
   const buf = await file.arrayBuffer();
   const zip = await (window.JSZip as JSZipCtor).loadAsync(buf);
-  const sheetPath = await resolveFirstSheetPath(zip);
-  if (!sheetPath) return null;
-  const sheetEntry = zip.file(sheetPath);
-  if (!sheetEntry) return null;
+  const resolution = await resolveDataSheetPath(zip, DATA_SHEET_NAME);
+  if (resolution.kind === "invalid") return { kind: "empty" };
+  if (resolution.kind === "not-found") return { kind: "sheet-not-found", sheetNames: resolution.sheetNames };
+  const sheetEntry = zip.file(resolution.path);
+  if (!sheetEntry) return { kind: "empty" };
   const [sheetXml, sharedStrings] = await Promise.all([sheetEntry.async("string"), loadSharedStrings(zip)]);
   const allRows = parseSheetRows(sheetXml, sharedStrings);
-  if (!allRows.length) return null;
-  return { headers: allRows[0], rows: allRows.slice(1) };
+  if (!allRows.length) return { kind: "empty" };
+  return { kind: "ok", headers: allRows[0], rows: allRows.slice(1) };
 }
 
 interface ColumnMap { code: number; activityName: number; unit?: number; qty?: number; unitPrice?: number; type?: number; pkgName?: number; id?: number; }
@@ -1093,28 +1113,30 @@ interface ColumnMap { code: number; activityName: number; unit?: number; qty?: n
 // exportRowModel()/buildEstimateCsv() agregan para que el archivo sea un
 // fiel reflejo completo de la tabla (ver su comentario de cabecera).
 const NON_ACTIVITY_TYPES = ["hito", "proyecto", "fase", "paquete"];
-const HEADER_KEYWORDS: { field: keyof ColumnMap; keywords: string[] }[] = [
-  { field: "code", keywords: ["codigo edt", "edt"] },
-  { field: "activityName", keywords: ["nombre de la actividad"] },
-  { field: "pkgName", keywords: ["paquete de trabajo", "paquete"] },
-  { field: "id", keywords: ["id."] },
-  { field: "type", keywords: ["tipo"] },
-  { field: "unit", keywords: ["unidad"] },
-  { field: "qty", keywords: ["cantidad"] },
-  { field: "unitPrice", keywords: ["precio unitario", "precio"] }
-];
+// Posición por posición con TEMPLATE_HEADERS: "Subtotal" (calculado) es
+// null a propósito, nunca se lee para reconciliar.
+const TEMPLATE_HEADER_FIELDS: (keyof ColumnMap | null)[] = ["id", "code", "pkgName", "activityName", "type", "unit", "qty", "unitPrice", null];
 function normalizeHeader(s: string): string {
   return String(s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
-// Empareja columnas por el TEXTO del encabezado (no por posición fija): así
-// tolera que el usuario reordene columnas en Excel. "Subtotal" (calculado)
-// se reconoce implícitamente al no aparecer en HEADER_KEYWORDS: nunca se
-// lee para reconciliar. "Paquete de trabajo" SÍ se lee -- ver
-// reconcileImportRows(): además de resolver el paquete por Código EDT,
-// verifica que el NOMBRE del paquete en el archivo coincida con el
-// nombre real de ese paquete en la EDT actual, para no reconciliar una
-// fila contra el paquete equivocado si alguien edita el Código EDT a
-// mano sin actualizar el nombre. "Id." también se lee -- ver
+const HEADER_FIELD_BY_TEXT: Record<string, keyof ColumnMap> = {};
+TEMPLATE_HEADERS.forEach((h, i) => {
+  const field = TEMPLATE_HEADER_FIELDS[i];
+  if (field) HEADER_FIELD_BY_TEXT[normalizeHeader(h)] = field;
+});
+// Empareja columnas por el TEXTO EXACTO del encabezado contra
+// TEMPLATE_HEADERS (normalizeHeader solo ignora mayúsculas/acentos/espacios
+// sobrantes, no substrings ni sinónimos): así tolera que el alumno
+// reordene columnas en Excel, pero rechaza una columna renombrada o
+// abreviada ("EDT" en vez de "Código EDT", "Paquete" en vez de "Paquete de
+// trabajo") en vez de adivinar por coincidencia parcial -- eso es lo que
+// antes permitía, por ejemplo, que una columna ajena con "actividad" en el
+// nombre se colara como si fuera "Nombre de la actividad". "Paquete de
+// trabajo" SÍ se lee -- ver reconcileImportRows(): además de resolver el
+// paquete por Código EDT, verifica que el NOMBRE del paquete en el archivo
+// coincida con el nombre real de ese paquete en la EDT actual, para no
+// reconciliar una fila contra el paquete equivocado si alguien edita el
+// Código EDT a mano sin actualizar el nombre. "Id." también se lee -- ver
 // reconcileImportRows(): verifica que, PARA ESE MISMO ID, el Código EDT y
 // el Paquete de trabajo/Nombre de la actividad del archivo sigan
 // correspondiendo a lo que hay ahora mismo en el proyecto (detecta un
@@ -1122,11 +1144,10 @@ function normalizeHeader(s: string): string {
 // Definir las Actividades -- aunque el texto por sí solo siga siendo
 // válido en otra fila).
 function mapHeaderColumns(headerRow: string[]): ColumnMap | null {
-  const norm = headerRow.map(normalizeHeader);
   const map: Partial<ColumnMap> = {};
-  HEADER_KEYWORDS.forEach(({ field, keywords }) => {
-    const idx = norm.findIndex((h) => keywords.some((kw) => h.indexOf(kw) !== -1));
-    if (idx !== -1) map[field] = idx;
+  headerRow.forEach((h, idx) => {
+    const field = HEADER_FIELD_BY_TEXT[normalizeHeader(h)];
+    if (field) map[field] = idx;
   });
   if (map.code == null || map.activityName == null) return null;
   return map as ColumnMap;
@@ -1242,17 +1263,22 @@ function reconcileImportRows(rows: string[][], colMap: ColumnMap): ReconcileResu
 }
 
 async function importEstimateExcel(file: File): Promise<void> {
-  let parsed: { headers: string[]; rows: string[][] } | null;
+  let parsed: ParsedXlsx;
   try {
     parsed = await parseEstimateXlsx(file);
   } catch (_) {
     await showAlert("El archivo no parece ser un .xlsx válido (¿se guardó bien o se cambió la extensión?).");
     return;
   }
-  if (!parsed) { await showAlert("El archivo no contiene datos reconocibles."); return; }
+  if (parsed.kind === "sheet-not-found") {
+    const otras = parsed.sheetNames.filter((n) => normalizeHeader(n) !== normalizeHeader(DATA_SHEET_NAME));
+    await showAlert("No encontré una hoja llamada «" + DATA_SHEET_NAME + "» en este archivo" + (otras.length ? " (tiene: " + otras.join(", ") + ")" : "") + ". Si tu Excel junta varios módulos en un solo libro, la hoja con los datos a importar aquí debe llamarse exactamente «" + DATA_SHEET_NAME + "» (como la que genera «⇩ Exportar a Excel») para que el simulador sepa cuál copiar y no la confunda con la de otro módulo.", "Hoja no reconocida");
+    return;
+  }
+  if (parsed.kind === "empty") { await showAlert("El archivo no contiene datos reconocibles."); return; }
   const colMap = mapHeaderColumns(parsed.headers);
   if (!colMap) {
-    await showAlert("No reconocí las columnas del archivo. Se esperan al menos «Código EDT» y «Nombre de la actividad» — no renombres esas columnas.");
+    await showAlert("No reconocí las columnas del archivo: los encabezados deben coincidir EXACTAMENTE con los de la plantilla (¿renombraste o abreviaste alguna columna, p. ej. «EDT» en vez de «Código EDT», o «Paquete» en vez de «Paquete de trabajo»?). Se esperan al menos «Código EDT» y «Nombre de la actividad» escritas tal cual.");
     return;
   }
   const result = reconcileImportRows(parsed.rows, colMap);

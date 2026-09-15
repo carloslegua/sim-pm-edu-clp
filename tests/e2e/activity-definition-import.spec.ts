@@ -67,6 +67,36 @@ async function buildFixtureXlsx(): Promise<Buffer> {
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
+// Igual que buildFixtureXlsx() pero con filas y nombre de hoja arbitrarios
+// -- para el caso de una hoja con OTRO nombre o encabezados abreviados, que
+// ahora deben rechazarse (ver resolveDataSheetPath()/mapHeaderColumns()).
+async function buildRowsXlsx(headerRow: string[], rows: string[][], sheetName = "EDT"): Promise<Buffer> {
+  const zip = new JSZip();
+  const allRows = [headerRow, ...rows];
+  const COLS = "ABCDEFGHIJ";
+  const cellInline = (ref: string, text: string) => `<c r="${ref}" t="inlineStr"><is><t>${text}</t></is></c>`;
+  const sheetXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>"
+    + allRows.map((cells, ri) => `<row r="${ri + 1}">` + cells.map((v, ci) => v === "" ? "" : cellInline(COLS[ci] + (ri + 1), v)).join("") + "</row>").join("")
+    + "</sheetData></worksheet>";
+  zip.file("[Content_Types].xml",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    + '<Default Extension="xml" ContentType="application/xml"/>'
+    + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+  zip.file("_rels/.rels",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+  zip.file("xl/workbook.xml",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+    + `<sheets><sheet name="${sheetName}" sheetId="1" r:id="rId1"/></sheets></workbook>`);
+  zip.file("xl/_rels/workbook.xml.rels",
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
+  zip.file("xl/worksheets/sheet1.xml", sheetXml);
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
 test("Activity_Definition — importar un .xlsx completado puebla las actividades y calcula la duración", async ({ page }) => {
   await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedDb);
   await page.goto("/Activity_Definition.html");
@@ -172,4 +202,55 @@ test("Activity_Definition — importar hitos (atado, suelto y con código faltan
   expect(byCode.H0).toMatchObject({ name: "Inicio del proyecto", leafId: null, afterLeafId: null });
   expect(byCode.H1).toMatchObject({ name: "Fin de excavación", leafId: "w2" });
   expect(byCode.H2).toMatchObject({ name: "Cierre del proyecto", leafId: null, afterLeafId: "w3" });
+});
+
+test("Activity_Definition — un .xlsx con la hoja de datos llamada distinto a «EDT» se rechaza (caso: un solo libro con varios módulos)", async ({ page }) => {
+  // Si el alumno junta en un mismo archivo las hojas de varios módulos
+  // (p. ej. "EDT" de este y "Estimado" de Estimar los Costos), ya no basta
+  // con leer la PRIMERA hoja del libro -- hay que confirmar que la hoja que
+  // se está por importar aquí es, por su NOMBRE, la de Definir las
+  // Actividades. Este archivo trae una única hoja, pero llamada "Estimado"
+  // (headers por lo demás perfectamente válidos): debe rechazarse igual.
+  await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedDb);
+  await page.goto("/Activity_Definition.html");
+  await expect(page.locator(".pkg-row")).toHaveCount(2);
+
+  const buffer = await buildRowsXlsx(
+    ["Código EDT", "Nombre de la actividad", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"],
+    [["1.1", "Excavar zanja", "m³", "100", "25", ""]],
+    "Estimado"
+  );
+  await page.setInputFiles("#xlsxFileInput", { name: "proyecto_completo.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer });
+
+  await expect(page.locator("#modalOverlay")).toHaveClass(/open/);
+  const msg = await page.locator("#modalMsg").textContent();
+  expect(msg).toMatch(/No encontré una hoja llamada «EDT»/);
+  expect(msg).toMatch(/Estimado/);
+  await page.locator("#modalOk").click();
+
+  await expect(page.locator(".act-row")).toHaveCount(0);
+});
+
+test("Activity_Definition — encabezados abreviados/renombrados (no coinciden EXACTAMENTE con la plantilla) se rechazan en vez de adivinar por substring", async ({ page }) => {
+  // Antes "edt" bastaba como substring para reconocer "Código EDT", y
+  // "actividad" solo para "Nombre de la actividad" -- eso podía colar una
+  // columna ajena por coincidencia parcial. Ahora el encabezado debe
+  // coincidir EXACTO (salvo mayúsculas/acentos/espacios) con la plantilla.
+  await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedDb);
+  await page.goto("/Activity_Definition.html");
+  await expect(page.locator(".pkg-row")).toHaveCount(2);
+
+  const buffer = await buildRowsXlsx(
+    ["EDT", "Actividad", "Unidad"],
+    [["1.1", "Excavar zanja", "m³"]]
+  );
+  await page.setInputFiles("#xlsxFileInput", { name: "actividades.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer });
+
+  await expect(page.locator("#modalOverlay")).toHaveClass(/open/);
+  const msg = await page.locator("#modalMsg").textContent();
+  expect(msg).toMatch(/No reconocí las columnas del archivo/);
+  expect(msg).toMatch(/EXACTAMENTE/);
+  await page.locator("#modalOk").click();
+
+  await expect(page.locator(".act-row")).toHaveCount(0);
 });

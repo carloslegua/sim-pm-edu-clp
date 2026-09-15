@@ -113,7 +113,10 @@ async function buildFixtureXlsx(): Promise<Buffer> {
 // casos de verificación puntuales (archivo completamente ajeno, Paquete de
 // trabajo que no coincide con el Código EDT, etc.) sin repetir todo el
 // mecanismo OOXML en cada test.
-async function buildRowsXlsx(headerRow: string[], rows: string[][]): Promise<Buffer> {
+// sheetName es opcional (por defecto "Estimado", el nombre real que exporta
+// el módulo) -- para poder armar también el caso de una hoja con OTRO
+// nombre, que ahora debe rechazarse (ver resolveDataSheetPath()).
+async function buildRowsXlsx(headerRow: string[], rows: string[][], sheetName = "Estimado"): Promise<Buffer> {
   const zip = new JSZip();
   const allRows = [headerRow, ...rows];
   const COLS = "ABCDEFGHIJ";
@@ -132,7 +135,7 @@ async function buildRowsXlsx(headerRow: string[], rows: string[][]): Promise<Buf
     + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
   zip.file("xl/workbook.xml",
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-    + '<sheets><sheet name="Estimado" sheetId="1" r:id="rId1"/></sheets></workbook>');
+    + `<sheets><sheet name="${sheetName}" sheetId="1" r:id="rId1"/></sheets></workbook>`);
   zip.file("xl/_rels/workbook.xml.rels",
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
     + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
@@ -454,4 +457,61 @@ test("Estimar los Costos — un archivo exportado ANTES de un cambio posterior e
 
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("gpi_db") as string));
   expect(saved.projects.p1.modules.costEstimate.byActivity).toMatchObject({ a1: "190", a2: "40" });
+});
+
+test("Estimar los Costos — un .xlsx con la hoja de datos llamada distinto a «Estimado» se rechaza (caso: un solo libro con varios módulos)", async ({ page }) => {
+  // Si el alumno junta en un mismo archivo las hojas de varios módulos
+  // (p. ej. "EDT" de Definir las Actividades y "Estimado" de este), ya no
+  // basta con leer la PRIMERA hoja del libro -- hay que confirmar que la
+  // hoja que se está por importar aquí es, por su NOMBRE, la de Estimar los
+  // Costos. Este archivo trae una única hoja, pero llamada "EDT" (headers
+  // por lo demás perfectamente válidos): debe rechazarse igual, sin ni
+  // siquiera intentar reconciliar filas.
+  const seedWithPrices = JSON.parse(JSON.stringify(seedDb));
+  seedWithPrices.projects.p1.modules.costEstimate = { byActivity: { a1: "190", a2: "40" } };
+  await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedWithPrices);
+  await page.goto("/Estimar_Costos.html");
+
+  const buffer = await buildRowsXlsx(
+    ["Código EDT", "Nombre de la actividad", "Paquete de trabajo", "Precio unitario"],
+    [["1.1", "Corte de zanja", "Excavación de zanjas", "190"]],
+    "EDT"
+  );
+  await page.setInputFiles("#xlsxFileInput", { name: "proyecto_completo.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer });
+
+  await expect(page.locator("#modalOverlay")).toHaveClass(/open/);
+  const msg = await page.locator("#modalMsg").textContent();
+  expect(msg).toMatch(/No encontré una hoja llamada «Estimado»/);
+  expect(msg).toMatch(/EDT/);
+  expect(msg).not.toMatch(/Se reemplazará/);
+  await page.locator("#modalOk").click();
+
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("gpi_db") as string));
+  expect(saved.projects.p1.modules.costEstimate.byActivity).toEqual({ a1: "190", a2: "40" });
+});
+
+test("Estimar los Costos — encabezados abreviados/renombrados (no coinciden EXACTAMENTE con la plantilla) se rechazan en vez de adivinar por substring", async ({ page }) => {
+  // Antes "edt" bastaba como substring para reconocer "Código EDT", y
+  // "paquete" solo para "Paquete de trabajo" -- eso podía colar una columna
+  // ajena por coincidencia parcial. Ahora el encabezado debe coincidir
+  // EXACTO (salvo mayúsculas/acentos/espacios) con el de la plantilla.
+  const seedWithPrices = JSON.parse(JSON.stringify(seedDb));
+  seedWithPrices.projects.p1.modules.costEstimate = { byActivity: { a1: "190", a2: "40" } };
+  await page.addInitScript((db) => { localStorage.setItem("gpi_db", JSON.stringify(db)); }, seedWithPrices);
+  await page.goto("/Estimar_Costos.html");
+
+  const buffer = await buildRowsXlsx(
+    ["EDT", "Actividad", "Precio unitario"],
+    [["1.1", "Corte de zanja", "190"]]
+  );
+  await page.setInputFiles("#xlsxFileInput", { name: "estimado.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer });
+
+  await expect(page.locator("#modalOverlay")).toHaveClass(/open/);
+  const msg = await page.locator("#modalMsg").textContent();
+  expect(msg).toMatch(/No reconocí las columnas del archivo/);
+  expect(msg).toMatch(/EXACTAMENTE/);
+  await page.locator("#modalOk").click();
+
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("gpi_db") as string));
+  expect(saved.projects.p1.modules.costEstimate.byActivity).toEqual({ a1: "190", a2: "40" });
 });

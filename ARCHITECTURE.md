@@ -333,14 +333,25 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   archivo completado afuera y **reemplaza** `byLeaf` entero (no hace
   merge — la plantilla no lleva id de actividad estable, así que un
   merge sería ambiguo). El emparejamiento de filas importadas usa el
-  código EDT (vía `leafRows()`) y el de columnas usa el TEXTO del
-  encabezado normalizado (no la posición), así que reordenar columnas en
-  Excel no rompe el import. El parser de `.xlsx` es hand-rolled: resuelve
-  la hoja de datos real vía `xl/workbook.xml` + sus `_rels` (nunca asume
-  `sheet1.xml`), y soporta tanto `xl/sharedStrings.xml` (formato real de
-  Excel) como `t="inlineStr"` (el propio formato de exportación de este
-  proyecto). La duración sigue sin persistirse: se recalcula en pantalla
-  igual que en `pert`/`cronograma-cpm`.
+  código EDT (vía `leafRows()`) y el de columnas usa el TEXTO EXACTO del
+  encabezado normalizado (mayúsculas/acentos/espacios ignorados, pero NO
+  substrings ni sinónimos) contra `TEMPLATE_HEADERS`, así que reordenar
+  columnas en Excel no rompe el import pero renombrarlas o abreviarlas
+  ("EDT" en vez de "Código EDT") sí se rechaza — antes bastaba una
+  coincidencia parcial, lo que podía colar una columna ajena por error.
+  El parser de `.xlsx` es hand-rolled: resuelve la hoja de datos vía
+  `xl/workbook.xml` + sus `_rels`, pero **buscando por NOMBRE** entre
+  TODAS las hojas del libro (`resolveDataSheetPath()`, nunca
+  `getElementsByTagName("sheet")[0]`) — necesario para que un alumno
+  pueda juntar en un solo `.xlsx` las hojas de varios módulos (p. ej.
+  "EDT" + "Estimado") sin que este módulo tome por error la hoja de
+  otro; se rechaza con un aviso (listando qué hojas sí tiene el
+  archivo) si ninguna hoja se llama exactamente "EDT" (`DATA_SHEET_NAME`,
+  el mismo nombre que ya escribe `buildTemplateXlsxBlob()`). Soporta
+  tanto `xl/sharedStrings.xml` (formato real de Excel) como
+  `t="inlineStr"` (el propio formato de exportación de este proyecto).
+  La duración sigue sin persistirse: se recalcula en pantalla igual que
+  en `pert`/`cronograma-cpm`.
 - **"⇩ Cargar ejemplo en el proyecto" (`loadSampleIntoProject`) — distinto
   de "Modo ejemplo"**: "Modo ejemplo" es un sandbox que nunca toca el
   proyecto activo (documentado desde su rediseño). Pero eso dejaba un
@@ -510,7 +521,13 @@ Costs")
   primero en la misma sesión): mismo mecanismo hand-rolled de lectura/
   escritura OOXML vía `window.JSZip`
   (`xlsxStylesXml`/`xlsxSheetXml`/parseo de `sharedStrings.xml` e
-  `inlineStr`/emparejamiento de columnas por texto de encabezado).
+  `inlineStr`/emparejamiento de columnas por TEXTO EXACTO de encabezado
+  contra `TEMPLATE_HEADERS`, tolerante a reordenar columnas pero no a
+  renombrarlas/abreviarlas, y resolución de la hoja de datos por NOMBRE
+  entre TODAS las del libro — mismo mecanismo que Activity_Definition.html,
+  ver esa sección para el porqué: un alumno puede juntar varias hojas de
+  varios módulos en un solo `.xlsx`, y "Estimado" es el nombre esperado
+  aquí (`DATA_SHEET_NAME`) frente a "EDT" en Actividades).
   Columnas: Id. | Código EDT | Paquete de trabajo | Nombre de la
   actividad | Tipo | Unidad | Cantidad | Precio unitario | Subtotal —
   Id./Código EDT/Paquete/Nombre/Unidad/Cantidad son de referencia

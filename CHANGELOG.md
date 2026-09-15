@@ -86,6 +86,29 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Al importar un .xlsx en Definir las Actividades y en Estimar los
+  Costos, se verifica que la HOJA y los ENCABEZADOS del archivo sean
+  los correctos, no solo el contenido de las filas.** A pedido
+  explícito del usuario: si el alumno guarda todo el proyecto en un
+  solo libro de Excel con varias hojas (una por módulo), antes se leía
+  ciegamente la PRIMERA hoja del libro sin fijarse en cuál era en
+  realidad -- con varias hojas en el mismo archivo, ese supuesto ya no
+  alcanza para saber cuál copiar. Ahora se buscan, entre TODAS las
+  hojas del libro, la que se llama exactamente "EDT" (Definir las
+  Actividades) o "Estimado" (Estimar los Costos) -- el mismo nombre que
+  ya escribe la propia exportación de cada módulo -- y se rechaza el
+  archivo con un aviso claro (listando qué hojas sí tiene) si no
+  aparece ninguna con ese nombre. Además, el emparejamiento de columnas
+  dejó de aceptar coincidencias parciales ("EDT" o "Paquete" solos
+  bastaban antes para reconocer "Código EDT" o "Paquete de trabajo",
+  por ejemplo) -- ahora el texto del encabezado debe coincidir EXACTO
+  (solo se ignoran mayúsculas/acentos/espacios) con el de la plantilla,
+  aunque las columnas sí se puedan seguir reordenando libremente. Ambas
+  verificaciones bloquean el import por completo (no se llega a
+  reconciliar ninguna fila) y se documentaron en las instrucciones de
+  cada plantilla `.xlsx`. Probado con un archivo de una sola hoja mal
+  nombrada y con encabezados abreviados, en los dos módulos.
+
 - **Al importar un .xlsx en Estimar los Costos, se verifica -- a través
   de la columna "Id." -- que el Código EDT y el "Paquete de trabajo /
   Actividad" de cada fila sigan correspondiendo, en el proyecto actual,

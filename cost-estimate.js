@@ -826,6 +826,7 @@
 		"Precio unitario",
 		"Subtotal"
 	];
+	var DATA_SHEET_NAME = "Estimado";
 	function xlsxStylesXml() {
 		const xfs = [
 			"<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/>",
@@ -1049,6 +1050,7 @@
 		return [
 			["Cómo completar este archivo", 25],
 			["", 0],
+			["0. Si guardas todo el proyecto en un solo libro de Excel (varias hojas para varios módulos), esta hoja debe llamarse exactamente “Estimado” y sus encabezados deben coincidir EXACTAMENTE con los de esta plantilla (se puede reordenar columnas, pero no renombrarlas ni abreviarlas): al importar se verifican ambas cosas y se rechaza el archivo si no calzan, para no mezclar datos de otro módulo por error.", 4],
 			["1. Este archivo es un reflejo COMPLETO de la tabla: trae una fila por cada fila que ves en pantalla -- el proyecto (Tipo=“Proyecto”), cada fase (Tipo=“Fase”), cada paquete de trabajo (Tipo=“Paquete”, con su Subtotal acumulado si ya tiene precios) y, debajo de cada paquete, sus actividades. Solo las filas de ACTIVIDAD llevan precio: para completar el precio de una, ubícala por su “Código EDT” y “Nombre de la actividad” (ya vienen de “Definir las Actividades”, no las edites) -- si además cambias “Paquete de trabajo”, debe seguir siendo el nombre real de ese paquete: si no coincide, la fila se rechaza al importar (protección contra mezclar filas de otro proyecto).", 4],
 			["1b. Las filas de Proyecto/Fase/Paquete son de referencia -- repiten su propio nombre también en “Nombre de la actividad” (para que esa columna nunca quede vacía, útil si armas una tabla dinámica en Excel), pero se identifican y se ignoran solas al reimportar por su columna “Tipo”, no hace falta tocarlas ni borrarlas.", 4],
 			["1c. La columna “Id.” es el mismo correlativo consecutivo (sin saltos, como el Task ID de MS Project) que ves en pantalla y en Definir las Actividades -- Código EDT y Nombre de la actividad siguen siendo la clave para reconciliar el precio, pero si el Id. de una fila ya no corresponde, en el proyecto actual, al mismo Código EDT/Nombre que trae el archivo (por ejemplo, porque editaste la EDT o las actividades después de exportarlo), se avisa igual: revisa esas filas antes de confiar en el resultado.", 4],
@@ -1203,18 +1205,28 @@
 		for (const ch of m[1]) n = n * 26 + (ch.charCodeAt(0) - 64);
 		return n - 1;
 	}
-	async function resolveFirstSheetPath(zip) {
+	async function resolveDataSheetPath(zip, expectedName) {
 		const wbEntry = zip.file("xl/workbook.xml");
-		if (!wbEntry) return null;
-		const sheetEl = new DOMParser().parseFromString(await wbEntry.async("string"), "application/xml").getElementsByTagName("sheet")[0];
-		const rId = sheetEl ? sheetEl.getAttribute("r:id") : null;
+		if (!wbEntry) return { kind: "invalid" };
+		const doc = new DOMParser().parseFromString(await wbEntry.async("string"), "application/xml");
+		const sheets = Array.from(doc.getElementsByTagName("sheet"));
+		const wanted = normalizeHeader(expectedName);
+		const sheetEl = sheets.find((s) => normalizeHeader(s.getAttribute("name") || "") === wanted);
+		if (!sheetEl) return {
+			kind: "not-found",
+			sheetNames: sheets.map((s) => s.getAttribute("name") || "").filter(Boolean)
+		};
+		const rId = sheetEl.getAttribute("r:id");
 		const relsEntry = zip.file("xl/_rels/workbook.xml.rels");
-		if (!rId || !relsEntry) return null;
+		if (!rId || !relsEntry) return { kind: "invalid" };
 		const relsDoc = new DOMParser().parseFromString(await relsEntry.async("string"), "application/xml");
 		const rel = Array.from(relsDoc.getElementsByTagName("Relationship")).find((r) => r.getAttribute("Id") === rId);
 		const target = rel ? rel.getAttribute("Target") || "" : "";
-		if (!target) return null;
-		return target.startsWith("/") ? target.slice(1) : "xl/" + target;
+		if (!target) return { kind: "invalid" };
+		return {
+			kind: "found",
+			path: target.startsWith("/") ? target.slice(1) : "xl/" + target
+		};
 	}
 	async function loadSharedStrings(zip) {
 		const entry = zip.file("xl/sharedStrings.xml");
@@ -1248,14 +1260,19 @@
 	async function parseEstimateXlsx(file) {
 		const buf = await file.arrayBuffer();
 		const zip = await window.JSZip.loadAsync(buf);
-		const sheetPath = await resolveFirstSheetPath(zip);
-		if (!sheetPath) return null;
-		const sheetEntry = zip.file(sheetPath);
-		if (!sheetEntry) return null;
+		const resolution = await resolveDataSheetPath(zip, DATA_SHEET_NAME);
+		if (resolution.kind === "invalid") return { kind: "empty" };
+		if (resolution.kind === "not-found") return {
+			kind: "sheet-not-found",
+			sheetNames: resolution.sheetNames
+		};
+		const sheetEntry = zip.file(resolution.path);
+		if (!sheetEntry) return { kind: "empty" };
 		const [sheetXml, sharedStrings] = await Promise.all([sheetEntry.async("string"), loadSharedStrings(zip)]);
 		const allRows = parseSheetRows(sheetXml, sharedStrings);
-		if (!allRows.length) return null;
+		if (!allRows.length) return { kind: "empty" };
 		return {
+			kind: "ok",
 			headers: allRows[0],
 			rows: allRows.slice(1)
 		};
@@ -1266,49 +1283,30 @@
 		"fase",
 		"paquete"
 	];
-	var HEADER_KEYWORDS = [
-		{
-			field: "code",
-			keywords: ["codigo edt", "edt"]
-		},
-		{
-			field: "activityName",
-			keywords: ["nombre de la actividad"]
-		},
-		{
-			field: "pkgName",
-			keywords: ["paquete de trabajo", "paquete"]
-		},
-		{
-			field: "id",
-			keywords: ["id."]
-		},
-		{
-			field: "type",
-			keywords: ["tipo"]
-		},
-		{
-			field: "unit",
-			keywords: ["unidad"]
-		},
-		{
-			field: "qty",
-			keywords: ["cantidad"]
-		},
-		{
-			field: "unitPrice",
-			keywords: ["precio unitario", "precio"]
-		}
+	var TEMPLATE_HEADER_FIELDS = [
+		"id",
+		"code",
+		"pkgName",
+		"activityName",
+		"type",
+		"unit",
+		"qty",
+		"unitPrice",
+		null
 	];
 	function normalizeHeader(s) {
 		return String(s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 	}
+	var HEADER_FIELD_BY_TEXT = {};
+	TEMPLATE_HEADERS.forEach((h, i) => {
+		const field = TEMPLATE_HEADER_FIELDS[i];
+		if (field) HEADER_FIELD_BY_TEXT[normalizeHeader(h)] = field;
+	});
 	function mapHeaderColumns(headerRow) {
-		const norm = headerRow.map(normalizeHeader);
 		const map = {};
-		HEADER_KEYWORDS.forEach(({ field, keywords }) => {
-			const idx = norm.findIndex((h) => keywords.some((kw) => h.indexOf(kw) !== -1));
-			if (idx !== -1) map[field] = idx;
+		headerRow.forEach((h, idx) => {
+			const field = HEADER_FIELD_BY_TEXT[normalizeHeader(h)];
+			if (field) map[field] = idx;
 		});
 		if (map.code == null || map.activityName == null) return null;
 		return map;
@@ -1423,13 +1421,18 @@
 			await showAlert("El archivo no parece ser un .xlsx válido (¿se guardó bien o se cambió la extensión?).");
 			return;
 		}
-		if (!parsed) {
+		if (parsed.kind === "sheet-not-found") {
+			const otras = parsed.sheetNames.filter((n) => normalizeHeader(n) !== normalizeHeader(DATA_SHEET_NAME));
+			await showAlert("No encontré una hoja llamada «Estimado» en este archivo" + (otras.length ? " (tiene: " + otras.join(", ") + ")" : "") + ". Si tu Excel junta varios módulos en un solo libro, la hoja con los datos a importar aquí debe llamarse exactamente «Estimado» (como la que genera «⇩ Exportar a Excel») para que el simulador sepa cuál copiar y no la confunda con la de otro módulo.", "Hoja no reconocida");
+			return;
+		}
+		if (parsed.kind === "empty") {
 			await showAlert("El archivo no contiene datos reconocibles.");
 			return;
 		}
 		const colMap = mapHeaderColumns(parsed.headers);
 		if (!colMap) {
-			await showAlert("No reconocí las columnas del archivo. Se esperan al menos «Código EDT» y «Nombre de la actividad» — no renombres esas columnas.");
+			await showAlert("No reconocí las columnas del archivo: los encabezados deben coincidir EXACTAMENTE con los de la plantilla (¿renombraste o abreviaste alguna columna, p. ej. «EDT» en vez de «Código EDT», o «Paquete» en vez de «Paquete de trabajo»?). Se esperan al menos «Código EDT» y «Nombre de la actividad» escritas tal cual.");
 			return;
 		}
 		const result = reconcileImportRows(parsed.rows, colMap);
