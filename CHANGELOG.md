@@ -11,6 +11,19 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Panel de Control — la columna "Tipo" de la plantilla combinada no se
+  explicaba con claridad** — a pedido explícito del usuario. En el
+  ejemplo de la hoja "Actividades" solo se mencionaba el valor "Hito",
+  sin aclarar que en blanco significa "actividad normal"; en el
+  ejemplo de la hoja "Estimado" la columna "Tipo" no se explicaba EN
+  ABSOLUTO (podía valer "Proyecto"/"Fase"/"Paquete"/"Hito" para una
+  fila de solo referencia, o quedar en blanco para una fila con
+  precio, y el ejemplo solo mostraba esta última). Ahora cada bloque
+  explica los valores válidos de "Tipo" explícitamente, y el ejemplo
+  de "Estimado" agrega una fila de referencia (Tipo="Paquete") junto a
+  la fila con precio, para que se vea la diferencia con un caso real.
+  Probado en `tests/e2e/panel-control-template.spec.ts`.
+
 - **WBS Builder solo guardaba en el Panel al ocultar o cerrar la
   pestaña, nunca al editar** — a pedido explícito del usuario, que pidió
   garantizar que WBS Builder sea la capa "que manda": un rename de fase

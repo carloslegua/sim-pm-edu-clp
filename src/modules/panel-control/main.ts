@@ -834,15 +834,18 @@ function templateInstructionsXml(): string {
   blank();
 
   text("Ejemplo — hoja “" + ACTIVITIES_SHEET_NAME + "” (Definir las Actividades)", 3);
-  text("Cada fila es una actividad dentro de un paquete (mismo “Código EDT” y “Paquete de trabajo” que le diste en la hoja “" + WBS_SHEET_NAME + "”). “Id.” es el mismo correlativo consecutivo que ya se ve en pantalla — se completa solo para la fila del paquete (referencia; si duplicas la fila para más de una actividad, las copias comparten el mismo Id., no hace falta cambiarlo). Para un hito (duración cero, como la última fila del ejemplo): escribe “Hito” en “Tipo” y asígnale un código propio en “Código de hito” (p. ej. “H1”); completa “Código EDT” solo si está atado a un paquete, o déjalo en blanco si es un hito suelto del proyecto.");
+  text("Cada fila es una actividad dentro de un paquete (mismo “Código EDT” y “Paquete de trabajo” que le diste en la hoja “" + WBS_SHEET_NAME + "”). “Id.” es el mismo correlativo consecutivo que ya se ve en pantalla — se completa solo para la fila del paquete (referencia; si duplicas la fila para más de una actividad, las copias comparten el mismo Id., no hace falta cambiarlo).");
+  text("“Tipo” tiene solo DOS valores válidos en esta hoja: déjalo EN BLANCO para una actividad normal (primera fila del ejemplo) — o escribe “Hito” para marcar la fila como un hito, duración cero por definición (segunda fila): en ese caso asígnale además un código propio en “Código de hito” (p. ej. “H1”, tú decides la numeración) y completa “Código EDT” solo si el hito está atado a un paquete, o déjalo en blanco si es un hito suelto del proyecto en general.");
   headerRow(ACTIVITIES_HEADERS);
   dataRow(["2", "1.1", "Excavación de zanjas", "Corte de zanja", "", "", "m³", "100", "25", "1"]);
   dataRow(["", "1.1", "Excavación de zanjas", "Fin de excavación", "Hito", "H1", "", "", "", ""]);
   blank();
 
   text("Ejemplo — hoja “" + COST_ESTIMATE_SHEET_NAME + "” (Estimar los Costos)", 3);
-  text("Cada fila es el precio de una actividad (mismo “Código EDT”, “Paquete de trabajo” y “Nombre de la actividad” que en la hoja “" + ACTIVITIES_SHEET_NAME + "”). Completa solo “Precio unitario” — “Subtotal” se calcula solo (Cantidad × Precio unitario) y “Id.” es opcional, de referencia.");
+  text("Cada fila con “Tipo” EN BLANCO es el precio de una actividad (mismo “Código EDT”, “Paquete de trabajo” y “Nombre de la actividad” que en la hoja “" + ACTIVITIES_SHEET_NAME + "”, como la última fila del ejemplo) — completa solo “Precio unitario” ahí, “Subtotal” se calcula solo (Cantidad × Precio unitario).");
+  text("“Tipo” también puede decir “Proyecto”, “Fase”, “Paquete” u “Hito” (como la primera fila del ejemplo, un “Paquete”): son filas de SOLO REFERENCIA, nunca llevan precio propio — muestran la misma estructura completa que ves en pantalla en este módulo (con el Subtotal ya sumado de sus actividades, si corresponde) y se ignoran solas al importar por su “Tipo”, no hace falta borrarlas si vienen de una exportación real de este módulo. “Id.” es opcional en cualquier fila, de referencia.");
   headerRow(COST_ESTIMATE_HEADERS);
+  dataRow(["2", "1.1", "Excavación de zanjas", "Excavación de zanjas", "Paquete", "", "", "", "4500"]);
   dataRow(["3", "1.1", "Excavación de zanjas", "Corte de zanja", "", "m³", "100", "45", "4500"]);
   blank();
 

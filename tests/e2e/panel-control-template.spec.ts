@@ -63,6 +63,13 @@ test("Panel de Control — 'Plantilla combinada' genera un .xlsx con una hoja po
   expect(sheet1).toMatch(/Cimentaciones/);
   expect(sheet1).toMatch(/Excavaci.n de zanjas/);
   expect(sheet1).toMatch(/Corte de zanja/);
+
+  // La columna "Tipo" (Actividades y Estimado) queda explicada, no solo
+  // mencionada de pasada -- incluye sus valores válidos y un ejemplo de fila
+  // de referencia (Tipo="Paquete") en Estimado, no solo la fila con precio.
+  expect(sheet1).toMatch(/“Tipo” tiene solo DOS valores válidos/);
+  expect(sheet1).toMatch(/“Tipo” también puede decir “Proyecto”, “Fase”, “Paquete” u “Hito”/);
+  expect(sheet1).toMatch(/Paquete/);
 });
 
 test("Panel de Control — la hoja «WBS» de la plantilla combinada, completada, se puede importar tal cual en WBS Builder", async ({ page }, testInfo) => {
