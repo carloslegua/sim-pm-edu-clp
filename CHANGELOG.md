@@ -11,6 +11,25 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Cronograma/CPM — el reporte imprimible no incluía "Predecesoras" ni
+  "Auditoría"** — a pedido explícito del usuario, que reportó el
+  ejemplo precargado como "incompleto" por esto (y no entendía para qué
+  servía "Auditoría"). La tabla de `buildReport()` es un `<table>`
+  armado a mano, independiente de la tabla en pantalla (`#cpmTable`) —
+  esta última ya tenía las 12 columnas completas, incluidas
+  Predecesoras/Auditoría, desde antes; solo el reporte se había quedado
+  corto en 10. Ahora el reporte trae las 12 (agrega "Predecesoras",
+  calculada igual que en pantalla vía `incoming()`/`linkToken()`, y
+  "Auditoría", igual que en pantalla vía `state().import.dates`) y dos
+  leyendas nuevas explicando qué significa cada una — en particular,
+  que "Auditoría" compara la fecha calculada contra una fecha de MS
+  Project pegada con «📋 Pegar cronograma», y por eso queda en "—" si
+  nunca se pegó un cronograma real (como en el propio ejemplo DISTRIB+,
+  que si tiene enlaces/predecesoras completos desde antes, pero nunca
+  pega fechas de MS Project). Probado en
+  `tests/smoke/cronograma-cpm.smoke.test.ts` con un token real de
+  predecesora del ejemplo ("SS+4d").
+
 - **Panel de Control — la columna "Tipo" de la plantilla combinada no se
   explicaba con claridad** — a pedido explícito del usuario. En el
   ejemplo de la hoja "Actividades" solo se mencionaba el valor "Hito",

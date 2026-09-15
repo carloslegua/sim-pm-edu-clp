@@ -49,6 +49,18 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(doc.querySelector("#netWrap svg")).toBeTruthy();
     expect(doc.querySelector("#ganttWrap svg")).toBeTruthy();
+
+    // El reporte imprimible trae Predecesoras (con datos reales del ejemplo,
+    // que sí tiene enlaces) y Auditoría (en "—" porque el ejemplo nunca pegó
+    // un cronograma real de MS Project) -- ambas explicadas en una leyenda,
+    // no solo como columnas vacías o sin contexto.
+    try { (doc.getElementById("btnReport") as HTMLElement).click(); } catch (_) { /* window.print() no implementado en jsdom */ }
+    const report = doc.getElementById("gpiReport")!.innerHTML;
+    expect(report).toContain("Predecesoras");
+    expect(report).toContain("Auditoría");
+    expect(report).toMatch(/Predecesoras:.*Id\. de red/);
+    expect(report).toMatch(/Auditoría:.*«📋 Pegar cronograma»/);
+    expect(report).toContain("SS+4d"); // token real del enlace L3 (a3→a4, SS, 4 días) del ejemplo
   });
 
   it("con proyecto activo real: un enlace manual FS entre dos actividades ajusta la duración del proyecto y persiste en GPI.getModule('schedule')", async () => {

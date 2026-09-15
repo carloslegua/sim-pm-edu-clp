@@ -958,7 +958,8 @@
 	}
 	function buildReport() {
 		const R = runCpm(), snap = R.snap, cpm = R.cpm, rep = document.getElementById("gpiReport");
-		const cmap = codeOf(snap), nmap = nameOf(snap);
+		const cmap = codeOf(snap), nmap = nameOf(snap), nn = netMap(snap);
+		const dates = state().import && state().import.dates || {};
 		const now = (/* @__PURE__ */ new Date()).toLocaleDateString("es-PE");
 		const s = criticalPertSums(R);
 		let h = "<div class='rep-head'><div><h1>Cronograma / Ruta Crítica</h1><div class='sub'>" + esc(document.getElementById("projectTitle").value) + "</div></div><div class='rep-meta'>" + esc(document.getElementById("courseTitle").value) + "<br>" + now + "<br>PMBOK · CPM</div></div>";
@@ -967,14 +968,24 @@
 			const path = cpm.criticalIds.map((id) => (cmap[id] || "") + " " + (nmap[id] || ""));
 			h += "<h2>Ruta crítica</h2><p class='num'>" + esc(path.join("  →  ")) + "</p>";
 		}
-		h += "<h2>Actividades (CPM)</h2><table><tr><th>Id.</th><th>Código EDT</th><th>Actividad</th><th>Duración</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>Holgura Total</th><th>Crítica</th></tr>";
+		h += "<h2>Actividades (CPM)</h2><table><tr><th>Id.</th><th>Código EDT</th><th>Actividad</th><th>Duración</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>Holgura Total</th><th>Predecesoras</th><th>Auditoría</th><th>Crítica</th></tr>";
 		snap.filter((r) => r.kind === "activity").forEach((r) => {
 			const row = cpm.ok ? cpm.rows[r.activityId] : null;
 			const dur = durMode === "pert" && r.te != null ? r.te : r.det;
-			h += "<tr><td class='num'>" + r.netId + "</td><td class='num'>" + esc(r.code) + "</td><td>" + esc(r.name) + "</td><td class='num'>" + fmt(dur) + "</td><td class='num'>" + (row ? fmt(row.es) : "—") + "</td><td class='num'>" + (row ? fmt(row.ef) : "—") + "</td><td class='num'>" + (row ? fmt(row.ls) : "—") + "</td><td class='num'>" + (row ? fmt(row.lf) : "—") + "</td><td class='num'>" + (row ? fmt(row.tf) : "—") + "</td><td>" + (row && row.critical ? "●" : "") + "</td></tr>";
+			const preds = incoming(r.activityId).map((l) => linkToken(l, nn)).filter(Boolean).join("; ");
+			let au = "—";
+			const pd = dates[r.activityId];
+			if (pd && row && (nz(pd.start) || nz(pd.finish))) {
+				const okS = !nz(pd.start) || pd.start === row.startDate;
+				const okF = !nz(pd.finish) || pd.finish === row.finishDate;
+				au = okS && okF ? "✓" : "✗";
+			}
+			h += "<tr><td class='num'>" + r.netId + "</td><td class='num'>" + esc(r.code) + "</td><td>" + esc(r.name) + "</td><td class='num'>" + fmt(dur) + "</td><td class='num'>" + (row ? fmt(row.es) : "—") + "</td><td class='num'>" + (row ? fmt(row.ef) : "—") + "</td><td class='num'>" + (row ? fmt(row.ls) : "—") + "</td><td class='num'>" + (row ? fmt(row.lf) : "—") + "</td><td class='num'>" + (row ? fmt(row.tf) : "—") + "</td><td>" + esc(preds || "—") + "</td><td class='num'>" + au + "</td><td>" + (row && row.critical ? "●" : "") + "</td></tr>";
 		});
 		h += "</table>";
 		h += "<p class='rep-note'>ES = Inicio Temprano (Early Start) · EF = Fin Temprano (Early Finish) · LS = Inicio Tardío (Late Start) · LF = Fin Tardío (Late Finish). Holgura Total = LS − ES; 0 = actividad crítica.</p>";
+		h += "<p class='rep-note'>Predecesoras: Id. de red de la actividad de la que depende, con el tipo de relación si no es FS (fin-a-inicio) y el adelanto/atraso en días si lo hay — p. ej. “3SS+2d” significa “depende del inicio de la actividad Id. 3, con 2 días de adelanto”.</p>";
+		h += "<p class='rep-note'>Auditoría: compara la fecha que calculó el simulador contra la fecha de MS Project que hayas pegado con «📋 Pegar cronograma» — ✓ coinciden, ✗ difieren (revisa calendario o enlaces). Si todavía no pegaste un cronograma real de MS Project, queda en “—”: no hay nada que auditar por ahora.</p>";
 		if (s.allValid) h += "<p class='rep-note'>Ruta crítica: ΣTE = " + fmt(s.sumTe) + " d, Σσ² = " + fmt(s.sumVar) + " (base para la probabilidad de plazo PERT).</p>";
 		rep.innerHTML = h;
 	}
