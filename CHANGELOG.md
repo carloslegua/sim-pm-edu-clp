@@ -131,9 +131,12 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
   instrucciones), cada una con el nombre y los encabezados EXACTOS que
   ese módulo exige — para que el alumno complete todo el proyecto en un
   único archivo y cada módulo, al importar, encuentre su propia hoja
-  sin ambigüedad. Probado en `tests/e2e/panel-control-template.spec.ts`,
-  incluido un round-trip real: completa la hoja "WBS" de la plantilla
-  descargada y la reimporta tal cual en WBS Builder.
+  sin ambigüedad. La hoja "Instrucciones" incluye, para cada una de las
+  tres hojas de datos, un ejemplo con el encabezado real y 1-2 filas ya
+  completadas (a pedido explícito del usuario). Probado en
+  `tests/e2e/panel-control-template.spec.ts`, incluido un round-trip
+  real: completa la hoja "WBS" de la plantilla descargada y la
+  reimporta tal cual en WBS Builder.
 
 - **WBS Builder ahora puede exportar/importar la EDT completa como
   `.xlsx`** — a pedido explícito del usuario, con la misma lógica que ya

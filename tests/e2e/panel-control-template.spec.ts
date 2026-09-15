@@ -55,6 +55,14 @@ test("Panel de Control — 'Plantilla combinada' genera un .xlsx con una hoja po
   expect(headersOf(sheet2)).toEqual(WBS_HEADERS);
   expect(headersOf(sheet3)).toEqual(ACTIVITIES_HEADERS);
   expect(headersOf(sheet4)).toEqual(COST_ESTIMATE_HEADERS);
+
+  // La hoja "Instrucciones" trae un ejemplo de fila completada para cada
+  // una de las tres hojas de datos.
+  const sheet1 = await zip.file("xl/worksheets/sheet1.xml")!.async("string");
+  expect(sheet1).toMatch(/Ejemplo — hoja/);
+  expect(sheet1).toMatch(/Cimentaciones/);
+  expect(sheet1).toMatch(/Excavaci.n de zanjas/);
+  expect(sheet1).toMatch(/Corte de zanja/);
 });
 
 test("Panel de Control — la hoja «WBS» de la plantilla combinada, completada, se puede importar tal cual en WBS Builder", async ({ page }, testInfo) => {

@@ -760,10 +760,11 @@ const COST_ESTIMATE_HEADERS = ["Id.", "Código EDT", "Paquete de trabajo", "Nomb
 function xlsxStylesXml(): string {
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-    + '<fonts count="3">'
+    + '<fonts count="4">'
     + '<font><sz val="11"/><name val="Calibri"/></font>'
     + '<font><b/><sz val="11"/><name val="Calibri"/></font>'
     + '<font><b/><sz val="12"/><name val="Calibri"/></font>'
+    + '<font><b/><sz val="11"/><color rgb="FF0090C2"/><name val="Calibri"/></font>'
     + '</fonts>'
     + '<fills count="3">'
     + '<fill><patternFill patternType="none"/></fill>'
@@ -773,10 +774,11 @@ function xlsxStylesXml(): string {
     + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'
     + '<border><left style="thin"><color rgb="FFB9C6D2"/></left><right style="thin"><color rgb="FFB9C6D2"/></right><top style="thin"><color rgb="FFB9C6D2"/></top><bottom style="thin"><color rgb="FFB9C6D2"/></bottom><diagonal/></border></borders>'
     + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-    + '<cellXfs count="3">'
+    + '<cellXfs count="4">'
     + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>'
     + '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'
     + '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" applyFont="1"/>'
+    + '<xf numFmtId="0" fontId="3" fillId="0" borderId="0" applyFont="1"/>'
     + '</cellXfs>'
     + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
     + '</styleSheet>';
@@ -807,18 +809,45 @@ function headerRowSheet(headers: string[], widths: number[]): string {
   return xlsxSheetXml([headers.map((h) => ({ v: h, t: "s", s: 1 } as XlCell))], widths);
 }
 
+// Estilos usados en esta hoja: 0 normal · 1 encabezado (igual que las hojas
+// de datos) · 2 título · 3 subtítulo de cada bloque de ejemplo.
 function templateInstructionsXml(): string {
-  const L: [string, number][] = [
-    ["Cómo completar este libro", 2],
-    ["", 0],
-    ["Este archivo trae una hoja por cada módulo que importa datos desde Excel: “" + WBS_SHEET_NAME + "” (WBS Builder), “" + ACTIVITIES_SHEET_NAME + "” (Definir las Actividades) y “" + COST_ESTIMATE_SHEET_NAME + "” (Estimar los Costos). NO renombres ninguna hoja: cada módulo busca la suya por ese nombre exacto y, si no la encuentra, rechaza el archivo (evita que un módulo confunda su hoja con la de otro).", 0],
-    ["Tampoco renombres ni abrevies los encabezados de la primera fila de cada hoja: deben coincidir EXACTAMENTE con lo que espera cada módulo (sí puedes reordenar las columnas dentro de una misma hoja).", 0],
-    ["Orden recomendado, porque la EDT (WBS Builder) es la que manda sobre los otros dos: 1) completa “" + WBS_SHEET_NAME + "” con las fases y paquetes de trabajo; 2) completa “" + ACTIVITIES_SHEET_NAME + "” con las actividades de cada paquete; 3) completa “" + COST_ESTIMATE_SHEET_NAME + "” con el precio de cada actividad.", 0],
-    ["Sube este MISMO archivo por separado en cada módulo, con su propio botón “Importar desde Excel” — cada uno copia solo su hoja e ignora las demás.", 0],
-    ["", 0],
-    ["Generado por el simulador GPI — Panel de Control.", 0]
-  ];
-  return xlsxSheetXml(L.map(([text, s]) => [{ v: text, t: "s", s: s === 2 ? 2 : 0 } as XlCell]), [110]);
+  const rows: Array<Array<XlCell | null>> = [];
+  const text = (v: string, s = 0): void => { rows.push([{ v, t: "s", s } as XlCell]); };
+  const blank = (): void => { rows.push([]); };
+  const headerRow = (headers: string[]): void => { rows.push(headers.map((h) => ({ v: h, t: "s", s: 1 } as XlCell))); };
+  const dataRow = (values: string[]): void => { rows.push(values.map((v) => (v === "" ? null : { v, t: "s", s: 0 } as XlCell))); };
+
+  text("Cómo completar este libro", 2);
+  blank();
+  text("Este archivo trae una hoja por cada módulo que importa datos desde Excel: “" + WBS_SHEET_NAME + "” (WBS Builder), “" + ACTIVITIES_SHEET_NAME + "” (Definir las Actividades) y “" + COST_ESTIMATE_SHEET_NAME + "” (Estimar los Costos). NO renombres ninguna hoja: cada módulo busca la suya por ese nombre exacto y, si no la encuentra, rechaza el archivo (evita que un módulo confunda su hoja con la de otro).");
+  text("Tampoco renombres ni abrevies los encabezados de la primera fila de cada hoja: deben coincidir EXACTAMENTE con lo que espera cada módulo (sí puedes reordenar las columnas dentro de una misma hoja).");
+  text("Orden recomendado, porque la EDT (WBS Builder) es la que manda sobre los otros dos: 1) completa “" + WBS_SHEET_NAME + "” con las fases y paquetes de trabajo; 2) completa “" + ACTIVITIES_SHEET_NAME + "” con las actividades de cada paquete; 3) completa “" + COST_ESTIMATE_SHEET_NAME + "” con el precio de cada actividad.");
+  text("Sube este MISMO archivo por separado en cada módulo, con su propio botón “Importar desde Excel” — cada uno copia solo su hoja e ignora las demás. Las filas de ejemplo de abajo son solo referencia: bórralas de cada hoja antes de completar la tuya.");
+  blank();
+
+  text("Ejemplo — hoja “" + WBS_SHEET_NAME + "” (WBS Builder)", 3);
+  text("La jerarquía se arma sola a partir del “Código EDT” (1, 1.1, 1.1.1…): el código de una fila, sin su último segmento, debe ser el de otra fila. En una FASE (tiene paquetes debajo, como la fila “1”) deja Duración/Inicio/Fin/Costo/Avance en blanco — se calculan solos a partir de sus paquetes; esas columnas solo se completan en los PAQUETES (sin filas hijas, como “1.1”).");
+  headerRow(WBS_HEADERS);
+  dataRow(["1", "Cimentaciones", "1", "", "", "", "", "", ""]);
+  dataRow(["1.1", "Excavación de zanjas", "2", "10", "2026-01-05", "2026-01-14", "5000", "Ana Torres", "50"]);
+  blank();
+
+  text("Ejemplo — hoja “" + ACTIVITIES_SHEET_NAME + "” (Definir las Actividades)", 3);
+  text("Cada fila es una actividad dentro de un paquete (mismo “Código EDT” y “Paquete de trabajo” que le diste en la hoja “" + WBS_SHEET_NAME + "”). Para un hito (duración cero, como la segunda fila del ejemplo): escribe “Hito” en “Tipo” y asígnale un código propio en “Código de hito” (p. ej. “H1”); completa “Código EDT” solo si está atado a un paquete, o déjalo en blanco si es un hito suelto del proyecto.");
+  headerRow(ACTIVITIES_HEADERS);
+  dataRow(["1.1", "Excavación de zanjas", "Corte de zanja", "", "", "m³", "100", "25", "1"]);
+  dataRow(["1.1", "Excavación de zanjas", "Fin de excavación", "Hito", "H1", "", "", "", ""]);
+  blank();
+
+  text("Ejemplo — hoja “" + COST_ESTIMATE_SHEET_NAME + "” (Estimar los Costos)", 3);
+  text("Cada fila es el precio de una actividad (mismo “Código EDT”, “Paquete de trabajo” y “Nombre de la actividad” que en la hoja “" + ACTIVITIES_SHEET_NAME + "”). Completa solo “Precio unitario” — “Subtotal” se calcula solo (Cantidad × Precio unitario) y “Id.” es opcional, de referencia.");
+  headerRow(COST_ESTIMATE_HEADERS);
+  dataRow(["2", "1.1", "Excavación de zanjas", "Corte de zanja", "", "m³", "100", "45", "4500"]);
+  blank();
+
+  text("Generado por el simulador GPI — Panel de Control.");
+  return xlsxSheetXml(rows, [16, 26, 22, 12, 12, 10, 10, 12, 10]);
 }
 
 async function buildCombinedTemplateXlsxBlob(): Promise<Blob> {

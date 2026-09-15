@@ -319,7 +319,13 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   de cada módulo (Panel de Control no importa el `.ts` de ningún
   módulo, mismo criterio de "cada módulo funciona sin depender de
   otro" del resto de la suite) — si algún módulo cambia su plantilla,
-  hay que actualizar la copia aquí también. Probado en
+  hay que actualizar la copia aquí también. La hoja "Instrucciones"
+  (`templateInstructionsXml()`) no es solo texto: trae, para cada una
+  de las tres hojas de datos, un bloque con el encabezado real y 1-2
+  filas de ejemplo ya completadas (p. ej. una fase + un paquete en
+  "WBS", una actividad + un hito en "EDT") — a pedido explícito del
+  usuario, para que el alumno vea el formato esperado sin tener que
+  adivinarlo. Probado en
   `tests/e2e/panel-control-template.spec.ts`: verifica hojas/
   encabezados exactos, y además completa la hoja "WBS" descargada con
   una fila real y la reimporta tal cual en WBS Builder — prueba de que
