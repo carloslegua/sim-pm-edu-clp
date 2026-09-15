@@ -473,6 +473,42 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
 - Lee `raci` (bloquea "Responsable" si la RACI ya asignó un "R" —
   `raciLocksResource`), `obs` y `scopeStatement` (siembra de entregables
   como ramas de nivel 1, `seedFromScope`).
+- **Import/export `.xlsx`** (a pedido explícito del usuario, "misma lógica"
+  que Definir las Actividades/Estimar los Costos): mismo mecanismo
+  hand-rolled vía `window.JSZip`, hoja de datos llamada exactamente "WBS"
+  (distinta de "EDT"/"Estimado" de esos dos módulos, para que un libro con
+  las tres hojas no sea ambiguo) y emparejamiento de columnas por texto
+  EXACTO contra `TEMPLATE_HEADERS`. Columnas: Código EDT | Paquete de
+  trabajo | Nivel | Duración | Inicio | Fin | Costo | Responsable | Avance
+  — el mismo modelo que ya muestra la vista "Tabla / Diccionario"
+  (`renderTable()`), del que `exportRowModel()` deriva directamente (mismos
+  valores YA CONSOLIDADOS por `computeRollup()`). **Diferencia de fondo con
+  Actividades/Estimar los Costos**: esos dos IMPORTAN filas sobre una EDT
+  ya existente (reconcilian por Código EDT contra algo real); WBS Builder
+  ES la fuente de la EDT, así que el import RECONSTRUYE el árbol completo
+  a partir de la columna "Código EDT" (`1`, `1.1`, `1.1.1`…, sin ninguna
+  columna de "padre" — `analyzeWbsRows()` ordena las filas por segmento
+  numérico y resuelve el padre de cada una quitándole su último segmento).
+  "Nivel" es puramente de referencia (se recalcula del propio código,
+  nunca se lee). "Duración"/"Inicio"/"Fin"/"Costo"/"Avance" solo se
+  aplican en las filas que resultan ser PAQUETES (sin ninguna fila hija en
+  el archivo); en una FASE esas mismas columnas son el resumen `rollup`
+  -- lo que traiga el archivo ahí se ignora y se recalcula.
+  **Preservación de id por Código EDT** (`applyWbsRows()`): dado que RACI,
+  Definir las Actividades (y en cascada Estimar los Costos/PERT/
+  Cronograma) referencian un paquete por su id de nodo, reconstruir el
+  árbol siempre con ids nuevos habría desenlazado esos módulos en CADA
+  reimportación. En cambio, un Código EDT que ya existía en el árbol antes
+  de importar RECICLA su mismo id (y sus `notes`/`orientation`/`delId`,
+  ninguno de los cuales viaja en el archivo) — solo un Código EDT
+  genuinamente nuevo recibe un id nuevo (`uid()`, mismo contador
+  compartido de toda la sesión); si el archivo mueve un nodo a otro
+  Código EDT, ese nodo pierde el id anterior, mismo efecto que borrarlo y
+  crear uno nuevo a mano. Cubierto por un test E2E dedicado que verifica,
+  tras un round-trip exportar→reimportar sin tocar el archivo, que un
+  paquete con un "R" de RACI sigue apareciendo bloqueado (prueba indirecta
+  de que conservó su id — si no lo hubiera hecho, `raciLocksResource` ya
+  no encontraría el assignment).
 - **Coherencia de Costo/Fechas/Responsable**: al definir la EDT es
   imposible conocer el costo, la duración o las fechas reales de un
   paquete — son estimaciones. El WBS deja explícito cuándo un valor es
@@ -519,8 +555,10 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
 
 **Recopilar_Requisitos.html**
 - Una de las dos excepciones que usan atributos `onclick`/`onchange`
-  inline (13 funciones expuestas vía `Object.assign(window, {...})`) en
-  vez de `addEventListener`, porque el HTML original ya estaba así y
+  inline (11 funciones expuestas vía `Object.assign(window, {...})` --
+  bajó de 13 al retirar `exportJSON`/`importJSON`, ver la sección
+  "Guardar/Abrir .json es responsabilidad EXCLUSIVA de Panel de Control")
+  en vez de `addEventListener`, porque el HTML original ya estaba así y
   reescribirlo habría sido un cambio de alcance mayor a "portar a
   TypeScript".
 - Usa su propio modal (`.ov`/`.modal`), no `.modal-overlay`/`.modal-card`.

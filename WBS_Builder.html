@@ -436,6 +436,14 @@
 </style>
   <link rel="stylesheet" href="gpi-shared.css">
   <script src="gpi-core.js"></script>
+  <!-- JSZip: generación de .xlsx en el navegador (si no carga, se exporta CSV equivalente).
+       integrity: hash SRI oficial de cdnjs para esta versión exacta -- si el CDN
+       sirviera contenido distinto (comprometido o corrupto), el navegador
+       rechaza el script en vez de ejecutarlo, y la app cae al CSV de todas
+       formas (mismo camino que "JSZip no cargó"). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+          integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
 
@@ -476,6 +484,10 @@
   <div class="sep"></div>
   <button class="btn" id="btnCollapseAll">⊟ Colapsar todo</button>
   <button class="btn" id="btnExpandAll">⊞ Expandir todo</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnExportExcel" title="Genera un .xlsx con la EDT actual (misma tabla que la vista 'Tabla / Diccionario'; si el proyecto está vacío, sale con solo el proyecto: sirve de plantilla)">⇩ Exportar a Excel</button>
+  <button class="btn primary" id="btnImportExcel" title="Sube el .xlsx completado: reemplaza la EDT actual">⇧ Importar desde Excel</button>
+  <input type="file" id="xlsxFileInput" accept=".xlsx">
   <div class="sep"></div>
   <button class="btn" id="btnReport">📄 Reporte</button>
   <button class="btn" id="btnPrint">🖨 Imprimir / PDF</button>

@@ -894,6 +894,486 @@
 			danger: false
 		});
 	}
+	function xmlEsc(s) {
+		return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+	}
+	var TEMPLATE_HEADERS = [
+		"Código EDT",
+		"Paquete de trabajo",
+		"Nivel",
+		"Duración",
+		"Inicio",
+		"Fin",
+		"Costo",
+		"Responsable",
+		"Avance"
+	];
+	var DATA_SHEET_NAME = "WBS";
+	function xlsxStylesXml() {
+		const xfs = [
+			"<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/>",
+			"<xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"1\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf>",
+			"<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf>",
+			"<xf numFmtId=\"164\" fontId=\"0\" fillId=\"0\" borderId=\"0\" applyNumberFormat=\"1\" applyAlignment=\"1\"><alignment horizontal=\"right\"/></xf>",
+			"<xf numFmtId=\"0\" fontId=\"3\" fillId=\"0\" borderId=\"0\" applyFont=\"1\" applyAlignment=\"1\"><alignment vertical=\"top\" wrapText=\"1\"/></xf>"
+		];
+		for (let i = 0; i < 10; i++) xfs.push("<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"left\" indent=\"" + i + "\"/></xf>");
+		for (let i = 0; i < 10; i++) xfs.push("<xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" applyFont=\"1\" applyAlignment=\"1\"><alignment horizontal=\"left\" indent=\"" + i + "\"/></xf>");
+		xfs.push("<xf numFmtId=\"0\" fontId=\"2\" fillId=\"3\" borderId=\"0\" applyFont=\"1\" applyFill=\"1\"/>");
+		return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><numFmts count=\"1\"><numFmt numFmtId=\"164\" formatCode=\"#,##0.00\"/></numFmts><fonts count=\"4\"><font><sz val=\"11\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"11\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"12\"/><name val=\"Calibri\"/></font><font><i/><sz val=\"10\"/><color rgb=\"FF4D5768\"/><name val=\"Calibri\"/></font></fonts><fills count=\"4\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFDDEBF7\"/><bgColor indexed=\"64\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFE8F6FC\"/><bgColor indexed=\"64\"/></patternFill></fill></fills><borders count=\"2\"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style=\"thin\"><color rgb=\"FFB9C6D2\"/></left><right style=\"thin\"><color rgb=\"FFB9C6D2\"/></right><top style=\"thin\"><color rgb=\"FFB9C6D2\"/></top><bottom style=\"thin\"><color rgb=\"FFB9C6D2\"/></bottom><diagonal/></border></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"" + xfs.length + "\">" + xfs.join("") + "</cellXfs><cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles></styleSheet>";
+	}
+	function xlsxSheetXml(rows, widths, freezeTop) {
+		const COLS = "ABCDEFGHIJ";
+		const cols = widths.map((w, i) => "<col min=\"" + (i + 1) + "\" max=\"" + (i + 1) + "\" width=\"" + w + "\" customWidth=\"1\"/>").join("");
+		const body = rows.map((cells, ri) => {
+			const cs = cells.map((c, ci) => {
+				if (c == null || c.v === "" || c.v == null) return "";
+				const ref = COLS[ci] + (ri + 1), st = c.s ? " s=\"" + c.s + "\"" : "";
+				if (c.t === "n") return "<c r=\"" + ref + "\"" + st + "><v>" + c.v + "</v></c>";
+				return "<c r=\"" + ref + "\"" + st + " t=\"inlineStr\"><is><t xml:space=\"preserve\">" + xmlEsc(c.v) + "</t></is></c>";
+			}).join("");
+			return "<row r=\"" + (ri + 1) + "\">" + cs + "</row>";
+		}).join("");
+		return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">" + (freezeTop ? "<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>" : "") + "<cols>" + cols + "</cols><sheetData>" + body + "</sheetData></worksheet>";
+	}
+	function exportRowModel() {
+		const codes = computeCodes();
+		const rolled = computeRollup();
+		const out = [TEMPLATE_HEADERS.map((h) => ({
+			v: h,
+			t: "s",
+			s: 1
+		}))];
+		const rows = [];
+		function walk(id, depth) {
+			if (id !== rootId) rows.push({
+				id,
+				depth
+			});
+			nodes[id].children.forEach((cid) => walk(cid, depth + 1));
+		}
+		walk(rootId, 0);
+		rows.forEach(({ id, depth }) => {
+			const node = nodes[id], r = rolled[id];
+			out.push([
+				{
+					v: codes[id],
+					t: "s",
+					s: 2
+				},
+				{
+					v: node.name || "",
+					t: "s",
+					s: 0
+				},
+				{
+					v: depth,
+					t: "n"
+				},
+				{
+					v: r.duration,
+					t: "n"
+				},
+				r.start ? {
+					v: r.start,
+					t: "s",
+					s: 0
+				} : null,
+				r.end ? {
+					v: r.end,
+					t: "s",
+					s: 0
+				} : null,
+				{
+					v: r.cost,
+					t: "n",
+					s: 3
+				},
+				node.resource ? {
+					v: node.resource,
+					t: "s",
+					s: 0
+				} : null,
+				{
+					v: r.percent,
+					t: "n"
+				}
+			]);
+		});
+		return out;
+	}
+	function templateInstructions() {
+		return [
+			["Cómo completar este archivo", 25],
+			["", 0],
+			["0. Si guardas todo el proyecto en un solo libro de Excel (varias hojas para varios módulos), esta hoja debe llamarse exactamente “WBS” y sus encabezados deben coincidir EXACTAMENTE con los de esta plantilla (se puede reordenar columnas, pero no renombrarlas ni abreviarlas): al importar se verifican ambas cosas y se rechaza el archivo si no calzan, para no mezclar datos de otro módulo por error.", 4],
+			["1. Cada fila es un nodo de la EDT (una fase o un paquete de trabajo). La jerarquía se reconstruye ÚNICAMENTE a partir de la columna “Código EDT” (1, 1.1, 1.1.1…) -- no hace falta ninguna columna de “padre”: quitando el último segmento del código de una fila debe quedar el código de OTRA fila del archivo (o nada, si es de primer nivel). Puedes reordenar las filas libremente: se reordenan solas por código al importar.", 4],
+			["2. La columna “Nivel” es de solo referencia (se recalcula del propio Código EDT): no hace falta completarla ni editarla.", 4],
+			["3. “Duración”, “Inicio”, “Fin”, “Costo” y “Avance” solo se aplican en las filas que son PAQUETES (las que no tienen ninguna fila hija debajo, con un código un nivel más profundo): en una FASE (con paquetes debajo), esas mismas columnas muestran un resumen calculado de sus paquetes -- se recalcula solo al importar, lo que hayas escrito ahí se ignora.", 4],
+			["3b. Si completas “Inicio” y “Fin” de un paquete, la Duración se calcula sola a partir de esas fechas (igual que en pantalla, formato AAAA-MM-DD); si dejas las fechas en blanco, se usa el número que pongas en “Duración”.", 4],
+			["4. Si el Cronograma CPM, la Matriz RACI o Estimar los Costos ya fijan la fecha, el responsable o el costo de un paquete, ese valor se sobrescribe de nuevo en la próxima sincronización con esos módulos -- lo que importes aquí no lo anula de forma permanente.", 4],
+			["5. Un Código EDT que ya existía en la EDT actual conserva su mismo identificador interno al importar (no pierde sus enlaces con RACI, Definir las Actividades, etc.); un Código EDT nuevo en el archivo crea un nodo nuevo; un Código EDT que YA NO aparece en el archivo se elimina -- igual que si lo borraras a mano.", 4],
+			["6. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
+			["7. Guarda el archivo y vuelve a “WBS Builder” > botón “⇧ Importar desde Excel” para subirlo.", 4],
+			["", 0],
+			["8. Este mismo archivo se puede volver a generar en cualquier momento con “⇩ Exportar a Excel”: reproduce exactamente la EDT actual, útil como plantilla y como respaldo.", 4],
+			["", 0],
+			["Generado por el simulador GPI — módulo WBS Builder.", 4]
+		].map((row) => [{
+			v: row[0],
+			t: "s",
+			s: row[1] === 25 ? 25 : 4
+		}]);
+	}
+	async function buildWbsXlsxBlob() {
+		const zip = new window.JSZip();
+		zip.file("[Content_Types].xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>");
+		zip.file("_rels/.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>");
+		zip.file("xl/workbook.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"WBS\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"Instrucciones\" sheetId=\"2\" r:id=\"rId2\"/></sheets></workbook>");
+		zip.file("xl/_rels/workbook.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>");
+		zip.file("xl/styles.xml", xlsxStylesXml());
+		zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(exportRowModel(), [
+			12,
+			34,
+			8,
+			10,
+			11,
+			11,
+			12,
+			20,
+			10
+		], true));
+		zip.file("xl/worksheets/sheet2.xml", xlsxSheetXml(templateInstructions(), [115], false));
+		return zip.generateAsync({
+			type: "blob",
+			mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+		});
+	}
+	function buildWbsCsv() {
+		function cell(v) {
+			const s = String(v == null ? "" : v);
+			return /[";\n]/.test(s) ? "\"" + s.replace(/"/g, "\"\"") + "\"" : s;
+		}
+		const codes = computeCodes(), rolled = computeRollup();
+		const lines = [TEMPLATE_HEADERS.join(";")];
+		const rows = [];
+		function walk(id, depth) {
+			if (id !== rootId) rows.push({
+				id,
+				depth
+			});
+			nodes[id].children.forEach((cid) => walk(cid, depth + 1));
+		}
+		walk(rootId, 0);
+		rows.forEach(({ id, depth }) => {
+			const node = nodes[id], r = rolled[id];
+			lines.push([
+				cell(codes[id]),
+				cell(node.name || ""),
+				cell(depth),
+				cell(r.duration),
+				cell(r.start || ""),
+				cell(r.end || ""),
+				cell(r.cost),
+				cell(node.resource || ""),
+				cell(r.percent)
+			].join(";"));
+		});
+		return lines.join("\r\n");
+	}
+	function downloadBlob(blob, filename) {
+		const url = URL.createObjectURL(blob), a = document.createElement("a");
+		a.href = url;
+		a.download = filename;
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+		URL.revokeObjectURL(url);
+	}
+	async function downloadWbsExcel() {
+		const safe = (document.getElementById("projectTitle").value || "proyecto").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
+		if (window.JSZip) try {
+			downloadBlob(await buildWbsXlsxBlob(), "wbs_" + safe + ".xlsx");
+			setStatus("Archivo exportado. Complétalo o revísalo en Excel/MS Project y vuelve a subirlo con «⇧ Importar desde Excel».");
+			return;
+		} catch (_) {}
+		downloadBlob(new Blob(["﻿" + buildWbsCsv()], { type: "text/csv;charset=utf-8" }), "wbs_" + safe + ".csv");
+		setStatus("No se pudo cargar la librería de Excel (¿sin conexión?): descargué un CSV equivalente.");
+	}
+	function colIndexFromRef(ref) {
+		const m = /^([A-Z]+)/.exec(ref);
+		if (!m) return 0;
+		let n = 0;
+		for (const ch of m[1]) n = n * 26 + (ch.charCodeAt(0) - 64);
+		return n - 1;
+	}
+	async function resolveDataSheetPath(zip, expectedName) {
+		const wbEntry = zip.file("xl/workbook.xml");
+		if (!wbEntry) return { kind: "invalid" };
+		const doc = new DOMParser().parseFromString(await wbEntry.async("string"), "application/xml");
+		const sheets = Array.from(doc.getElementsByTagName("sheet"));
+		const wanted = normalizeHeader(expectedName);
+		const sheetEl = sheets.find((s) => normalizeHeader(s.getAttribute("name") || "") === wanted);
+		if (!sheetEl) return {
+			kind: "not-found",
+			sheetNames: sheets.map((s) => s.getAttribute("name") || "").filter(Boolean)
+		};
+		const rId = sheetEl.getAttribute("r:id");
+		const relsEntry = zip.file("xl/_rels/workbook.xml.rels");
+		if (!rId || !relsEntry) return { kind: "invalid" };
+		const relsDoc = new DOMParser().parseFromString(await relsEntry.async("string"), "application/xml");
+		const rel = Array.from(relsDoc.getElementsByTagName("Relationship")).find((r) => r.getAttribute("Id") === rId);
+		const target = rel ? rel.getAttribute("Target") || "" : "";
+		if (!target) return { kind: "invalid" };
+		return {
+			kind: "found",
+			path: target.startsWith("/") ? target.slice(1) : "xl/" + target
+		};
+	}
+	async function loadSharedStrings(zip) {
+		const entry = zip.file("xl/sharedStrings.xml");
+		if (!entry) return [];
+		const doc = new DOMParser().parseFromString(await entry.async("string"), "application/xml");
+		return Array.from(doc.getElementsByTagName("si")).map((si) => Array.from(si.getElementsByTagName("t")).map((t) => t.textContent || "").join(""));
+	}
+	function parseSheetRows(xmlText, sharedStrings) {
+		const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+		return Array.from(doc.getElementsByTagName("row")).map((rowEl) => {
+			const row = [];
+			Array.from(rowEl.getElementsByTagName("c")).forEach((c) => {
+				const idx = colIndexFromRef(c.getAttribute("r") || "");
+				const t = c.getAttribute("t");
+				let val;
+				if (t === "inlineStr") {
+					const isEl = c.getElementsByTagName("is")[0];
+					const tEl = isEl ? isEl.getElementsByTagName("t")[0] : null;
+					val = tEl ? tEl.textContent || "" : "";
+				} else {
+					const vEl = c.getElementsByTagName("v")[0];
+					const raw = vEl ? vEl.textContent || "" : "";
+					val = t === "s" ? sharedStrings[Number(raw)] || "" : raw;
+				}
+				row[idx] = val;
+			});
+			for (let i = 0; i < row.length; i++) if (row[i] == null) row[i] = "";
+			return row;
+		});
+	}
+	async function parseWbsXlsx(file) {
+		const buf = await file.arrayBuffer();
+		const zip = await window.JSZip.loadAsync(buf);
+		const resolution = await resolveDataSheetPath(zip, DATA_SHEET_NAME);
+		if (resolution.kind === "invalid") return { kind: "empty" };
+		if (resolution.kind === "not-found") return {
+			kind: "sheet-not-found",
+			sheetNames: resolution.sheetNames
+		};
+		const sheetEntry = zip.file(resolution.path);
+		if (!sheetEntry) return { kind: "empty" };
+		const [sheetXml, sharedStrings] = await Promise.all([sheetEntry.async("string"), loadSharedStrings(zip)]);
+		const allRows = parseSheetRows(sheetXml, sharedStrings);
+		if (!allRows.length) return { kind: "empty" };
+		return {
+			kind: "ok",
+			headers: allRows[0],
+			rows: allRows.slice(1)
+		};
+	}
+	var TEMPLATE_HEADER_FIELDS = [
+		"code",
+		"name",
+		null,
+		"duration",
+		"start",
+		"end",
+		"cost",
+		"resource",
+		"percent"
+	];
+	function normalizeHeader(s) {
+		return String(s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+	}
+	var HEADER_FIELD_BY_TEXT = {};
+	TEMPLATE_HEADERS.forEach((h, i) => {
+		const field = TEMPLATE_HEADER_FIELDS[i];
+		if (field) HEADER_FIELD_BY_TEXT[normalizeHeader(h)] = field;
+	});
+	function mapHeaderColumns(headerRow) {
+		const map = {};
+		headerRow.forEach((h, idx) => {
+			const field = HEADER_FIELD_BY_TEXT[normalizeHeader(h)];
+			if (field) map[field] = idx;
+		});
+		if (map.code == null || map.name == null) return null;
+		return map;
+	}
+	function parseNumOrZero(s) {
+		const n = Number(String(s == null ? "" : s).trim().replace(/[^\d.-]/g, ""));
+		return isFinite(n) ? n : 0;
+	}
+	var WBS_CODE_RE = /^\d+(\.\d+)*$/;
+	function analyzeWbsRows(rows, colMap) {
+		const seen = {};
+		const invalidCodes = [];
+		const duplicateCodes = [];
+		const blankNames = [];
+		const parsedAll = [];
+		rows.forEach((row) => {
+			const codeRaw = (row[colMap.code] || "").trim();
+			const name = (row[colMap.name] || "").trim();
+			if (!codeRaw && !name) return;
+			if (!WBS_CODE_RE.test(codeRaw)) {
+				invalidCodes.push(codeRaw || "(vacío)");
+				return;
+			}
+			if (seen[codeRaw]) {
+				duplicateCodes.push(codeRaw);
+				return;
+			}
+			seen[codeRaw] = true;
+			if (!name) {
+				blankNames.push(codeRaw);
+				return;
+			}
+			parsedAll.push({
+				code: codeRaw,
+				segs: codeRaw.split(".").map(Number),
+				name,
+				duration: colMap.duration != null ? row[colMap.duration] || "" : "",
+				start: colMap.start != null ? row[colMap.start] || "" : "",
+				end: colMap.end != null ? row[colMap.end] || "" : "",
+				cost: colMap.cost != null ? row[colMap.cost] || "" : "",
+				resource: colMap.resource != null ? row[colMap.resource] || "" : "",
+				percent: colMap.percent != null ? row[colMap.percent] || "" : ""
+			});
+		});
+		parsedAll.sort((a, b) => {
+			const n = Math.max(a.segs.length, b.segs.length);
+			for (let i = 0; i < n; i++) {
+				const d = (a.segs[i] || 0) - (b.segs[i] || 0);
+				if (d) return d;
+			}
+			return 0;
+		});
+		const placedSet = {};
+		const orphanCodes = [];
+		const placed = [];
+		parsedAll.forEach((p) => {
+			const parentCode = p.segs.slice(0, -1).join(".");
+			if (parentCode && !placedSet[parentCode]) {
+				orphanCodes.push(p.code);
+				return;
+			}
+			placedSet[p.code] = true;
+			placed.push(p);
+		});
+		return {
+			placed,
+			invalidCodes,
+			duplicateCodes,
+			blankNames,
+			orphanCodes
+		};
+	}
+	function applyWbsRows(placed) {
+		const placedCodes = placed.map((p) => p.code);
+		function isLeaf(code) {
+			return !placedCodes.some((c) => c !== code && c.startsWith(code + "."));
+		}
+		const oldCodeOf = computeCodes();
+		const oldIdByCode = {};
+		Object.keys(oldCodeOf).forEach((id) => {
+			oldIdByCode[oldCodeOf[id]] = id;
+		});
+		const oldNodes = nodes;
+		const prevRoot = oldNodes[rootId];
+		nodes = {};
+		const newRootId = oldIdByCode["0"] || uid();
+		nodes[newRootId] = {
+			id: newRootId,
+			parentId: null,
+			name: prevRoot && prevRoot.name || "Proyecto sin título",
+			duration: 0,
+			cost: 0,
+			resource: prevRoot && prevRoot.resource || "",
+			percent: 0,
+			start: "",
+			end: "",
+			notes: prevRoot && prevRoot.notes || "",
+			children: [],
+			collapsed: false,
+			orientation: prevRoot && prevRoot.orientation || "spread"
+		};
+		rootId = newRootId;
+		const idByCode = { "0": newRootId };
+		placed.forEach((p) => {
+			const parentCode = p.segs.slice(0, -1).join(".") || "0";
+			const parentId = idByCode[parentCode];
+			if (!parentId) return;
+			const leaf = isLeaf(p.code);
+			const reusedId = oldIdByCode[p.code];
+			const id = reusedId || uid();
+			const prev = reusedId ? oldNodes[reusedId] : null;
+			nodes[id] = {
+				id,
+				parentId,
+				name: p.name,
+				duration: leaf ? parseNumOrZero(p.duration) : 0,
+				cost: leaf ? parseNumOrZero(p.cost) : 0,
+				resource: (p.resource || "").trim(),
+				percent: leaf ? Math.max(0, Math.min(100, parseNumOrZero(p.percent))) : 0,
+				start: leaf ? p.start.trim() : "",
+				end: leaf ? p.end.trim() : "",
+				notes: prev && prev.notes || "",
+				children: [],
+				collapsed: false,
+				orientation: prev && prev.orientation || "spread",
+				delId: prev ? prev.delId : void 0
+			};
+			nodes[parentId].children.push(id);
+			idByCode[p.code] = id;
+		});
+		selectedId = rootId;
+	}
+	async function importWbsExcel(file) {
+		let parsed;
+		try {
+			parsed = await parseWbsXlsx(file);
+		} catch (_) {
+			await showAlert("El archivo no parece ser un .xlsx válido (¿se guardó bien o se cambió la extensión?).");
+			return;
+		}
+		if (parsed.kind === "sheet-not-found") {
+			const otras = parsed.sheetNames.filter((n) => normalizeHeader(n) !== normalizeHeader(DATA_SHEET_NAME));
+			await showAlert("No encontré una hoja llamada «WBS» en este archivo" + (otras.length ? " (tiene: " + otras.join(", ") + ")" : "") + ". Si tu Excel junta varios módulos en un solo libro, la hoja con la EDT debe llamarse exactamente «WBS» (como la que genera «⇩ Exportar a Excel» aquí) para que el simulador sepa cuál copiar y no la confunda con la de otro módulo.", "Hoja no reconocida");
+			return;
+		}
+		if (parsed.kind === "empty") {
+			await showAlert("El archivo no contiene datos reconocibles.");
+			return;
+		}
+		const colMap = mapHeaderColumns(parsed.headers);
+		if (!colMap) {
+			await showAlert("No reconocí las columnas del archivo: los encabezados deben coincidir EXACTAMENTE con los de la plantilla (¿renombraste o abreviaste alguna columna, p. ej. «EDT» en vez de «Código EDT»?). Se esperan al menos «Código EDT» y «Paquete de trabajo» escritas tal cual.");
+			return;
+		}
+		const result = analyzeWbsRows(parsed.rows, colMap);
+		if (!result.placed.length) {
+			await showAlert("El archivo no tiene ninguna fila con un «Código EDT» válido y ubicable (formato esperado: números separados por puntos, p. ej. 1, 1.2, 1.2.3 -- y el código de un nivel menos debe ser también una fila del archivo). No se modificó la EDT actual.");
+			return;
+		}
+		let msg = "Se reemplazará la EDT actual (" + (Object.keys(nodes).length - 1) + " nodo(s)) por " + result.placed.length + " nodo(s) importado(s) del archivo. Fases y paquetes se reconstruyen a partir del Código EDT; los que ya existían conservan sus enlaces con RACI/Actividades/Costos.";
+		if (result.invalidCodes.length) msg += " " + result.invalidCodes.length + " fila(s) con Código EDT inválido se ignoraron: " + result.invalidCodes.slice(0, 8).join(", ") + (result.invalidCodes.length > 8 ? "…" : "") + ".";
+		if (result.duplicateCodes.length) msg += " " + result.duplicateCodes.length + " fila(s) con Código EDT repetido se ignoraron (se usó la primera aparición): " + result.duplicateCodes.slice(0, 8).join(", ") + (result.duplicateCodes.length > 8 ? "…" : "") + ".";
+		if (result.blankNames.length) msg += " " + result.blankNames.length + " fila(s) sin «Paquete de trabajo» se ignoraron: " + result.blankNames.slice(0, 8).join(", ") + (result.blankNames.length > 8 ? "…" : "") + ".";
+		if (result.orphanCodes.length) msg += " " + result.orphanCodes.length + " fila(s) no se pudieron ubicar porque su código padre no aparece (o tampoco se pudo ubicar) en el archivo: " + result.orphanCodes.slice(0, 8).join(", ") + (result.orphanCodes.length > 8 ? "…" : "") + ".";
+		if (!await showConfirm(msg, "Importar EDT desde Excel")) return;
+		applyWbsRows(result.placed);
+		render();
+		setTimeout(fitToScreen, 50);
+		const issues = result.invalidCodes.length + result.duplicateCodes.length + result.blankNames.length + result.orphanCodes.length;
+		setStatus(result.placed.length + " nodo(s) importado(s) desde Excel" + (issues ? " · " + issues + " fila(s) no importada(s)" : "") + ".");
+	}
 	function selectNode(id) {
 		selectedId = id;
 		render();
@@ -1030,6 +1510,15 @@
 			});
 			render();
 			setTimeout(fitToScreen, 50);
+		});
+		document.getElementById("btnExportExcel").addEventListener("click", downloadWbsExcel);
+		document.getElementById("btnImportExcel").addEventListener("click", () => {
+			document.getElementById("xlsxFileInput").click();
+		});
+		document.getElementById("xlsxFileInput").addEventListener("change", (e) => {
+			const files = e.target.files;
+			if (files && files[0]) importWbsExcel(files[0]);
+			e.target.value = "";
 		});
 		document.getElementById("btnPrint").addEventListener("click", () => window.print());
 		document.getElementById("btnSample").addEventListener("click", async () => {

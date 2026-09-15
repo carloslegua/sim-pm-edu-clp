@@ -98,6 +98,33 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **WBS Builder ahora puede exportar/importar la EDT completa como
+  `.xlsx`** — a pedido explícito del usuario, con la misma lógica que ya
+  usan Definir las Actividades y Estimar los Costos: hoja de datos con
+  nombre EXACTO ("WBS", distinto de "EDT"/"Estimado" de esos dos módulos
+  para que un libro con las tres hojas no sea ambiguo) y encabezados que
+  deben coincidir EXACTAMENTE con la plantilla, o se rechaza el archivo.
+  "⇩ Exportar a Excel" reproduce la misma tabla que ya se ve en la vista
+  "Tabla / Diccionario" (Código EDT | Paquete de trabajo | Nivel |
+  Duración | Inicio | Fin | Costo | Responsable | Avance). A diferencia
+  de esos dos módulos (que importan filas sobre una EDT ya existente),
+  WBS Builder ES la fuente de la EDT: "⇧ Importar desde Excel"
+  RECONSTRUYE el árbol completo a partir de la columna "Código EDT"
+  (`1`, `1.1`, `1.1.1`…, sin ninguna columna de "padre"). Un Código EDT
+  que ya existía en el árbol conserva su mismo id interno al reimportar
+  (y con él, sus enlaces con la Matriz RACI, Definir las Actividades y
+  en cascada Estimar los Costos/PERT/Cronograma) — solo un Código EDT
+  genuinamente nuevo crea un nodo nuevo; uno que desaparece del archivo
+  se elimina, igual que borrarlo a mano. Detalle completo en
+  ARCHITECTURE.md, sección de WBS_Builder.html. Probado en
+  `tests/e2e/wbs-builder-import.spec.ts`: reconstrucción de jerarquía con
+  una fase cuyo Costo del archivo se ignora (se recalcula), rechazo por
+  hoja mal nombrada, rechazo por encabezados abreviados, rechazo por
+  archivo sin ningún Código EDT válido, reporte de códigos huérfanos/
+  repetidos, y un round-trip (exportar → reimportar sin tocar el
+  archivo) que verifica que un paquete con RACI asignada sigue
+  apareciendo bloqueado — prueba indirecta de que conservó su id.
+
 - **`detectTool()` (gpi-core.ts) reconoce ahora los 13 formatos de
   exportación de módulo, no 11.** Al retirar el import propio de cada
   herramienta (ver arriba) y dejar "Importar .json" de Panel de Control
