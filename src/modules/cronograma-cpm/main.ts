@@ -21,7 +21,7 @@
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
 import type { CpmNode, CpmResult, PertProbabilityResult, ProjectCalendar, ScheduleValidateResult } from "../../core/gpi-core";
-import type { ActivitiesModule, PertModule, SchedulePlanModule, ScheduleLagUnit, ScheduleLinkType, WbsModule } from "../../core/types";
+import type { ActivitiesModule, MilestoneItem, PertModule, SchedulePlanModule, ScheduleLagUnit, ScheduleLinkType, WbsModule } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global { interface Window { GPI?: GpiApi; } }
@@ -133,31 +133,66 @@ interface Row {
   netId: number; kind: "project" | "summary" | "activity"; subkind?: "phase" | "package";
   code: string; name: string; depth?: number; activityId: string | null; leafId?: string;
   det?: number | null; te?: number | null; variance?: number | null; pertValid?: boolean;
+  isMilestone?: boolean;
+}
+
+// Mismo criterio que placeLooseMilestones() en activities/main.ts y
+// cost-estimate/main.ts (copia local deliberada, no compartida -- cada
+// módulo funciona sin depender de otro): un hito atado a un paquete
+// (leafId) se resuelve directo en fullRowsSnapshot(); uno suelto se
+// posiciona vía afterLeafId (null/vacío = al principio de todo, el id de
+// un paquete existente = justo después de ese paquete, colgante = al
+// final como huérfano en vez de perderse).
+function placeLooseMilestones(milestones: MilestoneItem[], knownLeafIds: Record<string, boolean>): { start: MilestoneItem[]; afterLeaf: Record<string, MilestoneItem[]>; orphan: MilestoneItem[] } {
+  const start: MilestoneItem[] = [], orphan: MilestoneItem[] = [];
+  const afterLeaf: Record<string, MilestoneItem[]> = {};
+  milestones.filter((m) => !m.leafId).forEach((m) => {
+    if (!m.afterLeafId) start.push(m);
+    else if (knownLeafIds[m.afterLeafId]) (afterLeaf[m.afterLeafId] ||= []).push(m);
+    else orphan.push(m);
+  });
+  return { start, afterLeaf, orphan };
 }
 
 // Snapshot de filas estilo MS Project (0=proyecto, luego fases/paquetes/
-// actividades) — la instantánea que consume GPI.util.buildScheduleLinks y
-// la fuente del Id. (netId), consecutivo SIN SALTOS igual que el Task ID de
-// MS Project. Este Id. coincide con el de Análisis PERT siempre (tampoco
-// procesa hitos) y con el de Definir las Actividades/Estimar los Costos
-// hasta el primer hito del proyecto -- ahí esos dos SÍ le asignan un número
-// real (nunca un hueco, para no romper su propia correlación 1:1 con MS
-// Project), así que sus filas posteriores a un hito quedan corridas
-// respecto de este módulo y de PERT, que no ven hitos en absoluto.
+// actividades E HITOS) — la instantánea que consume GPI.util.buildScheduleLinks
+// y la fuente del Id. (netId), consecutivo SIN SALTOS igual que el Task ID
+// de MS Project (ver ARCHITECTURE.md, "El 'Id.' de Definir las
+// Actividades..."). Este Id. coincide con el de Definir las Actividades y
+// Estimar los Costos SIEMPRE, hitos incluidos -- los tres módulos leen la
+// misma EDT/actividades/hitos y arman la numeración con el mismo criterio.
+// Un hito entra como una fila MÁS con kind:"activity" (activityId = su
+// propio id, det:0) -- así atraviesa gratis todo el camino que ya existe
+// para actividades reales (CPM, Red, Gantt, plantilla, pegado, enlace
+// manual): GPI.util.cpm() ya calcula ES=EF/LS=LF correctamente para
+// dur=0 sin ningún caso especial. Solo Análisis PERT sigue sin ver
+// hitos (fuera de alcance de este cambio).
 function fullRowsSnapshot(): Row[] {
   const w = wbsData(), act = actsData(), idx = pertIndex(), out: Row[] = [];
   if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
   let n = 0; const rootName = ((w.nodes[w.rootId].name || "").trim()) || metaName() || "Proyecto";
   out.push({ netId: n++, kind: "project", code: "0", name: rootName, activityId: null });
-  treeRows().forEach((r) => {
+  const tree = treeRows();
+  const milestones = act.milestones || [];
+  const knownLeafIds: Record<string, boolean> = {};
+  tree.forEach((r) => { if (r.kind === "package") knownLeafIds[r.id] = true; });
+  const loose = placeLooseMilestones(milestones, knownLeafIds);
+  function pushMilestone(m: MilestoneItem, leafId?: string): void {
+    out.push({ netId: n++, kind: "activity", code: m.code, name: m.name, activityId: m.id, leafId, det: 0, te: null, variance: null, pertValid: undefined, isMilestone: true });
+  }
+  loose.start.forEach((m) => pushMilestone(m));
+  tree.forEach((r) => {
     if (r.kind === "phase") { out.push({ netId: n++, kind: "summary", subkind: "phase", code: r.code, name: r.name, depth: r.depth, activityId: null }); } else {
       out.push({ netId: n++, kind: "summary", subkind: "package", code: r.code, name: r.name, depth: r.depth, activityId: null });
       ((act.byLeaf || {})[r.id] || []).forEach((a, i) => {
         const info = idx[a.id] || ({} as Partial<PertIdxEntry>);
         out.push({ netId: n++, kind: "activity", code: r.code + "." + (i + 1), name: a.name || "", activityId: a.id, leafId: r.id, det: info.dur, te: info.te, variance: info.variance, pertValid: info.valid });
       });
+      milestones.filter((m) => m.leafId === r.id).forEach((m) => pushMilestone(m, r.id));
+      (loose.afterLeaf[r.id] || []).forEach((m) => pushMilestone(m));
     }
   });
+  loose.orphan.forEach((m) => pushMilestone(m));
   return out;
 }
 
@@ -174,6 +209,7 @@ function scheduleNodes(snapshot: Row[]): ScheduleNode[] {
 function netMap(snap: Row[]): Record<string, number> { const m: Record<string, number> = {}; snap.forEach((r) => { if (r.activityId) m[r.activityId] = r.netId; }); return m; }
 function nameOf(snap: Row[]): Record<string, string> { const m: Record<string, string> = {}; snap.forEach((r) => { if (r.activityId) m[r.activityId] = r.name; }); return m; }
 function codeOf(snap: Row[]): Record<string, string> { const m: Record<string, string> = {}; snap.forEach((r) => { if (r.activityId) m[r.activityId] = r.code; }); return m; }
+function isMilestoneOf(snap: Row[]): Record<string, boolean> { const m: Record<string, boolean> = {}; snap.forEach((r) => { if (r.activityId && r.isMilestone) m[r.activityId] = true; }); return m; }
 
 function unitTag(u: string): string { return u === "d" ? "d" : u === "ed" ? "ed" : u === "h" ? "h" : u === "w" ? "sem" : "d"; }
 function linkToken(l: Link, nmap: Record<string, number>): string | null {
@@ -263,11 +299,11 @@ function renderTable(R: RunCpmResult): void {
         au = (okS && okF) ? "<span class='audit-ok' title='Coincide con MS Project'>✓</span>"
           : "<span class='audit-bad' title='Calc: " + esc((row.startDate || "?") + " → " + (row.finishDate || "?")) + " · Pegado: " + esc((pd.start || "?") + " → " + (pd.finish || "?")) + " (revisa calendario o enlaces)'>✗</span>";
       }
-      html += "<tr class='act-row" + (crit ? " crit" : "") + "'>" +
+      html += "<tr class='act-row" + (crit ? " crit" : "") + (r.isMilestone ? " milestone-row" : "") + "'>" +
         "<td class='n-cell'>" + r.netId + "</td>" +
-        "<td class='code-cell'>" + esc(r.code) + "</td>" +
-        "<td class='act-name'>" + esc(r.name) + (crit ? " <span class='crit-badge'>CRÍTICA</span>" : "") + (node.hasDur ? "" : " <span style='color:var(--warn);font-size:10px' title='La actividad no tiene metrado/rendimiento ni PERT: dur=0'>⚠ sin duración</span>") + "</td>" +
-        "<td class='num'>" + (dur != null ? fmt(dur) : "—") + "</td>" +
+        "<td class='code-cell" + (r.isMilestone ? " milestone-code" : "") + "'>" + (r.isMilestone ? "◆ " : "") + esc(r.code) + "</td>" +
+        "<td class='act-name'>" + esc(r.name) + (crit ? " <span class='crit-badge'>CRÍTICA</span>" : "") + (r.isMilestone ? " <span class='milestone-tag'>Hito</span>" : (node.hasDur ? "" : " <span style='color:var(--warn);font-size:10px' title='La actividad no tiene metrado/rendimiento ni PERT: dur=0'>⚠ sin duración</span>")) + "</td>" +
+        "<td class='num'" + (r.isMilestone ? " title='Los hitos tienen duración cero por definición'" : "") + ">" + (dur != null ? fmt(dur) : "—") + "</td>" +
         "<td class='num'>" + (row ? fmt(row.es) : "—") + "</td>" +
         "<td class='num'>" + (row ? fmt(row.ef) : "—") + "</td>" +
         "<td class='num'>" + (row ? fmt(row.ls) : "—") + "</td>" +
@@ -315,7 +351,11 @@ function criticalPertSums(R: RunCpmResult): CriticalPertSums {
   let sumTe = 0, sumVar = 0, allValid = true, count = 0;
   (R.cpm.ok ? R.cpm.criticalIds : []).forEach((id) => {
     const r = idx[id]; count++;
-    if (r && r.te != null && r.variance != null && r.pertValid !== false) { sumTe += r.te; sumVar += r.variance; } else allValid = false;
+    // Un hito nunca tiene terna O/M/P -- duración cero por definición, no
+    // dato faltante -- así que contribuye 0 exacto en vez de invalidar la
+    // probabilidad PERT de toda la ruta crítica solo porque cayó en ella.
+    if (r && r.isMilestone) { /* contribución exacta: 0 */ }
+    else if (r && r.te != null && r.variance != null && r.pertValid !== false) { sumTe += r.te; sumVar += r.variance; } else allValid = false;
   });
   return { sumTe, sumVar, allValid: allValid && count > 0, count };
 }
@@ -367,7 +407,7 @@ function renderNet(R: RunCpmResult): void {
   const inc: Record<string, string[]> = {}; ids.forEach((i) => { inc[i] = []; }); vlinks.forEach((l) => { inc[l.to].push(l.from); });
   const rank: Record<string, number> = {};
   R.cpm.order.forEach((id) => { let mr = 0; inc[id].forEach((f) => { if ((rank[f] || 0) + 1 > mr) mr = (rank[f] || 0) + 1; }); rank[id] = mr; });
-  const cmap = codeOf(R.snap), nmap = nameOf(R.snap);
+  const cmap = codeOf(R.snap), nmap = nameOf(R.snap), msmap = isMilestoneOf(R.snap);
   const NW = 168, NH = 78, GX = 58, GY = 26, MX = 22, MY = 22;
   const cols: Record<number, string[]> = {}; ids.forEach((id) => { const k = rank[id] || 0; (cols[k] = cols[k] || []).push(id); });
   const pos: Record<string, { x: number; y: number }> = {}; let maxRank = 0, maxRows = 0;
@@ -394,7 +434,7 @@ function renderNet(R: RunCpmResult): void {
     const p = pos[id], row = R.cpm.ok ? R.cpm.rows[id] : undefined; if (!row) return;
     const crit = row.critical;
     const stroke = crit ? "#ff5470" : "#00b6ec", fill = crit ? "rgba(255,84,112,.06)" : "#ffffff", band = crit ? "#ff5470" : "#00b6ec";
-    const nm = nmap[id] || "", nmS = nm.length > 24 ? nm.slice(0, 23) + "…" : nm;
+    const nm = (msmap[id] ? "◆ " : "") + (nmap[id] || ""), nmS = nm.length > 24 ? nm.slice(0, 23) + "…" : nm;
     const dur = row.ef - row.es;
     svg += "<g>";
     svg += "<rect x='" + p.x + "' y='" + p.y + "' width='" + NW + "' height='" + NH + "' rx='9' fill='" + fill + "' stroke='" + stroke + "' stroke-width='" + (crit ? 2 : 1.3) + "'/>";
@@ -405,7 +445,7 @@ function renderNet(R: RunCpmResult): void {
     svg += "<text x='" + (p.x + NW - 14) + "' y='" + (p.y + 13.5) + "' font-size='10.5' font-weight='700' fill='#fff' text-anchor='end'>" + fmt(row.ef) + "</text>";
     // nombre + código
     svg += "<text x='" + (p.x + NW / 2) + "' y='" + (p.y + 37) + "' font-size='11' font-weight='700' fill='#1a2027' text-anchor='middle' style='font-family:var(--display)'>" + esc(nmS) + "</text>";
-    svg += "<text x='" + (p.x + NW / 2) + "' y='" + (p.y + 50) + "' font-size='9' fill='#6c5ce7' text-anchor='middle'>EDT " + esc(cmap[id] || "") + "</text>";
+    svg += "<text x='" + (p.x + NW / 2) + "' y='" + (p.y + 50) + "' font-size='9' fill='#6c5ce7' text-anchor='middle'>" + (msmap[id] ? "Hito " : "EDT ") + esc(cmap[id] || "") + "</text>";
     // banda inferior LS | H.T. | LF
     svg += "<line x1='" + p.x + "' y1='" + (p.y + NH - 22) + "' x2='" + (p.x + NW) + "' y2='" + (p.y + NH - 22) + "' stroke='#e4eaf1'/>";
     svg += "<text x='" + (p.x + 14) + "' y='" + (p.y + NH - 8) + "' font-size='10' font-weight='700' fill='#4d5768'>" + fmt(row.ls) + "</text>";
@@ -440,7 +480,7 @@ function renderGantt(R: RunCpmResult): void {
     const row = R.cpm.ok ? R.cpm.rows[r.activityId as string] : undefined; if (!row) return;
     const y = HH + i * RH;
     const crit = row.critical, col = crit ? "#ff5470" : "#00b6ec";
-    let nm = (codeOf(R.snap)[r.activityId as string] || "") + " " + (r.name || "");
+    let nm = (r.isMilestone ? "◆ " : "") + (codeOf(R.snap)[r.activityId as string] || "") + " " + (r.name || "");
     if (nm.length > 30) nm = nm.slice(0, 29) + "…";
     svg += "<text x='10' y='" + (y + RH / 2 + 3) + "' font-size='10.5' fill='#1a2027' style='font-family:var(--display);font-weight:600'>" + esc(nm) + "</text>";
     const bx = LW + row.es * dayW, bw = Math.max(4, (row.ef - row.es) * dayW);
@@ -505,7 +545,7 @@ function openAddLink(): void {
   const snap = fullRowsSnapshot(), acts = snap.filter((r) => r.kind === "activity");
   if (acts.length < 2) { showAlert("Necesitas al menos 2 actividades definidas (módulo Definir las Actividades) para crear enlaces."); return; }
   const nm = nameOf(snap), nn = netMap(snap);
-  function optsHTML(): string { return acts.map((a) => "<option value='" + a.activityId + "'>" + esc(a.netId + " · EDT " + a.code + " · " + a.name) + "</option>").join(""); }
+  function optsHTML(): string { return acts.map((a) => "<option value='" + a.activityId + "'>" + esc(a.netId + " · " + (a.isMilestone ? "Hito " : "EDT ") + a.code + " · " + a.name) + "</option>").join(""); }
   function listHTML(): string {
     const ls = state().links || [];
     if (!ls.length) return "<div style='color:#8992a3;font-size:12px;padding:8px'>Sin enlaces todavía.</div>";
@@ -675,7 +715,7 @@ function clearLinks(): void {
 // ============================ REPORTE ============================
 function buildReport(): void {
   const R = runCpm(), snap = R.snap, cpm = R.cpm, rep = document.getElementById("gpiReport") as HTMLElement;
-  const cmap = codeOf(snap), nmap = nameOf(snap), nn = netMap(snap);
+  const cmap = codeOf(snap), nmap = nameOf(snap), nn = netMap(snap), msmap = isMilestoneOf(snap);
   const dates = (state().import && state().import!.dates) || {};
   const now = new Date().toLocaleDateString("es-PE");
   const s = criticalPertSums(R);
@@ -686,7 +726,7 @@ function buildReport(): void {
     "<tr><td>Actividades críticas</td><td class='num'>" + (cpm.ok ? cpm.criticalIds.length : "—") + "</td></tr>" +
     "<tr><td>Enlaces</td><td class='num'>" + (state().links || []).length + "</td></tr></table>";
   if (cpm.ok) {
-    const path = cpm.criticalIds.map((id) => (cmap[id] || "") + " " + (nmap[id] || ""));
+    const path = cpm.criticalIds.map((id) => (msmap[id] ? "◆ " : "") + (cmap[id] || "") + " " + (nmap[id] || ""));
     h += "<h2>Ruta crítica</h2><p class='num'>" + esc(path.join("  →  ")) + "</p>";
   }
   h += "<h2>Actividades (CPM)</h2><table><tr><th>Id.</th><th>Código EDT</th><th>Actividad</th><th>Duración</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>Holgura Total</th><th>Predecesoras</th><th>Auditoría</th><th>Crítica</th></tr>";
@@ -701,7 +741,7 @@ function buildReport(): void {
       const okF = !nz(pd.finish) || pd.finish === row.finishDate;
       au = (okS && okF) ? "✓" : "✗";
     }
-    h += "<tr><td class='num'>" + r.netId + "</td><td class='num'>" + esc(r.code) + "</td><td>" + esc(r.name) + "</td><td class='num'>" + fmt(dur) + "</td>" +
+    h += "<tr><td class='num'>" + r.netId + "</td><td class='num'>" + esc(r.code) + "</td><td>" + (r.isMilestone ? "◆ " : "") + esc(r.name) + "</td><td class='num'>" + fmt(dur) + "</td>" +
       "<td class='num'>" + (row ? fmt(row.es) : "—") + "</td><td class='num'>" + (row ? fmt(row.ef) : "—") + "</td>" +
       "<td class='num'>" + (row ? fmt(row.ls) : "—") + "</td><td class='num'>" + (row ? fmt(row.lf) : "—") + "</td>" +
       "<td class='num'>" + (row ? fmt(row.tf) : "—") + "</td>" +
@@ -786,12 +826,18 @@ function gpiPullAll(): void {
 // que ya usa cost-estimate/main.ts en su reconcileImportRows().
 function normName(s: string): string { return String(s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); }
 function findRealActivityId(code: string, name: string): string | null {
-  const pkg = treeRows().filter((r) => r.kind === "package" && r.code === code)[0];
-  if (!pkg) return null;
-  const acts = (actsData().byLeaf || {})[pkg.id] || [];
   const target = normName(name);
-  const hit = acts.filter((a) => normName(a.name || "") === target)[0];
-  return hit ? hit.id : null;
+  const pkg = treeRows().filter((r) => r.kind === "package" && r.code === code)[0];
+  if (pkg) {
+    const acts = (actsData().byLeaf || {})[pkg.id] || [];
+    const hit = acts.filter((a) => normName(a.name || "") === target)[0];
+    if (hit) return hit.id;
+  }
+  // No es (o no coincidió) un paquete -- puede ser un hito (código propio
+  // "H1"/"H2"..., no un Código EDT). Mismo criterio de emparejamiento por
+  // nombre normalizado que para actividades.
+  const ms = (actsData().milestones || []).filter((m) => m.code === code && normName(m.name) === target)[0];
+  return ms ? ms.id : null;
 }
 async function loadSampleIntoProject(): Promise<void> {
   if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) {
@@ -889,16 +935,21 @@ function gpiBadge(name: string | undefined, pushFn: () => void): void {
 }
 
 // ============================ PLAN DE ENLACES DEL EJEMPLO (proyecto real) ============================
-// Red de precedencias para las 43 actividades / 18 paquetes del catálogo
-// canónico DISTRIB+ (ver sampleActivities() en src/modules/activities/main.ts
-// y ARCHITECTURE.md, "Dataset de referencia (DISTRIB+)"). Cada entrada se
-// identifica por (Código EDT, nombre exacto de la actividad) en vez de un
-// id, porque los ids reales los asigna reconcileImportRows() al sembrar el
-// proyecto -- ver loadSampleIntoProject() más abajo. Diseño: cadena FS
-// dentro de cada paquete (mismo orden que sampleActivities()) + conectores
-// entre paquetes que siguen la secuencia real de un proyecto de
-// construcción (con algo de paralelismo -- SS+lag -- para que el CPM
-// resultante tenga ruta crítica y holgura, no una sola cadena lineal).
+// Red de precedencias para las 43 actividades / 18 paquetes / 3 hitos
+// (H1/H2/H3) del catálogo canónico DISTRIB+ (ver sampleActivities() en
+// src/modules/activities/main.ts y ARCHITECTURE.md, "Dataset de
+// referencia (DISTRIB+)"). Cada entrada se identifica por (Código EDT o
+// código de hito, nombre exacto) en vez de un id, porque los ids reales
+// los asigna reconcileImportRows() al sembrar el proyecto -- ver
+// loadSampleIntoProject() más abajo (findRealActivityId() resuelve
+// ambos casos: paquete+actividad o hito). Diseño: cadena FS dentro de
+// cada paquete (mismo orden que sampleActivities()) + conectores entre
+// paquetes que siguen la secuencia real de un proyecto de construcción
+// (con algo de paralelismo -- SS+lag -- para que el CPM resultante tenga
+// ruta crítica y holgura, no una sola cadena lineal); los 3 hitos quedan
+// agendados como nodos reales (duración 0): H1 antes de la primera
+// actividad, H2 entre Cimentaciones y Estructura, H3 después de la
+// última actividad.
 interface SampleLinkPlanEntry { fc: string; fn: string; tc: string; tn: string; type: ScheduleLinkType; lag?: number; lagUnit?: ScheduleLagUnit; }
 const SAMPLE_LINK_PLAN: SampleLinkPlanEntry[] = [
   // ---- cadenas dentro de cada paquete ----
@@ -927,6 +978,10 @@ const SAMPLE_LINK_PLAN: SampleLinkPlanEntry[] = [
   { fc: "5.1", fn: "Pruebas de tableros y circuitos eléctricos", tc: "5.1", tn: "Pruebas hidráulicas de redes sanitarias", type: "FS" },
   { fc: "5.2", fn: "Capacitación operativa al personal del cliente", tc: "5.2", tn: "Elaboración de manuales de operación y mantenimiento", type: "FS" },
   { fc: "5.3", fn: "Elaboración de dossier de calidad y planos as-built", tc: "5.3", tn: "Acta de entrega y cierre del proyecto", type: "FS" },
+  // ---- Hitos: inicio y cierre del proyecto (H2 -- Fin de Cimentaciones --
+  // se enlaza más abajo, entre 4.2 y 4.3, donde corresponde) ----
+  { fc: "H1", fn: "Inicio del Proyecto", tc: "1.1", tn: "Elaboración y aprobación del acta de constitución", type: "FS" },
+  { fc: "5.3", fn: "Acta de entrega y cierre del proyecto", tc: "H3", tn: "Cierre del Proyecto", type: "FS" },
   // ---- Dirección de Proyecto → arranque de Ingeniería ----
   { fc: "1.1", fn: "Elaboración y aprobación del acta de constitución", tc: "1.2", tn: "Plan para la dirección del proyecto (líneas base)", type: "FS" },
   { fc: "1.2", fn: "Planes subsidiarios de gestión", tc: "1.3", tn: "Elaboración de informes mensuales de avance", type: "FS" },
@@ -944,7 +999,8 @@ const SAMPLE_LINK_PLAN: SampleLinkPlanEntry[] = [
   { fc: "2.4", fn: "Trámite de certificado ITSE", tc: "4.1", tn: "Corte y excavación masiva", type: "FS" },
   { fc: "4.1", fn: "Nivelación y perfilado de plataforma", tc: "4.2", tn: "Excavación de zanjas para zapatas", type: "FS" },
   { fc: "3.2", fn: "Adquisición y suministro de materiales varios de construcción", tc: "4.2", tn: "Acero de refuerzo fy=4200 kg/cm²", type: "FS" },
-  { fc: "4.2", fn: "Encofrado y desencofrado de cimentaciones", tc: "4.3", tn: "Montaje de columnas metálicas", type: "FS" },
+  { fc: "4.2", fn: "Encofrado y desencofrado de cimentaciones", tc: "H2", tn: "Fin de Cimentaciones", type: "FS" },
+  { fc: "H2", fn: "Fin de Cimentaciones", tc: "4.3", tn: "Montaje de columnas metálicas", type: "FS" },
   { fc: "3.1", fn: "Transporte y entrega de estructuras a obra", tc: "4.3", tn: "Montaje de columnas metálicas", type: "FS" },
   { fc: "4.3", fn: "Instalación de cobertura TR-4", tc: "4.4", tn: "Tarrajeo de muros y cielorrasos", type: "FS" },
   { fc: "4.3", fn: "Montaje de vigas y tijerales", tc: "4.5", tn: "Instalación de tableros y circuitos eléctricos", type: "SS", lag: 8, lagUnit: "d" },

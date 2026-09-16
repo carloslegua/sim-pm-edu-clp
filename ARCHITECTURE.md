@@ -250,33 +250,52 @@ porque romper la correlación con MS Project es más grave que perder esa
 coincidencia entre módulos.
 
 Consecuencia directa: dentro de un mismo proyecto, el Id. de **Definir
-las Actividades** y de **Estimar los Costos** siempre coincide entre sí
-(ambos muestran hitos), y el Id. de **Análisis PERT** y de
-**Cronograma/CPM** siempre coincide entre sí (ninguno de los dos lee
-`activities.milestones`, así que ninguno muestra hitos). Pero entre esos
-dos PARES, el Id. solo coincide **hasta el primer hito** del proyecto —
-a partir de ahí, Definir las Actividades/Estimar los Costos van "un
-número más adelante" que PERT/Cronograma-CPM para el mismo paquete o
-actividad, porque los primeros sí le dan un número real al hito y los
-segundos ni lo ven. Esto es esperado, no un bug: cada par de tablas
-mantiene su propia correlación 1:1 con MS Project (que es lo que
-realmente importa), a costa de que el Id. dejе de ser una clave universal
-entre los cuatro cuando hay hitos de por medio.
+las Actividades**, **Estimar los Costos** y **Cronograma/CPM** siempre
+coincide entre los tres (los tres muestran hitos, cada uno con su propia
+copia local de `fullRows()`/`fullRowsSnapshot()`+`placeLooseMilestones()`
+— ver el detalle de Cronograma/CPM más abajo). **Análisis PERT queda como
+la única excepción**: no lee `activities.milestones` en absoluto, así que
+su Id. solo coincide con el de los otros tres **hasta el primer hito** del
+proyecto — a partir de ahí PERT va "un número atrás" para el mismo
+paquete/actividad. Esto sigue siendo así porque PERT no fue tocado (fuera
+de alcance explícito, ver historial de conversación); si en algún momento
+se decide extenderlo, el patrón a portar es exactamente el mismo que ya
+usan los otros tres.
 
-Los hitos ya siguen esta regla: en `fullRows()` de `activities/main.ts` y
-`cost-estimate/main.ts`, las líneas `milestones.filter(...)` /
-`placeLooseMilestones(...)` pasan `n: n++` igual que cualquier otra fila
-(nunca `n: -1` ni un valor especial) — ver el detalle en la sección de
-Activity_Definition.html más abajo. Cualquier elemento futuro que solo
-exista en un módulo debe seguir el mismo patrón: consumir su número como
-cualquier fila, nunca dejar un hueco.
+**Historia**: Cronograma/CPM tardó en alinearse con esta regla —
+originalmente (igual que PERT hoy) no leía `activities.milestones` en
+absoluto, así que su Id. divergía de Definir las Actividades/Estimar los
+Costos apenas había un hito de por medio, y los hitos eran invisibles en
+su tabla/Red/Gantt. Esto además era un bug funcional real, no solo
+cosmético: al pegar un cronograma REAL de MS Project (que sí numera los
+hitos como cualquier tarea) contra un snapshot sin hitos, la verificación
+de nombre por Id. quedaba mal alineada para toda actividad posterior a un
+hito. Corregido a pedido explícito del usuario: cada hito ahora entra al
+snapshot como una fila más con `kind:"activity"` (su propio id como
+`activityId`, duración 0) — así atraviesa gratis todo el camino que ya
+existía para actividades reales (CPM, Red, Gantt, plantilla, pegado,
+enlace manual) sin tocar `gpi-core.ts`: `GPI.util.cpm()` ya calculaba
+ES=EF/LS=LF correctamente para duración 0 sin ningún caso especial (ver
+`tests/unit/cpm.test.ts`).
 
-Cubierto por tests: `tests/smoke/activity-definition.smoke.test.ts` y
-`cost-estimate.smoke.test.ts` siembran un proyecto con un hito de por
-medio y verifican la secuencia sin saltos `0,1,2,3,4,5,6,7` (el hito
-ocupa el 5); `pert-analysis.smoke.test.ts` y `cronograma-cpm.smoke.test.ts`
-siembran el MISMO proyecto y verifican que su propia secuencia
-`0,1,2,3,4,5,6` no se ve afectada por el hito (nunca lo ven).
+Los hitos ya siguen esta regla: en `fullRows()`/`fullRowsSnapshot()` de
+`activities/main.ts`, `cost-estimate/main.ts` y `cronograma-cpm/main.ts`,
+las líneas `milestones.filter(...)` / `placeLooseMilestones(...)` pasan
+`n: n++`/`netId: n++` igual que cualquier otra fila (nunca un valor
+especial) — ver el detalle en la sección de Activity_Definition.html más
+abajo. Cualquier elemento futuro que solo exista en un módulo debe seguir
+el mismo patrón: consumir su número como cualquier fila, nunca dejar un
+hueco.
+
+Cubierto por tests: `tests/smoke/activity-definition.smoke.test.ts`,
+`cost-estimate.smoke.test.ts` y `cronograma-cpm.smoke.test.ts` siembran un
+proyecto con un hito de por medio y verifican la MISMA secuencia sin
+saltos `0,1,2,3,4,5,6,7` (el hito ocupa el 5); `cronograma-cpm.smoke.test.ts`
+agrega además un caso que enlaza el hito como nodo CPM real (predecesor Y
+sucesor de actividades reales) y confirma ES/EF/LS/LF; `pert-analysis.smoke.test.ts`
+sigue sembrando el MISMO proyecto y verificando que su propia secuencia
+`0,1,2,3,4,5,6` no se ve afectada por el hito (PERT nunca lo ve, fuera de
+alcance).
 
 ## Patrones y particularidades por módulo
 
@@ -395,11 +414,37 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   total** de `stateLive.links` (igual que "Limpiar enlaces" o "Pegar
   cronograma → Reemplazar todo"), nunca un merge, y limpia `import`/
   `baseline` a `null` (es un cronograma de referencia nuevo, no una
-  auditoría). Probado end-to-end en Chrome real: con el proyecto DISTRIB+
-  completo (WBS + 43 actividades) los 48 enlaces resuelven 100% —
-  resultado: **273 días laborables, 31 actividades críticas, fin
-  2027-07-21 partiendo de 2026-07-06** (ver también "Dataset de
-  referencia (DISTRIB+)").
+  auditoría). `SAMPLE_LINK_PLAN` también agenda los 3 hitos del catálogo
+  (H1 antes de la primera actividad, H2 entre Cimentaciones y Estructura,
+  H3 después de la última actividad) — `findRealActivityId()` resuelve un
+  extremo como hito (contra `actsData().milestones`, por su propio código
+  H1/H2/H3 + nombre) cuando no encuentra un paquete con ese Código EDT.
+  Probado end-to-end en Chrome real: con el proyecto DISTRIB+ completo
+  (WBS + 43 actividades + 3 hitos) los 51 enlaces resuelven 100% — ver el
+  resultado exacto en "Dataset de referencia (DISTRIB+)".
+- **Los hitos son nodos CPM reales, no solo filas de referencia**: a
+  pedido explícito del usuario ("no toma el criterio del Id... está
+  dejando fuera los hitos"), `fullRowsSnapshot()` ahora interca
+  `activities.milestones` en la numeración exactamente como Definir las
+  Actividades/Estimar los Costos (mismo `placeLooseMilestones()`, copia
+  local deliberada) — ver el detalle completo y el porqué en
+  ARCHITECTURE.md, "El 'Id.' de Definir las Actividades...". Cada hito
+  entra como una fila `kind:"activity"` de duración 0 (su propio id como
+  `activityId`), así que atraviesa gratis toda la maquinaria existente
+  (CPM, Red, Gantt, plantilla, pegado, enlace manual, `openAddLink()`)
+  sin ningún cambio en `gpi-core.ts` ni en esas funciones — solo
+  retoques cosméticos (ícono ◆, clase `milestone-row`, badge "Hito",
+  mismo lenguaje visual que Definir las Actividades). Único ajuste de
+  lógica real: `criticalPertSums()` (probabilidad PERT de la ruta
+  crítica) ahora trata un hito en la ruta crítica como contribución
+  exacta de 0 en vez de "dato PERT faltante" — un hito nunca tiene terna
+  O/M/P por definición, así que antes ocultaba la probabilidad aunque
+  todas las actividades sí tuvieran PERT completo. `GPI.util.cpm()` no
+  necesitó ningún cambio: ya calculaba ES=EF/LS=LF correctamente para
+  duración 0 (ver `tests/unit/cpm.test.ts`). El dataset congelado de
+  "Modo ejemplo" (más arriba) no gana hitos porque no tiene ninguno
+  definido en su propio `SAMPLE.acts` — su regresión dorada (53 días, 9
+  críticas) no se toca.
 
 **Schedule_Management_Plan.html**
 - Es un **documento vivo** de 15 secciones (checklist AACE RP 38R-06),
@@ -1070,11 +1115,15 @@ vez que se agrega o toca un módulo:
   termina antes, el 08-19), fin cimentaciones 2026-09-04, entrega final
   2026-11-06. Feriados de ejemplo: 2026-07-28/29, 2026-08-30.
 - **Cronograma / CPM del proyecto real** (`cronograma-cpm`,
-  `SAMPLE_LINK_PLAN` — ver su sección más arriba): 48 enlaces que cubren
+  `SAMPLE_LINK_PLAN` — ver su sección más arriba): 51 enlaces que cubren
   las 43 actividades reales sembradas por "Cargar ejemplo en el proyecto"
-  de `activities`. Con el proyecto DISTRIB+ completo (WBS + actividades +
-  estos enlaces) e inicio 2026-07-06: **273 días laborables, 31
-  actividades críticas, fin 2027-07-21**. Estas fechas son las que
+  de `activities` MÁS sus 3 hitos (H1/H2/H3), agendados como nodos CPM
+  reales de duración 0. Con el proyecto DISTRIB+ completo (WBS +
+  actividades + hitos + estos enlaces) e inicio 2026-07-06: **273 días
+  laborables, 34 actividades críticas (31 actividades + los 3 hitos, los
+  tres cayeron en la ruta crítica), fin 2027-07-21** — la duración y la
+  fecha de fin no cambian al agregar los hitos (duración 0 no suma
+  tiempo), solo crece el conteo de "críticas". Estas fechas son las que
   realmente calcula el CPM sobre la red completa — distintas de las
   fechas ILUSTRATIVAS de `schedule-plan` (más arriba), que no están
   calibradas contra un CPM real de 43 actividades y cubren solo hitos de

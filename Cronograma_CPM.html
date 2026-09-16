@@ -94,6 +94,11 @@
   tr.act-row.crit td{background:var(--danger-dim);} tr.act-row.crit:hover td{background:rgba(255,84,112,.16);}
   .act-name{text-align:left; font-weight:600;}
   .crit-badge{font-family:var(--mono); font-size:9.5px; font-weight:800; color:#fff; background:var(--danger); padding:1px 7px; border-radius:10px; letter-spacing:.4px;}
+  /* Hitos: duración cero, nodo CPM real -- mismo lenguaje visual que
+     Definir las Actividades (◆ + tag), sin tocar el fondo de la fila para
+     no pelear con tr.act-row.crit (un hito también puede ser crítico). */
+  .milestone-code{color:#6c5ce7; font-weight:800;}
+  .milestone-tag{font-family:var(--mono); font-size:9.5px; font-weight:700; color:#6c5ce7; background:#fff; border:1px solid rgba(108,92,231,.35); padding:1px 7px; border-radius:10px; margin-left:8px; vertical-align:middle;}
   td.tf-crit{color:var(--danger); font-weight:800;}
   .audit-ok{color:var(--good); font-weight:800;} .audit-bad{color:var(--danger); font-weight:800; cursor:help;}
   .audit-na{color:var(--ink-2);}

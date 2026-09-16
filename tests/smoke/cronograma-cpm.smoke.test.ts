@@ -119,15 +119,15 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
     expect(sch.links[0]).toMatchObject({ from: "a1", to: "a2", type: "FS" });
   });
 
-  it("Cronograma-CPM nunca ve hitos: su Id (netId) para paquetes/actividades no se ve afectado por ellos, igual que PERT", async () => {
-    // Mismo seed (EDT + actividades + hito en 'activities') que su
-    // equivalente en activity-definition/cost-estimate/pert-analysis
-    // .smoke.test.ts -- Cronograma-CPM ni siquiera lee
-    // "activities.milestones", así que su propio netId sigue siendo
-    // 0,1,2,3,4,5,6 pase lo que pase con los hitos (coincide siempre con
-    // PERT); Activities/Estimar los Costos, en cambio, ahora sí le asignan
-    // un número real al hito, así que sus filas para w3/a3 quedan corridas
-    // en 1 respecto de este módulo -- ver ARCHITECTURE.md.
+  it("Cronograma-CPM ahora sí ve los hitos: su Id (netId) coincide con Definir las Actividades/Estimar los Costos", async () => {
+    // Mismo seed (EDT + actividades + hito en 'activities') que
+    // activity-definition/cost-estimate.smoke.test.ts -- esos dos módulos
+    // ya verifican la secuencia sin saltos 0,1,2,3,4,5,6,7 con el hito
+    // ocupando el 5 (ver ARCHITECTURE.md, "El 'Id.' de Definir las
+    // Actividades..."). Cronograma-CPM ahora arma su fullRowsSnapshot()
+    // con el mismo criterio (placeLooseMilestones(), hito atado a w2), así
+    // que debe coincidir Id. por Id. -- ya no le falta la fila del hito ni
+    // corre el resto de las filas.
     const seedWithMilestone = {
       version: 1, activeId: "p1",
       projects: {
@@ -164,7 +164,76 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
     const doc = dom.window.document;
     const rows = Array.from(doc.querySelectorAll("#cpmBody tr"));
     const idOf = (row: Element) => row.querySelector(".n-cell")!.textContent;
-    expect(rows.map(idOf)).toEqual(["0", "1", "2", "3", "4", "5", "6"]);
+    expect(rows.map(idOf)).toEqual(["0", "1", "2", "3", "4", "5", "6", "7"]);
+    const msRow = rows[5]; // Id. 5 = el hito, justo después de a1(3)/a2(4), antes de w3(6)/a3(7)
+    expect(msRow.className).toMatch(/milestone-row/);
+    expect(msRow.querySelector(".code-cell")!.textContent).toMatch(/◆\s*H1/);
+    expect(msRow.querySelectorAll("td")[3].textContent).toBe("0"); // columna Duración: 0 por definición
+  });
+
+  it("un hito es un nodo CPM real: duración 0, ES=EF, y propaga la fecha de fin de su predecesora a su sucesora", async () => {
+    // Verifica lo que quedó sin probar a nivel unitario en GPI.util.cpm():
+    // un nodo dur=0 encadenado como sucesor Y predecesor de actividades
+    // reales calcula ES=EF y traslada la fecha sin desfase -- ver también
+    // el caso nuevo en tests/unit/cpm.test.ts.
+    const seedWithMilestone = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1, startDate: "2026-01-05" },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 3,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] },
+                w1: { id: "w1", parentId: "root", name: "Fase 1", children: ["w2"] },
+                w2: { id: "w2", parentId: "w1", name: "Paquete A", children: [] }
+              }
+            },
+            activities: {
+              byLeaf: { w2: [
+                { id: "a1", name: "Excavar zanja", unit: "m³", qty: 100, perf: 25, teams: 1 }, // dur = ceil(100/25) = 4
+                { id: "a2", name: "Vaciar concreto", unit: "m³", qty: 50, perf: 10, teams: 1 } // dur = ceil(50/10) = 5
+              ] }, idCounter: 3,
+              milestones: [{ id: "m1", code: "H1", name: "Fin de excavación", leafId: "w2" }]
+            }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Cronograma_CPM.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedWithMilestone)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+
+    // a1 -> hito -> a2, enlace manual (mismo flujo de "＋ Enlace manual" que usaría un alumno)
+    (doc.getElementById("btnAddLink") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 50));
+    (doc.getElementById("lkFrom") as HTMLSelectElement).value = "a1";
+    (doc.getElementById("lkTo") as HTMLSelectElement).value = "m1";
+    (doc.getElementById("lkAdd") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 50));
+    (doc.getElementById("lkFrom") as HTMLSelectElement).value = "m1";
+    (doc.getElementById("lkTo") as HTMLSelectElement).value = "a2";
+    (doc.getElementById("lkAdd") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 50));
+    (doc.getElementById("modalCancel") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(doc.getElementById("kpiDur")!.textContent).toBe("9"); // 4 (a1) + 0 (hito) + 5 (a2)
+    const rows = Array.from(doc.querySelectorAll("#cpmBody tr.act-row"));
+    const cellsOf = (row: Element) => Array.from(row.querySelectorAll("td")).map((td) => td.textContent!.trim());
+    const msRow = rows.filter((r) => r.className.indexOf("milestone-row") >= 0)[0];
+    expect(msRow).toBeTruthy();
+    const msCells = cellsOf(msRow);
+    expect(msCells[4]).toBe("4"); // ES del hito = EF de a1
+    expect(msCells[5]).toBe("4"); // EF del hito = ES (duración 0)
+    const a2Row = rows.filter((r) => r.textContent!.indexOf("Vaciar concreto") >= 0)[0];
+    expect(cellsOf(a2Row)[4]).toBe("4"); // ES de a2 = EF del hito, sin desfase
+    expect(cellsOf(a2Row)[5]).toBe("9"); // EF de a2 = 4 + 5
   });
 
   it("'⇩ Cargar ejemplo en el proyecto' SÍ agrega enlaces al proyecto activo real, emparejando por Código EDT + nombre de actividad", async () => {

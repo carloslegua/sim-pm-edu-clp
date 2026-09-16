@@ -141,4 +141,24 @@ describe("cpm — casos límite", () => {
     expect(r.ok).toBe(true);
     if (r.ok) { expect(r.projectDuration).toBe(7); expect(r.criticalIds).toEqual(["B"]); }
   });
+
+  it("un nodo de duración 0 (hito) encadenado como sucesor y predecesor: ES=EF=LS=LF, propaga la fecha sin desfase", () => {
+    // Cronograma/CPM ahora trata los hitos como nodos CPM reales (ver
+    // ARCHITECTURE.md, "El 'Id.' de Definir las Actividades...") -- esto
+    // nunca se había probado a nivel unitario aunque el código ya lo
+    // soportaba por inspección (dur[id]>0?1:0 en el cálculo de finishDate).
+    const r = cpm(
+      [{ id: "A", dur: 4 }, { id: "M", dur: 0 }, { id: "B", dur: 5 }],
+      [{ from: "A", to: "M", type: "FS" }, { from: "M", to: "B", type: "FS" }],
+      CAL_5X8, { startDate: "2026-01-05" }
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.rows.M.es).toBe(4); expect(r.rows.M.ef).toBe(4); // ES=EF: duración 0
+    expect(r.rows.M.ls).toBe(4); expect(r.rows.M.lf).toBe(4); // en la ruta crítica, también LS=LF
+    expect(r.rows.M.startDate).toBe(r.rows.M.finishDate); // misma fecha de calendario, sin desfase de 1 día
+    expect(r.rows.B.es).toBe(4); // el sucesor arranca exactamente donde el hito, sin desfase
+    expect(r.projectDuration).toBe(9); // 4 (A) + 0 (M) + 5 (B)
+    expect(r.criticalIds).toContain("M"); // un hito en la única ruta también es crítico
+  });
 });

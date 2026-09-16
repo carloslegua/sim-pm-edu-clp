@@ -36,6 +36,41 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Cronograma/CPM — no seguía el mismo criterio de "Id." que Definir las
+  Actividades/Estimar los Costos y dejaba los hitos completamente fuera**
+  — el usuario señaló que el módulo no hacía las mismas verificaciones
+  que el de Costos y que estaba dejando los hitos afuera. Confirmado: era
+  un bug real, no una decisión de diseño vigente (la "regla de oro" del
+  Id. gapless-como-MS-Project ya estaba documentada en ARCHITECTURE.md,
+  pero solo se había aplicado a Definir las Actividades/Estimar los
+  Costos). Además del hueco de visibilidad, era un bug funcional: al
+  pegar un cronograma real de MS Project (que sí numera los hitos como
+  cualquier tarea), la verificación de nombre por Id. de este módulo
+  quedaba mal alineada para toda actividad posterior a un hito.
+  `fullRowsSnapshot()` ahora interca `activities.milestones` en la
+  numeración con el mismo `placeLooseMilestones()` que ya usan
+  `activities`/`cost-estimate` (copia local), y cada hito entra como un
+  nodo CPM real de duración 0 (`kind:"activity"`, su propio id) — así
+  atraviesa gratis toda la maquinaria existente (CPM, Red, Gantt,
+  plantilla, pegado, enlace manual) sin tocar `gpi-core.ts`, que ya
+  calculaba ES=EF/LS=LF correctamente para duración 0. Se corrigió
+  además `criticalPertSums()`, que invalidaba la probabilidad PERT de la
+  ruta crítica si un hito caía en ella (un hito nunca tiene terna O/M/P
+  por definición). El botón "⇩ Cargar ejemplo en el proyecto" (agregado
+  antes en esta misma sesión) ahora también agenda los 3 hitos del
+  catálogo DISTRIB+ (H1/H2/H3) como nodos reales. Probado end-to-end en
+  Chrome real: 51/51 enlaces resuelven, 46 filas (43 actividades + 3
+  hitos), los 3 hitos caen en la ruta crítica (34 actividades críticas en
+  vez de 31; duración y fecha de fin no cambian, 0 no suma tiempo).
+  "Modo ejemplo" (sandbox congelado, regresión dorada de 53 días/9
+  críticas) no se tocó — no tiene hitos definidos. Análisis PERT sigue
+  sin ver hitos (fuera de alcance, no se pidió). Cubierto en
+  `tests/smoke/cronograma-cpm.smoke.test.ts` (paridad de Id. con
+  Actividades/Costos, y un hito como nodo CPM real encadenado) y
+  `tests/unit/cpm.test.ts` (caso nuevo de duración 0). Ver
+  ARCHITECTURE.md, "El 'Id.' de Definir las Actividades..." y la sección
+  de `Cronograma_CPM.html`.
+
 - **Cronograma/CPM — el reporte imprimible no incluía "Predecesoras" ni
   "Auditoría"** — a pedido explícito del usuario, que reportó el
   ejemplo precargado como "incompleto" por esto (y no entendía para qué

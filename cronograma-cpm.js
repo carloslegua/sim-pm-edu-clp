@@ -175,6 +175,20 @@
 		} catch (_) {}
 		return idx;
 	}
+	function placeLooseMilestones(milestones, knownLeafIds) {
+		const start = [], orphan = [];
+		const afterLeaf = {};
+		milestones.filter((m) => !m.leafId).forEach((m) => {
+			if (!m.afterLeafId) start.push(m);
+			else if (knownLeafIds[m.afterLeafId]) (afterLeaf[m.afterLeafId] ||= []).push(m);
+			else orphan.push(m);
+		});
+		return {
+			start,
+			afterLeaf,
+			orphan
+		};
+	}
 	function fullRowsSnapshot() {
 		const w = wbsData(), act = actsData(), idx = pertIndex(), out = [];
 		if (!w || !w.nodes || !w.rootId || !w.nodes[w.rootId]) return out;
@@ -187,7 +201,30 @@
 			name: rootName,
 			activityId: null
 		});
-		treeRows().forEach((r) => {
+		const tree = treeRows();
+		const milestones = act.milestones || [];
+		const knownLeafIds = {};
+		tree.forEach((r) => {
+			if (r.kind === "package") knownLeafIds[r.id] = true;
+		});
+		const loose = placeLooseMilestones(milestones, knownLeafIds);
+		function pushMilestone(m, leafId) {
+			out.push({
+				netId: n++,
+				kind: "activity",
+				code: m.code,
+				name: m.name,
+				activityId: m.id,
+				leafId,
+				det: 0,
+				te: null,
+				variance: null,
+				pertValid: void 0,
+				isMilestone: true
+			});
+		}
+		loose.start.forEach((m) => pushMilestone(m));
+		tree.forEach((r) => {
 			if (r.kind === "phase") out.push({
 				netId: n++,
 				kind: "summary",
@@ -222,8 +259,11 @@
 						pertValid: info.valid
 					});
 				});
+				milestones.filter((m) => m.leafId === r.id).forEach((m) => pushMilestone(m, r.id));
+				(loose.afterLeaf[r.id] || []).forEach((m) => pushMilestone(m));
 			}
 		});
+		loose.orphan.forEach((m) => pushMilestone(m));
 		return out;
 	}
 	function scheduleNodes(snapshot) {
@@ -256,6 +296,13 @@
 		const m = {};
 		snap.forEach((r) => {
 			if (r.activityId) m[r.activityId] = r.code;
+		});
+		return m;
+	}
+	function isMilestoneOf(snap) {
+		const m = {};
+		snap.forEach((r) => {
+			if (r.activityId && r.isMilestone) m[r.activityId] = true;
 		});
 		return m;
 	}
@@ -349,7 +396,7 @@
 					const okF = !nz(pd.finish) || pd.finish === row.finishDate;
 					au = okS && okF ? "<span class='audit-ok' title='Coincide con MS Project'>✓</span>" : "<span class='audit-bad' title='Calc: " + esc((row.startDate || "?") + " → " + (row.finishDate || "?")) + " · Pegado: " + esc((pd.start || "?") + " → " + (pd.finish || "?")) + " (revisa calendario o enlaces)'>✗</span>";
 				}
-				html += "<tr class='act-row" + (crit ? " crit" : "") + "'><td class='n-cell'>" + r.netId + "</td><td class='code-cell'>" + esc(r.code) + "</td><td class='act-name'>" + esc(r.name) + (crit ? " <span class='crit-badge'>CRÍTICA</span>" : "") + (node.hasDur ? "" : " <span style='color:var(--warn);font-size:10px' title='La actividad no tiene metrado/rendimiento ni PERT: dur=0'>⚠ sin duración</span>") + "</td><td class='num'>" + (dur != null ? fmt(dur) : "—") + "</td><td class='num'>" + (row ? fmt(row.es) : "—") + "</td><td class='num'>" + (row ? fmt(row.ef) : "—") + "</td><td class='num'>" + (row ? fmt(row.ls) : "—") + "</td><td class='num'>" + (row ? fmt(row.lf) : "—") + "</td><td class='num" + (crit ? " tf-crit" : "") + "'>" + (row ? fmt(row.tf) : "—") + "</td><td class='num'>" + (row ? fmt(row.ff) : "—") + "</td><td class='l num' style='font-size:11px'>" + esc(preds || "—") + "</td><td>" + au + "</td></tr>";
+				html += "<tr class='act-row" + (crit ? " crit" : "") + (r.isMilestone ? " milestone-row" : "") + "'><td class='n-cell'>" + r.netId + "</td><td class='code-cell" + (r.isMilestone ? " milestone-code" : "") + "'>" + (r.isMilestone ? "◆ " : "") + esc(r.code) + "</td><td class='act-name'>" + esc(r.name) + (crit ? " <span class='crit-badge'>CRÍTICA</span>" : "") + (r.isMilestone ? " <span class='milestone-tag'>Hito</span>" : node.hasDur ? "" : " <span style='color:var(--warn);font-size:10px' title='La actividad no tiene metrado/rendimiento ni PERT: dur=0'>⚠ sin duración</span>") + "</td><td class='num'" + (r.isMilestone ? " title='Los hitos tienen duración cero por definición'" : "") + ">" + (dur != null ? fmt(dur) : "—") + "</td><td class='num'>" + (row ? fmt(row.es) : "—") + "</td><td class='num'>" + (row ? fmt(row.ef) : "—") + "</td><td class='num'>" + (row ? fmt(row.ls) : "—") + "</td><td class='num'>" + (row ? fmt(row.lf) : "—") + "</td><td class='num" + (crit ? " tf-crit" : "") + "'>" + (row ? fmt(row.tf) : "—") + "</td><td class='num'>" + (row ? fmt(row.ff) : "—") + "</td><td class='l num' style='font-size:11px'>" + esc(preds || "—") + "</td><td>" + au + "</td></tr>";
 			}
 		});
 		body.innerHTML = html;
@@ -419,7 +466,7 @@
 		(R.cpm.ok ? R.cpm.criticalIds : []).forEach((id) => {
 			const r = idx[id];
 			count++;
-			if (r && r.te != null && r.variance != null && r.pertValid !== false) {
+			if (r && r.isMilestone) {} else if (r && r.te != null && r.variance != null && r.pertValid !== false) {
 				sumTe += r.te;
 				sumVar += r.variance;
 			} else allValid = false;
@@ -513,7 +560,7 @@
 			});
 			rank[id] = mr;
 		});
-		const cmap = codeOf(R.snap), nmap = nameOf(R.snap), NW = 168, NH = 78, GX = 58, MX = 22, MY = 22;
+		const cmap = codeOf(R.snap), nmap = nameOf(R.snap), msmap = isMilestoneOf(R.snap), NW = 168, NH = 78, GX = 58, MX = 22, MY = 22;
 		const cols = {};
 		ids.forEach((id) => {
 			const k = rank[id] || 0;
@@ -554,7 +601,7 @@
 			if (!row) return;
 			const crit = row.critical;
 			const stroke = crit ? "#ff5470" : "#00b6ec", fill = crit ? "rgba(255,84,112,.06)" : "#ffffff", band = crit ? "#ff5470" : "#00b6ec";
-			const nm = nmap[id] || "", nmS = nm.length > 24 ? nm.slice(0, 23) + "…" : nm;
+			const nm = (msmap[id] ? "◆ " : "") + (nmap[id] || ""), nmS = nm.length > 24 ? nm.slice(0, 23) + "…" : nm;
 			const dur = row.ef - row.es;
 			svg += "<g>";
 			svg += "<rect x='" + p.x + "' y='" + p.y + "' width='168' height='78' rx='9' fill='" + fill + "' stroke='" + stroke + "' stroke-width='" + (crit ? 2 : 1.3) + "'/>";
@@ -563,7 +610,7 @@
 			svg += "<text x='" + (p.x + NW / 2) + "' y='" + (p.y + 13.5) + "' font-size='10.5' font-weight='800' fill='#fff' text-anchor='middle'>" + fmt(dur) + "d</text>";
 			svg += "<text x='" + (p.x + NW - 14) + "' y='" + (p.y + 13.5) + "' font-size='10.5' font-weight='700' fill='#fff' text-anchor='end'>" + fmt(row.ef) + "</text>";
 			svg += "<text x='" + (p.x + NW / 2) + "' y='" + (p.y + 37) + "' font-size='11' font-weight='700' fill='#1a2027' text-anchor='middle' style='font-family:var(--display)'>" + esc(nmS) + "</text>";
-			svg += "<text x='" + (p.x + NW / 2) + "' y='" + (p.y + 50) + "' font-size='9' fill='#6c5ce7' text-anchor='middle'>EDT " + esc(cmap[id] || "") + "</text>";
+			svg += "<text x='" + (p.x + NW / 2) + "' y='" + (p.y + 50) + "' font-size='9' fill='#6c5ce7' text-anchor='middle'>" + (msmap[id] ? "Hito " : "EDT ") + esc(cmap[id] || "") + "</text>";
 			svg += "<line x1='" + p.x + "' y1='" + (p.y + NH - 22) + "' x2='" + (p.x + NW) + "' y2='" + (p.y + NH - 22) + "' stroke='#e4eaf1'/>";
 			svg += "<text x='" + (p.x + 14) + "' y='" + (p.y + NH - 8) + "' font-size='10' font-weight='700' fill='#4d5768'>" + fmt(row.ls) + "</text>";
 			svg += "<text x='" + (p.x + NW / 2) + "' y='" + (p.y + NH - 8) + "' font-size='10' font-weight='800' fill='" + (crit ? "#ff5470" : "#4d5768") + "' text-anchor='middle'>H" + fmt(row.tf) + "</text>";
@@ -601,7 +648,7 @@
 			if (!row) return;
 			const y = HH + i * RH;
 			const crit = row.critical, col = crit ? "#ff5470" : "#00b6ec";
-			let nm = (codeOf(R.snap)[r.activityId] || "") + " " + (r.name || "");
+			let nm = (r.isMilestone ? "◆ " : "") + (codeOf(R.snap)[r.activityId] || "") + " " + (r.name || "");
 			if (nm.length > 30) nm = nm.slice(0, 29) + "…";
 			svg += "<text x='10' y='" + (y + RH / 2 + 3) + "' font-size='10.5' fill='#1a2027' style='font-family:var(--display);font-weight:600'>" + esc(nm) + "</text>";
 			const bx = LW + row.es * dayW, bw = Math.max(4, (row.ef - row.es) * dayW);
@@ -706,7 +753,7 @@
 		}
 		const nm = nameOf(snap), nn = netMap(snap);
 		function optsHTML() {
-			return acts.map((a) => "<option value='" + a.activityId + "'>" + esc(a.netId + " · EDT " + a.code + " · " + a.name) + "</option>").join("");
+			return acts.map((a) => "<option value='" + a.activityId + "'>" + esc(a.netId + " · " + (a.isMilestone ? "Hito " : "EDT ") + a.code + " · " + a.name) + "</option>").join("");
 		}
 		function listHTML() {
 			const ls = state().links || [];
@@ -958,14 +1005,14 @@
 	}
 	function buildReport() {
 		const R = runCpm(), snap = R.snap, cpm = R.cpm, rep = document.getElementById("gpiReport");
-		const cmap = codeOf(snap), nmap = nameOf(snap), nn = netMap(snap);
+		const cmap = codeOf(snap), nmap = nameOf(snap), nn = netMap(snap), msmap = isMilestoneOf(snap);
 		const dates = state().import && state().import.dates || {};
 		const now = (/* @__PURE__ */ new Date()).toLocaleDateString("es-PE");
 		const s = criticalPertSums(R);
 		let h = "<div class='rep-head'><div><h1>Cronograma / Ruta Crítica</h1><div class='sub'>" + esc(document.getElementById("projectTitle").value) + "</div></div><div class='rep-meta'>" + esc(document.getElementById("courseTitle").value) + "<br>" + now + "<br>PMBOK · CPM</div></div>";
 		h += "<table class='rep-kv'><tr><td>Duración del proyecto</td><td class='num'>" + (cpm.ok ? fmt(cpm.projectDuration) + " días laborables" : "—") + "</td></tr><tr><td>Fecha de fin</td><td class='num'>" + (cpm.ok ? cpm.projectFinishDate || "—" : "—") + "</td></tr><tr><td>Actividades críticas</td><td class='num'>" + (cpm.ok ? cpm.criticalIds.length : "—") + "</td></tr><tr><td>Enlaces</td><td class='num'>" + (state().links || []).length + "</td></tr></table>";
 		if (cpm.ok) {
-			const path = cpm.criticalIds.map((id) => (cmap[id] || "") + " " + (nmap[id] || ""));
+			const path = cpm.criticalIds.map((id) => (msmap[id] ? "◆ " : "") + (cmap[id] || "") + " " + (nmap[id] || ""));
 			h += "<h2>Ruta crítica</h2><p class='num'>" + esc(path.join("  →  ")) + "</p>";
 		}
 		h += "<h2>Actividades (CPM)</h2><table><tr><th>Id.</th><th>Código EDT</th><th>Actividad</th><th>Duración</th><th>ES</th><th>EF</th><th>LS</th><th>LF</th><th>Holgura Total</th><th>Predecesoras</th><th>Auditoría</th><th>Crítica</th></tr>";
@@ -980,7 +1027,7 @@
 				const okF = !nz(pd.finish) || pd.finish === row.finishDate;
 				au = okS && okF ? "✓" : "✗";
 			}
-			h += "<tr><td class='num'>" + r.netId + "</td><td class='num'>" + esc(r.code) + "</td><td>" + esc(r.name) + "</td><td class='num'>" + fmt(dur) + "</td><td class='num'>" + (row ? fmt(row.es) : "—") + "</td><td class='num'>" + (row ? fmt(row.ef) : "—") + "</td><td class='num'>" + (row ? fmt(row.ls) : "—") + "</td><td class='num'>" + (row ? fmt(row.lf) : "—") + "</td><td class='num'>" + (row ? fmt(row.tf) : "—") + "</td><td>" + esc(preds || "—") + "</td><td class='num'>" + au + "</td><td>" + (row && row.critical ? "●" : "") + "</td></tr>";
+			h += "<tr><td class='num'>" + r.netId + "</td><td class='num'>" + esc(r.code) + "</td><td>" + (r.isMilestone ? "◆ " : "") + esc(r.name) + "</td><td class='num'>" + fmt(dur) + "</td><td class='num'>" + (row ? fmt(row.es) : "—") + "</td><td class='num'>" + (row ? fmt(row.ef) : "—") + "</td><td class='num'>" + (row ? fmt(row.ls) : "—") + "</td><td class='num'>" + (row ? fmt(row.lf) : "—") + "</td><td class='num'>" + (row ? fmt(row.tf) : "—") + "</td><td>" + esc(preds || "—") + "</td><td class='num'>" + au + "</td><td>" + (row && row.critical ? "●" : "") + "</td></tr>";
 		});
 		h += "</table>";
 		h += "<p class='rep-note'>ES = Inicio Temprano (Early Start) · EF = Fin Temprano (Early Finish) · LS = Inicio Tardío (Late Start) · LF = Fin Tardío (Late Finish). Holgura Total = LS − ES; 0 = actividad crítica.</p>";
@@ -1065,12 +1112,14 @@
 		return String(s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 	}
 	function findRealActivityId(code, name) {
-		const pkg = treeRows().filter((r) => r.kind === "package" && r.code === code)[0];
-		if (!pkg) return null;
-		const acts = (actsData().byLeaf || {})[pkg.id] || [];
 		const target = normName(name);
-		const hit = acts.filter((a) => normName(a.name || "") === target)[0];
-		return hit ? hit.id : null;
+		const pkg = treeRows().filter((r) => r.kind === "package" && r.code === code)[0];
+		if (pkg) {
+			const hit = ((actsData().byLeaf || {})[pkg.id] || []).filter((a) => normName(a.name || "") === target)[0];
+			if (hit) return hit.id;
+		}
+		const ms = (actsData().milestones || []).filter((m) => m.code === code && normName(m.name) === target)[0];
+		return ms ? ms.id : null;
 	}
 	async function loadSampleIntoProject() {
 		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) {
@@ -1374,6 +1423,20 @@
 			type: "FS"
 		},
 		{
+			fc: "H1",
+			fn: "Inicio del Proyecto",
+			tc: "1.1",
+			tn: "Elaboración y aprobación del acta de constitución",
+			type: "FS"
+		},
+		{
+			fc: "5.3",
+			fn: "Acta de entrega y cierre del proyecto",
+			tc: "H3",
+			tn: "Cierre del Proyecto",
+			type: "FS"
+		},
+		{
 			fc: "1.1",
 			fn: "Elaboración y aprobación del acta de constitución",
 			tc: "1.2",
@@ -1471,6 +1534,13 @@
 		{
 			fc: "4.2",
 			fn: "Encofrado y desencofrado de cimentaciones",
+			tc: "H2",
+			tn: "Fin de Cimentaciones",
+			type: "FS"
+		},
+		{
+			fc: "H2",
+			fn: "Fin de Cimentaciones",
 			tc: "4.3",
 			tn: "Montaje de columnas metálicas",
 			type: "FS"
