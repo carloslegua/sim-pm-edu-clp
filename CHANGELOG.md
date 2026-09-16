@@ -9,6 +9,31 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ## [Unreleased]
 
+### Added
+
+- **Cronograma/CPM — nuevo botón "⇩ Cargar ejemplo en el proyecto"** — el
+  usuario reportó que, tras cargar el ejemplo DISTRIB+ real en WBS
+  Builder + Definir las Actividades (18 paquetes, 43 actividades), la
+  tabla de Cronograma/CPM y sus vistas Red/Gantt aparecían sin
+  predecesoras. Diagnóstico: no era un bug de "Modo ejemplo" (ese sandbox
+  aislado sí tenía enlaces completos desde antes) sino que Cronograma/CPM
+  era el único módulo dependiente de `activities` sin su propio "⇩ Cargar
+  ejemplo en el proyecto" — a diferencia de Definir las Actividades y
+  Estimar los Costos, nunca sembraba `schedule.links` sobre el proyecto
+  real. Se agregó el mismo patrón: `SAMPLE_LINK_PLAN` (48 enlaces,
+  identificados por Código EDT + nombre de actividad, nunca por id — los
+  ids reales los asigna la reconciliación de `activities` al sembrar el
+  proyecto) resuelto contra las actividades reales vía
+  `findRealActivityId()`, con confirmación explícita antes de reemplazar
+  los enlaces del proyecto activo. Probado end-to-end en Chrome real: con
+  el ejemplo completo, los 48 enlaces resuelven al 100% (273 días
+  laborables, 31 actividades críticas, fin 2027-07-21 desde 2026-07-06).
+  Nunca toca "Modo ejemplo" ni el proyecto activo sin este botón
+  explícito. Cubierto en `tests/smoke/cronograma-cpm.smoke.test.ts`
+  (caso de éxito por Código EDT + nombre, y los dos avisos de guarda: EDT
+  vacía / sin actividades). Ver ARCHITECTURE.md, sección
+  `Cronograma_CPM.html` y "Dataset de referencia (DISTRIB+)".
+
 ### Fixed
 
 - **Cronograma/CPM — el reporte imprimible no incluía "Predecesoras" ni

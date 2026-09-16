@@ -166,4 +166,116 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
     const idOf = (row: Element) => row.querySelector(".n-cell")!.textContent;
     expect(rows.map(idOf)).toEqual(["0", "1", "2", "3", "4", "5", "6"]);
   });
+
+  it("'⇩ Cargar ejemplo en el proyecto' SÍ agrega enlaces al proyecto activo real, emparejando por Código EDT + nombre de actividad", async () => {
+    // A diferencia de "Modo ejemplo" (sandbox chico y congelado, ver el
+    // primer test de este archivo), esta acción resuelve SAMPLE_LINK_PLAN
+    // (código+nombre) contra la EDT/actividades REALES -- ver el
+    // comentario de loadSampleIntoProject() en cronograma-cpm/main.ts. La
+    // EDT sembrada aquí reproduce el código "4.2" del caso DISTRIB+ con un
+    // nombre de fase/paquete DISTINTO a propósito (el emparejamiento es
+    // por código, no por nombre de paquete), y solo dos actividades reales
+    // bajo ese paquete -- "Excavación de zanjas para zapatas" y "Solado de
+    // concreto e=10 cm" -- que en SAMPLE_LINK_PLAN están unidas por un
+    // enlace FS dentro del paquete 4.2. Ningún otro enlace del plan puede
+    // resolver (le faltan las demás actividades), así que debe quedar
+    // exactamente ese enlace.
+    const seedLive = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1, startDate: "2026-01-05" },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 8,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto Live", children: ["f1", "f2", "f3", "f4"] },
+                f1: { id: "f1", parentId: "root", name: "Fase 1", children: ["p11"] },
+                p11: { id: "p11", parentId: "f1", name: "Paquete 1.1", children: [] },
+                f2: { id: "f2", parentId: "root", name: "Fase 2", children: ["p21"] },
+                p21: { id: "p21", parentId: "f2", name: "Paquete 2.1", children: [] },
+                f3: { id: "f3", parentId: "root", name: "Fase 3", children: ["p31"] },
+                p31: { id: "p31", parentId: "f3", name: "Paquete 3.1", children: [] },
+                f4: { id: "f4", parentId: "root", name: "Fase Cualquiera", children: ["p41", "p42"] },
+                p41: { id: "p41", parentId: "f4", name: "Paquete 4.1", children: [] },
+                p42: { id: "p42", parentId: "f4", name: "Paquete con otro nombre", children: [] }
+              }
+            },
+            activities: {
+              byLeaf: { p42: [
+                { id: "x1", name: "Excavación de zanjas para zapatas", unit: "m³", qty: 620, perf: 60, teams: 2 },
+                { id: "x2", name: "Solado de concreto e=10 cm", unit: "m²", qty: 480, perf: 120, teams: 1 }
+              ] }, idCounter: 3
+            }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Cronograma_CPM.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedLive)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 100));
+    expect((doc.getElementById("modalOverlay") as HTMLElement).classList.contains("open")).toBe(true);
+    expect((doc.getElementById("modalMsg") as HTMLElement).textContent).toMatch(/PROYECTO ACTIVO/);
+    (doc.getElementById("modalOk") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 200));
+
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    const sch = saved.projects.p1.modules.schedule;
+    expect(sch.links).toHaveLength(1);
+    expect(sch.links[0]).toMatchObject({ from: "x1", to: "x2", type: "FS" });
+    expect(doc.getElementById("modeChip")!.textContent).toBe("Proyecto"); // sigue en modo "live", no "sample"
+  });
+
+  it("'⇩ Cargar ejemplo en el proyecto' avisa si la EDT del proyecto activo está vacía", async () => {
+    const seedNoWbs = {
+      version: 1, activeId: "p1",
+      projects: { p1: { schema: "gpi.project/v1", meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 }, modules: {} } }
+    };
+    const dom = await JSDOM.fromURL(base + "Cronograma_CPM.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedNoWbs)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 100));
+    expect((doc.getElementById("modalMsg") as HTMLElement).textContent).toMatch(/EDT del proyecto activo está vacía/);
+  });
+
+  it("'⇩ Cargar ejemplo en el proyecto' avisa si el proyecto activo todavía no tiene actividades", async () => {
+    const seedNoActs = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 3,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] },
+                w1: { id: "w1", parentId: "root", name: "Fase 1", children: ["w2"] },
+                w2: { id: "w2", parentId: "w1", name: "Paquete A", children: [] }
+              }
+            }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Cronograma_CPM.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedNoActs)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 100));
+    expect((doc.getElementById("modalMsg") as HTMLElement).textContent).toMatch(/todavía no tiene actividades/);
+  });
 });

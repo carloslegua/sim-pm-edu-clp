@@ -1035,6 +1035,7 @@
 		document.getElementById("btnPrint").addEventListener("click", printReport);
 		document.getElementById("btnSample").addEventListener("click", enterSample);
 		document.getElementById("btnLive").addEventListener("click", enterLive);
+		document.getElementById("btnLoadSampleLive").addEventListener("click", loadSampleIntoProject);
 		document.getElementById("btnClear").addEventListener("click", clearLinks);
 		document.getElementById("probTarget").addEventListener("input", () => {
 			renderProbability(runCpm());
@@ -1059,6 +1060,76 @@
 		actsLive = window.GPI.getModule("activities") ?? null;
 		pertLive = window.GPI.getModule("pert") ?? null;
 		spLive = window.GPI.getModule("schedulePlan") ?? null;
+	}
+	function normName(s) {
+		return String(s || "").trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+	}
+	function findRealActivityId(code, name) {
+		const pkg = treeRows().filter((r) => r.kind === "package" && r.code === code)[0];
+		if (!pkg) return null;
+		const acts = (actsData().byLeaf || {})[pkg.id] || [];
+		const target = normName(name);
+		const hit = acts.filter((a) => normName(a.name || "") === target)[0];
+		return hit ? hit.id : null;
+	}
+	async function loadSampleIntoProject() {
+		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) {
+			await showAlert("Esto solo aplica con un proyecto activo conectado al Panel de Control. Usa \"Modo ejemplo\" para explorar el caso DISTRIB+ sin conexión.");
+			return;
+		}
+		gpiPullAll();
+		const prevMode = mode;
+		mode = "live";
+		const pkgs = treeRows().filter((r) => r.kind === "package");
+		if (!pkgs.length) {
+			mode = prevMode;
+			await showAlert("La EDT del proyecto activo está vacía. Carga primero el ejemplo en WBS Builder (\"Cargar ejemplo\") y vuelve aquí.");
+			return;
+		}
+		if (!pkgs.some((p) => ((actsData().byLeaf || {})[p.id] || []).length > 0)) {
+			mode = prevMode;
+			await showAlert("El proyecto activo todavía no tiene actividades. Carga primero el ejemplo en Definir las Actividades (\"⇩ Cargar ejemplo en el proyecto\") y vuelve aquí.");
+			return;
+		}
+		const resolved = [];
+		const unresolved = [];
+		SAMPLE_LINK_PLAN.forEach((e) => {
+			const from = findRealActivityId(e.fc, e.fn), to = findRealActivityId(e.tc, e.tn);
+			if (from && to && from !== to) resolved.push({
+				from,
+				to,
+				type: e.type,
+				lag: e.lag || 0,
+				lagUnit: e.lagUnit || "d"
+			});
+			else unresolved.push(e.fc + " \"" + e.fn + "\" → " + e.tc + " \"" + e.tn + "\"");
+		});
+		if (!resolved.length) {
+			mode = prevMode;
+			await showAlert("Ningún enlace del ejemplo coincide con las actividades reales del proyecto (Código EDT + nombre). Revisa que hayas cargado el mismo ejemplo en Definir las Actividades.");
+			return;
+		}
+		let msg = "Se reemplazarán los enlaces del PROYECTO ACTIVO (no el modo ejemplo) por los " + resolved.length + " enlace(s) del ejemplo DISTRIB+ que coinciden con sus actividades reales.";
+		if (unresolved.length) msg += " " + unresolved.length + " enlace(s) del ejemplo no se pudieron ubicar (¿cargaste el mismo ejemplo en Definir las Actividades?): " + unresolved.slice(0, 8).join("; ") + (unresolved.length > 8 ? "…" : "") + ".";
+		if (!await showConfirm(msg, "Cargar ejemplo en el proyecto")) {
+			mode = prevMode;
+			render();
+			return;
+		}
+		const st = state();
+		st.links = resolved.map((r, i) => ({
+			id: "L" + (i + 1),
+			from: r.from,
+			to: r.to,
+			type: r.type,
+			lag: r.lag,
+			lagUnit: r.lagUnit,
+			source: "paste"
+		}));
+		st.linkCounter = st.links.length + 1;
+		st.import = null;
+		st.baseline = null;
+		commit("Ejemplo DISTRIB+ cargado en el proyecto activo (" + resolved.length + " enlace(s)).");
 	}
 	var initialized = false;
 	function init() {
@@ -1126,6 +1197,352 @@
 			}, 1400);
 		});
 	}
+	var SAMPLE_LINK_PLAN = [
+		{
+			fc: "1.2",
+			fn: "Plan para la dirección del proyecto (líneas base)",
+			tc: "1.2",
+			tn: "Planes subsidiarios de gestión",
+			type: "FS"
+		},
+		{
+			fc: "1.3",
+			fn: "Elaboración de informes mensuales de avance",
+			tc: "1.3",
+			tn: "Reuniones de control y seguimiento del proyecto",
+			type: "FS"
+		},
+		{
+			fc: "2.1",
+			fn: "Calicatas exploratorias",
+			tc: "2.1",
+			tn: "Ensayos de laboratorio de suelos",
+			type: "FS"
+		},
+		{
+			fc: "2.1",
+			fn: "Ensayos de laboratorio de suelos",
+			tc: "2.1",
+			tn: "Informe geotécnico",
+			type: "FS"
+		},
+		{
+			fc: "2.2",
+			fn: "Memoria de cálculo estructural",
+			tc: "2.2",
+			tn: "Planos estructurales",
+			type: "FS"
+		},
+		{
+			fc: "2.3",
+			fn: "Memoria de cálculo eléctrico y sanitario",
+			tc: "2.3",
+			tn: "Planos eléctricos y sanitarios",
+			type: "FS"
+		},
+		{
+			fc: "2.4",
+			fn: "Trámite de licencia de edificación municipal",
+			tc: "2.4",
+			tn: "Trámite de certificado ITSE",
+			type: "FS"
+		},
+		{
+			fc: "3.1",
+			fn: "Fabricación de estructuras metálicas",
+			tc: "3.1",
+			tn: "Transporte y entrega de estructuras a obra",
+			type: "FS"
+		},
+		{
+			fc: "3.2",
+			fn: "Adquisición y suministro de cemento y agregados",
+			tc: "3.2",
+			tn: "Adquisición y suministro de materiales varios de construcción",
+			type: "FS"
+		},
+		{
+			fc: "3.3",
+			fn: "Adquisición de tableros y equipos eléctricos",
+			tc: "3.3",
+			tn: "Adquisición de equipos de instalaciones sanitarias",
+			type: "FS"
+		},
+		{
+			fc: "4.1",
+			fn: "Corte y excavación masiva",
+			tc: "4.1",
+			tn: "Relleno y compactación con material propio",
+			type: "FS"
+		},
+		{
+			fc: "4.1",
+			fn: "Relleno y compactación con material propio",
+			tc: "4.1",
+			tn: "Eliminación de material excedente",
+			type: "FS"
+		},
+		{
+			fc: "4.1",
+			fn: "Eliminación de material excedente",
+			tc: "4.1",
+			tn: "Nivelación y perfilado de plataforma",
+			type: "FS"
+		},
+		{
+			fc: "4.2",
+			fn: "Excavación de zanjas para zapatas",
+			tc: "4.2",
+			tn: "Solado de concreto e=10 cm",
+			type: "FS"
+		},
+		{
+			fc: "4.2",
+			fn: "Solado de concreto e=10 cm",
+			tc: "4.2",
+			tn: "Acero de refuerzo fy=4200 kg/cm²",
+			type: "FS"
+		},
+		{
+			fc: "4.2",
+			fn: "Acero de refuerzo fy=4200 kg/cm²",
+			tc: "4.2",
+			tn: "Concreto f'c=280 kg/cm² en zapatas",
+			type: "FS"
+		},
+		{
+			fc: "4.2",
+			fn: "Concreto f'c=280 kg/cm² en zapatas",
+			tc: "4.2",
+			tn: "Encofrado y desencofrado de cimentaciones",
+			type: "FS"
+		},
+		{
+			fc: "4.3",
+			fn: "Montaje de columnas metálicas",
+			tc: "4.3",
+			tn: "Montaje de vigas y tijerales",
+			type: "FS"
+		},
+		{
+			fc: "4.3",
+			fn: "Montaje de vigas y tijerales",
+			tc: "4.3",
+			tn: "Instalación de cobertura TR-4",
+			type: "FS"
+		},
+		{
+			fc: "4.4",
+			fn: "Tarrajeo de muros y cielorrasos",
+			tc: "4.4",
+			tn: "Pintura general de interiores y exteriores",
+			type: "FS"
+		},
+		{
+			fc: "4.4",
+			fn: "Pintura general de interiores y exteriores",
+			tc: "4.4",
+			tn: "Cerramiento perimétrico",
+			type: "FS"
+		},
+		{
+			fc: "4.5",
+			fn: "Instalación de tableros y circuitos eléctricos",
+			tc: "4.5",
+			tn: "Instalación de redes sanitarias",
+			type: "FS"
+		},
+		{
+			fc: "5.1",
+			fn: "Pruebas de tableros y circuitos eléctricos",
+			tc: "5.1",
+			tn: "Pruebas hidráulicas de redes sanitarias",
+			type: "FS"
+		},
+		{
+			fc: "5.2",
+			fn: "Capacitación operativa al personal del cliente",
+			tc: "5.2",
+			tn: "Elaboración de manuales de operación y mantenimiento",
+			type: "FS"
+		},
+		{
+			fc: "5.3",
+			fn: "Elaboración de dossier de calidad y planos as-built",
+			tc: "5.3",
+			tn: "Acta de entrega y cierre del proyecto",
+			type: "FS"
+		},
+		{
+			fc: "1.1",
+			fn: "Elaboración y aprobación del acta de constitución",
+			tc: "1.2",
+			tn: "Plan para la dirección del proyecto (líneas base)",
+			type: "FS"
+		},
+		{
+			fc: "1.2",
+			fn: "Planes subsidiarios de gestión",
+			tc: "1.3",
+			tn: "Elaboración de informes mensuales de avance",
+			type: "FS"
+		},
+		{
+			fc: "1.2",
+			fn: "Planes subsidiarios de gestión",
+			tc: "2.1",
+			tn: "Calicatas exploratorias",
+			type: "FS"
+		},
+		{
+			fc: "2.1",
+			fn: "Informe geotécnico",
+			tc: "2.2",
+			tn: "Memoria de cálculo estructural",
+			type: "FS"
+		},
+		{
+			fc: "2.2",
+			fn: "Memoria de cálculo estructural",
+			tc: "2.3",
+			tn: "Memoria de cálculo eléctrico y sanitario",
+			type: "SS",
+			lag: 5,
+			lagUnit: "d"
+		},
+		{
+			fc: "2.2",
+			fn: "Planos estructurales",
+			tc: "2.4",
+			tn: "Trámite de licencia de edificación municipal",
+			type: "FS"
+		},
+		{
+			fc: "2.3",
+			fn: "Planos eléctricos y sanitarios",
+			tc: "2.4",
+			tn: "Trámite de licencia de edificación municipal",
+			type: "FS"
+		},
+		{
+			fc: "2.2",
+			fn: "Planos estructurales",
+			tc: "3.1",
+			tn: "Fabricación de estructuras metálicas",
+			type: "FS"
+		},
+		{
+			fc: "2.4",
+			fn: "Trámite de licencia de edificación municipal",
+			tc: "3.2",
+			tn: "Adquisición y suministro de cemento y agregados",
+			type: "SS",
+			lag: 10,
+			lagUnit: "d"
+		},
+		{
+			fc: "2.3",
+			fn: "Planos eléctricos y sanitarios",
+			tc: "3.3",
+			tn: "Adquisición de tableros y equipos eléctricos",
+			type: "FS"
+		},
+		{
+			fc: "2.4",
+			fn: "Trámite de certificado ITSE",
+			tc: "4.1",
+			tn: "Corte y excavación masiva",
+			type: "FS"
+		},
+		{
+			fc: "4.1",
+			fn: "Nivelación y perfilado de plataforma",
+			tc: "4.2",
+			tn: "Excavación de zanjas para zapatas",
+			type: "FS"
+		},
+		{
+			fc: "3.2",
+			fn: "Adquisición y suministro de materiales varios de construcción",
+			tc: "4.2",
+			tn: "Acero de refuerzo fy=4200 kg/cm²",
+			type: "FS"
+		},
+		{
+			fc: "4.2",
+			fn: "Encofrado y desencofrado de cimentaciones",
+			tc: "4.3",
+			tn: "Montaje de columnas metálicas",
+			type: "FS"
+		},
+		{
+			fc: "3.1",
+			fn: "Transporte y entrega de estructuras a obra",
+			tc: "4.3",
+			tn: "Montaje de columnas metálicas",
+			type: "FS"
+		},
+		{
+			fc: "4.3",
+			fn: "Instalación de cobertura TR-4",
+			tc: "4.4",
+			tn: "Tarrajeo de muros y cielorrasos",
+			type: "FS"
+		},
+		{
+			fc: "4.3",
+			fn: "Montaje de vigas y tijerales",
+			tc: "4.5",
+			tn: "Instalación de tableros y circuitos eléctricos",
+			type: "SS",
+			lag: 8,
+			lagUnit: "d"
+		},
+		{
+			fc: "3.3",
+			fn: "Adquisición de equipos de instalaciones sanitarias",
+			tc: "4.5",
+			tn: "Instalación de redes sanitarias",
+			type: "FS"
+		},
+		{
+			fc: "4.4",
+			fn: "Cerramiento perimétrico",
+			tc: "5.1",
+			tn: "Pruebas de tableros y circuitos eléctricos",
+			type: "SS",
+			lag: 3,
+			lagUnit: "d"
+		},
+		{
+			fc: "4.5",
+			fn: "Instalación de redes sanitarias",
+			tc: "5.1",
+			tn: "Pruebas hidráulicas de redes sanitarias",
+			type: "FS"
+		},
+		{
+			fc: "5.1",
+			fn: "Pruebas hidráulicas de redes sanitarias",
+			tc: "5.2",
+			tn: "Capacitación operativa al personal del cliente",
+			type: "FS"
+		},
+		{
+			fc: "5.1",
+			fn: "Pruebas hidráulicas de redes sanitarias",
+			tc: "5.3",
+			tn: "Elaboración de dossier de calidad y planos as-built",
+			type: "FS"
+		},
+		{
+			fc: "5.2",
+			fn: "Elaboración de manuales de operación y mantenimiento",
+			tc: "5.3",
+			tn: "Elaboración de dossier de calidad y planos as-built",
+			type: "FS"
+		}
+	];
 	var SAMPLE = (function() {
 		const nodes = {};
 		let k = 0;

@@ -366,6 +366,40 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
 - CSS del modal con más variaciones locales que el resto: ancho 420px,
   `max-height:90vh`, variante `.wide` (760px) para el editor de enlaces
   y la previsualización del pegado.
+- **"⇩ Cargar ejemplo en el proyecto" (`loadSampleIntoProject`) — distinto
+  de "Modo ejemplo"**: "Modo ejemplo" es un sandbox aislado y congelado
+  (12 actividades / 13 enlaces, usado como regresión dorada de
+  `GPI.util.cpm()` — ver "Dataset de referencia (DISTRIB+)" más abajo) que
+  nunca toca el proyecto activo. Pero eso dejaba un hueco de coherencia:
+  si el alumno ya cargó el ejemplo DISTRIB+ real en WBS Builder +
+  "Definir las Actividades" (18 paquetes, 43 actividades), este módulo en
+  modo "live" leía esas actividades reales sin problema (`treeRows()`/
+  `actsData()` ya apuntan al proyecto activo), pero `schedule.links` nunca
+  se sembraba — la tabla y la Red/Gantt aparecían sin predecesoras.
+  `loadSampleIntoProject()` resuelve esto con la misma idea que
+  `activities`/`cost-estimate` usan para su propio botón, pero sin poder
+  reusar `reconcileImportRows()` (esa función reconcilia FILAS de
+  actividades, no pares de enlace): `SAMPLE_LINK_PLAN` (constante local,
+  ~48 entradas) describe cada enlace por **(Código EDT, nombre exacto de
+  la actividad) en ambos extremos** — nunca por id, porque
+  `reconcileImportRows()` asigna ids NUEVOS a cada actividad al sembrar el
+  proyecto real, sin passthrough del `"a1".."a43"` del sandbox de
+  `activities/main.ts`. `findRealActivityId(code, name)` resuelve cada
+  extremo contra el proyecto real: ubica el paquete por Código EDT vía
+  `treeRows()` y busca en `actsData().byLeaf[paqueteId]` la actividad cuyo
+  nombre normalizado (mayúsculas/acentos/espacios ignorados) coincida —
+  mismo criterio de emparejamiento por nombre que ya usa
+  `cost-estimate/main.ts` en su propia `reconcileImportRows()`. Enlaces
+  cuyo código o nombre no se encuentran quedan fuera (avisados en el
+  diálogo de confirmación, no bloquean el resto). Es un **reemplazo
+  total** de `stateLive.links` (igual que "Limpiar enlaces" o "Pegar
+  cronograma → Reemplazar todo"), nunca un merge, y limpia `import`/
+  `baseline` a `null` (es un cronograma de referencia nuevo, no una
+  auditoría). Probado end-to-end en Chrome real: con el proyecto DISTRIB+
+  completo (WBS + 43 actividades) los 48 enlaces resuelven 100% —
+  resultado: **273 días laborables, 31 actividades críticas, fin
+  2027-07-21 partiendo de 2026-07-06** (ver también "Dataset de
+  referencia (DISTRIB+)").
 
 **Schedule_Management_Plan.html**
 - Es un **documento vivo** de 15 secciones (checklist AACE RP 38R-06),
@@ -1035,6 +1069,17 @@ vez que se agrega o toca un módulo:
   2026-08-21, fin Procura 2026-08-26 (lo cierra 3.3, no 3.1 — 3.1
   termina antes, el 08-19), fin cimentaciones 2026-09-04, entrega final
   2026-11-06. Feriados de ejemplo: 2026-07-28/29, 2026-08-30.
+- **Cronograma / CPM del proyecto real** (`cronograma-cpm`,
+  `SAMPLE_LINK_PLAN` — ver su sección más arriba): 48 enlaces que cubren
+  las 43 actividades reales sembradas por "Cargar ejemplo en el proyecto"
+  de `activities`. Con el proyecto DISTRIB+ completo (WBS + actividades +
+  estos enlaces) e inicio 2026-07-06: **273 días laborables, 31
+  actividades críticas, fin 2027-07-21**. Estas fechas son las que
+  realmente calcula el CPM sobre la red completa — distintas de las
+  fechas ILUSTRATIVAS de `schedule-plan` (más arriba), que no están
+  calibradas contra un CPM real de 43 actividades y cubren solo hitos de
+  alto nivel hasta 2026-11-06; no se reconciliaron entre sí en este
+  cambio.
 
 **Regla para trabajo futuro**: al agregar un módulo o una función
 nueva que necesite datos de ejemplo, el ejemplo se **AMPLÍA** a partir
