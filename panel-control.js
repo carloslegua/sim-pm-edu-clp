@@ -837,6 +837,15 @@
 		"Precio unitario",
 		"Subtotal"
 	];
+	var CRONOGRAMA_SHEET_NAME = "Cronograma";
+	var CRONOGRAMA_HEADERS = [
+		"Id.",
+		"Nombre",
+		"Duración (d)",
+		"Comienzo",
+		"Fin",
+		"Predecesoras"
+	];
 	function xlsxStylesXml() {
 		return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"4\"><font><sz val=\"11\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"11\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"12\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"11\"/><color rgb=\"FF0090C2\"/><name val=\"Calibri\"/></font></fonts><fills count=\"3\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFDDEBF7\"/><bgColor indexed=\"64\"/></patternFill></fill></fills><borders count=\"2\"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style=\"thin\"><color rgb=\"FFB9C6D2\"/></left><right style=\"thin\"><color rgb=\"FFB9C6D2\"/></right><top style=\"thin\"><color rgb=\"FFB9C6D2\"/></top><bottom style=\"thin\"><color rgb=\"FFB9C6D2\"/></bottom><diagonal/></border></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"4\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/><xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"1\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf><xf numFmtId=\"0\" fontId=\"2\" fillId=\"0\" borderId=\"0\" applyFont=\"1\"/><xf numFmtId=\"0\" fontId=\"3\" fillId=\"0\" borderId=\"0\" applyFont=\"1\"/></cellXfs><cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles></styleSheet>";
 	}
@@ -889,9 +898,9 @@
 		};
 		text("Cómo completar este libro", 2);
 		blank();
-		text("Este archivo trae una hoja por cada módulo que importa datos desde Excel: “WBS” (WBS Builder), “Actividades” (Definir las Actividades) y “Estimado” (Estimar los Costos). NO renombres ninguna hoja: cada módulo busca la suya por ese nombre exacto y, si no la encuentra, rechaza el archivo (evita que un módulo confunda su hoja con la de otro).");
+		text("Este archivo trae una hoja por cada módulo que importa datos desde Excel: “WBS” (WBS Builder), “Actividades” (Definir las Actividades), “Estimado” (Estimar los Costos) y “Cronograma” (Cronograma / CPM). NO renombres ninguna hoja: cada módulo busca la suya por ese nombre exacto y, si no la encuentra, rechaza el archivo (evita que un módulo confunda su hoja con la de otro).");
 		text("Tampoco renombres ni abrevies los encabezados de la primera fila de cada hoja: deben coincidir EXACTAMENTE con lo que espera cada módulo (sí puedes reordenar las columnas dentro de una misma hoja).");
-		text("Orden recomendado, porque la EDT (WBS Builder) es la que manda sobre los otros dos: 1) completa “WBS” con las fases y paquetes de trabajo; 2) completa “Actividades” con las actividades de cada paquete; 3) completa “Estimado” con el precio de cada actividad.");
+		text("Orden recomendado, porque cada hoja depende de la anterior: 1) “WBS” con las fases y paquetes de trabajo (la EDT manda sobre las demás); 2) “Actividades” con las actividades de cada paquete; 3) “Estimado” con el precio de cada actividad; 4) “Cronograma”, al final, con las predecesoras entre actividades — su Id. y sus nombres de referencia dependen de que “Actividades” ya esté cargada en el proyecto.");
 		text("Sube este MISMO archivo por separado en cada módulo, con su propio botón “Importar desde Excel” — cada uno copia solo su hoja e ignora las demás. Las filas de ejemplo de abajo son solo referencia: bórralas de cada hoja antes de completar la tuya.");
 		blank();
 		text("Ejemplo — hoja “WBS” (WBS Builder)", 3);
@@ -976,6 +985,26 @@
 			"4500"
 		]);
 		blank();
+		text("Ejemplo — hoja “Cronograma” (Cronograma / CPM)", 3);
+		text("Cada fila es el proyecto, una fase, un paquete, una actividad o un hito — exactamente la misma tabla que ves en pantalla en Cronograma/CPM. “Id.” y “Nombre” son de referencia (no las edites): si el nombre de esa fila ya no coincide con el proyecto actual al importar, esa fila se rechaza. “Duración” también es de referencia, se recalcula sola. Completa “Predecesoras” con el/los Id. de las filas de las que depende cada actividad u hito — sintaxis “3” (fin-a-inicio), “3FS+2d” (con adelanto/atraso), “7CC” (comienzo-a-comienzo); varias predecesoras se separan con “;”. “Comienzo”/“Fin” son opcionales, solo para auditar contra un cronograma real de MS Project.");
+		headerRow(CRONOGRAMA_HEADERS);
+		dataRow([
+			"2",
+			"Corte de zanja",
+			"4",
+			"",
+			"",
+			""
+		]);
+		dataRow([
+			"3",
+			"Vaciado de concreto",
+			"6",
+			"",
+			"",
+			"2FS+2d"
+		]);
+		blank();
 		text("Generado por el simulador GPI — Panel de Control.");
 		return xlsxSheetXml(rows, [
 			16,
@@ -992,10 +1021,10 @@
 	}
 	async function buildCombinedTemplateXlsxBlob() {
 		const zip = new window.JSZip();
-		zip.file("[Content_Types].xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet3.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet4.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>");
+		zip.file("[Content_Types].xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet3.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet4.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet5.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>");
 		zip.file("_rels/.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>");
-		zip.file("xl/workbook.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Instrucciones\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"" + xmlEsc(WBS_SHEET_NAME) + "\" sheetId=\"2\" r:id=\"rId2\"/><sheet name=\"" + xmlEsc(ACTIVITIES_SHEET_NAME) + "\" sheetId=\"3\" r:id=\"rId3\"/><sheet name=\"" + xmlEsc(COST_ESTIMATE_SHEET_NAME) + "\" sheetId=\"4\" r:id=\"rId4\"/></sheets></workbook>");
-		zip.file("xl/_rels/workbook.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet3.xml\"/><Relationship Id=\"rId4\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet4.xml\"/><Relationship Id=\"rId5\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>");
+		zip.file("xl/workbook.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Instrucciones\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"" + xmlEsc(WBS_SHEET_NAME) + "\" sheetId=\"2\" r:id=\"rId2\"/><sheet name=\"" + xmlEsc(ACTIVITIES_SHEET_NAME) + "\" sheetId=\"3\" r:id=\"rId3\"/><sheet name=\"" + xmlEsc(COST_ESTIMATE_SHEET_NAME) + "\" sheetId=\"4\" r:id=\"rId4\"/><sheet name=\"" + xmlEsc(CRONOGRAMA_SHEET_NAME) + "\" sheetId=\"5\" r:id=\"rId5\"/></sheets></workbook>");
+		zip.file("xl/_rels/workbook.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet3.xml\"/><Relationship Id=\"rId4\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet4.xml\"/><Relationship Id=\"rId5\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet5.xml\"/><Relationship Id=\"rId6\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>");
 		zip.file("xl/styles.xml", xlsxStylesXml());
 		zip.file("xl/worksheets/sheet1.xml", templateInstructionsXml());
 		zip.file("xl/worksheets/sheet2.xml", headerRowSheet(WBS_HEADERS, [
@@ -1032,6 +1061,14 @@
 			14,
 			12
 		]));
+		zip.file("xl/worksheets/sheet5.xml", headerRowSheet(CRONOGRAMA_HEADERS, [
+			6,
+			30,
+			12,
+			11,
+			11,
+			22
+		]));
 		return zip.generateAsync({
 			type: "blob",
 			mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -1053,7 +1090,7 @@
 			a.click();
 			a.remove();
 			URL.revokeObjectURL(url);
-			toast("Plantilla combinada descargada (hojas: WBS / Actividades / Estimado).");
+			toast("Plantilla combinada descargada (hojas: WBS / Actividades / Estimado / Cronograma).");
 		} catch (_) {
 			toast("No se pudo generar la plantilla combinada.");
 		}

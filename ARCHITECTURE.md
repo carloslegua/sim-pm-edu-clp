@@ -320,36 +320,38 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
 - **"⇩ Plantilla combinada (.xlsx)"** (a pedido explícito del usuario):
   genera un libro con una hoja por cada módulo que importa desde Excel
   (hoy: "WBS" de WBS Builder, "Actividades" de Definir las Actividades,
-  "Estimado" de Estimar los Costos, más una hoja "Instrucciones"), cada
-  una con el nombre EXACTO y los encabezados EXACTOS que ese módulo
-  exige al importar — así el alumno completa todo en un solo libro y,
-  al subirlo por separado en cada módulo, ese módulo encuentra su hoja
-  por nombre sin ambigüedad (mismo mecanismo `resolveDataSheetPath()` ya
-  implementado en los tres). Este es el ÚNICO módulo, aparte de esos
-  tres, que carga `window.JSZip` — con la MISMA interfaz mínima
+  "Estimado" de Estimar los Costos, "Cronograma" de Cronograma/CPM, más
+  una hoja "Instrucciones"), cada una con el nombre EXACTO y los
+  encabezados EXACTOS que ese módulo exige al importar — así el alumno
+  completa todo en un solo libro y, al subirlo por separado en cada
+  módulo, ese módulo encuentra su hoja por nombre sin ambigüedad (mismo
+  mecanismo `resolveDataSheetPath()` ya implementado en los cuatro).
+  Este es el ÚNICO módulo, aparte de esos cuatro, que carga
+  `window.JSZip` — con la MISMA interfaz mínima
   (`JSZipInstance`/`JSZipCtor`) copiada literal, a propósito: `declare
-  global` fusiona la declaración de `Window.JSZip` de los cuatro
+  global` fusiona la declaración de `Window.JSZip` de los cinco
   archivos en una sola pasada de `tsc`, así que una interfaz distinta
   en cualquiera de ellos (por chica que sea la diferencia, p. ej.
   omitir `loadAsync` porque este módulo solo ESCRIBE el .xlsx, nunca lo
   lee) rompe la fusión con un error de tipos — ver el comentario en el
   código. Los arreglos `WBS_HEADERS`/`ACTIVITIES_HEADERS`/
-  `COST_ESTIMATE_HEADERS` son una copia literal de `TEMPLATE_HEADERS`
-  de cada módulo (Panel de Control no importa el `.ts` de ningún
-  módulo, mismo criterio de "cada módulo funciona sin depender de
-  otro" del resto de la suite) — si algún módulo cambia su plantilla,
-  hay que actualizar la copia aquí también. La hoja "Instrucciones"
-  (`templateInstructionsXml()`) no es solo texto: trae, para cada una
-  de las tres hojas de datos, un bloque con el encabezado real y 1-2
-  filas de ejemplo ya completadas (p. ej. una fase + un paquete en
-  "WBS", una actividad + un hito en "Actividades") — a pedido explícito del
-  usuario, para que el alumno vea el formato esperado sin tener que
+  `COST_ESTIMATE_HEADERS`/`CRONOGRAMA_HEADERS` son una copia literal de
+  `TEMPLATE_HEADERS` de cada módulo (Panel de Control no importa el
+  `.ts` de ningún módulo, mismo criterio de "cada módulo funciona sin
+  depender de otro" del resto de la suite) — si algún módulo cambia su
+  plantilla, hay que actualizar la copia aquí también. La hoja
+  "Instrucciones" (`templateInstructionsXml()`) no es solo texto: trae,
+  para cada una de las cuatro hojas de datos, un bloque con el
+  encabezado real y 1-2 filas de ejemplo ya completadas (p. ej. una
+  fase + un paquete en "WBS", una actividad + un hito en "Actividades",
+  una predecesora con adelanto en "Cronograma") — a pedido explícito
+  del usuario, para que el alumno vea el formato esperado sin tener que
   adivinarlo. Probado en
   `tests/e2e/panel-control-template.spec.ts`: verifica hojas/
-  encabezados exactos, y además completa la hoja "WBS" descargada con
-  una fila real y la reimporta tal cual en WBS Builder — prueba de que
-  el encabezado generado aquí es aceptado de verdad por ese módulo, no
-  solo "se parece".
+  encabezados exactos, y además completa las hojas "WBS"/"Actividades"/
+  "Cronograma" descargadas con una fila real y las reimporta tal cual
+  en su módulo — prueba de que el encabezado generado aquí es aceptado
+  de verdad por ese módulo, no solo "se parece".
 
 **Project_Charter.html**
 - Único módulo con **binding genérico por ruta de puntos**: los campos
@@ -384,7 +386,42 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   migración).
 - CSS del modal con más variaciones locales que el resto: ancho 420px,
   `max-height:90vh`, variante `.wide` (760px) para el editor de enlaces
-  y la previsualización del pegado.
+  y la previsualización del import.
+- **"📋 Pegar cronograma" reemplazado por "⇩ Exportar a Excel" / "⇧
+  Importar desde Excel" (a pedido explícito del usuario, "uniforme como
+  el resto de los módulos")**: hasta este cambio, este era el único
+  módulo de los que dependen de `activities` que no seguía el patrón
+  `DATA_SHEET_NAME`/`TEMPLATE_HEADERS`/`resolveDataSheetPath()` ya
+  establecido por `activities`/`cost-estimate`/`wbs` — en su lugar,
+  copiaba/pegaba texto TSV por POSICIÓN fija de columna (`c[0]`, `c[1]`…),
+  intolerante a reordenar columnas. Ahora usa exactamente el mismo
+  mecanismo `.xlsx` que esos tres módulos: hoja de datos llamada
+  "Cronograma" (`DATA_SHEET_NAME`), columnas `Id./Nombre/Duración (d)/
+  Comienzo/Fin/Predecesoras` (`TEMPLATE_HEADERS`) emparejadas por TEXTO
+  exacto del encabezado (`mapHeaderColumns()`), y las mismas interfaces
+  `JSZipFileEntry`/`JSZipInstance`/`JSZipCtor` copiadas literal (con su
+  propio `<script>` de JSZip agregado a `Cronograma_CPM.html`, que antes
+  no lo necesitaba). **La reconciliación en sí no cambió**:
+  `GPI.util.buildScheduleLinks()` (validación de ciclos, cruce de nombre
+  por Id., sintaxis de predecesoras) es la MISMA función que ya usaba el
+  pegado — solo cambió cómo llegan las filas hasta ahí
+  (`rowsToPasted()` arma el mismo `PastedRowLocal[]` a partir de las
+  celdas del `.xlsx` en vez de líneas TSV); no se tocó `gpi-core.ts` en
+  absoluto. Único caso nuevo que ningún otro módulo había tenido: una
+  celda de "Comienzo"/"Fin" autoformateada por Excel como Fecha guarda
+  un número de serie (no el texto "2026-01-05") — `excelSerialToISODate()`
+  lo convierte (época 1899-12-30, con el bug de año bisiesto de Excel ya
+  incorporado) antes de caer al parser de texto existente. `Link.source`
+  pasa de `"paste"` a `"import"` (`ScheduleLink.source` en `core/types.ts`
+  se AMPLÍA, nunca se angosta, para que `.json` viejos con `source:"paste"`
+  sigan cargando: el campo es solo descriptivo, no se usa para ninguna
+  decisión de lógica). Probado en `tests/e2e/cronograma-cpm-import.spec.ts`
+  (export con encabezados exactos, import con columnas reordenadas,
+  encabezado renombrado rechazado, hoja con nombre distinto rechazada,
+  celda de fecha nativa de Excel, e Id. desactualizado vía
+  "nombre-no-coincide") y un caso nuevo en `tests/unit/cpm.test.ts`. La
+  hoja "Cronograma" también se agregó a la "⇩ Plantilla combinada" de
+  Panel de Control — ver esa sección más abajo.
 - **"⇩ Cargar ejemplo en el proyecto" (`loadSampleIntoProject`) — distinto
   de "Modo ejemplo"**: "Modo ejemplo" es un sandbox aislado y congelado
   (12 actividades / 13 enlaces, usado como regresión dorada de
@@ -411,8 +448,8 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   `cost-estimate/main.ts` en su propia `reconcileImportRows()`. Enlaces
   cuyo código o nombre no se encuentran quedan fuera (avisados en el
   diálogo de confirmación, no bloquean el resto). Es un **reemplazo
-  total** de `stateLive.links` (igual que "Limpiar enlaces" o "Pegar
-  cronograma → Reemplazar todo"), nunca un merge, y limpia `import`/
+  total** de `stateLive.links` (igual que "Limpiar enlaces" o "⇧ Importar
+  desde Excel → Reemplazar todo"), nunca un merge, y limpia `import`/
   `baseline` a `null` (es un cronograma de referencia nuevo, no una
   auditoría). `SAMPLE_LINK_PLAN` también agenda los 3 hitos del catálogo
   (H1 antes de la primera actividad, H2 entre Cimentaciones y Estructura,
@@ -431,8 +468,9 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   ARCHITECTURE.md, "El 'Id.' de Definir las Actividades...". Cada hito
   entra como una fila `kind:"activity"` de duración 0 (su propio id como
   `activityId`), así que atraviesa gratis toda la maquinaria existente
-  (CPM, Red, Gantt, plantilla, pegado, enlace manual, `openAddLink()`)
-  sin ningún cambio en `gpi-core.ts` ni en esas funciones — solo
+  (CPM, Red, Gantt, plantilla, importación desde Excel, enlace manual,
+  `openAddLink()`) sin ningún cambio en `gpi-core.ts` ni en esas
+  funciones — solo
   retoques cosméticos (ícono ◆, clase `milestone-row`, badge "Hito",
   mismo lenguaje visual que Definir las Actividades). Único ajuste de
   lógica real: `criticalPertSums()` (probabilidad PERT de la ruta

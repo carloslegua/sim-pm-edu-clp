@@ -152,7 +152,7 @@ export interface ScheduleLink {
   type: ScheduleLinkType;
   lag?: number;
   lagUnit?: ScheduleLagUnit;
-  source?: "paste" | "manual";
+  source?: "paste" | "manual" | "import"; // "paste" queda solo por compatibilidad con .json ya exportados -- Cronograma/CPM ahora escribe "import" (reemplazó el pegado por .xlsx, igual que el resto de la suite)
 }
 
 export interface ScheduleImportInfo {

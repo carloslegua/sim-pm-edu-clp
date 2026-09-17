@@ -448,7 +448,7 @@
 		if (!hasLinks) out.push({
 			c: "warn",
 			ic: "▤",
-			t: "Aún no hay enlaces. Usa <b>📋 Pegar cronograma</b> o <b>＋ Enlace manual</b> para construir la red."
+			t: "Aún no hay enlaces. Usa <b>⇧ Importar desde Excel</b> o <b>＋ Enlace manual</b> para construir la red."
 		});
 		else if (R.cpm.ok && !R.val.dangling.length && !R.val.selfLoops.length) out.push({
 			c: "ok",
@@ -812,27 +812,20 @@
 		}
 		return "";
 	}
-	function analyzePaste(text) {
-		const lines = String(text || "").replace(/\r/g, "").split("\n").filter((l) => l.trim() !== "");
-		const pasted = [];
-		lines.forEach((ln) => {
-			const c = ln.split("	");
-			const netStr = (c[0] || "").trim();
-			if (!/^\d+$/.test(netStr)) return;
-			const cols = c.length;
-			let name = (c[1] || "").trim();
-			const start = parseDateCell(cols >= 5 ? c[3] : "");
-			const finish = parseDateCell(cols >= 5 ? c[4] : "");
-			const predCell = cols >= 6 ? c[5] : cols === 2 ? c[1] : c[cols - 1] || "";
-			if (cols === 2) name = "";
-			pasted.push({
-				netId: parseInt(netStr, 10),
-				name,
-				start,
-				finish,
-				predCell
-			});
-		});
+	function excelSerialToISODate(serial) {
+		const d = new Date(Date.UTC(1899, 11, 30) + serial * 864e5);
+		return d.getUTCFullYear() + "-" + pad2(d.getUTCMonth() + 1) + "-" + pad2(d.getUTCDate());
+	}
+	function cellToDate(raw) {
+		const s = String(raw == null ? "" : raw).trim();
+		if (!s) return "";
+		if (/^\d+(\.\d+)?$/.test(s)) {
+			const n = Number(s);
+			if (n > 0 && n < 6e4) return excelSerialToISODate(n);
+		}
+		return parseDateCell(s);
+	}
+	function buildImportResult(pasted) {
 		const snap = fullRowsSnapshot();
 		const res = GPI.util.buildScheduleLinks(pasted, snap);
 		res.snap = snap;
@@ -868,7 +861,7 @@
 			}).join("");
 		}
 		const datesN = Object.keys(a.dates).length;
-		let html = "<p style='margin-bottom:10px'>Se interpretaron <b>" + a.pastedCount + "</b> fila(s). Nada se guarda hasta que confirmes.</p>";
+		let html = "<p style='margin-bottom:10px'>Se interpretaron <b>" + a.pastedCount + "</b> fila(s) del archivo. Nada se guarda hasta que confirmes.</p>";
 		html += sec("✔ Enlaces a crear", a.links.length, "cnt-ok", okList);
 		if (a.rejected.length) html += sec("✖ Enlaces rechazados", a.rejected.length, "cnt-bad", errList(a.rejected));
 		if (a.rowErrors.length) html += sec("⚠ Filas con problema", a.rowErrors.length, "cnt-warn", errList(a.rowErrors));
@@ -876,15 +869,15 @@
 		if (a.duplicates.length) html += sec("● Duplicados (colapsados)", a.duplicates.length, "cnt-warn", "");
 		html += sec("📅 Fechas para auditoría", datesN, "cnt-ok", "");
 		if (a.canApply) html += "<div class='radio-row'><label><input type='radio' name='mergeMode' value='merge' checked> Fusionar con lo existente</label><label><input type='radio' name='mergeMode' value='replace'> Reemplazar todo</label></div>";
-		else html += "<div class='issue warn' style='margin-top:8px'><span class='ic'>⚠</span><span>No hay nada aplicable. Revisa que pegaste la columna <b>Predecesoras</b> con los Id. de esta plantilla.</span></div>";
+		else html += "<div class='issue warn' style='margin-top:8px'><span class='ic'>⚠</span><span>No hay nada aplicable. Revisa que completaste la columna <b>Predecesoras</b> con los Id. de esta plantilla.</span></div>";
 		return html;
 	}
-	function applyPaste(a, mergeMode) {
+	function applyImport(a, mergeMode) {
 		const st = state();
 		const newLinks = a.links.map((l) => ({
 			...l,
 			id: newLinkId(),
-			source: "paste"
+			source: "import"
 		}));
 		if (mergeMode === "replace") st.links = newLinks;
 		else {
@@ -909,89 +902,325 @@
 		Object.assign(dates, a.dates);
 		st.import = {
 			at: Date.now(),
-			tool: "msproject-paste",
+			tool: "xlsx-import",
 			rowMap,
 			dates
 		};
-		commit("Cronograma pegado y aplicado (" + newLinks.length + " enlace[s]). Las fechas quedan como auditoría.");
+		commit("Cronograma importado y aplicado (" + newLinks.length + " enlace[s]). Las fechas quedan como auditoría.");
 	}
-	function openPaste() {
-		showModalHTML({
-			wide: true,
-			title: "Pegar cronograma (Excel / MS Project)",
-			html: "<p>Pega desde Excel o MS Project las columnas de tu cronograma. La <b>llave de unión es el Id.</b> (0 = proyecto), tal como aparece en la plantilla (botón «⧉ Copiar plantilla»). Orden esperado:</p><div style='font-family:var(--mono);font-size:11px;background:var(--bg-2);border:1px solid var(--panel-border);border-radius:8px;padding:8px 10px;margin-bottom:10px'>Id. &nbsp;·&nbsp; Nombre &nbsp;·&nbsp; Dur &nbsp;·&nbsp; Comienzo &nbsp;·&nbsp; Fin &nbsp;·&nbsp; Predecesoras</div><textarea class='paste-zone' id='pasteTA' placeholder='Pega aquí (Ctrl+V)…'></textarea><div style='font-size:11px;color:#8992a3;margin-top:8px'>Sintaxis de predecesoras: <b>3</b>, <b>3FS+2d</b>, <b>7CC</b> (SS), <b>9FC-1d</b> (lead). Separadores <b>;</b> o <b>,</b>. Se pega la <b>topología</b>; el simulador recalcula las fechas — las fechas pegadas son solo auditoría.</div>",
-			confirmText: "Analizar ▸",
-			cancelText: "Cancelar",
-			afterOpen: (card) => {
-				card.querySelector("#pasteTA").focus();
-			},
-			collect: () => ({ text: document.getElementById("pasteTA").value })
-		}).then((r) => {
-			if (!r || r.text == null) return;
-			const a = analyzePaste(r.text);
-			showModalHTML({
-				wide: true,
-				title: "Previsualización — antes de guardar",
-				html: previewHTML(a),
-				confirmText: a.canApply ? "Confirmar ▾" : null,
-				cancelText: "Cancelar",
-				collect: a.canApply ? () => {
-					const m = document.querySelector("input[name=mergeMode]:checked");
-					return { mode: m ? m.value : "merge" };
-				} : void 0
-			}).then((c) => {
-				if (c && c.mode) applyPaste(a, c.mode);
+	function xmlEsc(s) {
+		return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+	}
+	var DATA_SHEET_NAME = "Cronograma";
+	var TEMPLATE_HEADERS = [
+		"Id.",
+		"Nombre",
+		"Duración (d)",
+		"Comienzo",
+		"Fin",
+		"Predecesoras"
+	];
+	function xlsxStylesXml() {
+		const xfs = [
+			"<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/>",
+			"<xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"1\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" vertical=\"center\" wrapText=\"1\"/></xf>",
+			"<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf>",
+			"<xf numFmtId=\"164\" fontId=\"0\" fillId=\"0\" borderId=\"0\" applyNumberFormat=\"1\" applyAlignment=\"1\"><alignment horizontal=\"right\"/></xf>",
+			"<xf numFmtId=\"0\" fontId=\"3\" fillId=\"0\" borderId=\"0\" applyFont=\"1\" applyAlignment=\"1\"><alignment vertical=\"top\" wrapText=\"1\"/></xf>"
+		];
+		for (let i = 0; i < 10; i++) xfs.push("<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"left\" indent=\"" + i + "\"/></xf>");
+		for (let i = 0; i < 10; i++) xfs.push("<xf numFmtId=\"0\" fontId=\"1\" fillId=\"0\" borderId=\"0\" applyFont=\"1\" applyAlignment=\"1\"><alignment horizontal=\"left\" indent=\"" + i + "\"/></xf>");
+		xfs.push("<xf numFmtId=\"0\" fontId=\"2\" fillId=\"3\" borderId=\"0\" applyFont=\"1\" applyFill=\"1\"/>");
+		return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><numFmts count=\"1\"><numFmt numFmtId=\"164\" formatCode=\"#,##0.00\"/></numFmts><fonts count=\"4\"><font><sz val=\"11\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"11\"/><name val=\"Calibri\"/></font><font><b/><sz val=\"12\"/><name val=\"Calibri\"/></font><font><i/><sz val=\"10\"/><color rgb=\"FF4D5768\"/><name val=\"Calibri\"/></font></fonts><fills count=\"4\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFDDEBF7\"/><bgColor indexed=\"64\"/></patternFill></fill><fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFE8F6FC\"/><bgColor indexed=\"64\"/></patternFill></fill></fills><borders count=\"2\"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style=\"thin\"><color rgb=\"FFB9C6D2\"/></left><right style=\"thin\"><color rgb=\"FFB9C6D2\"/></right><top style=\"thin\"><color rgb=\"FFB9C6D2\"/></top><bottom style=\"thin\"><color rgb=\"FFB9C6D2\"/></bottom><diagonal/></border></borders><cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs><cellXfs count=\"" + xfs.length + "\">" + xfs.join("") + "</cellXfs><cellStyles count=\"1\"><cellStyle name=\"Normal\" xfId=\"0\" builtinId=\"0\"/></cellStyles></styleSheet>";
+	}
+	function xlsxSheetXml(rows, widths, freezeTop) {
+		const COLS = "ABCDEFGHIJ";
+		const cols = widths.map((w, i) => "<col min=\"" + (i + 1) + "\" max=\"" + (i + 1) + "\" width=\"" + w + "\" customWidth=\"1\"/>").join("");
+		const body = rows.map((cells, ri) => {
+			const cs = cells.map((c, ci) => {
+				if (c == null || c.v === "" || c.v == null) return "";
+				const ref = COLS[ci] + (ri + 1), st = c.s ? " s=\"" + c.s + "\"" : "";
+				if (c.t === "n") return "<c r=\"" + ref + "\"" + st + "><v>" + c.v + "</v></c>";
+				return "<c r=\"" + ref + "\"" + st + " t=\"inlineStr\"><is><t xml:space=\"preserve\">" + xmlEsc(c.v) + "</t></is></c>";
+			}).join("");
+			return "<row r=\"" + (ri + 1) + "\">" + cs + "</row>";
+		}).join("");
+		return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">" + (freezeTop ? "<sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>" : "") + "<cols>" + cols + "</cols><sheetData>" + body + "</sheetData></worksheet>";
+	}
+	function templateRowModel() {
+		const out = [TEMPLATE_HEADERS.map((h) => ({
+			v: h,
+			t: "s",
+			s: 1
+		}))];
+		const snap = fullRowsSnapshot(), nn = netMap(snap);
+		snap.forEach((r) => {
+			const isAct = r.kind === "activity";
+			const dur = isAct && r.det != null ? {
+				v: r.det,
+				t: "n"
+			} : null;
+			const preds = isAct ? incoming(r.activityId).map((l) => linkToken(l, nn)).filter(Boolean).join("; ") : "";
+			out.push([
+				{
+					v: r.netId,
+					t: "n",
+					s: 2
+				},
+				{
+					v: r.name || "",
+					t: "s",
+					s: 0
+				},
+				dur,
+				null,
+				null,
+				preds ? {
+					v: preds,
+					t: "s",
+					s: 0
+				} : null
+			]);
+		});
+		return out;
+	}
+	function templateInstructions() {
+		return [
+			["Cómo completar esta plantilla", 25],
+			["", 0],
+			["0. Si guardas todo el proyecto en un solo libro de Excel (varias hojas para varios módulos), esta hoja debe llamarse exactamente “Cronograma” y sus encabezados deben coincidir EXACTAMENTE con los de esta plantilla (se puede reordenar columnas, pero no renombrarlas ni abreviarlas): al importar se verifican ambas cosas y se rechaza el archivo si no calzan.", 4],
+			["1. Las columnas “Id.” y “Nombre” son de referencia — no las edites ni las borres: son la clave con la que este simulador reconoce cada fila al importar el archivo de vuelta (el mismo Id. correlativo que ya se ve en pantalla, y en Definir las Actividades/Estimar los Costos). Si el nombre de esa fila ya no coincide, en el proyecto actual, con lo que había cuando exportaste este archivo (por ejemplo, se editaron las actividades después), esa fila se rechaza al importar — vuelve a exportar la plantilla actualizada.", 4],
+			["2. “Duración” es de referencia — se recalcula sola en pantalla a partir del metrado/rendimiento de cada actividad, no hace falta completarla ni se relee al importar.", 4],
+			["3. “Comienzo” y “Fin” son OPCIONALES: solo sirven para auditoría, si ya tienes un cronograma real calculado en MS Project y quieres comparar sus fechas contra las que calcula este simulador (columna “Auditoría” en pantalla) — el simulador siempre recalcula las fechas solo a partir de “Predecesoras”, nunca a partir de estas dos columnas.", 4],
+			["4. “Predecesoras”: escribe el/los Id. de las filas de las que depende cada actividad u hito. Sintaxis: “3” (depende del fin de la fila 3, fin-a-inicio), “3FS+2d” (fin-a-inicio con 2 días de adelanto), “7CC” (comienzo-a-comienzo), “9FC-1d” (fin-a-comienzo con 1 día de atraso). Varias predecesoras se separan con “;” o “,”.", 4],
+			["5. Puedes trabajar este archivo indistintamente en Excel o en MS Project (Archivo > Abrir > Examinar > tipo “Libro de Excel”) — es el mismo .xlsx.", 4],
+			["6. Guarda el archivo y vuelve a “Cronograma / CPM” > botón “⇧ Importar desde Excel” para subirlo.", 4],
+			["", 0],
+			["Generado por el simulador GPI — módulo Cronograma / CPM.", 4]
+		].map((row) => [{
+			v: row[0],
+			t: "s",
+			s: row[1] === 25 ? 25 : 4
+		}]);
+	}
+	async function buildTemplateXlsxBlob() {
+		const zip = new window.JSZip();
+		zip.file("[Content_Types].xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/worksheets/sheet2.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/></Types>");
+		zip.file("_rels/.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>");
+		zip.file("xl/workbook.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"" + xmlEsc(DATA_SHEET_NAME) + "\" sheetId=\"1\" r:id=\"rId1\"/><sheet name=\"Instrucciones\" sheetId=\"2\" r:id=\"rId2\"/></sheets></workbook>");
+		zip.file("xl/_rels/workbook.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/><Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet2.xml\"/><Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>");
+		zip.file("xl/styles.xml", xlsxStylesXml());
+		zip.file("xl/worksheets/sheet1.xml", xlsxSheetXml(templateRowModel(), [
+			6,
+			30,
+			12,
+			11,
+			11,
+			22
+		], true));
+		zip.file("xl/worksheets/sheet2.xml", xlsxSheetXml(templateInstructions(), [115], false));
+		return zip.generateAsync({
+			type: "blob",
+			mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+		});
+	}
+	function buildTemplateCsv() {
+		function cell(v) {
+			const s = String(v == null ? "" : v);
+			return /[";\n]/.test(s) ? "\"" + s.replace(/"/g, "\"\"") + "\"" : s;
+		}
+		const lines = [TEMPLATE_HEADERS.join(";")];
+		const snap = fullRowsSnapshot(), nn = netMap(snap);
+		snap.forEach((r) => {
+			const isAct = r.kind === "activity";
+			const dur = isAct && r.det != null ? r.det : "";
+			const preds = isAct ? incoming(r.activityId).map((l) => linkToken(l, nn)).filter(Boolean).join("; ") : "";
+			lines.push([
+				cell(r.netId),
+				cell(r.name || ""),
+				cell(dur),
+				"",
+				"",
+				cell(preds)
+			].join(";"));
+		});
+		return lines.join("\r\n");
+	}
+	function downloadBlob(blob, filename) {
+		const url = URL.createObjectURL(blob), a = document.createElement("a");
+		a.href = url;
+		a.download = filename;
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+		URL.revokeObjectURL(url);
+	}
+	async function downloadTemplate() {
+		const safe = (document.getElementById("projectTitle").value || "proyecto").replace(/[^a-z0-9_-]+/gi, "_").toLowerCase();
+		if (window.JSZip) try {
+			downloadBlob(await buildTemplateXlsxBlob(), "plantilla_cronograma_" + safe + ".xlsx");
+			setStatus("Plantilla descargada. Completa Predecesoras (y Comienzo/Fin si quieres auditar) y vuelve a subirla con «⇧ Importar desde Excel».");
+			return;
+		} catch (_) {}
+		downloadBlob(new Blob(["﻿" + buildTemplateCsv()], { type: "text/csv;charset=utf-8" }), "plantilla_cronograma_" + safe + ".csv");
+		setStatus("No se pudo cargar la librería de Excel (¿sin conexión?): descargué un CSV equivalente.");
+	}
+	function colIndexFromRef(ref) {
+		const m = /^([A-Z]+)/.exec(ref);
+		if (!m) return 0;
+		let n = 0;
+		for (const ch of m[1]) n = n * 26 + (ch.charCodeAt(0) - 64);
+		return n - 1;
+	}
+	async function resolveDataSheetPath(zip, expectedName) {
+		const wbEntry = zip.file("xl/workbook.xml");
+		if (!wbEntry) return { kind: "invalid" };
+		const doc = new DOMParser().parseFromString(await wbEntry.async("string"), "application/xml");
+		const sheets = Array.from(doc.getElementsByTagName("sheet"));
+		const wanted = normName(expectedName);
+		const sheetEl = sheets.find((s) => normName(s.getAttribute("name") || "") === wanted);
+		if (!sheetEl) return {
+			kind: "not-found",
+			sheetNames: sheets.map((s) => s.getAttribute("name") || "").filter(Boolean)
+		};
+		const rId = sheetEl.getAttribute("r:id");
+		const relsEntry = zip.file("xl/_rels/workbook.xml.rels");
+		if (!rId || !relsEntry) return { kind: "invalid" };
+		const relsDoc = new DOMParser().parseFromString(await relsEntry.async("string"), "application/xml");
+		const rel = Array.from(relsDoc.getElementsByTagName("Relationship")).find((r) => r.getAttribute("Id") === rId);
+		const target = rel ? rel.getAttribute("Target") || "" : "";
+		if (!target) return { kind: "invalid" };
+		return {
+			kind: "found",
+			path: target.startsWith("/") ? target.slice(1) : "xl/" + target
+		};
+	}
+	async function loadSharedStrings(zip) {
+		const entry = zip.file("xl/sharedStrings.xml");
+		if (!entry) return [];
+		const doc = new DOMParser().parseFromString(await entry.async("string"), "application/xml");
+		return Array.from(doc.getElementsByTagName("si")).map((si) => Array.from(si.getElementsByTagName("t")).map((t) => t.textContent || "").join(""));
+	}
+	function parseSheetRows(xmlText, sharedStrings) {
+		const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+		return Array.from(doc.getElementsByTagName("row")).map((rowEl) => {
+			const row = [];
+			Array.from(rowEl.getElementsByTagName("c")).forEach((c) => {
+				const idx = colIndexFromRef(c.getAttribute("r") || "");
+				const t = c.getAttribute("t");
+				let val;
+				if (t === "inlineStr") {
+					const isEl = c.getElementsByTagName("is")[0];
+					const tEl = isEl ? isEl.getElementsByTagName("t")[0] : null;
+					val = tEl ? tEl.textContent || "" : "";
+				} else {
+					const vEl = c.getElementsByTagName("v")[0];
+					const raw = vEl ? vEl.textContent || "" : "";
+					val = t === "s" ? sharedStrings[Number(raw)] || "" : raw;
+				}
+				row[idx] = val;
+			});
+			for (let i = 0; i < row.length; i++) if (row[i] == null) row[i] = "";
+			return row;
+		});
+	}
+	async function parseScheduleXlsx(file) {
+		const buf = await file.arrayBuffer();
+		const zip = await window.JSZip.loadAsync(buf);
+		const resolution = await resolveDataSheetPath(zip, DATA_SHEET_NAME);
+		if (resolution.kind === "invalid") return { kind: "empty" };
+		if (resolution.kind === "not-found") return {
+			kind: "sheet-not-found",
+			sheetNames: resolution.sheetNames
+		};
+		const sheetEntry = zip.file(resolution.path);
+		if (!sheetEntry) return { kind: "empty" };
+		const [sheetXml, sharedStrings] = await Promise.all([sheetEntry.async("string"), loadSharedStrings(zip)]);
+		const allRows = parseSheetRows(sheetXml, sharedStrings);
+		if (!allRows.length) return { kind: "empty" };
+		return {
+			kind: "ok",
+			headers: allRows[0],
+			rows: allRows.slice(1)
+		};
+	}
+	var TEMPLATE_HEADER_FIELDS = [
+		"id",
+		"name",
+		null,
+		"start",
+		"finish",
+		"predecessors"
+	];
+	var HEADER_FIELD_BY_TEXT = {};
+	TEMPLATE_HEADERS.forEach((h, i) => {
+		const field = TEMPLATE_HEADER_FIELDS[i];
+		if (field) HEADER_FIELD_BY_TEXT[normName(h)] = field;
+	});
+	function mapHeaderColumns(headerRow) {
+		const map = {};
+		headerRow.forEach((h, idx) => {
+			const field = HEADER_FIELD_BY_TEXT[normName(h)];
+			if (field) map[field] = idx;
+		});
+		if (map.id == null) return null;
+		return map;
+	}
+	function rowsToPasted(rows, colMap) {
+		const out = [];
+		rows.forEach((row) => {
+			const idStr = String(row[colMap.id] || "").trim();
+			if (!/^\d+$/.test(idStr)) return;
+			const name = colMap.name != null ? String(row[colMap.name] || "").trim() : "";
+			const start = colMap.start != null ? cellToDate(row[colMap.start]) : "";
+			const finish = colMap.finish != null ? cellToDate(row[colMap.finish]) : "";
+			const predCell = colMap.predecessors != null ? String(row[colMap.predecessors] || "") : "";
+			out.push({
+				netId: parseInt(idStr, 10),
+				name,
+				start,
+				finish,
+				predCell
 			});
 		});
+		return out;
 	}
-	function copyTemplate() {
-		const snap = fullRowsSnapshot(), nn = netMap(snap);
-		const rows = [[
-			"Id.",
-			"Nombre",
-			"Dur (d)",
-			"Comienzo",
-			"Fin",
-			"Predecesoras"
-		].join("	")];
-		snap.forEach((r) => {
-			let dur = "", preds = "";
-			if (r.kind === "activity") {
-				dur = r.det != null ? r.det : "";
-				preds = incoming(r.activityId).map((l) => linkToken(l, nn)).filter(Boolean).join("; ");
-			}
-			rows.push([
-				r.netId,
-				r.name,
-				dur,
-				"",
-				"",
-				preds
-			].join("	"));
-		});
-		const tsv = rows.join("\n");
-		function ok() {
-			setStatus("Plantilla copiada al portapapeles — pégala en Excel o MS Project.");
-			showAlert("Plantilla copiada. Pégala en Excel o MS Project, completa Comienzo/Fin y Predecesoras usando los Id., y vuelve a pegarla aquí con «📋 Pegar cronograma».", "Plantilla copiada");
-		}
-		if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(tsv).then(ok, () => {
-			fallbackCopy(tsv);
-			ok();
-		});
-		else {
-			fallbackCopy(tsv);
-			ok();
-		}
-	}
-	function fallbackCopy(t) {
-		const ta = document.createElement("textarea");
-		ta.value = t;
-		document.body.appendChild(ta);
-		ta.select();
+	async function importScheduleExcel(file) {
+		let parsed;
 		try {
-			document.execCommand("copy");
-		} catch (_) {}
-		ta.remove();
+			parsed = await parseScheduleXlsx(file);
+		} catch (_) {
+			await showAlert("El archivo no parece ser un .xlsx válido (¿se guardó bien o se cambió la extensión?).");
+			return;
+		}
+		if (parsed.kind === "sheet-not-found") {
+			const otras = parsed.sheetNames.filter((n) => normName(n) !== normName(DATA_SHEET_NAME));
+			await showAlert("No encontré una hoja llamada «Cronograma» en este archivo" + (otras.length ? " (tiene: " + otras.join(", ") + ")" : "") + ". Si tu Excel junta varios módulos en un solo libro, la hoja con los datos a importar aquí debe llamarse exactamente «Cronograma» (como la que genera «⇩ Exportar a Excel») para que el simulador sepa cuál copiar y no la confunda con la de otro módulo.", "Hoja no reconocida");
+			return;
+		}
+		if (parsed.kind === "empty") {
+			await showAlert("El archivo no contiene datos reconocibles.");
+			return;
+		}
+		const colMap = mapHeaderColumns(parsed.headers);
+		if (!colMap) {
+			await showAlert("No reconocí las columnas del archivo: los encabezados deben coincidir EXACTAMENTE con los de la plantilla (¿renombraste o abreviaste alguna, p. ej. «Id» en vez de «Id.»?). Se espera al menos la columna «Id.» escrita tal cual.");
+			return;
+		}
+		const a = buildImportResult(rowsToPasted(parsed.rows, colMap));
+		showModalHTML({
+			wide: true,
+			title: "Previsualización — antes de guardar",
+			html: previewHTML(a),
+			confirmText: a.canApply ? "Confirmar ▾" : null,
+			cancelText: "Cancelar",
+			collect: a.canApply ? () => {
+				const m = document.querySelector("input[name=mergeMode]:checked");
+				return { mode: m ? m.value : "merge" };
+			} : void 0
+		}).then((c) => {
+			if (c && c.mode) applyImport(a, c.mode);
+		});
 	}
 	function clearLinks() {
 		showConfirm("Se eliminarán todos los enlaces y las fechas de auditoría de este cronograma. Las actividades y la EDT no se tocan. ¿Continuar?", "Limpiar cronograma").then((ok) => {
@@ -1032,7 +1261,7 @@
 		h += "</table>";
 		h += "<p class='rep-note'>ES = Inicio Temprano (Early Start) · EF = Fin Temprano (Early Finish) · LS = Inicio Tardío (Late Start) · LF = Fin Tardío (Late Finish). Holgura Total = LS − ES; 0 = actividad crítica.</p>";
 		h += "<p class='rep-note'>Predecesoras: Id. de red de la actividad de la que depende, con el tipo de relación si no es FS (fin-a-inicio) y el adelanto/atraso en días si lo hay — p. ej. “3SS+2d” significa “depende del inicio de la actividad Id. 3, con 2 días de adelanto”.</p>";
-		h += "<p class='rep-note'>Auditoría: compara la fecha que calculó el simulador contra la fecha de MS Project que hayas pegado con «📋 Pegar cronograma» — ✓ coinciden, ✗ difieren (revisa calendario o enlaces). Si todavía no pegaste un cronograma real de MS Project, queda en “—”: no hay nada que auditar por ahora.</p>";
+		h += "<p class='rep-note'>Auditoría: compara la fecha que calculó el simulador contra la fecha de MS Project que hayas importado con «⇧ Importar desde Excel» (columnas Comienzo/Fin, opcionales) — ✓ coinciden, ✗ difieren (revisa calendario o enlaces). Si todavía no importaste esas fechas, queda en “—”: no hay nada que auditar por ahora.</p>";
 		if (s.allValid) h += "<p class='rep-note'>Ruta crítica: ΣTE = " + fmt(s.sumTe) + " d, Σσ² = " + fmt(s.sumVar) + " (base para la probabilidad de plazo PERT).</p>";
 		rep.innerHTML = h;
 	}
@@ -1066,8 +1295,15 @@
 		});
 	}
 	function wireToolbar() {
-		document.getElementById("btnTemplate").addEventListener("click", copyTemplate);
-		document.getElementById("btnPaste").addEventListener("click", openPaste);
+		document.getElementById("btnExportExcel").addEventListener("click", downloadTemplate);
+		document.getElementById("btnImportExcel").addEventListener("click", () => {
+			document.getElementById("xlsxFileInput").click();
+		});
+		document.getElementById("xlsxFileInput").addEventListener("change", (e) => {
+			const files = e.target.files;
+			if (files && files[0]) importScheduleExcel(files[0]);
+			e.target.value = "";
+		});
 		document.getElementById("btnAddLink").addEventListener("click", openAddLink);
 		document.getElementById("btnRecalc").addEventListener("click", () => {
 			render();
@@ -1173,7 +1409,7 @@
 			type: r.type,
 			lag: r.lag,
 			lagUnit: r.lagUnit,
-			source: "paste"
+			source: "import"
 		}));
 		st.linkCounter = st.links.length + 1;
 		st.import = null;
@@ -1756,7 +1992,7 @@
 						type: "FS",
 						lag: 0,
 						lagUnit: "d",
-						source: "paste"
+						source: "import"
 					},
 					{
 						id: "L2",
@@ -1765,7 +2001,7 @@
 						type: "FS",
 						lag: 0,
 						lagUnit: "d",
-						source: "paste"
+						source: "import"
 					},
 					{
 						id: "L3",
@@ -1774,7 +2010,7 @@
 						type: "SS",
 						lag: 4,
 						lagUnit: "d",
-						source: "paste"
+						source: "import"
 					},
 					{
 						id: "L4",
@@ -1783,7 +2019,7 @@
 						type: "FS",
 						lag: 0,
 						lagUnit: "d",
-						source: "paste"
+						source: "import"
 					},
 					{
 						id: "L5",
@@ -1792,7 +2028,7 @@
 						type: "SS",
 						lag: 3,
 						lagUnit: "d",
-						source: "paste"
+						source: "import"
 					},
 					{
 						id: "L6",
@@ -1801,7 +2037,7 @@
 						type: "SS",
 						lag: 2,
 						lagUnit: "d",
-						source: "paste"
+						source: "import"
 					},
 					{
 						id: "L7",
@@ -1810,7 +2046,7 @@
 						type: "FS",
 						lag: 0,
 						lagUnit: "d",
-						source: "paste"
+						source: "import"
 					},
 					{
 						id: "L8",
@@ -1819,7 +2055,7 @@
 						type: "FS",
 						lag: 0,
 						lagUnit: "d",
-						source: "paste"
+						source: "import"
 					},
 					{
 						id: "L9",
@@ -1828,7 +2064,7 @@
 						type: "FS",
 						lag: 0,
 						lagUnit: "d",
-						source: "paste"
+						source: "import"
 					},
 					{
 						id: "L10",
@@ -1837,7 +2073,7 @@
 						type: "FS",
 						lag: 0,
 						lagUnit: "d",
-						source: "paste"
+						source: "import"
 					},
 					{
 						id: "L11",
@@ -1846,7 +2082,7 @@
 						type: "SS",
 						lag: 2,
 						lagUnit: "d",
-						source: "paste"
+						source: "import"
 					},
 					{
 						id: "L12",
@@ -1855,7 +2091,7 @@
 						type: "FS",
 						lag: 3,
 						lagUnit: "d",
-						source: "paste"
+						source: "import"
 					},
 					{
 						id: "L13",
@@ -1864,7 +2100,7 @@
 						type: "SS",
 						lag: 5,
 						lagUnit: "d",
-						source: "paste"
+						source: "import"
 					}
 				]
 			},

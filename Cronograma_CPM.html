@@ -147,7 +147,6 @@
   .modal-card{width:420px; max-height:90vh; overflow:auto;}
   .modal-card.wide{width:760px;}
   .modal-actions{margin-top:18px;}
-  .paste-zone{width:100%; min-height:150px; font-family:var(--mono); font-size:12px; border:1.5px dashed var(--cyan); border-radius:10px; padding:10px; background:var(--bg-2); color:var(--ink-0); resize:vertical;}
   .prev-sec{margin:12px 0;}
   .prev-sec h4{font-family:var(--display); font-size:12px; font-weight:800; margin:0 0 6px; color:var(--ink-0); display:flex; align-items:center; gap:7px;}
   .prev-count{font-family:var(--mono); font-size:10.5px; font-weight:700; padding:1px 8px; border-radius:10px;}
@@ -171,6 +170,15 @@
 </style>
 <link rel="stylesheet" href="gpi-shared.css">
 <script src="gpi-core.js"></script>
+<!-- JSZip: generación/lectura de .xlsx en el navegador (si no carga, se
+     exporta CSV equivalente -- igual criterio que activities/cost-estimate/wbs).
+     integrity: hash SRI oficial de cdnjs para esta versión exacta -- si el CDN
+     sirviera contenido distinto (comprometido o corrupto), el navegador
+     rechaza el script en vez de ejecutarlo, y la app cae al CSV de todas
+     formas (mismo camino que "JSZip no cargó"). -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+        integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
 
@@ -190,8 +198,9 @@
 
 <div class="toolbar">
   <div class="sep"></div>
-  <button class="btn" id="btnTemplate" title="Copia la plantilla (Id., Nombre, Dur, Comienzo, Fin, Predecesoras) para llenarla en Excel o MS Project">⧉ Copiar plantilla</button>
-  <button class="btn primary" id="btnPaste">📋 Pegar cronograma</button>
+  <button class="btn" id="btnExportExcel" title="Genera un .xlsx con la tabla actual (Id., Nombre, Duración, Comienzo, Fin, Predecesoras), listo para completar en Excel o MS Project">⇩ Exportar a Excel</button>
+  <button class="btn primary" id="btnImportExcel" title="Sube el .xlsx completado: agrega o reemplaza los enlaces del cronograma">⇧ Importar desde Excel</button>
+  <input type="file" id="xlsxFileInput" accept=".xlsx">
   <button class="btn violet" id="btnAddLink">＋ Enlace manual</button>
   <div class="sep"></div>
   <button class="btn" id="btnRecalc">⟳ Recalcular</button>

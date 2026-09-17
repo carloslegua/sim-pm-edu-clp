@@ -34,6 +34,36 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
   vacía / sin actividades). Ver ARCHITECTURE.md, sección
   `Cronograma_CPM.html` y "Dataset de referencia (DISTRIB+)".
 
+### Changed
+
+- **Cronograma/CPM — "📋 Pegar cronograma" reemplazado por "⇩ Exportar a
+  Excel" / "⇧ Importar desde Excel", uniforme con el resto de la suite**
+  — el usuario señaló que el pegado no seguía la misma lógica que WBS
+  Builder/Definir las Actividades/Estimar los Costos (archivo `.xlsx`
+  con nombre de hoja y encabezados EXACTOS, emparejados por texto) y
+  pidió unificarlo, además de sumar la hoja correspondiente a la "⇩
+  Plantilla combinada" del Panel de Control. Confirmado con el usuario:
+  se reemplaza el pegado por completo, no queda como alternativa.
+  `Cronograma_CPM.html` gana su propio `<script>` de JSZip (antes no lo
+  necesitaba). La reconciliación en sí no cambió: `GPI.util.buildScheduleLinks()`
+  (ciclos, cruce de nombre por Id., sintaxis de predecesoras) es la
+  MISMA función que ya usaba el pegado — solo cambió cómo llegan las
+  filas hasta ahí. Caso nuevo que ningún otro módulo había tenido: una
+  celda de fecha autoformateada por Excel guarda un número de serie, no
+  texto — `excelSerialToISODate()` la convierte antes de caer al parser
+  de texto existente. `Link.source` pasa de `"paste"` a `"import"`
+  (`ScheduleLink.source` en `core/types.ts` se amplía, nunca se angosta:
+  `.json` viejos con `source:"paste"` siguen cargando). La hoja
+  "Cronograma" (Id./Nombre/Duración/Comienzo/Fin/Predecesoras) se agregó
+  a la plantilla combinada de Panel de Control, con su propio bloque de
+  ejemplo e instrucciones. Probado en `tests/e2e/cronograma-cpm-import.spec.ts`
+  (export, import con columnas reordenadas, encabezado renombrado
+  rechazado, hoja con nombre distinto rechazada, celda de fecha nativa
+  de Excel, Id. desactualizado), un round-trip nuevo en
+  `tests/e2e/panel-control-template.spec.ts`, y un caso nuevo en
+  `tests/unit/cpm.test.ts`. Ver ARCHITECTURE.md, secciones
+  `Cronograma_CPM.html` y "Plantilla combinada" de `Panel_Control.html`.
+
 ### Fixed
 
 - **Cronograma/CPM — no seguía el mismo criterio de "Id." que Definir las

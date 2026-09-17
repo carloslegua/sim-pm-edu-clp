@@ -59,7 +59,7 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
     expect(report).toContain("Predecesoras");
     expect(report).toContain("Auditoría");
     expect(report).toMatch(/Predecesoras:.*Id\. de red/);
-    expect(report).toMatch(/Auditoría:.*«📋 Pegar cronograma»/);
+    expect(report).toMatch(/Auditoría:.*«⇧ Importar desde Excel»/);
     expect(report).toContain("SS+4d"); // token real del enlace L3 (a3→a4, SS, 4 días) del ejemplo
   });
 

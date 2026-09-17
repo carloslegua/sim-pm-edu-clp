@@ -756,6 +756,8 @@ const ACTIVITIES_SHEET_NAME = "Actividades";
 const ACTIVITIES_HEADERS = ["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Código de hito", "Unidad", "Metrado", "Rendimiento (R)", "N.º de equipos"];
 const COST_ESTIMATE_SHEET_NAME = "Estimado";
 const COST_ESTIMATE_HEADERS = ["Id.", "Código EDT", "Paquete de trabajo", "Nombre de la actividad", "Tipo", "Unidad", "Cantidad", "Precio unitario", "Subtotal"];
+const CRONOGRAMA_SHEET_NAME = "Cronograma";
+const CRONOGRAMA_HEADERS = ["Id.", "Nombre", "Duración (d)", "Comienzo", "Fin", "Predecesoras"];
 
 function xlsxStylesXml(): string {
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -820,9 +822,9 @@ function templateInstructionsXml(): string {
 
   text("Cómo completar este libro", 2);
   blank();
-  text("Este archivo trae una hoja por cada módulo que importa datos desde Excel: “" + WBS_SHEET_NAME + "” (WBS Builder), “" + ACTIVITIES_SHEET_NAME + "” (Definir las Actividades) y “" + COST_ESTIMATE_SHEET_NAME + "” (Estimar los Costos). NO renombres ninguna hoja: cada módulo busca la suya por ese nombre exacto y, si no la encuentra, rechaza el archivo (evita que un módulo confunda su hoja con la de otro).");
+  text("Este archivo trae una hoja por cada módulo que importa datos desde Excel: “" + WBS_SHEET_NAME + "” (WBS Builder), “" + ACTIVITIES_SHEET_NAME + "” (Definir las Actividades), “" + COST_ESTIMATE_SHEET_NAME + "” (Estimar los Costos) y “" + CRONOGRAMA_SHEET_NAME + "” (Cronograma / CPM). NO renombres ninguna hoja: cada módulo busca la suya por ese nombre exacto y, si no la encuentra, rechaza el archivo (evita que un módulo confunda su hoja con la de otro).");
   text("Tampoco renombres ni abrevies los encabezados de la primera fila de cada hoja: deben coincidir EXACTAMENTE con lo que espera cada módulo (sí puedes reordenar las columnas dentro de una misma hoja).");
-  text("Orden recomendado, porque la EDT (WBS Builder) es la que manda sobre los otros dos: 1) completa “" + WBS_SHEET_NAME + "” con las fases y paquetes de trabajo; 2) completa “" + ACTIVITIES_SHEET_NAME + "” con las actividades de cada paquete; 3) completa “" + COST_ESTIMATE_SHEET_NAME + "” con el precio de cada actividad.");
+  text("Orden recomendado, porque cada hoja depende de la anterior: 1) “" + WBS_SHEET_NAME + "” con las fases y paquetes de trabajo (la EDT manda sobre las demás); 2) “" + ACTIVITIES_SHEET_NAME + "” con las actividades de cada paquete; 3) “" + COST_ESTIMATE_SHEET_NAME + "” con el precio de cada actividad; 4) “" + CRONOGRAMA_SHEET_NAME + "”, al final, con las predecesoras entre actividades — su Id. y sus nombres de referencia dependen de que “" + ACTIVITIES_SHEET_NAME + "” ya esté cargada en el proyecto.");
   text("Sube este MISMO archivo por separado en cada módulo, con su propio botón “Importar desde Excel” — cada uno copia solo su hoja e ignora las demás. Las filas de ejemplo de abajo son solo referencia: bórralas de cada hoja antes de completar la tuya.");
   blank();
 
@@ -849,6 +851,13 @@ function templateInstructionsXml(): string {
   dataRow(["3", "1.1", "Excavación de zanjas", "Corte de zanja", "", "m³", "100", "45", "4500"]);
   blank();
 
+  text("Ejemplo — hoja “" + CRONOGRAMA_SHEET_NAME + "” (Cronograma / CPM)", 3);
+  text("Cada fila es el proyecto, una fase, un paquete, una actividad o un hito — exactamente la misma tabla que ves en pantalla en Cronograma/CPM. “Id.” y “Nombre” son de referencia (no las edites): si el nombre de esa fila ya no coincide con el proyecto actual al importar, esa fila se rechaza. “Duración” también es de referencia, se recalcula sola. Completa “Predecesoras” con el/los Id. de las filas de las que depende cada actividad u hito — sintaxis “3” (fin-a-inicio), “3FS+2d” (con adelanto/atraso), “7CC” (comienzo-a-comienzo); varias predecesoras se separan con “;”. “Comienzo”/“Fin” son opcionales, solo para auditar contra un cronograma real de MS Project.");
+  headerRow(CRONOGRAMA_HEADERS);
+  dataRow(["2", "Corte de zanja", "4", "", "", ""]);
+  dataRow(["3", "Vaciado de concreto", "6", "", "", "2FS+2d"]);
+  blank();
+
   text("Generado por el simulador GPI — Panel de Control.");
   return xlsxSheetXml(rows, [16, 26, 22, 12, 12, 10, 10, 12, 10, 12]);
 }
@@ -865,6 +874,7 @@ async function buildCombinedTemplateXlsxBlob(): Promise<Blob> {
     + '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
     + '<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
     + '<Override PartName="/xl/worksheets/sheet4.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+    + '<Override PartName="/xl/worksheets/sheet5.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
     + '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
     + '</Types>');
   zip.file("_rels/.rels",
@@ -880,6 +890,7 @@ async function buildCombinedTemplateXlsxBlob(): Promise<Blob> {
     + '<sheet name="' + xmlEsc(WBS_SHEET_NAME) + '" sheetId="2" r:id="rId2"/>'
     + '<sheet name="' + xmlEsc(ACTIVITIES_SHEET_NAME) + '" sheetId="3" r:id="rId3"/>'
     + '<sheet name="' + xmlEsc(COST_ESTIMATE_SHEET_NAME) + '" sheetId="4" r:id="rId4"/>'
+    + '<sheet name="' + xmlEsc(CRONOGRAMA_SHEET_NAME) + '" sheetId="5" r:id="rId5"/>'
     + '</sheets>'
     + '</workbook>');
   zip.file("xl/_rels/workbook.xml.rels",
@@ -889,13 +900,15 @@ async function buildCombinedTemplateXlsxBlob(): Promise<Blob> {
     + '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>'
     + '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>'
     + '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet4.xml"/>'
-    + '<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+    + '<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet5.xml"/>'
+    + '<Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
     + '</Relationships>');
   zip.file("xl/styles.xml", xlsxStylesXml());
   zip.file("xl/worksheets/sheet1.xml", templateInstructionsXml());
   zip.file("xl/worksheets/sheet2.xml", headerRowSheet(WBS_HEADERS, [12, 34, 8, 10, 11, 11, 12, 20, 10]));
   zip.file("xl/worksheets/sheet3.xml", headerRowSheet(ACTIVITIES_HEADERS, [6, 12, 22, 30, 10, 14, 10, 10, 14, 12]));
   zip.file("xl/worksheets/sheet4.xml", headerRowSheet(COST_ESTIMATE_HEADERS, [6, 12, 22, 30, 8, 10, 11, 14, 12]));
+  zip.file("xl/worksheets/sheet5.xml", headerRowSheet(CRONOGRAMA_HEADERS, [6, 30, 12, 11, 11, 22]));
   return zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
 
@@ -911,7 +924,7 @@ async function downloadCombinedTemplate(): Promise<void> {
     const url = URL.createObjectURL(blob), a = document.createElement("a");
     a.href = url; a.download = "plantilla_importacion_" + safe + ".xlsx";
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    toast("Plantilla combinada descargada (hojas: " + WBS_SHEET_NAME + " / " + ACTIVITIES_SHEET_NAME + " / " + COST_ESTIMATE_SHEET_NAME + ").");
+    toast("Plantilla combinada descargada (hojas: " + WBS_SHEET_NAME + " / " + ACTIVITIES_SHEET_NAME + " / " + COST_ESTIMATE_SHEET_NAME + " / " + CRONOGRAMA_SHEET_NAME + ").");
   } catch (_) {
     toast("No se pudo generar la plantilla combinada.");
   }
