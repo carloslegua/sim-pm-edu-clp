@@ -66,6 +66,36 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Media — `modules: []` se aceptaba y provocaba pérdida silenciosa de
+  escrituras** — el usuario reportó: "la validación acepta cualquier
+  objeto, incluidos arreglos. Reproduje una importación con `modules:
+  []`: guardar un Acta devolvió `true`, pero leerla inmediatamente
+  devolvió `null`, porque la serialización del arreglo descarta esa
+  propiedad." Diagnóstico: en JavaScript `typeof [] === "object"`, así
+  que el chequeo original de `normalizeToProject()` (`!proj.modules ||
+  typeof proj.modules !== "object"`) aceptaba un arreglo vacío tal cual
+  — es objeto Y es *truthy*. `setModule()` le asigna una propiedad de
+  texto (`p.modules.charter = datos`) sin lanzar (un array sigue siendo
+  un objeto JS), pero `JSON.stringify()` de un `Array` SOLO serializa
+  sus elementos indexados: la propiedad se descartaba en silencio al
+  guardar — `setModule()` devolvía `true`, `getModule()` inmediatamente
+  después devolvía `null`. El mismo patrón de chequeo `truthy` (sin
+  excluir arrays) se repetía en `setModule()`, `ingestToolExport()`, y
+  en `sanitizeTree()` para `nodes`. Corrección, exactamente la
+  recomendada: `isPlainObject()` (nueva, compartida) reemplaza los
+  cuatro chequeos sueltos y agrega `!Array.isArray(v)`; `detectTool()`
+  y `normalizeToProject()` además coaccionan `nodes` a `{}` antes de
+  sanear si no es un objeto plano. Tres casos nuevos en
+  `tests/unit/import-validation.test.ts`: `modules: []` vía
+  `importProject()` seguido de un `setModule()` real que ahora sí
+  persiste; un proyecto ya guardado con `modules: []` en disco (dato
+  corrupto de antes de este fix) también se corrige; y `nodes: []` se
+  trata como un WBS vacío en vez de perder lo que se le cuelgue.
+  Verificado que los tres detectan el bug real: revertido el fix
+  temporalmente, fallan exactamente como se esperaba. Ver
+  ARCHITECTURE.md, sección "Un tercer hueco: `typeof [] ===
+  \"object\"` dejaba colar `modules: []`/`nodes: []`".
+
 - **Media — la validación de árboles WBS/OBS no eliminaba ciclos en
   `parentId`** — el usuario reportó: "la poda de `children` funciona,
   pero deja intactos los enlaces hacia el padre. Importé un OBS con un

@@ -203,6 +203,29 @@ function uid(): string {
   return "p" + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36);
 }
 
+// Un objeto-diccionario válido ({clave: valor}) nunca es un arreglo --
+// bug real reportado por el usuario (severidad media): en JavaScript
+// `typeof [] === "object"`, así que un .json con `"modules": []` pasaba
+// intacto el chequeo `!proj.modules || typeof proj.modules !== "object"`
+// (un arreglo vacío es objeto Y es truthy). proj.modules quedaba siendo
+// un Array real; asignarle una propiedad de texto (p. ej.
+// `p.modules.charter = datos`, lo que hace setModule()) funciona en
+// memoria -- los arreglos siguen siendo objetos JS --, pero
+// `JSON.stringify()` de un Array SOLO serializa sus elementos
+// indexados: cualquier propiedad de texto colgada ahí se descarta en
+// silencio al guardar. setModule() devolvía `true` (la escritura en sí
+// no lanzó ninguna excepción) pero getModule() inmediatamente después
+// devolvía `null`, porque lo que de verdad quedó en disco nunca tuvo
+// esa propiedad. Se usa en los tres puntos donde "modules" se lee o se
+// inicializa antes de escribir (normalizeToProject(), setModule(),
+// ingestToolExport()) y también en sanitizeTree() para "nodes" (mismo
+// riesgo: un WBS/OBS importado con `"nodes": []` en vez de `{id: nodo}`
+// debe tratarse como vacío, no como un array que silenciosamente
+// pierde cualquier propiedad que se le cuelgue).
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
 export function defaultMeta(): ProjectMeta {
   return {
     id: null, name: "Proyecto sin título", code: "", client: "", location: "",
@@ -267,7 +290,7 @@ export function setModule(name: string, data: unknown, expectedProjectId?: strin
   const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
   if (!p) return false;
   if (expectedProjectId != null && d.activeId !== expectedProjectId) return false;
-  p.modules = p.modules || {};
+  p.modules = isPlainObject(p.modules) ? p.modules : {};
   (p.modules as Record<string, unknown>)[name] = data;
   p.meta.updatedAt = Date.now();
   // El resultado real de save() (antes se ignoraba y siempre se
@@ -343,7 +366,7 @@ interface DetectedTool { module: string; data: unknown; }
 // construcción: subir por "parentId" desde cualquier nodo alcanzado
 // siempre termina en rootId en, como mucho, la profundidad del árbol.
 function sanitizeTree(rootId: unknown, nodes: unknown): void {
-  if (typeof rootId !== "string" || !nodes || typeof nodes !== "object") return;
+  if (typeof rootId !== "string" || !isPlainObject(nodes)) return; // "nodes" debe ser {id: nodo}, nunca un arreglo
   const map = nodes as Record<string, { children?: unknown; parentId?: unknown }>;
   const visited = new Set<string>();
   (function walk(id: string, parentId: string | null): void {
@@ -367,6 +390,7 @@ function detectTool(obj: any): DetectedTool | null {
   // OBS y RACI se marcan explícitamente con "kind" porque su forma (nodes+rootId,
   // u objeto de asignaciones) podría confundirse con la de otras herramientas.
   if (obj.kind === "gpi.obs/v1" && obj.nodes && obj.rootId) {
+    if (!isPlainObject(obj.nodes)) obj.nodes = {}; // "nodes": [] no debe colarse como un WBS/OBS "vacío pero array"
     sanitizeTree(obj.rootId, obj.nodes);
     return { module: "obs", data: { rootId: obj.rootId, idCounter: obj.idCounter || 1, nodes: obj.nodes } };
   }
@@ -418,6 +442,7 @@ function detectTool(obj: any): DetectedTool | null {
     };
   }
   if (obj.nodes && obj.rootId) {
+    if (!isPlainObject(obj.nodes)) obj.nodes = {}; // "nodes": [] no debe colarse como un WBS/OBS "vacío pero array"
     sanitizeTree(obj.rootId, obj.nodes);
     return { module: "wbs", data: { rootId: obj.rootId, idCounter: obj.idCounter || 1, nodes: obj.nodes } };
   }
@@ -434,11 +459,17 @@ function normalizeToProject(obj: any): GpiProject {
     // sobre "modules" undefined) y su WBS/OBS pueden traer los mismos
     // ciclos que detectTool() sanea para el import de un solo módulo.
     const proj = obj as GpiProject;
-    if (!proj.modules || typeof proj.modules !== "object") proj.modules = {};
+    if (!isPlainObject(proj.modules)) proj.modules = {};
     const wbsMod = proj.modules.wbs as WbsModule | undefined;
-    if (wbsMod && wbsMod.nodes) sanitizeTree(wbsMod.rootId, wbsMod.nodes);
+    if (wbsMod && wbsMod.nodes) {
+      if (!isPlainObject(wbsMod.nodes)) wbsMod.nodes = {}; // "nodes": [] no debe colarse como un WBS "vacío pero array"
+      sanitizeTree(wbsMod.rootId, wbsMod.nodes);
+    }
     const obsMod = proj.modules.obs as ObsModule | undefined;
-    if (obsMod && obsMod.nodes) sanitizeTree(obsMod.rootId, obsMod.nodes);
+    if (obsMod && obsMod.nodes) {
+      if (!isPlainObject(obsMod.nodes)) obsMod.nodes = {};
+      sanitizeTree(obsMod.rootId, obsMod.nodes);
+    }
     return proj;
   }
   // envolver exportación de herramienta
@@ -468,7 +499,7 @@ export function ingestToolExport(obj: any): { ok: boolean; reason?: string; modu
   if (!p) return { ok: false, reason: "no-active" };
   const det = detectTool(obj);
   if (!det) return { ok: false, reason: "unknown-format" };
-  p.modules = p.modules || {};
+  p.modules = isPlainObject(p.modules) ? p.modules : {};
   (p.modules as Record<string, unknown>)[det.module] = det.data;
   // completar metadatos si vienen y están vacíos
   if (obj.title && (!p.meta.name || p.meta.name === "Proyecto sin título")) p.meta.name = obj.title;

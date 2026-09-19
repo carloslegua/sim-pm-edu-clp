@@ -376,6 +376,58 @@ mano, igual que describió el usuario). Dos pruebas preexistentes en
 raíz) se actualizaron para reflejar que la raíz ahora siempre trae
 `parentId: null`.
 
+### Un tercer hueco: `typeof [] === "object"` dejaba colar `modules: []`/`nodes: []`
+
+Bug real reportado por el usuario (severidad media, 2026-09): "la
+validación acepta cualquier objeto, incluidos arreglos. Importé
+`modules: []`: guardar un Acta devolvió `true`, pero leerla
+inmediatamente devolvió `null`, porque la serialización del arreglo
+descarta esa propiedad." Diagnóstico: en JavaScript `typeof [] ===
+"object"`, así que el chequeo original de `normalizeToProject()`
+(`!proj.modules || typeof proj.modules !== "object"`) aceptaba un
+arreglo vacío tal cual — es objeto Y es *truthy*. `proj.modules`
+quedaba siendo un `Array` real. `setModule()` le asigna una propiedad
+de texto (`p.modules.charter = datos`) — funciona sin lanzar, porque
+un array sigue siendo un objeto JS —, pero `JSON.stringify()` de un
+`Array` SOLO serializa sus elementos indexados: cualquier propiedad de
+texto colgada ahí (`"charter"`) se descarta en silencio al guardar.
+`setModule()` devolvía `true` (la escritura en memoria no falló) pero
+`getModule()` inmediatamente después devolvía `null`, porque lo que de
+verdad quedó en disco nunca tuvo esa propiedad — pérdida de datos
+totalmente silenciosa, sin ningún aviso.
+
+El mismo patrón (`p.modules = p.modules || {}`, un chequeo de
+*truthy*, no de "objeto plano") se repetía en `setModule()` e
+`ingestToolExport()`, y `sanitizeTree()` tenía el mismo hueco para
+`nodes` (un WBS/OBS con `"nodes": []` en vez de `{id: nodo}`).
+
+Corrección, exactamente la recomendada — "exigir un objeto de módulos
+válido, excluir arreglos, y verificar los tipos internos antes de
+persistir": `isPlainObject()` (nueva, compartida) reemplaza los
+chequeos `truthy`/`typeof "object"` sueltos en los CUATRO puntos donde
+`modules` o `nodes` se leen o se inicializan antes de escribir
+(`normalizeToProject()`, `setModule()`, `ingestToolExport()`,
+`sanitizeTree()`), y agrega `!Array.isArray(v)` — la única diferencia
+real con el chequeo anterior, pero la que cierra el hueco. `detectTool()`
+y `normalizeToProject()` además coaccionan `nodes` a `{}` ANTES de
+llamar a `sanitizeTree()` si no es un objeto plano (un array vacío no
+se puede "convertir en objeto" mutando sus propiedades desde dentro de
+`sanitizeTree()`, hay que reemplazar la referencia completa en el
+llamador).
+
+Cubierto en `tests/unit/import-validation.test.ts` (nuevo `describe`):
+`modules: []` vía `importProject()` seguido de un `setModule()` real,
+confirmando que ni la copia en memoria ni lo que queda en
+`localStorage` son arreglos, y que la propiedad persiste; un proyecto
+YA guardado con `modules: []` en disco (dato corrupto de antes de este
+fix) se corrige también vía `ingestToolExport()`; y `nodes: []` se
+trata como un WBS vacío en vez de perder silenciosamente lo que se le
+cuelgue. Verificado que los tres detectan el bug real: revertido el
+fix temporalmente, los tres fallan exactamente como se esperaba
+(el primero con `setModule()` devolviendo `true` mientras
+`getModule()` sigue devolviendo `null` tras el viaje por
+`localStorage`).
+
 ## Ningún módulo guarda sin verificar que el proyecto activo sigue siendo el que cargó
 
 Bug real reportado por un usuario (2026-09): abrir el Acta de

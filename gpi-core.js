@@ -123,6 +123,9 @@ var GPI = (function(exports) {
 	function uid() {
 		return "p" + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36);
 	}
+	function isPlainObject(v) {
+		return !!v && typeof v === "object" && !Array.isArray(v);
+	}
 	function defaultMeta() {
 		return {
 			id: null,
@@ -190,7 +193,7 @@ var GPI = (function(exports) {
 		const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
 		if (!p) return false;
 		if (expectedProjectId != null && d.activeId !== expectedProjectId) return false;
-		p.modules = p.modules || {};
+		p.modules = isPlainObject(p.modules) ? p.modules : {};
 		p.modules[name] = data;
 		p.meta.updatedAt = Date.now();
 		return save(d);
@@ -241,7 +244,7 @@ var GPI = (function(exports) {
 		return active();
 	}
 	function sanitizeTree(rootId, nodes) {
-		if (typeof rootId !== "string" || !nodes || typeof nodes !== "object") return;
+		if (typeof rootId !== "string" || !isPlainObject(nodes)) return;
 		const map = nodes;
 		const visited = /* @__PURE__ */ new Set();
 		(function walk(id, parentId) {
@@ -262,6 +265,7 @@ var GPI = (function(exports) {
 	function detectTool(obj) {
 		if (!obj || typeof obj !== "object") return null;
 		if (obj.kind === "gpi.obs/v1" && obj.nodes && obj.rootId) {
+			if (!isPlainObject(obj.nodes)) obj.nodes = {};
 			sanitizeTree(obj.rootId, obj.nodes);
 			return {
 				module: "obs",
@@ -333,6 +337,7 @@ var GPI = (function(exports) {
 			}
 		};
 		if (obj.nodes && obj.rootId) {
+			if (!isPlainObject(obj.nodes)) obj.nodes = {};
 			sanitizeTree(obj.rootId, obj.nodes);
 			return {
 				module: "wbs",
@@ -348,11 +353,17 @@ var GPI = (function(exports) {
 	function normalizeToProject(obj) {
 		if (obj && obj.schema === SCHEMA && obj.meta) {
 			const proj = obj;
-			if (!proj.modules || typeof proj.modules !== "object") proj.modules = {};
+			if (!isPlainObject(proj.modules)) proj.modules = {};
 			const wbsMod = proj.modules.wbs;
-			if (wbsMod && wbsMod.nodes) sanitizeTree(wbsMod.rootId, wbsMod.nodes);
+			if (wbsMod && wbsMod.nodes) {
+				if (!isPlainObject(wbsMod.nodes)) wbsMod.nodes = {};
+				sanitizeTree(wbsMod.rootId, wbsMod.nodes);
+			}
 			const obsMod = proj.modules.obs;
-			if (obsMod && obsMod.nodes) sanitizeTree(obsMod.rootId, obsMod.nodes);
+			if (obsMod && obsMod.nodes) {
+				if (!isPlainObject(obsMod.nodes)) obsMod.nodes = {};
+				sanitizeTree(obsMod.rootId, obsMod.nodes);
+			}
 			return proj;
 		}
 		const projMeta = Object.assign(defaultMeta(), {
@@ -390,7 +401,7 @@ var GPI = (function(exports) {
 			ok: false,
 			reason: "unknown-format"
 		};
-		p.modules = p.modules || {};
+		p.modules = isPlainObject(p.modules) ? p.modules : {};
 		p.modules[det.module] = det.data;
 		if (obj.title && (!p.meta.name || p.meta.name === "Proyecto sin título")) p.meta.name = obj.title;
 		if (obj.course && !p.meta.course) p.meta.course = obj.course;

@@ -1,4 +1,4 @@
-// Dos bugs reales reportados por el usuario en las importaciones .json:
+// Bugs reales reportados por el usuario en las importaciones .json:
 //
 // 1) Un proyecto con "schema" reconocido y "meta", pero SIN "modules",
 //    se aceptaba tal cual (normalizeToProject() devolvía el objeto sin
@@ -9,6 +9,14 @@
 //    "children" se aceptaba intacta, y el primer recorrido recursivo
 //    del núcleo sobre esos datos (wbsCodes, wbsLeaves, obsNodes...)
 //    entraba en recursión infinita y desbordaba la pila.
+// 3) (severidad media) "modules": [] se aceptaba como válido -- en
+//    JavaScript `typeof [] === "object"`, así que el chequeo original
+//    ("!proj.modules || typeof proj.modules !== 'object'") lo dejaba
+//    pasar. setModule() escribía la propiedad sin lanzar (los arreglos
+//    siguen siendo objetos JS), pero JSON.stringify() de un Array SOLO
+//    serializa sus elementos indexados: la propiedad se perdía en
+//    silencio al guardar -- setModule() devolvía true, pero getModule()
+//    inmediatamente después devolvía null.
 //
 // Fix en src/core/gpi-core.ts: normalizeToProject() ahora garantiza
 // "modules" como objeto (regla ya aplicada por setModule/ingestToolExport,
@@ -19,10 +27,14 @@
 // normalizeToProject() (import de un proyecto completo) -- poda
 // cualquier referencia de "children" que forme un ciclo, apunte a un id
 // inexistente, o le dé un segundo padre a un nodo, ANTES de guardar.
+// isPlainObject() -- nueva, compartida por los tres puntos de escritura
+// de "modules" (normalizeToProject/setModule/ingestToolExport) y por
+// sanitizeTree() para "nodes" -- excluye explícitamente los arreglos,
+// no solo verifica truthy/typeof "object".
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   KEY, createProject, exportActive, getModule, ingestToolExport,
-  importProject, obsNodes, wbsCodes, wbsLeaves
+  importProject, obsNodes, setModule, wbsCodes, wbsLeaves
 } from "../../src/core/gpi-core";
 
 beforeEach(() => { localStorage.removeItem(KEY); });
@@ -171,5 +183,66 @@ describe("una EDT/OBS con referencias circulares no cuelga el núcleo (se poda a
     expect(res.ok).toBe(true);
     const wbs = getModule("wbs");
     expect(wbsLeaves(wbs).map((r) => r.id)).toEqual(["a"]);
+  });
+});
+
+describe("BUG REPORTADO (severidad media): 'modules': [] se acepta como válido y provoca pérdida silenciosa de escrituras", () => {
+  it("importProject() con 'modules': [] -- setModule() ya no debe devolver true mientras pierde el dato en silencio", () => {
+    // Repro exacta: typeof [] === "object" en JavaScript, así que el
+    // chequeo original ("!proj.modules || typeof proj.modules !== 'object'")
+    // aceptaba un arreglo vacío tal cual como "modules". Guardar un Acta
+    // (setModule("charter", ...)) devolvía true (asignarle una propiedad
+    // de texto a un Array funciona en memoria), pero leerla
+    // inmediatamente después devolvía null, porque JSON.stringify() de
+    // un Array solo serializa sus elementos indexados -- la propiedad
+    // "charter" nunca llegaba a persistirse de verdad.
+    const arrayModulesProject = {
+      schema: "gpi.project/v1",
+      meta: { id: null, name: "Proyecto con modules array", course: "GPI", createdAt: 1, updatedAt: 1 },
+      modules: [] // el caso real reportado por el usuario
+    };
+    importProject(arrayModulesProject);
+    expect(Array.isArray(exportActive()!.modules)).toBe(false);
+
+    const ok = setModule("charter", { identification: { sponsor: "Ana" } });
+    expect(ok).toBe(true);
+    expect(getModule("charter")).toEqual({ identification: { sponsor: "Ana" } }); // antes: null
+
+    // Lo que de verdad quedó en localStorage también debe tener la
+    // propiedad -- no solo la copia en memoria de este proceso.
+    const onDisk = JSON.parse(localStorage.getItem(KEY) as string);
+    const projId = Object.keys(onDisk.projects)[0];
+    expect(Array.isArray(onDisk.projects[projId].modules)).toBe(false);
+    expect(onDisk.projects[projId].modules.charter).toEqual({ identification: { sponsor: "Ana" } });
+  });
+
+  it("ingestToolExport() con un proyecto que YA tiene 'modules': [] en disco (dato corrupto de antes de este fix) también se corrige antes de escribir", () => {
+    createProject({ name: "Proyecto real" });
+    // Simular un proyecto ya guardado con "modules" como arreglo (p. ej.
+    // por una versión anterior del núcleo, o localStorage tocado a mano).
+    const db = JSON.parse(localStorage.getItem(KEY) as string);
+    const id = db.activeId as string;
+    db.projects[id].modules = [];
+    localStorage.setItem(KEY, JSON.stringify(db));
+
+    const res = ingestToolExport({ rootId: "root", idCounter: 1, nodes: { root: { id: "root", name: "P", children: [] } } });
+    expect(res.ok).toBe(true);
+    expect(getModule("wbs")).not.toBeNull();
+
+    const onDisk = JSON.parse(localStorage.getItem(KEY) as string);
+    expect(Array.isArray(onDisk.projects[id].modules)).toBe(false);
+    expect(onDisk.projects[id].modules.wbs).not.toBeUndefined();
+  });
+
+  it("sanitizeTree() trata 'nodes': [] como un WBS vacío, no como un arreglo que pierde propiedades en silencio", () => {
+    createProject({ name: "Proyecto real" });
+    const res = ingestToolExport({ rootId: "root", idCounter: 1, nodes: [] });
+    expect(res.ok).toBe(true);
+    const wbs = getModule("wbs");
+    expect(Array.isArray(wbs!.nodes)).toBe(false);
+    // Con "nodes" vacío no hay raíz real -- los recorridos deben verlo
+    // como un WBS sin datos, no lanzar.
+    expect(() => wbsLeaves(wbs)).not.toThrow();
+    expect(wbsLeaves(wbs)).toEqual([]);
   });
 });
