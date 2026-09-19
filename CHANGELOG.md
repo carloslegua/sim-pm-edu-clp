@@ -66,6 +66,41 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **`scripts/static-server.mjs` — el servidor local permitía leer
+  archivos fuera del repositorio (path traversal)** — el usuario
+  reportó: una ruta con segmentos `..` codificados recibió HTTP 200 y
+  permitió leer un archivo inocuo del SDK fuera del proyecto; el
+  servidor escucha únicamente en `127.0.0.1`, lo que limita la
+  exposición, y el problema corresponde al servidor local (`npm run
+  dev` / `tests/e2e` vía `playwright.config.ts`), no a GitHub Pages.
+  Diagnóstico: la ruta pedida se resolvía con `path.join(ROOT,
+  urlPath)`, que normaliza segmentos `..` pero no impide que
+  suficientes `../` (o su versión codificada, `%2e%2e`) terminen
+  apuntando fuera de `ROOT` — cualquier archivo del disco legible por el
+  proceso quedaba expuesto, con los permisos del usuario, a otro
+  proceso local o a otra pestaña del mismo navegador mientras el
+  servidor sigue corriendo. Corrección: la ruta se resuelve con
+  `path.resolve(ROOT, "." + urlPath)` (el `"."` inicial evita que
+  `resolve` descarte a `ROOT` si `urlPath` se interpretara como
+  absoluto) y se rechaza con 403 toda ruta resuelta que no quede dentro
+  de `ROOT` (comparando contra el prefijo `ROOT + path.sep`, no un
+  `startsWith(ROOT)` a secas, para que un directorio hermano con el
+  mismo prefijo de nombre no cuele). Nuevo
+  `tests/unit/static-server-traversal.test.ts`: arranca el script real
+  como subproceso y confirma en HTTP real, contra un archivo "canario"
+  propio en el directorio temporal del sistema, que una ruta con `..`
+  —literal o codificada— nunca devuelve su contenido, sin dejar de
+  servir archivos normales del repo. Verificado que el test detecta el
+  bug real: revertido el fix temporalmente, la petición con `..`
+  codificados efectivamente devolvía 200 y el contenido del canario.
+  Deliberadamente sin tocar: el mismo patrón `createServer`/`join(ROOT,
+  ...)` duplicado en el `beforeAll` de los 14 `tests/smoke/*.smoke.test.ts`
+  — son servidores efímeros internos al proceso de Vitest, sin ningún
+  actor externo que pueda mandarles una ruta arbitraria, a diferencia de
+  `static-server.mjs`. Ver ARCHITECTURE.md, sección
+  "`scripts/static-server.mjs` — la ruta pedida se resuelve DENTRO de la
+  raíz del repo".
+
 - **Núcleo — las importaciones .json carecían de validación estructural
   suficiente: `modules` ausente y EDT/OBS con ciclos** — el usuario
   reportó dos fallas: un proyecto con `schema` reconocido y metadatos,

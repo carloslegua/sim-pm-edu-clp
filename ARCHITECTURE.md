@@ -1190,6 +1190,48 @@ Costs")
   siguieron los demás (`addEventListener`, `window.GPI`, `esc()` local,
   `gpi-shared.css` para el modal).
 
+## `scripts/static-server.mjs` — la ruta pedida se resuelve DENTRO de la raíz del repo
+
+Bug real reportado por el usuario: el servidor mínimo que usan `npm run
+dev` y `tests/e2e` (vía `playwright.config.ts`, `webServer.command`)
+resolvía la ruta pedida con `path.join(ROOT, urlPath)`. `join` normaliza
+segmentos `..`, pero NO impide que suficientes `../` (o su versión
+codificada, `%2e%2e`) terminen apuntando fuera de `ROOT` — una ruta con
+`..` codificados recibió HTTP 200 y devolvió el contenido de un archivo
+fuera del proyecto. El servidor solo escucha en `127.0.0.1` (menos
+exposición que un bind a `0.0.0.0`, y el problema es específico de este
+servidor local — GitHub Pages no lo hereda: sirve archivos estáticos
+directamente, sin este código), pero eso no evita que otro proceso
+local, o el propio navegador desde otra pestaña, lea archivos
+arbitrarios del disco con los permisos del usuario mientras `npm run
+dev` sigue corriendo.
+
+Corrección: la ruta se resuelve con `path.resolve(ROOT, "." + urlPath)`
+(el `"."` inicial evita que `resolve` descarte a `ROOT` si Node
+interpretara `urlPath` como absoluto — a diferencia de `join`,
+`resolve` sí prioriza el último argumento absoluto) y se rechaza con
+403 toda ruta resuelta que no quede dentro de `ROOT` (comparando con el
+prefijo `ROOT + path.sep`, no un `startsWith(ROOT)` a secas, para que
+un directorio hermano con el mismo prefijo de nombre no cuele). Cubierto
+en `tests/unit/static-server-traversal.test.ts`: arranca el script REAL
+como subproceso (igual que `playwright.config.ts`) y confirma en HTTP
+real, contra un archivo "canario" propio creado en el directorio
+temporal del sistema (para no depender de qué archivos existan en las
+carpetas superiores de cada máquina/CI), que una ruta con `..` — literal
+o codificada — nunca devuelve su contenido, sin dejar de servir
+archivos normales del repo. Verificado que el test detecta el bug real:
+revertido el fix temporalmente, la petición con `..` codificados
+efectivamente devuelve 200 y el contenido del canario.
+
+No se tocó el mismo patrón `createServer`/`join(ROOT, ...)` duplicado en
+el `beforeAll` de cada `tests/smoke/*.smoke.test.ts` (14 archivos): esos
+servidores son infraestructura de test efímera — arrancan y mueren
+dentro del propio proceso de Vitest, en un puerto aleatorio, y las
+únicas rutas que reciben son las que el propio test (o la carga interna
+de recursos de jsdom) construye — no hay ningún actor externo que pueda
+mandarles una ruta arbitraria, a diferencia de `static-server.mjs`, que
+queda escuchando mientras un alumno tiene `npm run dev` abierto.
+
 ## Cómo verificar equivalencia de comportamiento (metodología A/B)
 
 Técnica reutilizable para comprobar que un cambio (una migración, una
