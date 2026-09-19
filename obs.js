@@ -168,17 +168,23 @@
 	}
 	function isDescendant(ancestorId, candidateId) {
 		if (ancestorId === candidateId) return true;
-		let n = nodes[candidateId];
-		while (n && n.parentId) {
+		let curId = candidateId, n = nodes[candidateId];
+		const seen = /* @__PURE__ */ new Set();
+		while (n && n.parentId && !seen.has(curId)) {
+			seen.add(curId);
 			if (n.parentId === ancestorId) return true;
+			curId = n.parentId;
 			n = nodes[n.parentId];
 		}
 		return false;
 	}
 	function depthOf(id) {
-		let d = 0, n = nodes[id];
-		while (n && n.parentId) {
+		let d = 0, curId = id, n = nodes[id];
+		const seen = /* @__PURE__ */ new Set();
+		while (n && n.parentId && !seen.has(curId)) {
+			seen.add(curId);
 			d++;
+			curId = n.parentId;
 			n = nodes[n.parentId];
 		}
 		return d;

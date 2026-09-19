@@ -123,13 +123,34 @@ function countDescendants(id: string): number {
   walk(id);
   return count;
 }
+// Defensa en profundidad en los dos recorridos ascendentes (por
+// parentId) de este archivo: el núcleo ya reconstruye "parentId"
+// coherente con "children" al importar/sanear (sanitizeTree() en
+// gpi-core.ts), así que en el flujo normal un ciclo aquí no debería
+// pasar -- pero si igual llegara (dato de antes de ese fix, o
+// localStorage tocado a mano), un Set de visitados evita el loop
+// infinito reportado por el usuario, en vez de colgar el módulo con
+// solo abrirlo o soltar un nodo.
 function isDescendant(ancestorId: string, candidateId: string): boolean {
   if (ancestorId === candidateId) return true;
-  let n: ObsUiNode | undefined = nodes[candidateId];
-  while (n && n.parentId) { if (n.parentId === ancestorId) return true; n = nodes[n.parentId]; }
+  let curId: string | undefined = candidateId, n: ObsUiNode | undefined = nodes[candidateId];
+  const seen = new Set<string>();
+  while (n && n.parentId && !seen.has(curId as string)) {
+    seen.add(curId as string);
+    if (n.parentId === ancestorId) return true;
+    curId = n.parentId; n = nodes[n.parentId];
+  }
   return false;
 }
-function depthOf(id: string): number { let d = 0, n: ObsUiNode | undefined = nodes[id]; while (n && n.parentId) { d++; n = nodes[n.parentId]; } return d; }
+function depthOf(id: string): number {
+  let d = 0, curId: string | undefined = id, n: ObsUiNode | undefined = nodes[id];
+  const seen = new Set<string>();
+  while (n && n.parentId && !seen.has(curId as string)) {
+    seen.add(curId as string);
+    d++; curId = n.parentId; n = nodes[n.parentId];
+  }
+  return d;
+}
 function deleteSubtree(id: string): void {
   const node = nodes[id]; if (!node) return;
   [...node.children].forEach(deleteSubtree);

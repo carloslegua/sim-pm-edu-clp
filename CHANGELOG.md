@@ -66,6 +66,42 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Media — la validación de árboles WBS/OBS no eliminaba ciclos en
+  `parentId`** — el usuario reportó: "la poda de `children` funciona,
+  pero deja intactos los enlaces hacia el padre. Importé un OBS con un
+  nodo cuyo `parentId` apunta a sí mismo: la importación devolvió éxito
+  y el recorrido quedó bloqueado; detuve la ejecución con un límite de
+  tiempo." Diagnóstico: `sanitizeTree()` (agregada en un fix anterior
+  para podar ciclos en WBS/OBS) solo reescribía `children` — el sentido
+  descendente del árbol —, dejando intacto `parentId` — el sentido
+  ascendente, que usan `obsNodes()`/`code()` en el núcleo y
+  `isDescendant()`/la función de profundidad en
+  `src/modules/wbs/main.ts` y `src/modules/obs/main.ts`, los cuatro con
+  un `while (n && n.parentId)` sin control de visitados. Un `parentId`
+  cíclico (a sí mismo, o entre varios nodos) pasaba intacto: la
+  importación devolvía éxito, y el primer recorrido ascendente quedaba
+  en loop infinito — no es recursión, así que ni siquiera un límite de
+  profundidad del navegador lo cortaba. Corrección, exactamente la
+  recomendada: (1) `sanitizeTree()` ahora TAMBIÉN reescribe `parentId`
+  de cada nodo alcanzado, usando la misma recorrida (ya acíclica) que
+  arma `children` — cada nodo recibe como padre exactamente aquel en
+  cuyo `children` quedó, nunca el valor suelto que traía el `.json`;
+  (2) defensa en profundidad — `obsNodes()`/`code()` (núcleo) e
+  `isDescendant()`/la función de profundidad en `wbs/main.ts` y
+  `obs/main.ts` ganan un `Set` de visitados en su recorrido ascendente,
+  por si un `parentId` cíclico llegara por cualquier otra vía. Nuevo
+  caso en `tests/unit/import-validation.test.ts`: un OBS con
+  `children` ya limpio pero `parentId` de un nodo apuntando a sí mismo
+  — confirma que `obsNodes()` termina y que `parentId` quedó
+  reconstruido coherente. Verificado que el test detecta el bug real:
+  revertido el fix temporalmente, la llamada cuelga de verdad (no
+  lanza ni hace timeout de Vitest — hubo que terminar el proceso a
+  mano, igual que describió el usuario). Dos pruebas preexistentes en
+  `tests/unit/tool-export-import.test.ts` se actualizaron para
+  reflejar que la raíz ahora siempre trae `parentId: null`. Ver
+  ARCHITECTURE.md, sección "El hueco que dejó esa primera pasada:
+  `parentId` no se saneaba, solo `children`".
+
 - **La recuperación de cuota podía sobrescribir cambios de otra pestaña
   (regresión del fix anterior de cuota agotada)** — el usuario reportó,
   simulando dos contextos compartiendo `localStorage`: A conservó un

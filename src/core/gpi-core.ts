@@ -328,23 +328,38 @@ interface DetectedTool { module: string; data: unknown; }
 // resto de las ramas de compatibilidad de este archivo (regla #3 de
 // CLAUDE.md: tolerar datos viejos/corruptos sin rechazar el import
 // completo).
+//
+// TAMBIÉN reescribe "parentId" de cada nodo alcanzado, para que quede
+// coherente con el árbol ya saneado -- bug real reportado por el
+// usuario (severidad media): la poda de arriba sólo tocaba "children";
+// un OBS importado con un "parentId" que apunta a sí mismo (o a un
+// ciclo entre varios nodos, independiente de "children") pasaba
+// intacto, y obsNodes()/code() más abajo -- que sube por "parentId" con
+// un `while` sin control de visitados -- quedaba en loop infinito con
+// solo abrir el módulo. Como "parentId" ahora se reconstruye a partir
+// de la MISMA recorrida que ya arma "children" (cada nodo recibe como
+// padre exactamente aquel en cuyo "children" quedó, nunca el valor
+// suelto que traía el .json), el resultado es coherente por
+// construcción: subir por "parentId" desde cualquier nodo alcanzado
+// siempre termina en rootId en, como mucho, la profundidad del árbol.
 function sanitizeTree(rootId: unknown, nodes: unknown): void {
   if (typeof rootId !== "string" || !nodes || typeof nodes !== "object") return;
-  const map = nodes as Record<string, { children?: unknown }>;
+  const map = nodes as Record<string, { children?: unknown; parentId?: unknown }>;
   const visited = new Set<string>();
-  (function walk(id: string): void {
+  (function walk(id: string, parentId: string | null): void {
     const n = map[id];
     if (!n || visited.has(id)) return;
     visited.add(id);
+    n.parentId = parentId;
     const kids = Array.isArray(n.children) ? (n.children as unknown[]) : [];
     const clean: string[] = [];
     kids.forEach((cid) => {
       if (typeof cid !== "string" || !map[cid] || visited.has(cid) || cid === id) return;
       clean.push(cid);
-      walk(cid);
+      walk(cid, id);
     });
     n.children = clean;
-  })(rootId);
+  })(rootId, null);
 }
 
 function detectTool(obj: any): DetectedTool | null {
@@ -544,7 +559,16 @@ export function obsNodes(obs?: ObsModule | null): ObsNodeRow[] {
   function code(id: string): string {
     const parts: number[] = [];
     let n: ObsNode | undefined = nodes[id];
-    while (n && n.parentId) {
+    // Defensa en profundidad: sanitizeTree() ya reconstruye "parentId"
+    // coherente con "children" al importar, así que en el flujo normal
+    // esto nunca debería hacer falta -- pero si un "parentId" cíclico
+    // llegara a nodes por otra vía (dato viejo de antes de ese fix,
+    // localStorage tocado a mano), un Set de visitados evita el loop
+    // infinito reportado por el usuario (un nodo cuyo parentId apunta a
+    // sí mismo colgaba este recorrido con solo abrir el módulo).
+    const seen = new Set<string>();
+    while (n && n.parentId && !seen.has(n.id as string)) {
+      seen.add(n.id as string);
       const siblings = (nodes[n.parentId] || {}).children || [];
       parts.unshift(siblings.indexOf(n.id as string) + 1);
       n = nodes[n.parentId];

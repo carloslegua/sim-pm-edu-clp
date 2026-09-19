@@ -127,6 +127,37 @@ describe("una EDT/OBS con referencias circulares no cuelga el núcleo (se poda a
     expect(rows.map((r) => r.id)).toEqual(["a", "b"]);
   });
 
+  it("BUG REPORTADO (severidad media): un OBS con parentId que apunta a sí mismo cuelga obsNodes() si 'children' no basta -- sanitizeTree() debe reconstruir parentId, no solo podar children", () => {
+    // Repro exacta: "Importé un OBS con un nodo cuyo parentId apunta a
+    // sí mismo: la importación devolvió éxito y el recorrido quedó
+    // bloqueado". "children" de "b" ya está limpio (es hijo real de
+    // "a", sin ciclo ahí) -- el ciclo vive SOLO en "parentId", que antes
+    // de este fix sanitizeTree() nunca tocaba.
+    createProject({ name: "Proyecto real" });
+    const selfParentObsExport = {
+      kind: "gpi.obs/v1", idCounter: 3,
+      rootId: "root",
+      nodes: {
+        root: { id: "root", parentId: null, children: ["a"] },
+        a: { id: "a", parentId: "root", role: "Rol A", children: ["b"] },
+        b: { id: "b", parentId: "b", role: "Rol B", children: [] } // ciclo: b es su propio padre
+      }
+    };
+    const res = ingestToolExport(selfParentObsExport);
+    expect(res.ok).toBe(true);
+    const obs = getModule("obs");
+
+    // obsNodes() sube por parentId (code()) -- si sanitizeTree() no
+    // hubiera reconstruido parentId, este recorrido nunca terminaría
+    // (Vitest mataría el test por timeout en vez de llegar aquí).
+    const rows = obsNodes(obs);
+    expect(rows.map((r) => r.id)).toEqual(["a", "b"]);
+
+    // parentId quedó reescrito coherente con "children": "b" es hijo
+    // real de "a" (donde de hecho está en children), no de sí mismo.
+    expect(rows.find((r) => r.id === "b")!.parentId).toBe("a");
+  });
+
   it("una referencia 'children' colgante (id que no existe en 'nodes') se descarta sin romper el resto", () => {
     createProject({ name: "Proyecto real" });
     const danglingWbsExport = {

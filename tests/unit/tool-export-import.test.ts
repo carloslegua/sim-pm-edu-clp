@@ -19,7 +19,10 @@ describe("ingestToolExport", () => {
   it("obs (gpi.obs/v1)", () => {
     const res = ingestToolExport({ kind: "gpi.obs/v1", rootId: "r", idCounter: 2, nodes: { r: { id: "r", children: [] } } });
     expect(res).toEqual({ ok: true, module: "obs" });
-    expect(getModule("obs")).toEqual({ rootId: "r", idCounter: 2, nodes: { r: { id: "r", children: [] } } });
+    // sanitizeTree() (ver tests/unit/import-validation.test.ts) reconstruye
+    // "parentId" de cada nodo alcanzado desde rootId -- la raíz recibe
+    // parentId: null aunque el .json original no lo trajera.
+    expect(getModule("obs")).toEqual({ rootId: "r", idCounter: 2, nodes: { r: { id: "r", children: [], parentId: null } } });
   });
 
   it("raci (gpi.raci/v1) -- solo assignments, sin fijar filas/columnas (esas se derivan del WBS/OBS vivos)", () => {
@@ -92,7 +95,10 @@ describe("ingestToolExport", () => {
   it("wbs (nodes+rootId sin \"kind\" -- formato más antiguo/genérico)", () => {
     const res = ingestToolExport({ rootId: "r", idCounter: 3, nodes: { r: { id: "r", children: [] } } });
     expect(res).toEqual({ ok: true, module: "wbs" });
-    expect(getModule("wbs")).toEqual({ rootId: "r", idCounter: 3, nodes: { r: { id: "r", children: [] } } });
+    // sanitizeTree() (ver tests/unit/import-validation.test.ts) reconstruye
+    // "parentId" de cada nodo alcanzado desde rootId -- la raíz recibe
+    // parentId: null aunque el .json original no lo trajera.
+    expect(getModule("wbs")).toEqual({ rootId: "r", idCounter: 3, nodes: { r: { id: "r", children: [], parentId: null } } });
   });
 
   it("formato no reconocido -> unknown-format, no toca el proyecto activo", () => {

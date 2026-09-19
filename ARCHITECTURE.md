@@ -308,20 +308,73 @@ módulo vía "Importar .json" de cada tarjeta del Panel):
   rechazan datos viejos/corruptos, se toleran). Se aplica a `wbs` y a
   `obs` (misma forma `{rootId, nodes}`) en ambos puntos de entrada.
 
-Deliberadamente sin tocar: los propios recorridos recursivos
-(`wbsCodes`/`wbsLeaves`/`obsNodes`/`wbsPhases`/`activitiesStats`/
-`pertStats`) siguen sin control de visitados — no hacía falta
-agregárselo a los seis por separado porque WBS Builder ya impide crear
-un ciclo desde la UI (`isDescendant()` en `src/modules/wbs/main.ts`
-bloquea soltar un nodo dentro de su propia rama al reordenar por
-arrastre); la única vía real para que un ciclo llegue a esos datos es
-un `.json` importado, que es exactamente donde se corta ahora. Cubierto
-en `tests/unit/import-validation.test.ts`: `modules` ausente en las dos
+Deliberadamente sin tocar (en esta primera pasada): los propios
+recorridos recursivos DESCENDENTES (`wbsCodes`/`wbsLeaves`/`obsNodes`/
+`wbsPhases`/`activitiesStats`/`pertStats`, que bajan por `children`)
+seguían sin control de visitados — no hacía falta agregárselo a los
+seis por separado porque WBS Builder ya impide crear un ciclo desde la
+UI (`isDescendant()` en `src/modules/wbs/main.ts` bloquea soltar un
+nodo dentro de su propia rama al reordenar por arrastre); la única vía
+real para que un ciclo llegue a esos datos es un `.json` importado, que
+es exactamente donde se corta ahora. Cubierto en
+`tests/unit/import-validation.test.ts`: `modules` ausente en las dos
 rutas de import, un ciclo WBS de dos pasos vía `importProject()` Y vía
 `ingestToolExport()`, un ciclo OBS, y una referencia colgante a un id
 inexistente. Verificado que los tests detectan los bugs reales:
 revertido el fix temporalmente, fallan con el mismo `TypeError`/
 `RangeError: Maximum call stack size exceeded` que reportó el usuario.
+
+### El hueco que dejó esa primera pasada: `parentId` no se saneaba, solo `children`
+
+Bug real reportado por el usuario (severidad media, 2026-09): la poda
+de arriba solo reescribía `children` (el sentido DESCENDENTE del
+árbol); dejaba intacto `parentId` (el sentido ASCENDENTE, que usan
+`obsNodes()`/`code()` en el núcleo y `isDescendant()`/la función de
+profundidad en `src/modules/wbs/main.ts` y `src/modules/obs/main.ts`,
+todos con un `while (n && n.parentId)` sin control de visitados). Un
+OBS importado con un nodo cuyo `parentId` apunta a sí mismo (o a un
+ciclo entre varios nodos, independiente de `children`) pasaba intacto:
+la importación devolvía éxito y el primer recorrido ascendente —solo
+con abrir el módulo— quedaba en loop infinito, sin desbordar la pila
+(no es recursión, es un `while`) así que ni siquiera un límite de
+profundidad del navegador lo cortaba; hubo que interrumpir la
+ejecución con un límite de tiempo externo.
+
+Corrección, siguiendo la propia recomendación del reporte:
+
+- **"Reconstruir padres coherentes con el árbol aceptado"**:
+  `sanitizeTree()` ahora TAMBIÉN reescribe `parentId` de cada nodo que
+  alcanza, usando la MISMA recorrida que ya arma `children` — cada nodo
+  recibe como padre exactamente aquel en cuyo `children` quedó (la
+  raíz recibe `parentId: null`), nunca el valor suelto que traía el
+  `.json`. Como esa recorrida ya es acíclica por construcción (mismo
+  set de visitados de la poda de `children`), el resultado es un árbol
+  con `children`/`parentId` mutuamente coherentes: subir por `parentId`
+  desde cualquier nodo alcanzado desde `rootId` siempre termina, en como
+  mucho la profundidad del árbol. Esto cierra el hueco de raíz para
+  cualquier dato que entre por los dos puntos de import ya cubiertos
+  (`detectTool()`/`normalizeToProject()`) — WBS también se beneficia,
+  aunque el núcleo no use `parentId` en sus propios recorridos, porque
+  `wbs/main.ts` sí lo usa en su UI.
+- **"Proteger también los recorridos ascendentes"**: defensa en
+  profundidad — `obsNodes()`/`code()` (núcleo), e `isDescendant()`/la
+  función de profundidad en `wbs/main.ts` y en `obs/main.ts`, ganan un
+  `Set` de visitados en su recorrido ascendente. En el flujo normal esto
+  nunca debería activarse (ya no puede entrar un `parentId` cíclico por
+  import), pero protege igual ante datos de antes de este fix, o
+  `localStorage` tocado a mano.
+
+Cubierto en `tests/unit/import-validation.test.ts`: un OBS donde
+`children` ya está limpio (sin ciclo ahí) pero `parentId` de un nodo
+apunta a sí mismo — confirma que `obsNodes()` termina y que `parentId`
+quedó reescrito coherente con `children`. Verificado que el test
+detecta el bug real: revertido el fix temporalmente, la llamada a
+`obsNodes()` cuelga de verdad (no lanza ni hace timeout de Vitest —
+Node se queda bloqueado en el `while`; hubo que terminar el proceso a
+mano, igual que describió el usuario). Dos pruebas preexistentes en
+`tests/unit/tool-export-import.test.ts` (`obs`/`wbs` con un solo nodo
+raíz) se actualizaron para reflejar que la raíz ahora siempre trae
+`parentId: null`.
 
 ## Ningún módulo guarda sin verificar que el proyecto activo sigue siendo el que cargó
 

@@ -244,19 +244,20 @@ var GPI = (function(exports) {
 		if (typeof rootId !== "string" || !nodes || typeof nodes !== "object") return;
 		const map = nodes;
 		const visited = /* @__PURE__ */ new Set();
-		(function walk(id) {
+		(function walk(id, parentId) {
 			const n = map[id];
 			if (!n || visited.has(id)) return;
 			visited.add(id);
+			n.parentId = parentId;
 			const kids = Array.isArray(n.children) ? n.children : [];
 			const clean = [];
 			kids.forEach((cid) => {
 				if (typeof cid !== "string" || !map[cid] || visited.has(cid) || cid === id) return;
 				clean.push(cid);
-				walk(cid);
+				walk(cid, id);
 			});
 			n.children = clean;
-		})(rootId);
+		})(rootId, null);
 	}
 	function detectTool(obj) {
 		if (!obj || typeof obj !== "object") return null;
@@ -484,7 +485,9 @@ var GPI = (function(exports) {
 		function code(id) {
 			const parts = [];
 			let n = nodes[id];
-			while (n && n.parentId) {
+			const seen = /* @__PURE__ */ new Set();
+			while (n && n.parentId && !seen.has(n.id)) {
+				seen.add(n.id);
 				const siblings = (nodes[n.parentId] || {}).children || [];
 				parts.unshift(siblings.indexOf(n.id) + 1);
 				n = nodes[n.parentId];
