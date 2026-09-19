@@ -66,6 +66,27 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **La importación JSON de actividades descartaba los hitos** — el
+  usuario reportó: un archivo del formato reconocido
+  `gpi.activities/v1` con `milestones` se importa con éxito, pero
+  conserva solamente `byLeaf` e `idCounter`; los hitos desaparecen.
+  Aclaró que el hallazgo corresponde a la importación de herramienta
+  (`detectTool()`/`ingestToolExport()`), no a la exportación del
+  proyecto completo. Diagnóstico: `ActivitiesModule.milestones` es un
+  campo de primera clase, pero la rama de `detectTool()` que arma el
+  módulo solo copiaba dos de las tres propiedades. Ningún módulo genera
+  hoy ese formato (los botones "Guardar .json" propios se retiraron),
+  pero se sigue aceptando por compatibilidad con archivos ya guardados,
+  y "reconocido" no puede significar "truncado en silencio". Corrección:
+  se conserva `milestones` cuando es un arreglo y se trata como `[]`
+  si viene con otro tipo (mismo criterio que `links` de
+  `gpi.schedule/v1`); sin hitos (formato anterior) queda `[]`. Tres
+  casos nuevos en `tests/unit/tool-export-import.test.ts`: ida y vuelta
+  con un hito suelto y uno colgado de un paquete, formato viejo sin
+  hitos, y `milestones` de tipo inválido; verificado que fallan sin el
+  fix. Ver ARCHITECTURE.md, "Un cuarto hueco: `gpi.activities/v1`
+  reconocía el formato pero descartaba los hitos".
+
 - **Media — `modules: []` se aceptaba y provocaba pérdida silenciosa de
   escrituras** — el usuario reportó: "la validación acepta cualquier
   objeto, incluidos arreglos. Reproduje una importación con `modules:

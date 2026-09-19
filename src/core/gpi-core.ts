@@ -410,7 +410,23 @@ function detectTool(obj: any): DetectedTool | null {
     return { module: "scopeStatement", data: obj.data };
   }
   if (obj.kind === "gpi.activities/v1" && obj.data) {
-    return { module: "activities", data: { byLeaf: obj.data.byLeaf || {}, idCounter: obj.data.idCounter || 1 } };
+    // Bug real reportado por el usuario: un .json con este formato
+    // reconocido (ok:true) pero con "milestones" -- los hitos sueltos o
+    // colgados de un paquete, ver MilestoneItem en types.ts -- se
+    // aceptaba con éxito y sin embargo los descartaba en silencio, solo
+    // conservaba byLeaf/idCounter. Se valida como el resto de los
+    // arreglos de este archivo: si no es un Array, se trata como vacío
+    // en vez de aceptarlo tal cual (regla #3 de CLAUDE.md: tolerar
+    // datos viejos/corruptos, nunca perderlos en silencio si SÍ vienen
+    // bien formados).
+    return {
+      module: "activities",
+      data: {
+        byLeaf: obj.data.byLeaf || {},
+        idCounter: obj.data.idCounter || 1,
+        milestones: Array.isArray(obj.data.milestones) ? obj.data.milestones : []
+      }
+    };
   }
   if (obj.kind === "gpi.requirements/v1" && obj.data) {
     return { module: "requirements", data: obj.data };

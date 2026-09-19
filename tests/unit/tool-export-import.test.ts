@@ -55,10 +55,40 @@ describe("ingestToolExport", () => {
     expect(getModule("scopeStatement")).toEqual({ productScope: "Alcance" });
   });
 
-  it("activities (gpi.activities/v1)", () => {
+  it("activities (gpi.activities/v1) sin hitos (formato viejo) -- milestones queda como arreglo vacío", () => {
     const res = ingestToolExport({ kind: "gpi.activities/v1", data: { byLeaf: { w1: [{ id: "a1", name: "Excavar" }] }, idCounter: 2 } });
     expect(res).toEqual({ ok: true, module: "activities" });
-    expect(getModule("activities")).toEqual({ byLeaf: { w1: [{ id: "a1", name: "Excavar" }] }, idCounter: 2 });
+    expect(getModule("activities")).toEqual({ byLeaf: { w1: [{ id: "a1", name: "Excavar" }] }, idCounter: 2, milestones: [] });
+  });
+
+  it("activities (gpi.activities/v1) CON hitos -- ida y vuelta: los hitos (sueltos y colgados de un paquete) se conservan (bug reportado: se descartaban en silencio)", () => {
+    const data = {
+      byLeaf: { w1: [{ id: "a1", name: "Excavar", unit: "m³", qty: 100, perf: 25, teams: 1 }] },
+      idCounter: 2,
+      milestones: [
+        { id: "m1", code: "H1", name: "Inicio de obra", leafId: null, afterLeafId: null },
+        { id: "m2", code: "H2", name: "Fin de excavación", leafId: "w1", afterLeafId: null }
+      ]
+    };
+    const res = ingestToolExport({ kind: "gpi.activities/v1", data });
+    expect(res).toEqual({ ok: true, module: "activities" });
+    expect(getModule("activities")).toEqual(data);
+
+    // Ida y vuelta: lo que queda guardado, re-envuelto en el mismo formato,
+    // vuelve a importarse idéntico.
+    const stored = getModule("activities");
+    const res2 = ingestToolExport({ kind: "gpi.activities/v1", data: JSON.parse(JSON.stringify(stored)) });
+    expect(res2).toEqual({ ok: true, module: "activities" });
+    expect(getModule("activities")).toEqual(data);
+  });
+
+  it("activities (gpi.activities/v1) con 'milestones' que no es un arreglo -- se descarta a [] en vez de aceptarse tal cual", () => {
+    const res = ingestToolExport({ kind: "gpi.activities/v1", data: { byLeaf: {}, idCounter: 1, milestones: "no es un arreglo" } });
+    expect(res.ok).toBe(true);
+    expect(getModule("activities")!.milestones).toEqual([]);
+    const res2 = ingestToolExport({ kind: "gpi.activities/v1", data: { byLeaf: {}, idCounter: 1, milestones: { m1: {} } } });
+    expect(res2.ok).toBe(true);
+    expect(getModule("activities")!.milestones).toEqual([]);
   });
 
   it("requirements (gpi.requirements/v1) -- caso agregado junto con el retiro del import propio del módulo", () => {

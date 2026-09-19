@@ -300,7 +300,8 @@ var GPI = (function(exports) {
 			module: "activities",
 			data: {
 				byLeaf: obj.data.byLeaf || {},
-				idCounter: obj.data.idCounter || 1
+				idCounter: obj.data.idCounter || 1,
+				milestones: Array.isArray(obj.data.milestones) ? obj.data.milestones : []
 			}
 		};
 		if (obj.kind === "gpi.requirements/v1" && obj.data) return {

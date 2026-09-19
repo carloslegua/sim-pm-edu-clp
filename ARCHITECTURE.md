@@ -428,6 +428,36 @@ fix temporalmente, los tres fallan exactamente como se esperaba
 `getModule()` sigue devolviendo `null` tras el viaje por
 `localStorage`).
 
+### Un cuarto hueco: `gpi.activities/v1` reconocía el formato pero descartaba los hitos
+
+Bug real reportado por el usuario (2026-09): un `.json` del formato
+reconocido `gpi.activities/v1` con `milestones` se importaba con éxito
+(`ok: true`) pero conservaba solo `byLeaf` e `idCounter`; los hitos
+desaparecían. Es un hallazgo de la importación de UNA herramienta
+(`detectTool()`/`ingestToolExport()`, "Importar .json" de la tarjeta
+del Panel), no de la exportación/importación del proyecto completo
+(`normalizeToProject()`, que ya pasa `modules` verbatim).
+`ActivitiesModule.milestones?: MilestoneItem[]` es un campo de primera
+clase (hitos sueltos o colgados de un paquete, ver `types.ts`); la rama
+de `detectTool()` que construía el objeto solo copiaba dos de las tres
+propiedades. Hoy ningún módulo genera ese formato (los botones
+"Guardar .json" propios se retiraron, ver más arriba), pero
+`detectTool()` sigue aceptándolo por compatibilidad con archivos ya
+guardados por alumnos (regla #3 de CLAUDE.md) — y "reconocido" no puede
+significar "reconocido pero truncado en silencio".
+
+Corrección: la rama ahora conserva `milestones` cuando es un `Array` y
+lo trata como `[]` si viene con otro tipo (mismo criterio ligero que
+`links` de `gpi.schedule/v1`; no se valida cada ítem, igual que el
+resto de los arreglos importados de este archivo). Sin `milestones`
+(formato anterior a los hitos) el módulo queda con `milestones: []`.
+Cubierto en `tests/unit/tool-export-import.test.ts`: ida y vuelta con
+un hito suelto y uno colgado de un paquete (lo importado se re-envuelve
+en el mismo formato y vuelve idéntico), formato viejo sin hitos, y
+`milestones` con tipo inválido (string, objeto). Verificado que los
+tres fallan sin el fix. La aserción preexistente de `activities`
+(`toEqual` estricto) se actualizó para incluir `milestones: []`.
+
 ## Ningún módulo guarda sin verificar que el proyecto activo sigue siendo el que cargó
 
 Bug real reportado por un usuario (2026-09): abrir el Acta de
