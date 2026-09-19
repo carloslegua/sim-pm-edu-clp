@@ -28,6 +28,18 @@ import type {
 export const KEY = "gpi_db";
 const SCHEMA = "gpi.project/v1";
 let mem: GpiDb | null = null;
+// Última versión de la base que se intentó guardar y NO llegó a
+// localStorage (QuotaExceededError u otro fallo de escritura -- ver
+// save()). Antes, esa versión se perdía en el momento: la función de
+// escritura devolvía éxito igual (bug real reportado por el usuario,
+// confirmado reproduciendo el error de cuota: setModule() devolvía
+// true, aparecía el aviso, pero exportActive() -- y cualquier otra
+// lectura -- seguía sirviendo la última versión SÍ persistida en disco,
+// sin los cambios que el aviso decía poder rescatar exportando). Ahora
+// db() sirve esta copia mientras exista, así toda lectura posterior
+// (incluida exportActive()) ve los cambios pendientes, y un futuro
+// guardado exitoso (el alumno libera espacio) la limpia.
+let pendingUnsaved: GpiDb | null = null;
 
 function avail(): boolean {
   try {
@@ -44,6 +56,11 @@ export { avail as available };
 function fresh(): GpiDb { return { version: 1, activeId: null, projects: {} }; }
 function db(): GpiDb {
   if (!avail()) return mem || (mem = fresh());
+  // Hay una versión más reciente que localStorage rechazó por cuota --
+  // servirla a toda lectura/escritura hasta que un guardado futuro
+  // vuelva a tener éxito, en vez de volver silenciosamente a la última
+  // que sí quedó en disco (que ya no refleja el trabajo del alumno).
+  if (pendingUnsaved) return pendingUnsaved;
   try {
     return (JSON.parse(localStorage.getItem(KEY) as string) as GpiDb) || fresh();
   } catch (e) {
@@ -51,16 +68,33 @@ function db(): GpiDb {
   }
 }
 export { db as raw };
+// Refleja si la última escritura a localStorage falló (cuota agotada u
+// otro error) y por lo tanto hay cambios que solo existen en memoria
+// (ver pendingUnsaved) -- para que Panel de Control u otro módulo pueda
+// distinguir "todo guardado" de "hay trabajo pendiente de exportar"
+// además del aviso visual ya existente.
+export function hasUnsavedChanges(): boolean { return pendingUnsaved !== null; }
 
-function save(d: GpiDb): void {
-  if (!avail()) { mem = d; return; }
+// Devuelve true si el guardado llegó a localStorage, false si falló
+// (queda igual retenido en pendingUnsaved -- ver db()). Antes esta
+// función no devolvía nada y sus llamadoras (setModule, patchMeta...)
+// reportaban éxito de forma incondicional, sin importar si la escritura
+// real había fallado.
+function save(d: GpiDb): boolean {
+  if (!avail()) { mem = d; return true; } // modo memoria (sin localStorage): degradado pero no es un fallo de escritura
   try {
     localStorage.setItem(KEY, JSON.stringify(d));
-    hideQuotaNotice(); // volvió a guardar bien: retirar el aviso si estaba
+    pendingUnsaved = null; // volvió a guardar bien: ya no hace falta el respaldo en memoria
+    hideQuotaNotice();
+    return true;
   } catch (e) {
     // localStorage lleno (QuotaExceededError) u otro fallo de escritura:
-    // antes esto fallaba EN SILENCIO y el alumno perdía cambios sin avisar.
+    // antes esto fallaba EN SILENCIO y el alumno perdía cambios sin
+    // avisar. Ahora se retiene la versión intentada (pendingUnsaved,
+    // ver arriba) en vez de descartarla.
+    pendingUnsaved = d;
     showQuotaNotice();
+    return false;
   }
 }
 
@@ -146,8 +180,12 @@ export function setModule(name: string, data: unknown, expectedProjectId?: strin
   p.modules = p.modules || {};
   (p.modules as Record<string, unknown>)[name] = data;
   p.meta.updatedAt = Date.now();
-  save(d);
-  return true;
+  // El resultado real de save() (antes se ignoraba y siempre se
+  // devolvía true, incluso si localStorage rechazó la escritura por
+  // cuota): el dato igual queda aplicado y recuperable -- ver
+  // pendingUnsaved en save()/db() -- pero el llamador ahora puede
+  // distinguir "guardado en disco" de "solo en memoria, exportalo".
+  return save(d);
 }
 
 // ----- gestión de proyectos -----
@@ -1793,6 +1831,7 @@ export const GPI = {
   duplicateProject,
   deleteProject,
   exportActive,
+  hasUnsavedChanges,
   importProject,
   ingestToolExport,
   onChange,

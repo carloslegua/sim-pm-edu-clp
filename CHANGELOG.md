@@ -66,6 +66,47 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Núcleo — el respaldo recomendado tras un fallo de almacenamiento
+  podía omitir los últimos cambios** — el usuario simuló un error de
+  cuota (`localStorage.setItem` lanzando `QuotaExceededError`) y
+  reportó: `setModule()` devolvió `true`, apareció el aviso de
+  almacenamiento lleno, y `exportActive()` devolvió la versión anterior.
+  El aviso recomienda exportar para rescatar el trabajo, pero la
+  exportación del Panel consulta los datos persistidos. Diagnóstico
+  confirmado en `save()` (`src/core/gpi-core.ts`): cuando la escritura a
+  disco fallaba, la versión recién mutada en memoria se descartaba sin
+  más — la función no devolvía nada, así que `setModule()`/`patchMeta()`
+  reportaban éxito de forma incondicional, y la siguiente lectura
+  (incluida `exportActive()`, que usa el mismo `db()`) volvía a
+  parsear `localStorage` desde cero, sirviendo la última versión que sí
+  se había guardado. El aviso visible prometía un rescate que la
+  implementación no cumplía. Corrección: `save()` ahora devuelve si la
+  escritura llegó a disco, y cuando falla retiene esa versión en una
+  variable de módulo nueva (`pendingUnsaved`, distinta del `mem` ya
+  existente para cuando `localStorage` no está disponible en absoluto —
+  esta es específicamente "hay `localStorage`, pero ESTA escritura se
+  rechazó por cuota"). `db()` sirve `pendingUnsaved` a toda lectura
+  posterior mientras exista, así que `exportActive()` —y cualquier otra
+  lectura, y cualquier escritura posterior, que ahora sigue construyendo
+  sobre el cambio pendiente en vez de partir otra vez de la versión
+  vieja— ve el cambio real que se intentó guardar. `setModule()`
+  devuelve el resultado real de `save()` en vez de `true` incondicional.
+  Se agregó `GPI.hasUnsavedChanges()` para que Panel de Control (o
+  cualquier módulo) pueda consultar el estado además del aviso visual.
+  El estado pendiente se limpia solo cuando un guardado posterior tiene
+  éxito (el alumno libera espacio borrando proyectos viejos, o el
+  navegador deja de estar lleno). Nuevo
+  `tests/unit/quota-recovery.test.ts`: simula el error de cuota
+  (mockeando `Storage.prototype.setItem` para que solo la clave
+  `gpi_db` falle, dejando intacta la sonda de disponibilidad que usa
+  `avail()`) y confirma que `setModule()` refleja el fallo real, que
+  `exportActive()` sirve el cambio pendiente en vez de la versión vieja,
+  y que un guardado posterior exitoso persiste el cambio y limpia el
+  estado. Verificado que el test detecta el bug real: revertido
+  temporalmente el fix, el mismo test falla exactamente donde se
+  esperaba. Ver ARCHITECTURE.md, sección "Esquema de
+  `localStorage["gpi_db"]`" → "Cuota llena".
+
 - **Stakeholder Studio — un .json de interesados manipulado podía
   ejecutar código en el navegador (XSS)** — el usuario reportó, con
   evidencia puntual, que un identificador de interesado importado se

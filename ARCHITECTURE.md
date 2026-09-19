@@ -92,7 +92,24 @@ que deben poder reabrirse.
   (`QuotaExceededError` u otro), `gpi-core.ts` muestra un aviso visible
   en pantalla (`showQuotaNotice`) en vez de perder cambios en silencio
   — comportamiento agregado durante la migración, no estaba en el JS
-  original.
+  original. El aviso recomienda exportar el proyecto a `.json` para
+  rescatar el trabajo — eso solo es cierto porque `save()` retiene la
+  versión que no llegó a disco en una variable de módulo
+  (`pendingUnsaved`, distinta de `mem`: esta es específicamente "hay
+  localStorage, pero ESTA escritura se rechazó por cuota") y `db()` la
+  sirve a toda lectura posterior mientras exista, incluida
+  `exportActive()`. Antes de este fix (bug real reportado por el
+  usuario, reproducido simulando el error de cuota) esa versión se
+  descartaba: `setModule()` devolvía `true` de todas formas, el aviso
+  aparecía, pero `exportActive()` volvía a leer de disco y servía la
+  ÚLTIMA versión que sí se había guardado — el aviso prometía rescatar
+  un cambio que la exportación nunca llegaba a incluir. `setModule()`
+  ahora devuelve el resultado real de `save()` en vez de `true`
+  incondicional; `GPI.hasUnsavedChanges()` expone si hay una versión
+  pendiente sin persistir. Se limpia solo en el próximo guardado
+  exitoso (el alumno libera espacio borrando proyectos viejos desde el
+  Panel, o el navegador deja de estar lleno). Cubierto en
+  `tests/unit/quota-recovery.test.ts`.
 
 ### Forma general
 

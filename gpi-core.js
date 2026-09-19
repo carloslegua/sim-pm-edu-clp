@@ -4,6 +4,7 @@ var GPI = (function(exports) {
 	var KEY = "gpi_db";
 	var SCHEMA = "gpi.project/v1";
 	var mem = null;
+	var pendingUnsaved = null;
 	function avail() {
 		try {
 			const k = "__gpi_t";
@@ -23,22 +24,30 @@ var GPI = (function(exports) {
 	}
 	function db() {
 		if (!avail()) return mem || (mem = fresh());
+		if (pendingUnsaved) return pendingUnsaved;
 		try {
 			return JSON.parse(localStorage.getItem("gpi_db")) || fresh();
 		} catch (e) {
 			return fresh();
 		}
 	}
+	function hasUnsavedChanges() {
+		return pendingUnsaved !== null;
+	}
 	function save(d) {
 		if (!avail()) {
 			mem = d;
-			return;
+			return true;
 		}
 		try {
 			localStorage.setItem(KEY, JSON.stringify(d));
+			pendingUnsaved = null;
 			hideQuotaNotice();
+			return true;
 		} catch (e) {
+			pendingUnsaved = d;
 			showQuotaNotice();
+			return false;
 		}
 	}
 	var quotaEl = null;
@@ -134,8 +143,7 @@ var GPI = (function(exports) {
 		p.modules = p.modules || {};
 		p.modules[name] = data;
 		p.meta.updatedAt = Date.now();
-		save(d);
-		return true;
+		return save(d);
 	}
 	function createProject(metaOverrides, modules) {
 		const d = db(), id = uid();
@@ -2095,6 +2103,7 @@ var GPI = (function(exports) {
 		duplicateProject,
 		deleteProject,
 		exportActive,
+		hasUnsavedChanges,
 		importProject,
 		ingestToolExport,
 		onChange,
@@ -2124,6 +2133,7 @@ var GPI = (function(exports) {
 	exports.esc = esc;
 	exports.exportActive = exportActive;
 	exports.getModule = getModule;
+	exports.hasUnsavedChanges = hasUnsavedChanges;
 	exports.importProject = importProject;
 	exports.ingestToolExport = ingestToolExport;
 	exports.kpi = kpi;
