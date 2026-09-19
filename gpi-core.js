@@ -117,7 +117,7 @@ var GPI = (function(exports) {
 	}
 	function getModule(name) {
 		const p = active();
-		return p ? p.modules[name] || null : null;
+		return p && p.modules ? p.modules[name] || null : null;
 	}
 	function setActive(id) {
 		const d = db();
@@ -190,16 +190,37 @@ var GPI = (function(exports) {
 	function exportActive() {
 		return active();
 	}
+	function sanitizeTree(rootId, nodes) {
+		if (typeof rootId !== "string" || !nodes || typeof nodes !== "object") return;
+		const map = nodes;
+		const visited = /* @__PURE__ */ new Set();
+		(function walk(id) {
+			const n = map[id];
+			if (!n || visited.has(id)) return;
+			visited.add(id);
+			const kids = Array.isArray(n.children) ? n.children : [];
+			const clean = [];
+			kids.forEach((cid) => {
+				if (typeof cid !== "string" || !map[cid] || visited.has(cid) || cid === id) return;
+				clean.push(cid);
+				walk(cid);
+			});
+			n.children = clean;
+		})(rootId);
+	}
 	function detectTool(obj) {
 		if (!obj || typeof obj !== "object") return null;
-		if (obj.kind === "gpi.obs/v1" && obj.nodes && obj.rootId) return {
-			module: "obs",
-			data: {
-				rootId: obj.rootId,
-				idCounter: obj.idCounter || 1,
-				nodes: obj.nodes
-			}
-		};
+		if (obj.kind === "gpi.obs/v1" && obj.nodes && obj.rootId) {
+			sanitizeTree(obj.rootId, obj.nodes);
+			return {
+				module: "obs",
+				data: {
+					rootId: obj.rootId,
+					idCounter: obj.idCounter || 1,
+					nodes: obj.nodes
+				}
+			};
+		}
 		if (obj.kind === "gpi.raci/v1") return {
 			module: "raci",
 			data: { assignments: obj.assignments || {} }
@@ -260,18 +281,29 @@ var GPI = (function(exports) {
 				idCounter: obj.idCounter || obj.stakeholders.length + 1
 			}
 		};
-		if (obj.nodes && obj.rootId) return {
-			module: "wbs",
-			data: {
-				rootId: obj.rootId,
-				idCounter: obj.idCounter || 1,
-				nodes: obj.nodes
-			}
-		};
+		if (obj.nodes && obj.rootId) {
+			sanitizeTree(obj.rootId, obj.nodes);
+			return {
+				module: "wbs",
+				data: {
+					rootId: obj.rootId,
+					idCounter: obj.idCounter || 1,
+					nodes: obj.nodes
+				}
+			};
+		}
 		return null;
 	}
 	function normalizeToProject(obj) {
-		if (obj && obj.schema === SCHEMA && obj.meta) return obj;
+		if (obj && obj.schema === SCHEMA && obj.meta) {
+			const proj = obj;
+			if (!proj.modules || typeof proj.modules !== "object") proj.modules = {};
+			const wbsMod = proj.modules.wbs;
+			if (wbsMod && wbsMod.nodes) sanitizeTree(wbsMod.rootId, wbsMod.nodes);
+			const obsMod = proj.modules.obs;
+			if (obsMod && obsMod.nodes) sanitizeTree(obsMod.rootId, obsMod.nodes);
+			return proj;
+		}
 		const projMeta = Object.assign(defaultMeta(), {
 			name: obj && obj.title || "Proyecto importado",
 			course: obj && obj.course || void 0

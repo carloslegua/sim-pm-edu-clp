@@ -141,7 +141,13 @@ export function active(): GpiProject | null { const d = db(); return (d.activeId
 export function meta(): ProjectMeta | null { const p = active(); return p ? p.meta : null; }
 export function getModule<K extends keyof ProjectModules>(name: K): ProjectModules[K] | null {
   const p = active();
-  return p ? (p.modules[name] || null) : null;
+  // Segunda capa: normalizeToProject() ya garantiza "modules" al
+  // importar, pero un proyecto guardado por una versión más vieja del
+  // núcleo (o tocado a mano en localStorage) también podría no tenerlo
+  // -- sin este chequeo, cada uno de los ~60 sitios que llaman
+  // GPI.getModule(...) en los 13 módulos y en Panel de Control revienta
+  // con TypeError en vez de tratarlo como "este módulo no tiene datos".
+  return p && p.modules ? (p.modules[name] || null) : null;
 }
 
 // ----- escritura -----
@@ -220,11 +226,49 @@ export function exportActive(): GpiProject | null { return active(); }
 
 interface DetectedTool { module: string; data: unknown; }
 
+// Poda ciclos y referencias colgantes en un árbol WBS/OBS ({rootId,
+// nodes}) ANTES de que el núcleo lo guarde -- bug real reportado por el
+// usuario: un .json de EDT manipulado con un ciclo en "children" (p.
+// ej. A hijo de B y B hijo de A) se aceptaba intacto, y el primer
+// recorrido recursivo sobre esos datos (wbsCodes/wbsLeaves/obsNodes/
+// wbsPhases/activitiesStats/pertStats -- ninguno lleva control de
+// visitados) entraba en recursión infinita y desbordaba la pila apenas
+// se abría un módulo o el Panel de Control con ese proyecto activo. Se
+// llama en los dos puntos donde datos ajenos entran al núcleo:
+// detectTool() (import de un solo módulo, "Importar .json" del Panel) y
+// normalizeToProject() (import de un proyecto completo). Muta "nodes"
+// en el sitio: cada nodo conserva como mucho una referencia de padre (la
+// primera que se alcanza recorriendo desde rootId); cualquier otra
+// referencia al mismo id -- ciclo, nodo con dos padres, o un id que ni
+// siquiera existe en "nodes" -- se descarta en silencio, igual que el
+// resto de las ramas de compatibilidad de este archivo (regla #3 de
+// CLAUDE.md: tolerar datos viejos/corruptos sin rechazar el import
+// completo).
+function sanitizeTree(rootId: unknown, nodes: unknown): void {
+  if (typeof rootId !== "string" || !nodes || typeof nodes !== "object") return;
+  const map = nodes as Record<string, { children?: unknown }>;
+  const visited = new Set<string>();
+  (function walk(id: string): void {
+    const n = map[id];
+    if (!n || visited.has(id)) return;
+    visited.add(id);
+    const kids = Array.isArray(n.children) ? (n.children as unknown[]) : [];
+    const clean: string[] = [];
+    kids.forEach((cid) => {
+      if (typeof cid !== "string" || !map[cid] || visited.has(cid) || cid === id) return;
+      clean.push(cid);
+      walk(cid);
+    });
+    n.children = clean;
+  })(rootId);
+}
+
 function detectTool(obj: any): DetectedTool | null {
   if (!obj || typeof obj !== "object") return null;
   // OBS y RACI se marcan explícitamente con "kind" porque su forma (nodes+rootId,
   // u objeto de asignaciones) podría confundirse con la de otras herramientas.
   if (obj.kind === "gpi.obs/v1" && obj.nodes && obj.rootId) {
+    sanitizeTree(obj.rootId, obj.nodes);
     return { module: "obs", data: { rootId: obj.rootId, idCounter: obj.idCounter || 1, nodes: obj.nodes } };
   }
   if (obj.kind === "gpi.raci/v1") {
@@ -275,13 +319,29 @@ function detectTool(obj: any): DetectedTool | null {
     };
   }
   if (obj.nodes && obj.rootId) {
+    sanitizeTree(obj.rootId, obj.nodes);
     return { module: "wbs", data: { rootId: obj.rootId, idCounter: obj.idCounter || 1, nodes: obj.nodes } };
   }
   return null;
 }
 
 function normalizeToProject(obj: any): GpiProject {
-  if (obj && obj.schema === SCHEMA && obj.meta) return obj as GpiProject; // ya es proyecto
+  if (obj && obj.schema === SCHEMA && obj.meta) {
+    // ya es un proyecto completo -- pero "modules" puede faltar o venir
+    // corrupto (bug real reportado por el usuario: un .json con schema y
+    // meta reconocidos, sin "modules", se aceptaba tal cual y cada
+    // GPI.getModule(...) posterior -- docenas de sitios en los 13
+    // módulos y en Panel de Control -- reventaba con TypeError al leer
+    // sobre "modules" undefined) y su WBS/OBS pueden traer los mismos
+    // ciclos que detectTool() sanea para el import de un solo módulo.
+    const proj = obj as GpiProject;
+    if (!proj.modules || typeof proj.modules !== "object") proj.modules = {};
+    const wbsMod = proj.modules.wbs as WbsModule | undefined;
+    if (wbsMod && wbsMod.nodes) sanitizeTree(wbsMod.rootId, wbsMod.nodes);
+    const obsMod = proj.modules.obs as ObsModule | undefined;
+    if (obsMod && obsMod.nodes) sanitizeTree(obsMod.rootId, obsMod.nodes);
+    return proj;
+  }
   // envolver exportación de herramienta
   const projMeta = Object.assign(defaultMeta(), {
     name: (obj && obj.title) || "Proyecto importado",

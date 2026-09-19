@@ -223,6 +223,58 @@ ahora vive ÚNICAMENTE en `Panel_Control.html`, con dos niveles:
   recorte de alcance consciente, no un bug, documentado aquí para no
   "redescubrirlo" como regresión.
 
+### Validación de estructura al importar: `modules` ausente y ciclos en WBS/OBS
+
+Bug real reportado por el usuario (2026-09), con dos síntomas
+distintos: (1) un `.json` con `schema`/`meta` reconocidos pero sin
+`modules` se aceptaba tal cual y cada `GPI.getModule(...)` posterior
+(~60 sitios en los 13 módulos y en Panel de Control) reventaba con
+`TypeError` al leer sobre `modules` undefined; (2) una EDT (o un
+organigrama OBS) con un ciclo en `children` (p. ej. A hijo de B y B
+hijo de A) se aceptaba intacta, y el primer recorrido recursivo del
+núcleo sobre esos datos —`wbsCodes`, `wbsLeaves`, `obsNodes`,
+`wbsPhases`, `activitiesStats`, `pertStats`: ninguno lleva control de
+visitados— entraba en recursión infinita y desbordaba la pila (`Maximum
+call stack size exceeded`) apenas se abría un módulo o el Panel con ese
+proyecto activo.
+
+Corrección, en los dos puntos donde datos ajenos entran al núcleo
+(`normalizeToProject()`, usada por `importProject()` — un proyecto
+completo — y `detectTool()`, usada por `ingestToolExport()` — un solo
+módulo vía "Importar .json" de cada tarjeta del Panel):
+
+- `normalizeToProject()` garantiza `modules` como objeto cuando el
+  `.json` ya trae `schema`/`meta` reconocidos pero no trae `modules` (o
+  lo trae corrupto). `getModule()` gana además una segunda capa de
+  defensa (`p && p.modules`) por si un proyecto ya guardado con una
+  versión más vieja del núcleo, o tocado a mano en `localStorage`,
+  tampoco lo tiene — mismo criterio de dos capas que la guarda de
+  identidad de proyecto (ver más abajo).
+- `sanitizeTree(rootId, nodes)` (nueva, compartida por `detectTool()`
+  y `normalizeToProject()`) recorre el árbol desde `rootId` llevando un
+  set de visitados y reescribe el `children` de cada nodo descartando
+  cualquier referencia que forme un ciclo, apunte a un id que no existe
+  en `nodes`, o le dé un segundo padre a un nodo ya alcanzado — en
+  silencio, sin abortar el import completo, igual que el resto de las
+  ramas de compatibilidad de este archivo (regla #3 de CLAUDE.md: no se
+  rechazan datos viejos/corruptos, se toleran). Se aplica a `wbs` y a
+  `obs` (misma forma `{rootId, nodes}`) en ambos puntos de entrada.
+
+Deliberadamente sin tocar: los propios recorridos recursivos
+(`wbsCodes`/`wbsLeaves`/`obsNodes`/`wbsPhases`/`activitiesStats`/
+`pertStats`) siguen sin control de visitados — no hacía falta
+agregárselo a los seis por separado porque WBS Builder ya impide crear
+un ciclo desde la UI (`isDescendant()` en `src/modules/wbs/main.ts`
+bloquea soltar un nodo dentro de su propia rama al reordenar por
+arrastre); la única vía real para que un ciclo llegue a esos datos es
+un `.json` importado, que es exactamente donde se corta ahora. Cubierto
+en `tests/unit/import-validation.test.ts`: `modules` ausente en las dos
+rutas de import, un ciclo WBS de dos pasos vía `importProject()` Y vía
+`ingestToolExport()`, un ciclo OBS, y una referencia colgante a un id
+inexistente. Verificado que los tests detectan los bugs reales:
+revertido el fix temporalmente, fallan con el mismo `TypeError`/
+`RangeError: Maximum call stack size exceeded` que reportó el usuario.
+
 ## Ningún módulo guarda sin verificar que el proyecto activo sigue siendo el que cargó
 
 Bug real reportado por un usuario (2026-09): abrir el Acta de

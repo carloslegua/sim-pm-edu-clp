@@ -66,6 +66,46 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Núcleo — las importaciones .json carecían de validación estructural
+  suficiente: `modules` ausente y EDT/OBS con ciclos** — el usuario
+  reportó dos fallas: un proyecto con `schema` reconocido y metadatos,
+  pero sin `modules`, se aceptaba y después provocaba errores de
+  lectura; y una EDT con referencias circulares causaba desbordamiento
+  de pila. Diagnóstico: `normalizeToProject()` devolvía el objeto
+  importado tal cual en cuanto veía `schema`/`meta` válidos, sin
+  garantizar `modules` — y `getModule()` (~60 llamadas en los 13
+  módulos y en Panel de Control) leía `p.modules[name]` sin comprobar
+  que `p.modules` existiera, así que el primer acceso reventaba con
+  `TypeError`. Por separado, `detectTool()` (import de un solo módulo)
+  y `normalizeToProject()` (import de proyecto completo) aceptaban la
+  forma `{rootId, nodes}` de WBS/OBS sin validar que `children` formara
+  un árbol real: un ciclo (A hijo de B, B hijo de A) hacía que cualquiera
+  de los seis recorridos recursivos del núcleo sobre esos datos
+  (`wbsCodes`, `wbsLeaves`, `obsNodes`, `wbsPhases`, `activitiesStats`,
+  `pertStats` — ninguno lleva control de visitados) entrara en
+  recursión infinita apenas se abría un módulo o el Panel con ese
+  proyecto activo. Corrección, preservando los formatos antiguos
+  compatibles (nada se rechaza, se sanea en silencio, igual que el
+  resto de las ramas de compatibilidad del archivo): `normalizeToProject()`
+  garantiza `modules` como objeto cuando falta; `getModule()` gana una
+  segunda capa de defensa (`p && p.modules`) para proyectos ya guardados
+  sin `modules` por otra vía; y una función nueva, `sanitizeTree()`,
+  compartida por `detectTool()` y `normalizeToProject()`, recorre el
+  árbol desde `rootId` y descarta cualquier referencia en `children` que
+  forme un ciclo, apunte a un id inexistente o le dé un segundo padre a
+  un nodo ya visitado. No se tocaron los seis recorridos recursivos en
+  sí (WBS Builder ya impide crear un ciclo desde la UI vía
+  `isDescendant()`; la única vía real de entrada es un `.json`
+  importado, que es exactamente donde se corta ahora). Nuevo
+  `tests/unit/import-validation.test.ts` (6 casos): `modules` ausente
+  por las dos rutas de import, un ciclo WBS de dos pasos vía
+  `importProject()` y vía `ingestToolExport()`, un ciclo OBS, y una
+  referencia colgante a un id inexistente. Verificado que los tests
+  detectan los bugs reales: revertido el fix temporalmente, fallan con
+  el mismo `TypeError`/`RangeError: Maximum call stack size exceeded`
+  que reportó el usuario. Ver ARCHITECTURE.md, sección "Validación de
+  estructura al importar: `modules` ausente y ciclos en WBS/OBS".
+
 - **Núcleo — el respaldo recomendado tras un fallo de almacenamiento
   podía omitir los últimos cambios** — el usuario simuló un error de
   cuota (`localStorage.setItem` lanzando `QuotaExceededError`) y
