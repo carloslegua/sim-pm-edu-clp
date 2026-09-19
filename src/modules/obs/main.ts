@@ -610,6 +610,24 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
   if (typeof window.GPI === "undefined" || !window.GPI.available()) return;
   const GPI = window.GPI;
   const proj = GPI.active();
+  // Id. del proyecto activo cuando esta pestaña cargó sus datos -- se
+  // compara contra GPI.activeId() antes de cada guardado (ver push())
+  // para nunca escribir este organigrama sobre un proyecto distinto que
+  // se haya activado desde otra pestaña mientras esta seguía abierta
+  // (bug real reportado por el usuario, confirmado sistémico en los 13
+  // módulos de herramienta).
+  const loadedProjectId: string | null = proj ? GPI.activeId() : null;
+  let projectStale = false;
+  function markProjectStale(): void {
+    if (projectStale) return;
+    projectStale = true;
+    setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+    const banner = document.getElementById("banner");
+    if (banner) {
+      banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar el organigrama aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+      banner.classList.add("show");
+    }
+  }
   const titleEl = document.getElementById("projectTitle") as HTMLInputElement;
   const courseEl = document.getElementById("courseTitle") as HTMLInputElement;
   function refreshStakeholderList(): void {
@@ -640,15 +658,19 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
   }
   function push(): void {
     if (!GPI.active()) return;
-    GPI.setModule("obs", { rootId, idCounter, nodes });
-    GPI.patchMeta({ course: courseEl.value });
+    if (loadedProjectId != null && GPI.activeId() !== loadedProjectId) { markProjectStale(); return; }
+    GPI.setModule("obs", { rootId, idCounter, nodes }, loadedProjectId);
+    GPI.patchMeta({ course: courseEl.value }, loadedProjectId);
   }
   if (proj) pull(); else refreshStakeholderList();
   window.addEventListener("beforeunload", push);
   document.addEventListener("visibilitychange", () => { if (document.hidden) push(); });
   // Si Stakeholder Studio agrega interesados en otra pestaña, refresca el
   // autocompletado de "Persona" sin tocar el organigrama que se está editando.
-  if (GPI.onChange) GPI.onChange(() => { if (!document.hidden) refreshStakeholderList(); });
+  if (GPI.onChange) GPI.onChange(() => {
+    if (loadedProjectId != null && GPI.activeId() !== loadedProjectId) { markProjectStale(); return; }
+    if (!document.hidden) refreshStakeholderList();
+  });
   gpiBadge(proj ? (proj.meta && proj.meta.name) : "", push);
 });
 

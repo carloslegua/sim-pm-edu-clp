@@ -391,11 +391,28 @@ function pullFromCostEstimate(): void {
 let userEdited = false;
 ["input", "change"].forEach((ev) => document.addEventListener(ev, (e) => { if (e.isTrusted) userEdited = true; }, true));
 
+// Id. del proyecto activo cuando esta pestaña cargó sus datos -- se
+// compara contra GPI.activeId() antes de cada guardado (ver save()) para
+// nunca escribir esta gestión de costos sobre un proyecto distinto que
+// se haya activado desde otra pestaña mientras esta seguía abierta (bug
+// real reportado por el usuario, confirmado sistémico en los 13 módulos
+// de herramienta).
+let loadedProjectId: string | null = null;
+let projectStale = false;
+function markProjectStale(): void {
+  if (projectStale) return;
+  projectStale = true;
+  const t = $("saveTxt"), d = $("saveDot");
+  if (t) t.textContent = "⚠ El proyecto activo cambió en otra pestaña: no se puede guardar aquí";
+  if (d) d.style.background = "#dc3546";
+}
+
 function save(): void {
   if (gpiOn() && !(GPI as GpiApi).getModule("cost") && !userEdited) { buildJSON(); return; }
+  if (gpiOn() && loadedProjectId != null && (GPI as GpiApi).activeId() !== loadedProjectId) { markProjectStale(); return; }
   let synced = false;
   if (gpiOn()) {
-    try { (GPI as GpiApi).setModule("cost", collect() as unknown as CostModule); synced = true; $("saveTxt").textContent = "Sincronizado con el Panel"; } catch (e) { /* noop */ }
+    try { (GPI as GpiApi).setModule("cost", collect() as unknown as CostModule, loadedProjectId); synced = true; $("saveTxt").textContent = "Sincronizado con el Panel"; } catch (e) { /* noop */ }
   }
   if (!synced) {
     try {
@@ -473,6 +490,7 @@ function gpiBadge(): void {
 function init(reload: boolean): void {
   load();
   const connected = gpiOn();
+  if (connected) loadedProjectId = (GPI as GpiApi).activeId();
   const pw1 = document.getElementById("pullWbs1"), pw3 = document.getElementById("pullWbs3");
   if (pw1) pw1.style.display = connected ? "inline-flex" : "none";
   if (pw3) pw3.style.display = connected ? "inline-flex" : "none";
@@ -493,6 +511,7 @@ function init(reload: boolean): void {
     // Reactividad entre pestañas: si cambian los metadatos o la EDT en otra
     // pestaña, refresca el nombre del proyecto que muestra el badge flotante.
     if ((GPI as GpiApi).onChange) (GPI as GpiApi).onChange(function () {
+      if (loadedProjectId != null && (GPI as GpiApi).activeId() !== loadedProjectId) { markProjectStale(); return; }
       try {
         const el = document.querySelector("#gpiBadge b"); const m = (GPI as GpiApi).meta();
         if (el && m && m.name) el.textContent = m.name;

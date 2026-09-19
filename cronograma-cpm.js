@@ -13,6 +13,8 @@
 	var pertLive = null;
 	var spLive = null;
 	var durMode = "det";
+	var loadedProjectId = null;
+	var projectStale = false;
 	function state() {
 		return mode === "sample" ? stateSample : stateLive;
 	}
@@ -689,14 +691,28 @@
 			baseline: o.baseline || null
 		};
 	}
+	function markProjectStale() {
+		if (projectStale) return;
+		projectStale = true;
+		setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+		const banner = document.getElementById("banner");
+		if (banner) {
+			banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar el cronograma aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+			banner.classList.add("show");
+		}
+	}
 	function gpiPush() {
 		if (mode === "sample") return;
 		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
-		window.GPI.setModule("schedule", stateLive);
+		if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
+			markProjectStale();
+			return;
+		}
+		window.GPI.setModule("schedule", stateLive, loadedProjectId);
 		window.GPI.patchMeta({
 			name: document.getElementById("projectTitle").value,
 			course: document.getElementById("courseTitle").value
-		});
+		}, loadedProjectId);
 	}
 	function commit(statusMsg) {
 		if (statusMsg) setStatus(statusMsg);
@@ -1432,6 +1448,7 @@
 		GPI = window.GPI;
 		if (window.GPI.available() && window.GPI.active()) {
 			const proj = window.GPI.active();
+			loadedProjectId = window.GPI.activeId();
 			if (proj && proj.meta) {
 				if (proj.meta.name) document.getElementById("projectTitle").value = proj.meta.name;
 				if (proj.meta.course) document.getElementById("courseTitle").value = proj.meta.course;
@@ -1449,6 +1466,10 @@
 				if (document.hidden) gpiPush();
 			});
 			window.GPI.onChange(() => {
+				if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
+					markProjectStale();
+					return;
+				}
 				if (mode === "live") {
 					gpiPullAll();
 					render();

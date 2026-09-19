@@ -24,6 +24,14 @@ declare global { interface Window { GPI?: GpiApi; } }
 // inputMode: "dias" (O/P en días) o "pct" (O/P como % de M).
 let mode: "live" | "sample" = "live";
 let stateLive: PertModule = { byActivity: {}, inputMode: "dias" };
+// Id. del proyecto activo cuando esta pestaña cargó sus datos -- se
+// compara contra GPI.activeId() antes de cada guardado (ver gpiPush())
+// para nunca escribir este análisis sobre un proyecto distinto que se
+// haya activado desde otra pestaña mientras esta seguía abierta (bug
+// real reportado por el usuario, confirmado sistémico en los 13 módulos
+// de herramienta).
+let loadedProjectId: string | null = null;
+let projectStale = false;
 let stateSample: PertModule | null = null;
 let wbsLive: WbsModule | null = null, actsLive: ActivitiesModule | null = null;
 
@@ -848,11 +856,25 @@ function gpiPull(): void {
   wbsLive = window.GPI.getModule("wbs") ?? null;
   actsLive = window.GPI.getModule("activities") ?? null;
 }
+// Aviso visible, una sola vez, de que esta pestaña quedó desactualizada
+// (otra pestaña activó un proyecto distinto) -- reusa el mismo <div id="banner">
+// que ya existe para "gpi-core.js no cargó".
+function markProjectStale(): void {
+  if (projectStale) return;
+  projectStale = true;
+  setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+  const banner = document.getElementById("banner");
+  if (banner) {
+    banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar el análisis PERT aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+    banner.classList.add("show");
+  }
+}
 function gpiPush(): void {
   if (mode === "sample") return;
   if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
-  window.GPI.setModule("pert", stateLive);
-  window.GPI.patchMeta({ name: (document.getElementById("projectTitle") as HTMLInputElement).value, course: (document.getElementById("courseTitle") as HTMLInputElement).value });
+  if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) { markProjectStale(); return; }
+  window.GPI.setModule("pert", stateLive, loadedProjectId);
+  window.GPI.patchMeta({ name: (document.getElementById("projectTitle") as HTMLInputElement).value, course: (document.getElementById("courseTitle") as HTMLInputElement).value }, loadedProjectId);
 }
 
 let initialized = false;
@@ -864,6 +886,7 @@ function init(): void {
 
   if (typeof window.GPI !== "undefined" && window.GPI.available()) {
     const proj = window.GPI.active();
+    loadedProjectId = window.GPI.activeId();
     if (proj) {
       if (proj.meta) {
         if (proj.meta.name) (document.getElementById("projectTitle") as HTMLInputElement).value = proj.meta.name;
@@ -877,6 +900,7 @@ function init(): void {
     window.addEventListener("beforeunload", gpiPush);
     document.addEventListener("visibilitychange", () => { if (document.hidden) gpiPush(); });
     window.GPI.onChange(() => {
+      if (loadedProjectId != null && window.GPI!.activeId() !== loadedProjectId) { markProjectStale(); return; }
       // otra pestaña cambió metrados/rendimientos: la M automática debe seguir
       if (mode === "live") { gpiPull(); render(); }
     });

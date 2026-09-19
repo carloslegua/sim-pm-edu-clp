@@ -116,17 +116,33 @@ export function setActive(id: string): GpiProject | null {
   if (d.projects[id]) { d.activeId = id; save(d); }
   return active();
 }
-export function patchMeta(partial: Partial<ProjectMeta>): ProjectMeta | null {
+// expectedProjectId es la segunda barrera (la primera es que cada módulo
+// se abstenga de llamar a esto si GPI.activeId() ya no coincide con el
+// proyecto que cargó): un módulo puede capturar el estado de un proyecto,
+// quedarse abierto mientras OTRA pestaña activa un proyecto distinto, y
+// disparar su guardado de salida (beforeunload/visibilitychange) contra
+// "el proyecto activo ahora", que ya no es el suyo -- sin este chequeo,
+// esa escritura vieja se aplicaba igual, sin avisar, sobre el proyecto
+// equivocado (bug real reportado por el usuario con Project_Charter, y
+// confirmado sistémico en los 13 módulos de herramienta). Si se pasa y no
+// coincide con el proyecto activo actual, no se escribe nada -- mismo
+// criterio defensivo que "sin proyecto activo": devolver null/false, no
+// lanzar. Omitir el parámetro conserva el comportamiento anterior (lo usa
+// Panel de Control, que siempre actúa sobre el proyecto que él mismo
+// acaba de activar/crear, nunca sobre un snapshot cargado antes).
+export function patchMeta(partial: Partial<ProjectMeta>, expectedProjectId?: string | null): ProjectMeta | null {
   const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
   if (!p) return null;
+  if (expectedProjectId != null && d.activeId !== expectedProjectId) return null;
   Object.assign(p.meta, partial || {});
   p.meta.updatedAt = Date.now();
   save(d);
   return p.meta;
 }
-export function setModule(name: string, data: unknown): boolean {
+export function setModule(name: string, data: unknown, expectedProjectId?: string | null): boolean {
   const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
   if (!p) return false;
+  if (expectedProjectId != null && d.activeId !== expectedProjectId) return false;
   p.modules = p.modules || {};
   (p.modules as Record<string, unknown>)[name] = data;
   p.meta.updatedAt = Date.now();

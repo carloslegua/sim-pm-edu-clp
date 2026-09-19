@@ -1461,9 +1461,22 @@
 		const proj = window.GPI.active();
 		const titleEl = document.getElementById("projectTitle");
 		const courseEl = document.getElementById("courseTitle");
+		let loadedProjectId = null;
+		let projectStale = false;
+		function markProjectStale() {
+			if (projectStale) return;
+			projectStale = true;
+			setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+			const banner = document.getElementById("banner");
+			if (banner) {
+				banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar los interesados aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+				banner.classList.add("show");
+			}
+		}
 		function pull() {
 			const p = window.GPI.active();
 			if (!p) return;
+			loadedProjectId = window.GPI.activeId();
 			if (p.meta) {
 				if (p.meta.name) titleEl.value = p.meta.name;
 				if (p.meta.course) courseEl.value = p.meta.course;
@@ -1504,16 +1517,20 @@
 		}
 		function push() {
 			if (!window.GPI.active()) return;
+			if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
+				markProjectStale();
+				return;
+			}
 			window.GPI.setModule("stakeholders", {
 				stakeholders,
 				powerWeights,
 				interestWeights,
 				idCounter
-			});
+			}, loadedProjectId);
 			window.GPI.patchMeta({
 				name: titleEl.value,
 				course: courseEl.value
-			});
+			}, loadedProjectId);
 		}
 		if (proj) pull();
 		window.addEventListener("beforeunload", push);
@@ -1523,8 +1540,12 @@
 		window.GPI.onChange(() => {
 			const p = window.GPI.active();
 			if (!p || !p.meta) return;
-			if (document.hidden) {
-				pull();
+			if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
+				if (document.hidden) {
+					pull();
+					return;
+				}
+				markProjectStale();
 				return;
 			}
 			if (p.meta.name && document.activeElement !== titleEl) titleEl.value = p.meta.name;

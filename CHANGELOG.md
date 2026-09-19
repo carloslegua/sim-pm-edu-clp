@@ -66,6 +66,44 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Integridad de datos — un módulo abierto podía sobrescribir OTRO
+  proyecto tras un cambio de proyecto activo en otra pestaña** — el
+  usuario reprodujo la secuencia exacta: abrir el Acta de Constitución
+  del proyecto A, activar el proyecto B desde el Panel de Control (otra
+  pestaña, mismo `localStorage`), y disparar el guardado de salida del
+  Acta. B terminó con el nombre y el Acta de A. Diagnóstico correcto del
+  usuario: "el módulo guarda su estado anterior sobre el proyecto que
+  esté activo en ese momento, sin comprobar su identidad". Una auditoría
+  completa confirmó que no era un bug aislado del Acta sino un hueco de
+  diseño sistémico en los 13 módulos de herramienta y en el núcleo:
+  `GPI.setModule()`/`GPI.patchMeta()` escribían siempre sobre el proyecto
+  activo leído en el momento de la llamada, sin ningún parámetro de
+  identidad, y el patrón de guardado compartido (`beforeunload` +
+  `visibilitychange`, con auto-guardado por debounce o inmediato en
+  algunos) solo comprobaba "¿hay algún proyecto activo?", nunca "¿sigue
+  siendo el mismo que cargué?". Corrección en dos capas: (1) núcleo —
+  `setModule`/`patchMeta` ganan un tercer parámetro opcional
+  `expectedProjectId`, y si no coincide con el proyecto activo actual no
+  escriben nada (sin el parámetro, compatibilidad intacta con Panel de
+  Control); (2) los 13 módulos capturan el id. del proyecto que cargaron
+  y rechazan guardar (mostrando un aviso visible) si el proyecto activo
+  cambió a otro distinto — excepto la transición legítima de "sin
+  proyecto" a "proyecto recién creado", que sigue permitida. Los 12
+  módulos con `GPI.onChange()` avisan proactivamente apenas otra pestaña
+  cambia el proyecto activo, no solo al guardar/salir; a
+  `project-charter` (el módulo reportado) se le agregó su primer
+  `onChange()`. Repro end-to-end en `tests/smoke/project-charter.smoke.test.ts`
+  (guardado solo al salir) y `tests/smoke/cronograma-cpm.smoke.test.ts`
+  (guardado inmediato en cada edición, la ventana de exposición más
+  chica), y la defensa del núcleo por separado en
+  `tests/unit/project-identity-guard.test.ts`. No se corrigió el sentido
+  invertido de `!document.hidden` en `raci`/`schedule-plan`/
+  `scope-statement` ni se hizo que el `onChange()` "de mentira" de otros
+  módulos refresque de verdad sus propios datos — problema real pero
+  distinto (frescura/UX), fuera de alcance deliberado. Ver
+  ARCHITECTURE.md, sección "Ningún módulo guarda sin verificar que el
+  proyecto activo sigue siendo el que cargó".
+
 - **Cronograma/CPM — no seguía el mismo criterio de "Id." que Definir las
   Actividades/Estimar los Costos y dejaba los hitos completamente fuera**
   — el usuario señaló que el módulo no hacía las mismas verificaciones

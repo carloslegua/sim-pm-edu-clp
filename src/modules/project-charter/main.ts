@@ -268,6 +268,13 @@ function nextRanCode(): { num: number; code: string } {
 }
 
 let state: CharterState = defaultState();
+// Id. del proyecto activo cuando esta pestaña cargó sus datos -- se
+// compara contra GPI.activeId() antes de cada guardado (ver gpiPush())
+// para nunca escribir el Acta de este proyecto sobre uno distinto que
+// se haya activado desde otra pestaña mientras esta seguía abierta (bug
+// real reportado por el usuario: Acta de A guardada sobre B).
+let loadedProjectId: string | null = null;
+let projectStale = false;
 
 // ---------- utilidades ----------
 function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)); }
@@ -857,9 +864,23 @@ function wireToolbar(): void {
 // proyecto (meta), que a su vez alimentan el encabezado de las demás
 // herramientas. En sentido inverso, si el acta está vacía, se precarga desde
 // los metadatos existentes para no partir de cero.
+// Aviso visible, una sola vez, de que esta pestaña quedó desactualizada
+// (otra pestaña activó un proyecto distinto) -- reusa el mismo <div id="banner">
+// que ya existe para "gpi-core.js no cargó", en vez de crear UI nueva.
+function markProjectStale(): void {
+  if (projectStale) return;
+  projectStale = true;
+  setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+  const banner = document.getElementById("banner");
+  if (banner) {
+    banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar el Acta aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+    banner.classList.add("show");
+  }
+}
 function gpiPush(): void {
   if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
-  window.GPI.setModule("charter", state);
+  if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) { markProjectStale(); return; }
+  window.GPI.setModule("charter", state, loadedProjectId);
   const patch: Record<string, unknown> = {
     name: (document.getElementById("projectTitle") as HTMLInputElement).value,
     course: (document.getElementById("courseTitle") as HTMLInputElement).value
@@ -868,7 +889,7 @@ function gpiPush(): void {
   if ((state.identification.manager || "").trim()) patch.manager = state.identification.manager;
   if ((state.identification.client || "").trim()) patch.client = state.identification.client;
   if (Number(state.budget.amount) > 0) { patch.capex = state.budget.amount; patch.currency = state.budget.currency; }
-  window.GPI.patchMeta(patch);
+  window.GPI.patchMeta(patch, loadedProjectId);
 }
 
 function init(): void {
@@ -877,6 +898,7 @@ function init(): void {
 
   if (typeof window.GPI !== "undefined" && window.GPI.available()) {
     const proj = window.GPI.active();
+    loadedProjectId = window.GPI.activeId();
     const titleEl = document.getElementById("projectTitle") as HTMLInputElement;
     const courseEl = document.getElementById("courseTitle") as HTMLInputElement;
     if (proj) {
@@ -903,6 +925,11 @@ function init(): void {
     }
     window.addEventListener("beforeunload", gpiPush);
     document.addEventListener("visibilitychange", () => { if (document.hidden) gpiPush(); });
+    // Este módulo no tenía ninguna suscripción a onChange() -- se agrega
+    // solo para detectar cuanto antes (apenas otra pestaña activa un
+    // proyecto distinto) que esta pestaña quedó desactualizada, en vez de
+    // enterarse recién al intentar guardar/salir.
+    window.GPI.onChange(() => { if (loadedProjectId != null && window.GPI!.activeId() !== loadedProjectId) markProjectStale(); });
     gpiBadge(proj ? (proj.meta && proj.meta.name) : "", gpiPush);
   } else {
     (document.getElementById("banner") as HTMLElement).classList.add("show");

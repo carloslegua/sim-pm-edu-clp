@@ -493,14 +493,27 @@
 	["input", "change"].forEach((ev) => document.addEventListener(ev, (e) => {
 		if (e.isTrusted) userEdited = true;
 	}, true));
+	var loadedProjectId = null;
+	var projectStale = false;
+	function markProjectStale() {
+		if (projectStale) return;
+		projectStale = true;
+		const t = $("saveTxt"), d = $("saveDot");
+		if (t) t.textContent = "⚠ El proyecto activo cambió en otra pestaña: no se puede guardar aquí";
+		if (d) d.style.background = "#dc3546";
+	}
 	function save() {
 		if (gpiOn() && !GPI.getModule("cost") && !userEdited) {
 			buildJSON();
 			return;
 		}
+		if (gpiOn() && loadedProjectId != null && GPI.activeId() !== loadedProjectId) {
+			markProjectStale();
+			return;
+		}
 		let synced = false;
 		if (gpiOn()) try {
-			GPI.setModule("cost", collect());
+			GPI.setModule("cost", collect(), loadedProjectId);
 			synced = true;
 			$("saveTxt").textContent = "Sincronizado con el Panel";
 		} catch (e) {}
@@ -612,6 +625,7 @@
 	function init(reload) {
 		load();
 		const connected = gpiOn();
+		if (connected) loadedProjectId = GPI.activeId();
 		const pw1 = document.getElementById("pullWbs1"), pw3 = document.getElementById("pullWbs3");
 		if (pw1) pw1.style.display = connected ? "inline-flex" : "none";
 		if (pw3) pw3.style.display = connected ? "inline-flex" : "none";
@@ -635,6 +649,10 @@
 				if (document.hidden) save();
 			});
 			if (GPI.onChange) GPI.onChange(function() {
+				if (loadedProjectId != null && GPI.activeId() !== loadedProjectId) {
+					markProjectStale();
+					return;
+				}
 				try {
 					const el = document.querySelector("#gpiBadge b");
 					const m = GPI.meta();

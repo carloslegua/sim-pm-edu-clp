@@ -5,6 +5,8 @@
 		byActivity: {},
 		inputMode: "dias"
 	};
+	var loadedProjectId = null;
+	var projectStale = false;
 	var stateSample = null;
 	var wbsLive = null;
 	var actsLive = null;
@@ -1224,14 +1226,28 @@
 		wbsLive = window.GPI.getModule("wbs") ?? null;
 		actsLive = window.GPI.getModule("activities") ?? null;
 	}
+	function markProjectStale() {
+		if (projectStale) return;
+		projectStale = true;
+		setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+		const banner = document.getElementById("banner");
+		if (banner) {
+			banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar el análisis PERT aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+			banner.classList.add("show");
+		}
+	}
 	function gpiPush() {
 		if (mode === "sample") return;
 		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
-		window.GPI.setModule("pert", stateLive);
+		if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
+			markProjectStale();
+			return;
+		}
+		window.GPI.setModule("pert", stateLive, loadedProjectId);
 		window.GPI.patchMeta({
 			name: document.getElementById("projectTitle").value,
 			course: document.getElementById("courseTitle").value
-		});
+		}, loadedProjectId);
 	}
 	var initialized = false;
 	function init() {
@@ -1241,6 +1257,7 @@
 		wireGrid();
 		if (typeof window.GPI !== "undefined" && window.GPI.available()) {
 			const proj = window.GPI.active();
+			loadedProjectId = window.GPI.activeId();
 			if (proj) {
 				if (proj.meta) {
 					if (proj.meta.name) document.getElementById("projectTitle").value = proj.meta.name;
@@ -1256,6 +1273,10 @@
 				if (document.hidden) gpiPush();
 			});
 			window.GPI.onChange(() => {
+				if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
+					markProjectStale();
+					return;
+				}
 				if (mode === "live") {
 					gpiPull();
 					render();

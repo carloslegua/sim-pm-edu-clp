@@ -118,17 +118,19 @@ var GPI = (function(exports) {
 		}
 		return active();
 	}
-	function patchMeta(partial) {
+	function patchMeta(partial, expectedProjectId) {
 		const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
 		if (!p) return null;
+		if (expectedProjectId != null && d.activeId !== expectedProjectId) return null;
 		Object.assign(p.meta, partial || {});
 		p.meta.updatedAt = Date.now();
 		save(d);
 		return p.meta;
 	}
-	function setModule(name, data) {
+	function setModule(name, data, expectedProjectId) {
 		const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
 		if (!p) return false;
+		if (expectedProjectId != null && d.activeId !== expectedProjectId) return false;
 		p.modules = p.modules || {};
 		p.modules[name] = data;
 		p.meta.updatedAt = Date.now();

@@ -54,6 +54,15 @@ let stateLive: ScheduleState = { links: [], linkCounter: 1, import: null, baseli
 let stateSample: ScheduleState | null = null;
 let wbsLive: WbsModule | null = null, actsLive: ActivitiesModule | null = null, pertLive: PertModule | null = null, spLive: SchedulePlanModule | null = null;
 let durMode: "det" | "pert" = "det";
+// Id. del proyecto activo cuando esta pestaña cargó sus datos -- se
+// compara contra GPI.activeId() antes de cada guardado (ver gpiPush())
+// para nunca escribir el cronograma de este proyecto sobre uno distinto
+// que se haya activado desde otra pestaña mientras esta seguía abierta
+// (bug real reportado por el usuario, confirmado sistémico en los 13
+// módulos de herramienta -- este es el de mayor exposición: commit()
+// llama gpiPush() en cada edición, no solo al salir).
+let loadedProjectId: string | null = null;
+let projectStale = false;
 
 function state(): ScheduleState { return (mode === "sample" ? stateSample : stateLive) as ScheduleState; }
 function wbsData(): WbsModule | null { return mode === "sample" ? SAMPLE.wbs : wbsLive; }
@@ -524,11 +533,25 @@ function normSchedule(o: any): ScheduleState {
     baseline: o.baseline || null
   };
 }
+// Aviso visible, una sola vez, de que esta pestaña quedó desactualizada
+// (otra pestaña activó un proyecto distinto) -- reusa el mismo <div id="banner">
+// que ya existe para "sin actividades"/"gpi-core.js no cargó".
+function markProjectStale(): void {
+  if (projectStale) return;
+  projectStale = true;
+  setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+  const banner = document.getElementById("banner");
+  if (banner) {
+    banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar el cronograma aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+    banner.classList.add("show");
+  }
+}
 function gpiPush(): void {
   if (mode === "sample") return;
   if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
-  window.GPI.setModule("schedule", stateLive);
-  window.GPI.patchMeta({ name: (document.getElementById("projectTitle") as HTMLInputElement).value, course: (document.getElementById("courseTitle") as HTMLInputElement).value });
+  if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) { markProjectStale(); return; }
+  window.GPI.setModule("schedule", stateLive, loadedProjectId);
+  window.GPI.patchMeta({ name: (document.getElementById("projectTitle") as HTMLInputElement).value, course: (document.getElementById("courseTitle") as HTMLInputElement).value }, loadedProjectId);
 }
 function commit(statusMsg?: string): void { if (statusMsg) setStatus(statusMsg); gpiPush(); render(); }
 function newLinkId(): string { const st = state(); return "L" + (st.linkCounter++); }
@@ -1195,6 +1218,7 @@ function init(): void {
 
   if (window.GPI.available() && window.GPI.active()) {
     const proj = window.GPI.active();
+    loadedProjectId = window.GPI.activeId();
     if (proj && proj.meta) {
       if (proj.meta.name) (document.getElementById("projectTitle") as HTMLInputElement).value = proj.meta.name;
       if (proj.meta.course) (document.getElementById("courseTitle") as HTMLInputElement).value = proj.meta.course;
@@ -1208,7 +1232,10 @@ function init(): void {
     }
     window.addEventListener("beforeunload", gpiPush);
     document.addEventListener("visibilitychange", () => { if (document.hidden) gpiPush(); });
-    window.GPI.onChange(() => { if (mode === "live") { gpiPullAll(); render(); } });
+    window.GPI.onChange(() => {
+      if (loadedProjectId != null && window.GPI!.activeId() !== loadedProjectId) { markProjectStale(); return; }
+      if (mode === "live") { gpiPullAll(); render(); }
+    });
     gpiBadge(proj ? (proj.meta && proj.meta.name) : "", gpiPush);
     setStatus("Proyecto cargado desde el Panel de Control.");
     render();

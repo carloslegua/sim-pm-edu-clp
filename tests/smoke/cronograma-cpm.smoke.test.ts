@@ -119,6 +119,77 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
     expect(sch.links[0]).toMatchObject({ from: "a1", to: "a2", type: "FS" });
   });
 
+  it("BUG REPORTADO: si otra pestaña activa un proyecto distinto, agregar un enlace (guardado inmediato, no solo al salir) NO debe sobrescribir ese otro proyecto", async () => {
+    // Mismo repro que project-charter.smoke.test.ts, pero para el módulo de
+    // mayor exposición: commit() llama gpiPush() en CADA edición (agregar
+    // un enlace manual), no solo al cerrar la pestaña.
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto A", course: "GPI", createdAt: 1, updatedAt: 1, startDate: "2026-01-05" },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 3,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto A", children: ["w1"] },
+                w1: { id: "w1", parentId: "root", name: "Fase 1", children: ["w2"] },
+                w2: { id: "w2", parentId: "w1", name: "Paquete A", children: [] }
+              }
+            },
+            activities: {
+              byLeaf: { w2: [
+                { id: "a1", name: "Excavar zanja", unit: "m³", qty: 100, perf: 25, teams: 1 },
+                { id: "a2", name: "Vaciar concreto", unit: "m³", qty: 50, perf: 10, teams: 1 }
+              ] }, idCounter: 3
+            }
+          }
+        },
+        p2: {
+          schema: "gpi.project/v1",
+          meta: { id: "p2", name: "Proyecto B", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: { schedule: { links: [], linkCounter: 1, import: null, baseline: null } }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Cronograma_CPM.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    expect(doc.querySelectorAll(".act-row").length).toBe(2);
+
+    // Otra pestaña (el Panel de Control) activa el proyecto B, SIN que esta
+    // pestaña se recargue -- mismo mecanismo (storage event) que ya usan
+    // los E2E de sincronización entre módulos.
+    const db2 = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    db2.activeId = "p2";
+    dom.window.localStorage.setItem("gpi_db", JSON.stringify(db2));
+    dom.window.dispatchEvent(new dom.window.StorageEvent("storage", { key: "gpi_db" }));
+    await new Promise((r) => setTimeout(r, 50));
+
+    // El alumno, sin darse cuenta, agrega un enlace manual en esta pestaña
+    // (ya desactualizada) -- esto dispara commit() -> gpiPush() de inmediato.
+    (doc.getElementById("btnAddLink") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 50));
+    (doc.getElementById("lkFrom") as HTMLSelectElement).value = "a1";
+    (doc.getElementById("lkTo") as HTMLSelectElement).value = "a2";
+    (doc.getElementById("lkAdd") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 100));
+    (doc.getElementById("modalCancel") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 50));
+
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    // B (el proyecto activo ahora) nunca debe recibir el enlace de A.
+    expect(saved.projects.p2.modules.schedule.links).toEqual([]);
+    expect(saved.projects.p2.meta.name).toBe("Proyecto B");
+    // A tampoco debe quedar con el enlace "guardado" (el guardado fue
+    // rechazado, no silenciosamente redirigido): sigue como se sembró.
+    expect(saved.projects.p1.modules.schedule).toBeUndefined();
+  });
+
   it("Cronograma-CPM ahora sí ve los hitos: su Id (netId) coincide con Definir las Actividades/Estimar los Costos", async () => {
     // Mismo seed (EDT + actividades + hito en 'activities') que
     // activity-definition/cost-estimate.smoke.test.ts -- esos dos módulos

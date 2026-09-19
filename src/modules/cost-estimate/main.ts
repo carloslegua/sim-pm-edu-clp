@@ -57,6 +57,14 @@ interface EstimateState { byActivity: Record<string, string | number>; }
 
 let mode: "live" | "sample" = "live";
 let stateLive: EstimateState = { byActivity: {} };
+// Id. del proyecto activo cuando esta pestaña cargó sus datos -- se
+// compara contra GPI.activeId() antes de cada guardado (ver gpiPush())
+// para nunca escribir este estimado sobre un proyecto distinto que se
+// haya activado desde otra pestaña mientras esta seguía abierta (bug
+// real reportado por el usuario, confirmado sistémico en los 13 módulos
+// de herramienta).
+let loadedProjectId: string | null = null;
+let projectStale = false;
 let stateSample: EstimateState | null = null;
 let wbsLive: WbsModule | null = null;
 let activitiesLive: ActivitiesModule | null = null;
@@ -1337,11 +1345,25 @@ function gpiPullWbs(): void {
   wbsLive = window.GPI.getModule("wbs") ?? null;
   activitiesLive = window.GPI.getModule("activities") ?? null;
 }
+// Aviso visible, una sola vez, de que esta pestaña quedó desactualizada
+// (otra pestaña activó un proyecto distinto) -- reusa el mismo <div id="banner">
+// que ya existe para "gpi-core.js no cargó".
+function markProjectStale(): void {
+  if (projectStale) return;
+  projectStale = true;
+  setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+  const banner = document.getElementById("banner");
+  if (banner) {
+    banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar el estimado aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+    banner.classList.add("show");
+  }
+}
 function gpiPush(): void {
   if (mode === "sample") return; // el modo ejemplo jamás escribe sobre el proyecto
   if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
-  window.GPI.setModule("costEstimate", stateLive as unknown as CostEstimateModule);
-  window.GPI.patchMeta({ name: (document.getElementById("projectTitle") as HTMLInputElement).value, course: (document.getElementById("courseTitle") as HTMLInputElement).value });
+  if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) { markProjectStale(); return; }
+  window.GPI.setModule("costEstimate", stateLive as unknown as CostEstimateModule, loadedProjectId);
+  window.GPI.patchMeta({ name: (document.getElementById("projectTitle") as HTMLInputElement).value, course: (document.getElementById("courseTitle") as HTMLInputElement).value }, loadedProjectId);
 }
 
 let initialized = false;
@@ -1352,6 +1374,7 @@ function init(): void {
 
   if (typeof window.GPI !== "undefined" && window.GPI.available()) {
     const proj = window.GPI.active();
+    loadedProjectId = window.GPI.activeId();
     if (proj) {
       if (proj.meta) {
         if (proj.meta.name) (document.getElementById("projectTitle") as HTMLInputElement).value = proj.meta.name;
@@ -1365,6 +1388,7 @@ function init(): void {
     window.addEventListener("beforeunload", gpiPush);
     document.addEventListener("visibilitychange", () => { if (document.hidden) gpiPush(); });
     window.GPI.onChange(() => {
+      if (loadedProjectId != null && window.GPI!.activeId() !== loadedProjectId) { markProjectStale(); return; }
       // otra pestaña (p. ej. WBS Builder o Definir las Actividades) cambió el
       // proyecto: refrescar sin perder lo que se está escribiendo aquí
       if (mode === "live") { gpiPullWbs(); render(); }

@@ -1,6 +1,18 @@
 (function() {
 	//#region src/modules/scope-statement/main.ts
 	var state;
+	var loadedProjectId = null;
+	var projectStale = false;
+	function markProjectStale() {
+		if (projectStale) return;
+		projectStale = true;
+		setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+		const banner = document.getElementById("banner");
+		if (banner) {
+			banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar el enunciado del alcance aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+			banner.classList.add("show");
+		}
+	}
 	function blank() {
 		return {
 			productScope: "",
@@ -556,11 +568,15 @@
 	}
 	function persist() {
 		if (gpiOn() && window.GPI.available() && window.GPI.active()) {
-			window.GPI.setModule("scopeStatement", serialize());
+			if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
+				markProjectStale();
+				return;
+			}
+			window.GPI.setModule("scopeStatement", serialize(), loadedProjectId);
 			window.GPI.patchMeta({
 				name: $("projectTitle").value,
 				course: $("courseTitle").value
-			});
+			}, loadedProjectId);
 		}
 		setStatus("Cambios guardados.");
 	}
@@ -811,6 +827,7 @@
 		wire();
 		const proj = activeProject();
 		if (proj) {
+			loadedProjectId = window.GPI.activeId();
 			const d = mod("scopeStatement");
 			if (d) {
 				state = normalize(d);
@@ -830,6 +847,10 @@
 				else refreshFromGpi();
 			});
 			window.GPI.onChange(() => {
+				if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
+					markProjectStale();
+					return;
+				}
 				if (!document.hidden) refreshFromGpi();
 			});
 			gpiBadge(proj.meta ? proj.meta.name : "");

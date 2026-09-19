@@ -1316,6 +1316,17 @@
 		}
 		const titleEl = document.getElementById("projectTitle");
 		const courseEl = document.getElementById("courseTitle");
+		let loadedProjectId = null;
+		let projectStale = false;
+		function markProjectStale() {
+			if (projectStale) return;
+			projectStale = true;
+			setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+			if (banner) {
+				banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar el plan aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+				banner.classList.add("show");
+			}
+		}
 		function refreshPeopleList() {
 			const mod = window.GPI.getModule("obs") ?? null;
 			const names = (mod && window.GPI.util ? window.GPI.util.obsNodes(mod) : []).map((n) => window.GPI.util.obsLabel(n)).filter(Boolean);
@@ -1330,6 +1341,7 @@
 		function pull() {
 			const p = window.GPI.active();
 			if (!p) return;
+			loadedProjectId = window.GPI.activeId();
 			if (p.meta) {
 				if (p.meta.name) titleEl.value = p.meta.name;
 				if (p.meta.course) courseEl.value = p.meta.course;
@@ -1342,11 +1354,15 @@
 		}
 		function push() {
 			if (!window.GPI.active()) return;
-			window.GPI.setModule("schedulePlan", state);
+			if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
+				markProjectStale();
+				return;
+			}
+			window.GPI.setModule("schedulePlan", state, loadedProjectId);
 			window.GPI.patchMeta({
 				name: titleEl.value,
 				course: courseEl.value
-			});
+			}, loadedProjectId);
 		}
 		const proj = window.GPI.active();
 		if (proj) pull();
@@ -1356,6 +1372,10 @@
 			if (document.hidden) push();
 		});
 		window.GPI.onChange(() => {
+			if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
+				markProjectStale();
+				return;
+			}
 			if (!document.hidden) {
 				refreshPeopleList();
 				updateMetaPanels();

@@ -206,6 +206,84 @@ ahora vive ÚNICAMENTE en `Panel_Control.html`, con dos niveles:
   recorte de alcance consciente, no un bug, documentado aquí para no
   "redescubrirlo" como regresión.
 
+## Ningún módulo guarda sin verificar que el proyecto activo sigue siendo el que cargó
+
+Bug real reportado por un usuario (2026-09): abrir el Acta de
+Constitución del proyecto A, activar el proyecto B desde el Panel de
+Control (otra pestaña, mismo `localStorage`) y disparar el guardado de
+salida del Acta hacía que B terminara con el nombre y el Acta de A. La
+causa no era un descuido puntual de `project-charter`: era un hueco de
+diseño presente en **los 13 módulos de herramienta y en el núcleo
+mismo**. `GPI.setModule()`/`GPI.patchMeta()` escribían siempre sobre
+`d.activeId` leído en el momento de la llamada, sin ningún parámetro de
+identidad — y el patrón de guardado compartido por los 13 módulos
+(`beforeunload` + `visibilitychange`, algunos con auto-guardado por
+debounce o inmediato en cada clic) solo comprobaba "¿hay ALGÚN proyecto
+activo?", nunca "¿sigue siendo el MISMO proyecto que cargué?".
+
+Auditoría de los 13 módulos encontró tres variantes del mismo hueco:
+
+- **Sin `GPI.onChange()` en absoluto** (`project-charter`, antes de este
+  fix): ningún aviso ni protección hasta el guardado de salida.
+- **`onChange()` que solo refresca datos de OTROS módulos** (`wbs`,
+  `activities`, `pert`, `cost-estimate`, `cronograma-cpm`): la
+  suscripción existe (p. ej. Definir Actividades vuelve a leer la EDT),
+  pero nunca protege los datos PROPIOS que la función de guardado
+  realmente escribe — sincronización de mentira.
+- **`onChange()` con la condición al revés** (`raci`, `schedule-plan`,
+  `scope-statement`): gateaba en `!document.hidden`, justo lo opuesto de
+  lo que hace falta — cambiar de pestaña para activar otro proyecto en
+  el Panel vuelve `hidden=true` a la pestaña del módulo, así que la
+  condición para refrescar/proteger nunca se cumplía ahí.
+  `stakeholder-studio` era el único que por casualidad tenía el sentido
+  correcto (`document.hidden`), pero solo protegía ese layout
+  (pestañas de la misma ventana), no dos ventanas separadas.
+
+### La corrección: defensa en dos capas
+
+**Capa 1 (núcleo, `src/core/gpi-core.ts`)** — `setModule(name, data,
+expectedProjectId?)` y `patchMeta(partial, expectedProjectId?)` ganan un
+tercer parámetro opcional: si se pasa y no coincide con `d.activeId`
+actual, la función no escribe nada y devuelve `false`/`null`. Sin el
+parámetro, el comportamiento no cambia — es lo que sigue usando Panel de
+Control, que siempre actúa sobre el proyecto que él mismo acaba de
+activar/crear, nunca sobre un snapshot cargado antes.
+
+**Capa 2 (cada uno de los 13 módulos de herramienta)** — mismo parche
+mecánico en todos: una variable `loadedProjectId` capturada en el
+momento en que el módulo hidrata sus datos (el `init()`/`pull()`/
+`tryLoadLive()` de cada uno), y la función de guardado rechaza escribir
+si `GPI.activeId() !== loadedProjectId` — **excepto** cuando
+`loadedProjectId` es `null` (el módulo arrancó sin proyecto activo, un
+flujo legítimo preexistente: p. ej. crear un proyecto nuevo mientras el
+módulo está abierto en blanco debe poder sembrarlo). Los 12 módulos que
+ya tenían `GPI.onChange()` reciben la misma comprobación ahí también,
+para avisar proactivamente en cuanto otra pestaña cambia el proyecto
+activo, no solo al intentar guardar/salir; `project-charter` (el
+reportado) no tenía ningún `onChange()` y se le agregó uno mínimo solo
+para esto. `setModule`/`patchMeta` reciben `loadedProjectId` como tercer
+argumento en cada módulo — defensa en profundidad: aunque el chequeo del
+módulo se rompiera, el núcleo igual rechaza la escritura.
+
+Repro end-to-end en `tests/smoke/project-charter.smoke.test.ts` (el caso
+reportado, guardado solo al salir) y `tests/smoke/cronograma-cpm.smoke.test.ts`
+(guardado inmediato en cada edición, la ventana de exposición más
+chica); la defensa del núcleo por sí sola en
+`tests/unit/project-identity-guard.test.ts`.
+
+**Fuera de alcance, deliberado**: no se corrigió el sentido invertido de
+`!document.hidden` en `raci`/`schedule-plan`/`scope-statement`, ni se
+hizo que el `onChange()` de los módulos con sincronización "de mentira"
+refresque de verdad sus datos propios al detectar el cambio — eso es un
+problema real pero distinto (frescura/UX: la pestaña puede seguir
+mostrando datos viejos del proyecto anterior hasta que el usuario
+recarga). Esta corrección garantiza que, sea cual sea el estado en
+pantalla, **nunca se escribe sobre el proyecto equivocado**, que es
+exactamente el bug reportado. Tampoco se auditó `panel-control/main.ts`
+a fondo: sus escrituras son acciones directas del usuario sobre el
+proyecto que el propio Panel acaba de activar/crear, un patrón distinto
+al de los 13 módulos de herramienta.
+
 ## Las tres formas de referenciar el núcleo
 
 Cada módulo referencia `GPI` de una de tres formas — no asumir que es

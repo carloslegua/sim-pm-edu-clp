@@ -58,6 +58,21 @@ interface ReqState {
 
 let state: ReqState = { baseline: { frozen: false, version: "1.0", date: "", approver: "", snapshot: [] }, items: [], changes: [], activeChangeId: null, idCounter: 1, changeCounter: 1 };
 let userEdited = false;
+// Id. del proyecto activo cuando esta pestaña cargó sus datos -- se
+// compara contra GPI.activeId() antes de cada guardado (ver save()) para
+// nunca escribir estos requisitos sobre un proyecto distinto que se haya
+// activado desde otra pestaña mientras esta seguía abierta (bug real
+// reportado por el usuario, confirmado sistémico en los 13 módulos de
+// herramienta).
+let loadedProjectId: string | null = null;
+let projectStale = false;
+function markProjectStale(): void {
+  if (projectStale) return;
+  projectStale = true;
+  const t = $("saveTxt"), d = $("saveDot");
+  if (t) t.textContent = "⚠ El proyecto activo cambió en otra pestaña: no se puede guardar aquí";
+  if (d) d.style.background = "#dc3546";
+}
 
 function $(id: string): HTMLElement { return document.getElementById(id) as HTMLElement; }
 function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)); }
@@ -104,9 +119,10 @@ function collect(): RequirementsModule {
 }
 function save(): void {
   if (gpiOn() && !(GPI as GpiApi).getModule("requirements") && !userEdited && !state.items.length) { return; }
+  if (gpiOn() && loadedProjectId != null && (GPI as GpiApi).activeId() !== loadedProjectId) { markProjectStale(); return; }
   let synced = false;
   if (gpiOn()) {
-    try { (GPI as GpiApi).setModule("requirements", collect()); synced = true; $("saveTxt").textContent = "Sincronizado con el Panel"; } catch (e) { /* noop */ }
+    try { (GPI as GpiApi).setModule("requirements", collect(), loadedProjectId); synced = true; $("saveTxt").textContent = "Sincronizado con el Panel"; } catch (e) { /* noop */ }
   }
   if (!synced) {
     try {
@@ -840,12 +856,14 @@ function gpiBadge(): void {
 function init(): void {
   load(); renderAll();
   const connected = gpiOn();
+  if (connected) loadedProjectId = (GPI as GpiApi).activeId();
   if (!connected || (GPI as GpiApi).getModule("requirements") || state.items.length) { if (connected) save(); } else { $("saveTxt").textContent = "Sin guardar aún: se sincronizará con tu primer cambio"; }
   if (connected) {
     gpiBadge();
     window.addEventListener("beforeunload", save);
     document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
     if ((GPI as GpiApi).onChange) (GPI as GpiApi).onChange(() => {
+      if (loadedProjectId != null && (GPI as GpiApi).activeId() !== loadedProjectId) { markProjectStale(); return; }
       try { const el = document.querySelector("#gpiBadge b"); const m = (GPI as GpiApi).meta(); if (el && m && m.name) el.textContent = m.name; } catch (e) { /* noop */ }
       renderAll();
     });

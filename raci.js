@@ -379,6 +379,8 @@
 	var rows = [];
 	var cols = [];
 	var assignments = {};
+	var loadedProjectId = null;
+	var projectStale = false;
 	function loadSample() {
 		mode = "sample";
 		rows = SAMPLE_LEAVES.slice();
@@ -393,6 +395,7 @@
 		const obsCols = window.GPI.util.obsNodes(obsMod || void 0);
 		if (!leaves.length || !obsCols.length) return false;
 		mode = "live";
+		loadedProjectId = window.GPI.activeId();
 		rows = leaves.map((l) => ({
 			id: l.id,
 			code: l.code,
@@ -418,19 +421,33 @@
 		if (val) assignments[rowId][colId] = val;
 		else delete assignments[rowId][colId];
 	}
+	function markProjectStale() {
+		if (projectStale) return;
+		projectStale = true;
+		setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+		const banner = document.getElementById("banner");
+		if (banner) {
+			banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar la matriz RACI aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+			banner.classList.add("show");
+		}
+	}
 	function syncToGpi(opts) {
 		if (mode !== "live") return;
 		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
-		window.GPI.setModule("raci", { assignments });
+		if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
+			markProjectStale();
+			return;
+		}
+		window.GPI.setModule("raci", { assignments }, loadedProjectId);
 		const wbsMod = window.GPI.getModule("wbs");
 		const obsMod = window.GPI.getModule("obs");
 		if (wbsMod && obsMod) {
 			const updated = window.GPI.util.applyRaciToWbs(wbsMod, { assignments }, obsMod);
-			window.GPI.setModule("wbs", updated);
+			window.GPI.setModule("wbs", updated, loadedProjectId);
 		}
 		if (opts && opts.meta) {
 			const courseEl = document.getElementById("courseTitle");
-			if (courseEl) window.GPI.patchMeta({ course: courseEl.value });
+			if (courseEl) window.GPI.patchMeta({ course: courseEl.value }, loadedProjectId);
 		}
 	}
 	function render() {
@@ -907,6 +924,10 @@
 			if (document.hidden) syncToGpi({ meta: true });
 		});
 		if (GPI.onChange) GPI.onChange(() => {
+			if (mode === "live" && loadedProjectId != null && GPI.activeId() !== loadedProjectId) {
+				markProjectStale();
+				return;
+			}
 			if (!document.hidden) {
 				tryLoadLive();
 				render();

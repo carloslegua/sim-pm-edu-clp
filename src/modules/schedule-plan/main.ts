@@ -807,6 +807,23 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
   if (typeof window.GPI === "undefined" || !window.GPI.available()) { if (banner) banner.classList.add("show"); return; }
   const titleEl = document.getElementById("projectTitle") as HTMLInputElement;
   const courseEl = document.getElementById("courseTitle") as HTMLInputElement;
+  // Id. del proyecto activo cuando esta pestaña cargó sus datos -- se
+  // compara contra GPI.activeId() antes de cada guardado (ver push())
+  // para nunca escribir este plan sobre un proyecto distinto que se haya
+  // activado desde otra pestaña mientras esta seguía abierta (bug real
+  // reportado por el usuario, confirmado sistémico en los 13 módulos de
+  // herramienta).
+  let loadedProjectId: string | null = null;
+  let projectStale = false;
+  function markProjectStale(): void {
+    if (projectStale) return;
+    projectStale = true;
+    setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+    if (banner) {
+      banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar el plan aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+      banner.classList.add("show");
+    }
+  }
 
   function refreshPeopleList(): void {
     const mod: ObsModule | null = window.GPI!.getModule("obs") ?? null;
@@ -817,6 +834,7 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
   }
   function pull(): void {
     const p = window.GPI!.active(); if (!p) return;
+    loadedProjectId = window.GPI!.activeId();
     if (p.meta) { if (p.meta.name) titleEl.value = p.meta.name; if (p.meta.course) courseEl.value = p.meta.course; }
     const mod = p.modules && p.modules.schedulePlan;
     // Sin plan aún: arranca EN BLANCO (defaultState), no con el ejemplo,
@@ -830,14 +848,18 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
   }
   function push(): void {
     if (!window.GPI!.active()) return;
-    window.GPI!.setModule("schedulePlan", state);
-    window.GPI!.patchMeta({ name: titleEl.value, course: courseEl.value });
+    if (loadedProjectId != null && window.GPI!.activeId() !== loadedProjectId) { markProjectStale(); return; }
+    window.GPI!.setModule("schedulePlan", state, loadedProjectId);
+    window.GPI!.patchMeta({ name: titleEl.value, course: courseEl.value }, loadedProjectId);
   }
   const proj = window.GPI!.active();
   if (proj) pull(); else refreshPeopleList();
   window.addEventListener("beforeunload", push);
   document.addEventListener("visibilitychange", () => { if (document.hidden) push(); });
-  window.GPI!.onChange(() => { if (!document.hidden) { refreshPeopleList(); updateMetaPanels(); updateSidebar(); } });
+  window.GPI!.onChange(() => {
+    if (loadedProjectId != null && window.GPI!.activeId() !== loadedProjectId) { markProjectStale(); return; }
+    if (!document.hidden) { refreshPeopleList(); updateMetaPanels(); updateSidebar(); }
+  });
   gpiBadge(proj ? (proj.meta && proj.meta.name) : "", push);
 });
 

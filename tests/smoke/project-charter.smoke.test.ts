@@ -104,4 +104,58 @@ describe("Project_Charter.html (migrado a project-charter.js)", () => {
     expect(ch.stakeholders.length).toBe(1);
     expect(ch.stakeholders[0].name).toBe("Interesado Alto");
   });
+
+  it("BUG REPORTADO: si otra pestaña activa un proyecto distinto mientras el Acta sigue abierta, el guardado de salida NO debe sobrescribir ese otro proyecto", async () => {
+    // Repro exacta: "abrir el Acta del proyecto A, activar B desde el
+    // Panel y ejecutar el guardado de salida del Acta. B terminó con el
+    // nombre de A y recibió su acta." -- p1 (A) y p2 (B) coexisten desde
+    // el arranque; el Acta carga con p1 activo.
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto A", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {}
+        },
+        p2: {
+          schema: "gpi.project/v1",
+          meta: { id: "p2", name: "Proyecto B", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: { charter: { identification: { sponsor: "Sponsor real de B" } } }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Project_Charter.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 500));
+    const doc = dom.window.document;
+    expect((doc.getElementById("projectTitle") as HTMLInputElement).value).toBe("Proyecto A");
+
+    // El alumno edita el Acta de A...
+    (doc.querySelector('[data-bind="identification.sponsor"]') as HTMLInputElement).value = "Sponsor editado en A";
+    (doc.querySelector('[data-bind="identification.sponsor"]') as HTMLInputElement).dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+
+    // ...y, SIN recargar esta pestaña, otra pestaña (el Panel de Control)
+    // activa el proyecto B -- simulado igual que en
+    // tests/e2e/wbs-authority-propagation.spec.ts: se escribe localStorage
+    // directo y se dispara el evento "storage" que GPI.onChange() escucha.
+    const db2 = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    db2.activeId = "p2";
+    dom.window.localStorage.setItem("gpi_db", JSON.stringify(db2));
+    dom.window.dispatchEvent(new dom.window.StorageEvent("storage", { key: "gpi_db" }));
+    await new Promise((r) => setTimeout(r, 50));
+
+    // El alumno cierra/oculta la pestaña del Acta -- se dispara el guardado de salida.
+    dom.window.dispatchEvent(new dom.window.Event("beforeunload"));
+
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    // B (el proyecto activo ahora) NUNCA debe recibir el Acta ni el nombre de A.
+    expect(saved.projects.p2.meta.name).toBe("Proyecto B");
+    expect(saved.projects.p2.modules.charter.identification.sponsor).toBe("Sponsor real de B");
+    // A tampoco debe corromperse (el guardado, correctamente rechazado, no debe tocarlo).
+    expect(saved.projects.p1.meta.name).toBe("Proyecto A");
+    expect(saved.projects.p1.modules.charter).toBeUndefined();
+  });
 });

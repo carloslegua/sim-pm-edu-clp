@@ -877,8 +877,28 @@ render();
   const proj = window.GPI.active();
   const titleEl = document.getElementById("projectTitle") as HTMLInputElement;
   const courseEl = document.getElementById("courseTitle") as HTMLInputElement;
+  // Id. del proyecto activo cuando esta pestaña cargó sus datos -- se
+  // compara contra GPI.activeId() antes de cada guardado (ver push())
+  // para nunca escribir estos interesados sobre un proyecto distinto que
+  // se haya activado desde otra pestaña mientras esta seguía abierta
+  // (bug real reportado por el usuario, confirmado sistémico en los 13
+  // módulos de herramienta -- este módulo ya se resincroniza solo cuando
+  // queda oculto, pero no en el layout de dos ventanas visibles a la vez).
+  let loadedProjectId: string | null = null;
+  let projectStale = false;
+  function markProjectStale(): void {
+    if (projectStale) return;
+    projectStale = true;
+    setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+    const banner = document.getElementById("banner");
+    if (banner) {
+      banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar los interesados aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+      banner.classList.add("show");
+    }
+  }
   function pull(): void {
     const p = window.GPI!.active(); if (!p) return;
+    loadedProjectId = window.GPI!.activeId();
     if (p.meta) { if (p.meta.name) titleEl.value = p.meta.name; if (p.meta.course) courseEl.value = p.meta.course; }
     const mod = p.modules && p.modules.stakeholders;
     if (mod && Array.isArray(mod.stakeholders) && mod.stakeholders.length) {
@@ -908,8 +928,9 @@ render();
   }
   function push(): void {
     if (!window.GPI!.active()) return;
-    window.GPI!.setModule("stakeholders", { stakeholders, powerWeights, interestWeights, idCounter });
-    window.GPI!.patchMeta({ name: titleEl.value, course: courseEl.value });
+    if (loadedProjectId != null && window.GPI!.activeId() !== loadedProjectId) { markProjectStale(); return; }
+    window.GPI!.setModule("stakeholders", { stakeholders, powerWeights, interestWeights, idCounter }, loadedProjectId);
+    window.GPI!.patchMeta({ name: titleEl.value, course: courseEl.value }, loadedProjectId);
   }
   if (proj) pull();
   window.addEventListener("beforeunload", push);
@@ -917,10 +938,16 @@ render();
   // Reactividad entre pestañas (patrón común del ecosistema): si el Acta de
   // Constitución o el Panel cambian el proyecto activo en otra pestaña, se
   // refresca el encabezado. No se recarga la lista de interesados mientras
-  // esta pestaña está visible para no pisar la edición en curso.
+  // esta pestaña está visible para no pisar la edición en curso -- salvo que
+  // el proyecto activo ya sea otro distinto del que esta pestaña cargó: ahí
+  // no hay edición en curso que proteger (sería sobre el proyecto viejo), así
+  // que se avisa en vez de fallar en silencio al guardar/salir.
   window.GPI.onChange(() => {
     const p = window.GPI!.active(); if (!p || !p.meta) return;
-    if (document.hidden) { pull(); return; }
+    if (loadedProjectId != null && window.GPI!.activeId() !== loadedProjectId) {
+      if (document.hidden) { pull(); return; }
+      markProjectStale(); return;
+    }
     if (p.meta.name && document.activeElement !== titleEl) titleEl.value = p.meta.name;
     if (p.meta.course && document.activeElement !== courseEl) courseEl.value = p.meta.course;
   });

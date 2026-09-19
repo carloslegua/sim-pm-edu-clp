@@ -105,6 +105,14 @@ let mode: "live" | "sample" = "sample";
 let rows: RaciRow[] = [];
 let cols: RaciCol[] = [];
 let assignments: Assignments = {};
+// Id. del proyecto activo cuando tryLoadLive() cargó estos datos -- se
+// compara contra GPI.activeId() antes de cada guardado (ver syncToGpi())
+// para nunca escribir esta matriz (ni el WBS que también toca) sobre un
+// proyecto distinto que se haya activado desde otra pestaña mientras
+// esta seguía abierta (bug real reportado por el usuario, confirmado
+// sistémico en los 13 módulos de herramienta).
+let loadedProjectId: string | null = null;
+let projectStale = false;
 
 function loadSample(): void {
   mode = "sample";
@@ -121,6 +129,7 @@ function tryLoadLive(): boolean {
   const obsCols = window.GPI.util.obsNodes(obsMod || undefined);
   if (!leaves.length || !obsCols.length) return false;
   mode = "live";
+  loadedProjectId = window.GPI.activeId();
   rows = leaves.map((l) => ({ id: l.id, code: l.code, name: l.name, notes: l.notes || "" }));
   cols = obsCols.map((c) => ({ id: c.id, code: c.code, role: c.role, person: c.person, type: c.type }));
   const raciMod = window.GPI.getModule("raci");
@@ -140,19 +149,33 @@ function setCellValue(rowId: string, colId: string, val: string): void {
 // al cerrar la pestaña — para que el WBS quede sincronizado al instante.
 // En modo "sample" (ejemplo desconectado) NUNCA se escribe en GPI: sus ids
 // no corresponden al WBS/OBS reales y sobrescribirían datos válidos del proyecto.
+// Aviso visible, una sola vez, de que esta pestaña quedó desactualizada
+// (otra pestaña activó un proyecto distinto) -- reusa renderBanner()/el
+// mismo <div id="banner"> que ya existe para "modo ejemplo".
+function markProjectStale(): void {
+  if (projectStale) return;
+  projectStale = true;
+  setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+  const banner = document.getElementById("banner");
+  if (banner) {
+    banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar la matriz RACI aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+    banner.classList.add("show");
+  }
+}
 function syncToGpi(opts?: { meta?: boolean }): void {
   if (mode !== "live") return;
   if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
-  window.GPI.setModule("raci", { assignments });
+  if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) { markProjectStale(); return; }
+  window.GPI.setModule("raci", { assignments }, loadedProjectId);
   const wbsMod = window.GPI.getModule("wbs") as WbsModule | null;
   const obsMod = window.GPI.getModule("obs") as ObsModule | null;
   if (wbsMod && obsMod) {
     const updated = window.GPI.util.applyRaciToWbs(wbsMod, { assignments }, obsMod);
-    window.GPI.setModule("wbs", updated);
+    window.GPI.setModule("wbs", updated, loadedProjectId);
   }
   if (opts && opts.meta) {
     const courseEl = document.getElementById("courseTitle") as HTMLInputElement | null;
-    if (courseEl) window.GPI.patchMeta({ course: courseEl.value });
+    if (courseEl) window.GPI.patchMeta({ course: courseEl.value }, loadedProjectId);
   }
 }
 
@@ -505,7 +528,10 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
   document.addEventListener("visibilitychange", () => { if (document.hidden) syncToGpi({ meta: true }); });
   // Si el WBS o el OBS cambian en otra pestaña (p. ej. se agrega un puesto o
   // un paquete nuevo), refresca filas/columnas sin perder las asignaciones ya hechas.
-  if (GPI.onChange) GPI.onChange(() => { if (!document.hidden) { tryLoadLive(); render(); } });
+  if (GPI.onChange) GPI.onChange(() => {
+    if (mode === "live" && loadedProjectId != null && GPI.activeId() !== loadedProjectId) { markProjectStale(); return; }
+    if (!document.hidden) { tryLoadLive(); render(); }
+  });
   gpiBadge(proj ? (proj.meta && proj.meta.name) : "", () => {
     if (mode !== "live") { showAlert('Estás en modo ejemplo (independiente). Usa "↻ Actualizar filas/columnas" para vincular la matriz al WBS y OBS reales del proyecto activo antes de sincronizar.'); return false; }
     syncToGpi({ meta: true });

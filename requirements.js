@@ -62,6 +62,15 @@
 		changeCounter: 1
 	};
 	var userEdited = false;
+	var loadedProjectId = null;
+	var projectStale = false;
+	function markProjectStale() {
+		if (projectStale) return;
+		projectStale = true;
+		const t = $("saveTxt"), d = $("saveDot");
+		if (t) t.textContent = "⚠ El proyecto activo cambió en otra pestaña: no se puede guardar aquí";
+		if (d) d.style.background = "#dc3546";
+	}
 	function $(id) {
 		return document.getElementById(id);
 	}
@@ -161,9 +170,13 @@
 	}
 	function save() {
 		if (gpiOn() && !GPI.getModule("requirements") && !userEdited && !state.items.length) return;
+		if (gpiOn() && loadedProjectId != null && GPI.activeId() !== loadedProjectId) {
+			markProjectStale();
+			return;
+		}
 		let synced = false;
 		if (gpiOn()) try {
-			GPI.setModule("requirements", collect());
+			GPI.setModule("requirements", collect(), loadedProjectId);
 			synced = true;
 			$("saveTxt").textContent = "Sincronizado con el Panel";
 		} catch (e) {}
@@ -1314,6 +1327,7 @@
 		load();
 		renderAll();
 		const connected = gpiOn();
+		if (connected) loadedProjectId = GPI.activeId();
 		if (!connected || GPI.getModule("requirements") || state.items.length) {
 			if (connected) save();
 		} else $("saveTxt").textContent = "Sin guardar aún: se sincronizará con tu primer cambio";
@@ -1324,6 +1338,10 @@
 				if (document.hidden) save();
 			});
 			if (GPI.onChange) GPI.onChange(() => {
+				if (loadedProjectId != null && GPI.activeId() !== loadedProjectId) {
+					markProjectStale();
+					return;
+				}
 				try {
 					const el = document.querySelector("#gpiBadge b");
 					const m = GPI.meta();

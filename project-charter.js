@@ -369,6 +369,8 @@
 		};
 	}
 	var state = defaultState();
+	var loadedProjectId = null;
+	var projectStale = false;
 	function esc(s) {
 		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
 			"&": "&amp;",
@@ -1075,9 +1077,23 @@
 			onDirty();
 		});
 	}
+	function markProjectStale() {
+		if (projectStale) return;
+		projectStale = true;
+		setStatus("⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.");
+		const banner = document.getElementById("banner");
+		if (banner) {
+			banner.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar el Acta aquí -- recárgala para seguir trabajando sobre el proyecto activo, o vuelve a activar el proyecto original desde el Panel de Control.";
+			banner.classList.add("show");
+		}
+	}
 	function gpiPush() {
 		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
-		window.GPI.setModule("charter", state);
+		if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
+			markProjectStale();
+			return;
+		}
+		window.GPI.setModule("charter", state, loadedProjectId);
 		const patch = {
 			name: document.getElementById("projectTitle").value,
 			course: document.getElementById("courseTitle").value
@@ -1089,13 +1105,14 @@
 			patch.capex = state.budget.amount;
 			patch.currency = state.budget.currency;
 		}
-		window.GPI.patchMeta(patch);
+		window.GPI.patchMeta(patch, loadedProjectId);
 	}
 	function init() {
 		wireStatics();
 		wireToolbar();
 		if (typeof window.GPI !== "undefined" && window.GPI.available()) {
 			const proj = window.GPI.active();
+			loadedProjectId = window.GPI.activeId();
 			const titleEl = document.getElementById("projectTitle");
 			const courseEl = document.getElementById("courseTitle");
 			if (proj) {
@@ -1120,6 +1137,9 @@
 			window.addEventListener("beforeunload", gpiPush);
 			document.addEventListener("visibilitychange", () => {
 				if (document.hidden) gpiPush();
+			});
+			window.GPI.onChange(() => {
+				if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) markProjectStale();
 			});
 			gpiBadge(proj ? proj.meta && proj.meta.name : "", gpiPush);
 		} else document.getElementById("banner").classList.add("show");
