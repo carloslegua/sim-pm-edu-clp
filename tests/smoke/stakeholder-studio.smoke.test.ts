@@ -85,4 +85,71 @@ describe("Stakeholder_Studio.html (migrado a stakeholder-studio.js)", () => {
     const mod = saved.projects.p1.modules.stakeholders;
     expect(mod.stakeholders.length).toBe(2);
   });
+
+  it("SEGURIDAD: un Id. o valor de Legitimidad importado con marcado HTML no puede inyectar código (XSS reportado por el usuario)", async () => {
+    // Repro: un .json de interesados manipulado (importado vía Panel de
+    // Control, o un proyecto sembrado por otra herramienta) con un Id. o
+    // un valor de Legitimidad/Urgencia que contiene marcado HTML. Antes de
+    // este fix, esos campos se insertaban SIN escapar en atributos
+    // (data-id="${s.id}") y en contenido de texto (${s[key]}) dentro de
+    // .innerHTML -- suficiente para romper el atributo/elemento e inyectar
+    // HTML/JS arbitrario que corre en el origen del sitio (con acceso de
+    // lectura/escritura a TODOS los proyectos de ese localStorage).
+    const XSS_ID = 'mal1" onmouseover="window.__xssFired=true" data-x="';
+    const XSS_LEGIT = '<img src=x onerror="window.__xssFired=true">';
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            stakeholders: {
+              stakeholders: [{
+                id: XSS_ID, name: "Interesado malicioso", org: "Org", role: "Rol",
+                category: "Interno", power: 50, interest: 50, legitimacy: XSS_LEGIT, urgency: 50,
+                powerCriteria: { pos: 3, res: 3, net: 3, veto: 3, expert: 3 },
+                interestCriteria: { afect: 3, stake: 3, align: 3, prox: 3, atten: 3 }
+              }], idCounter: 2
+            }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Stakeholder_Studio.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 500));
+    const doc = dom.window.document;
+
+    // Desplegar la ficha -- es donde se renderizan el Id. (atributo) y la
+    // Legitimidad (texto) crudos.
+    (doc.querySelector(".reg-header") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 100));
+
+    // El marcador nunca se ejecutó: ni por el atributo inyectado
+    // (onmouseover) ni por el elemento inyectado en el texto (<img onerror>).
+    expect((dom.window as any).__xssFired).toBeUndefined();
+    expect(doc.querySelectorAll(".d-val img").length).toBe(0);
+    expect(doc.querySelectorAll("img[onerror]").length).toBe(0);
+
+    // El Id. completo sigue siendo el valor ÚNICO del atributo data-id (no
+    // se "escapó" del atributo hacia uno nuevo como onmouseover).
+    const card = doc.querySelector(".reg-card") as HTMLElement;
+    expect(card.getAttribute("data-id")).toBe(XSS_ID);
+    expect(card.hasAttribute("onmouseover")).toBe(false);
+
+    // La Legitimidad se ve como texto literal, no como HTML interpretado.
+    expect(doc.querySelector(".d-val")!.textContent).toBe(XSS_LEGIT);
+
+    // La vista Matriz Poder-Interés también renderiza el Id. en un atributo
+    // (burbuja SVG) -- misma protección ahí.
+    (doc.querySelector('[data-view="poderInteres"]') as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 50));
+    const bubble = doc.querySelector(".bubble") as SVGElement;
+    expect(bubble.getAttribute("data-id")).toBe(XSS_ID);
+    expect(bubble.hasAttribute("onmouseover")).toBe(false);
+    expect((dom.window as any).__xssFired).toBeUndefined();
+  });
 });

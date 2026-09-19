@@ -210,16 +210,16 @@ function render(): void {
 function renderDetailEditor(s: Stakeholder): string {
   const catOpts = Object.keys(CATS).map((c) => `<option ${c === s.category ? "selected" : ""}>${c}</option>`).join("");
   const slider = (key: "legitimacy" | "urgency", label: string) => `<div class="slider-field">
-      <div class="lab"><label>${label}</label><span class="val d-val" data-id="${s.id}" data-field="${key}">${s[key]}</span></div>
-      <input type="range" min="0" max="100" step="5" value="${s[key]}" class="d-sld" data-id="${s.id}" data-field="${key}">
+      <div class="lab"><label>${label}</label><span class="val d-val" data-id="${escapeHtml(s.id)}" data-field="${key}">${escapeHtml(s[key])}</span></div>
+      <input type="range" min="0" max="100" step="5" value="${escapeHtml(s[key])}" class="d-sld" data-id="${escapeHtml(s.id)}" data-field="${key}">
     </div>`;
   const t = salienceType(s);
   return `<div class="reg-detail-inner">
     <div class="detail-cols">
-      <div class="field"><label>Nombre</label><input class="d-inp" data-id="${s.id}" data-field="name" value="${escapeHtml(s.name)}"></div>
-      <div class="field"><label>Organización</label><input class="d-inp" data-id="${s.id}" data-field="org" value="${escapeHtml(s.org)}"></div>
-      <div class="field"><label>Categoría</label><select class="d-sel" data-id="${s.id}" data-field="category">${catOpts}</select></div>
-      <div class="field"><label>Rol / Cargo</label><input class="d-inp" data-id="${s.id}" data-field="role" value="${escapeHtml(s.role)}"></div>
+      <div class="field"><label>Nombre</label><input class="d-inp" data-id="${escapeHtml(s.id)}" data-field="name" value="${escapeHtml(s.name)}"></div>
+      <div class="field"><label>Organización</label><input class="d-inp" data-id="${escapeHtml(s.id)}" data-field="org" value="${escapeHtml(s.org)}"></div>
+      <div class="field"><label>Categoría</label><select class="d-sel" data-id="${escapeHtml(s.id)}" data-field="category">${catOpts}</select></div>
+      <div class="field"><label>Rol / Cargo</label><input class="d-inp" data-id="${escapeHtml(s.id)}" data-field="role" value="${escapeHtml(s.role)}"></div>
     </div>
     <div class="input-map-note"><b>Poder</b> e <b>Interés</b> se calculan abajo a partir de 5 criterios ponderados (no se editan directamente) y ubican al interesado en la Matriz Poder–Interés. <b>Legitimidad</b> y <b>Urgencia</b> se registran directamente y, junto con el Poder ya calculado, determinan su tipo de Prominencia.</div>
     ${powerPanelHtml(s)}
@@ -230,7 +230,7 @@ function renderDetailEditor(s: Stakeholder): string {
     </div>
     <div class="detail-foot">
       <span class="sal-badge" style="background:${salColor(t)}">Prominencia: ${SAL_INFO[t].t}</span>
-      <button class="btn danger d-del" data-id="${s.id}">🗑 Eliminar interesado</button>
+      <button class="btn danger d-del" data-id="${escapeHtml(s.id)}">🗑 Eliminar interesado</button>
     </div>
   </div>`;
 }
@@ -243,7 +243,7 @@ function powerPanelHtml(s: Stakeholder): string {
     const opts = [1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === val ? "selected" : ""}>${n} · ${POWER_LEVELS[n].t}</option>`).join("");
     return `<div class="field" title="${escapeHtml(cr.desc)}">
         <label>${escapeHtml(cr.label)} <span class="wtag">${(powerWeights as unknown as Record<string, number>)[cr.key]}%</span></label>
-        <select class="d-pc" data-id="${s.id}" data-crit="${cr.key}">${opts}</select>
+        <select class="d-pc" data-id="${escapeHtml(s.id)}" data-crit="${cr.key}">${opts}</select>
       </div>`;
   }).join("");
   return `<div class="power-panel">
@@ -267,7 +267,7 @@ function interestPanelHtml(s: Stakeholder): string {
     const opts = [1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === val ? "selected" : ""}>${n} · ${INTEREST_LEVELS[n].t}</option>`).join("");
     return `<div class="field" title="${escapeHtml(cr.desc)}">
         <label>${escapeHtml(cr.label)} <span class="wtag">${(interestWeights as unknown as Record<string, number>)[cr.key]}%</span></label>
-        <select class="d-ic" data-id="${s.id}" data-crit="${cr.key}">${opts}</select>
+        <select class="d-ic" data-id="${escapeHtml(s.id)}" data-crit="${cr.key}">${opts}</select>
       </div>`;
   }).join("");
   return `<div class="power-panel interest-panel">
@@ -290,10 +290,10 @@ function renderRegister(): string {
   const cards = stakeholders.map((s) => {
     const c = catHex(s.category);
     const open = expandedIds.has(s.id);
-    return `<div class="reg-card ${open ? "expanded" : ""}" data-id="${s.id}">
-      <div class="reg-header" data-id="${s.id}" role="button" tabindex="0" aria-expanded="${open}">
+    return `<div class="reg-card ${open ? "expanded" : ""}" data-id="${escapeHtml(s.id)}">
+      <div class="reg-header" data-id="${escapeHtml(s.id)}" role="button" tabindex="0" aria-expanded="${open}">
         <div class="reg-headmain">
-          <button class="reg-toggle" data-id="${s.id}" aria-label="Desplegar o colapsar">${open ? "▾" : "▸"}</button>
+          <button class="reg-toggle" data-id="${escapeHtml(s.id)}" aria-label="Desplegar o colapsar">${open ? "▾" : "▸"}</button>
           <div class="reg-namewrap">
             <div class="sh-name">${escapeHtml(s.name)}</div>
             <div class="sh-org">${escapeHtml(s.org || "—")}${s.role ? " · " + escapeHtml(s.role) : ""}</div>
@@ -448,9 +448,9 @@ function renderSalience(): string {
 function bubbleNode(s: Stakeholder, x: number, y: number, rBase?: number): string {
   const r = rBase || 14;
   const sel = s.id === selectedId ? "selected" : "";
-  return `<g class="bubble ${sel}" data-id="${s.id}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})" role="button" tabindex="0" aria-label="${escapeHtml(s.name || "Interesado sin nombre")}">
+  return `<g class="bubble ${sel}" data-id="${escapeHtml(s.id)}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})" role="button" tabindex="0" aria-label="${escapeHtml(s.name || "Interesado sin nombre")}">
     <circle r="${r}" fill="${catHex(s.category)}" stroke="#fff" stroke-width="2" opacity="0.92"/>
-    <text text-anchor="middle" dy="3.5">${initials(s.name)}</text>
+    <text text-anchor="middle" dy="3.5">${escapeHtml(initials(s.name))}</text>
   </g>`;
 }
 interface BubblePoint { s: Stakeholder; x: number; y: number; size?: number; }
@@ -542,8 +542,8 @@ function selectedBlock(): string {
   if (!s) return `<h3 class="mt">Interesado</h3><div class="empty-hint">Selecciona un interesado (fila o burbuja) para editar sus atributos.</div>`;
   const catOpts = Object.keys(CATS).map((c) => `<option ${c === s.category ? "selected" : ""}>${c}</option>`).join("");
   const slider = (key: "legitimacy" | "urgency", label: string) => `<div class="slider-field">
-      <div class="lab"><label>${label}</label><span class="val" id="v_${key}">${s[key]}</span></div>
-      <input type="range" min="0" max="100" step="5" value="${s[key]}" data-field="${key}" class="sld">
+      <div class="lab"><label>${label}</label><span class="val" id="v_${key}">${escapeHtml(s[key])}</span></div>
+      <input type="range" min="0" max="100" step="5" value="${escapeHtml(s[key])}" data-field="${key}" class="sld">
     </div>`;
   return `<h3 class="mt">Atributos del interesado</h3>
     <div class="field"><label>Nombre</label><input id="f_name" value="${escapeHtml(s.name)}"></div>

@@ -66,6 +66,39 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Stakeholder Studio — un .json de interesados manipulado podía
+  ejecutar código en el navegador (XSS)** — el usuario reportó, con
+  evidencia puntual, que un identificador de interesado importado se
+  insertaba directamente en atributos HTML sin escapar, y confirmó en
+  Chrome que un identificador manipulado ejecutaba un marcador
+  JavaScript inocuo al abrir el módulo. Diagnóstico: `data-id="${s.id}"`
+  (13 sitios: editor de detalle, paneles de Poder/Interés, tarjetas del
+  registro, burbuja del gráfico) se interpolaba SIN pasar por
+  `escapeHtml()`, a diferencia de `name`/`org`/`role`/`category`, que sí
+  lo hacían — `id` no es un valor interno confiable, viaja tal cual
+  desde cualquier `.json` de interesados importado (`detectTool()` en
+  `gpi-core.ts` copia el arreglo completo sin sanear ningún campo) hasta
+  el render vía `main.innerHTML`/`sb.innerHTML`. Un `id` con comillas
+  rompe el atributo e inyecta HTML/JS arbitrario que corre en el origen
+  del sitio, con acceso de lectura/escritura a TODOS los proyectos
+  guardados en ese `localStorage` — no solo el importado. Auditoría del
+  resto de campos encontró un segundo vector menos obvio: Legitimidad y
+  Urgencia (`${s[key]}`, 2 sitios) tampoco se escapaban, y son las dos
+  únicas propiedades numéricas de `Stakeholder` que NO se recalculan al
+  cargar (a diferencia de Poder/Interés, siempre derivados por
+  aritmética que produce `NaN` de forma segura ante datos corruptos,
+  nunca una cadena) — un valor de Legitimidad con marcado HTML se
+  insertaba tal cual como contenido de texto. Corregidos los 15 sitios
+  con `escapeHtml()`. Deliberadamente sin tocar: los 4 usos de `s.id`
+  dentro de `document.querySelector('[data-id="${s.id}"]')` (comparan
+  contra el valor ya decodificado del atributo vía API del DOM, no HTML
+  insertado — escaparlos con una función pensada para contexto HTML
+  rompería la coincidencia). Cubierto por un nuevo caso "SEGURIDAD" en
+  `tests/smoke/stakeholder-studio.smoke.test.ts` que reproduce el ataque
+  con un `id` y una Legitimidad con marcado HTML real y confirma que
+  ningún elemento ni atributo inyectado llega al DOM ni se ejecuta
+  ningún marcador. Ver ARCHITECTURE.md, sección `Stakeholder_Studio.html`.
+
 - **Integridad de datos — un módulo abierto podía sobrescribir OTRO
   proyecto tras un cambio de proyecto activo en otra pestaña** — el
   usuario reprodujo la secuencia exacta: abrir el Acta de Constitución

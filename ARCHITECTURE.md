@@ -454,6 +454,36 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
 - Poder e Interés son **campos derivados** de 5 criterios ponderados
   cada uno (nunca editables directamente) — patrón de cálculo
   multicriterio único en la suite.
+- **Todo campo de `Stakeholder` que se interpola en HTML pasa por
+  `escapeHtml()`, sin excepción — incluido `id`** (bug de seguridad real
+  reportado por el usuario, 2026-09: un `.json` de interesados
+  manipulado con un `id` o un valor de Legitimidad/Urgencia que contenía
+  marcado HTML ejecutaba código en el navegador al abrir el módulo,
+  porque `data-id="${s.id}"` y `${s[key]}` (legitimidad/urgencia, las
+  dos únicas propiedades numéricas que NO se recalculan al cargar — a
+  diferencia de `power`/`interest`, siempre derivados por aritmética de
+  `recomputePower()`/`recomputeInterest()`, que produce `NaN` de forma
+  segura ante datos corruptos, nunca una cadena) se insertaban SIN
+  escapar en `main.innerHTML`/`sb.innerHTML`. `id` no es un valor
+  interno confiable: viaja tal cual desde cualquier `.json` importado
+  (`detectTool()` en `gpi-core.ts` copia `obj.stakeholders` verbatim, sin
+  sanear ningún campo) hasta el render, así que un archivo de interesados
+  malicioso podía inyectar HTML/JS que corre en el origen del sitio —con
+  acceso de lectura/escritura a TODOS los proyectos de ese
+  `localStorage`, no solo el importado. Corregido escapando `s.id` en
+  los 13 sitios donde se interpola en un atributo (`renderDetailEditor`,
+  `powerPanelHtml`, `interestPanelHtml`, `renderRegister`, `bubbleNode`)
+  y `s[key]` (legitimidad/urgencia) en los 2 sitios donde se interpola
+  como texto/valor sin pasar por aritmética (`renderDetailEditor`,
+  `selectedBlock` del sidebar). Los usos de `s.id` dentro de
+  `document.querySelector('[data-id="${s.id}"]')` (selector CSS vía API
+  del DOM, no HTML insertado con `innerHTML`) se dejan sin escapar a
+  propósito: ahí se compara contra el valor YA decodificado del
+  atributo, así que escaparlo con `escapeHtml()` (pensado para contexto
+  HTML, no CSS) rompería la coincidencia. Cubierto por el nuevo caso
+  "SEGURIDAD" en `tests/smoke/stakeholder-studio.smoke.test.ts`, que
+  reproduce el ataque con un `id` y una Legitimidad con marcado HTML y
+  confirma que ningún elemento/atributo inyectado llega al DOM.
 
 **Cronograma_CPM.html** — algorítmicamente el más crítico.
 - Único módulo que **depende duro de `gpi-core.js`** incluso para su
