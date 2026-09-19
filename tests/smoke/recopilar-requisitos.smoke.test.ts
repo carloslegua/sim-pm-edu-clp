@@ -90,4 +90,62 @@ describe("Recopilar_Requisitos.html (migrado a requirements.js)", () => {
     expect(saved.items[0].sourceRanIds).toEqual(["ranX"]);
     expect(saved.items[0].wbsNodeIds).toEqual(["w1"]);
   });
+
+  it("SEGURIDAD: un id de requisito/modificación importado con marcado HTML no puede inyectar código (XSS reportado por el usuario)", async () => {
+    // Repro: un .json de requisitos manipulado (importado vía Panel de
+    // Control, o un proyecto sembrado por otra herramienta) con un Id.
+    // que contiene marcado HTML. Antes de este fix, ese campo se
+    // insertaba SIN escapar dentro de un onclick inline (onclick="openItemEditor('${id}')")
+    // -- suficiente para romper el atributo HTML e inyectar un elemento
+    // que se ejecuta con solo abrir el módulo, sin ningún clic.
+    const XSS_ID = 'x"><img src=x onerror="window.__xssFired=true">';
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            requirements: {
+              // baseline congelada: es la condición para que renderMods()
+              // pinte los botones de acción de cada modificación (si no,
+              // solo muestra un aviso) -- necesario para ejercer también el
+              // Id. malicioso de "changes" en este mismo test.
+              baseline: { frozen: true, version: "1.0", date: "2026-01-01", approver: "Ana", snapshot: [] },
+              items: [{ id: XSS_ID, code: "REQ.001", text: "Requisito malicioso", type: "funcional", priority: "should", status: "propuesto" }],
+              changes: [{ id: XSS_ID, code: "MOD.01", date: "2026-01-01", status: "propuesto", summary: "Modificación maliciosa", impact: {} }],
+              idCounter: 2, changeCounter: 2
+            }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Recopilar_Requisitos.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+
+    // El marcador nunca se ejecutó con solo abrir el módulo -- ni por
+    // atributo inyectado ni por un elemento inyectado en el DOM.
+    expect((dom.window as any).__xssFired).toBeUndefined();
+    expect(doc.querySelectorAll("img[onerror]").length).toBe(0);
+
+    // El Id. malicioso nunca llega a guardarse ni a renderizarse: se
+    // valida y se regenera ANTES (normalizeItem/normalizeMod), así que
+    // el botón "Editar" existe y sigue funcionando con un Id. seguro,
+    // no con el payload.
+    const editBtn = doc.querySelector('.icon-btn[title="Editar"][aria-label="Editar requisito"]') as HTMLElement;
+    expect(editBtn).toBeTruthy();
+    const onclickAttr = editBtn.getAttribute("onclick") || "";
+    expect(onclickAttr).not.toContain('"');
+    expect(onclickAttr).toMatch(/^openItemEditor\('[A-Za-z0-9_-]+'\)$/);
+
+    const modEditBtn = doc.querySelector('.icon-btn[title="Editar"][aria-label="Editar modificación"]') as HTMLElement;
+    expect(modEditBtn).toBeTruthy();
+    const modOnclick = modEditBtn.getAttribute("onclick") || "";
+    expect(modOnclick).not.toContain('"');
+    expect(modOnclick).toMatch(/^openModEditor\('[A-Za-z0-9_-]+'\)$/);
+  });
 });

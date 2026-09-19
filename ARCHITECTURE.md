@@ -982,6 +982,48 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
 - El módulo con más lecturas cruzadas: `charter` (RAN), `stakeholders`
   (origen del requisito) y `wbs` (trazabilidad), con datos de
   demostración propios (`DEMO`) para el modo suelto.
+- **El `id` de un requisito/modificación importado se valida y se
+  escapa en DOS capas — bug de seguridad real reportado por el usuario
+  (2026-09), extensión del mismo tipo de XSS ya corregido en
+  Stakeholder Studio**: al usar `onclick`/`onchange` inline (a
+  diferencia de casi todos los demás módulos, que usan `data-*` +
+  `addEventListener`), el `id` no vive en un atributo plano sino DENTRO
+  de un literal de cadena JS que a su vez vive dentro del atributo HTML
+  (`onclick="openItemEditor('${id}')"`) — escapar solo para HTML
+  (como alcanza en Stakeholder Studio) NO es suficiente aquí: el
+  navegador decodifica las entidades del atributo ANTES de compilar el
+  manejador como JS, así que un `id` con una comilla simple seguiría
+  pudiendo cerrar el literal de cadena y ejecutar JS arbitrario al
+  hacer clic, aunque estuviera escapado para HTML. Y con una comilla
+  DOBLE sin escapar (el bug real, antes de este fix), ni siquiera hacía
+  falta el clic: rompía el atributo `onclick="..."` mismo e inyectaba
+  marcado que se ejecuta al renderizar. Corrección en dos capas: (1)
+  `isSafeId()` — todo `id` que entra por `normalizeItem()`/
+  `normalizeMod()` (de un `.json` importado o de datos ya guardados) se
+  valida contra `/^[A-Za-z0-9_-]{1,64}$/` y se regenera si no lo
+  cumple, así un `id` malicioso nunca llega a guardarse ni a
+  renderizarse — mismo criterio de "validar antes de guardar" que la
+  poda de ciclos de WBS/OBS; (2) `escJsAttr()` — cada uno de los 8
+  sitios que igual interpola un `id` dentro de un `onclick`/`onchange`
+  inline lo escapa PRIMERO para el literal de cadena JS (comilla
+  simple, backslash) y RECIÉN DESPUÉS para el atributo HTML (`esc()`)
+  — defensa en profundidad, por si algún `id` llegara a `state` sin
+  pasar por `normalizeItem`/`normalizeMod`. Auditado el resto de la
+  suite (`Grep` de `onclick=.*\+.*\.id` y variantes en los 13 módulos):
+  ningún otro módulo interpola un identificador crudo dentro de un
+  manejador inline — `cost.ts` (la otra excepción con `onclick` inline)
+  solo interpola un índice de arreglo interno (`${i}`, nunca
+  atacante-controlable), y los módulos con `data-id="${x.id}"` ya
+  escapan correctamente desde la corrección de Stakeholder Studio.
+  Cubierto en `tests/smoke/recopilar-requisitos.smoke.test.ts`: importa
+  un `id` con un payload de ruptura de atributo + elemento inyectado
+  (`<img onerror>`) para un requisito Y una modificación (con la línea
+  base congelada, para ejercer también esa vista), confirma que no se
+  ejecuta ningún marcador ni se crea ningún elemento inyectado, y que
+  los botones siguen funcionando con un `id` regenerado y seguro.
+  Verificado que el test detecta el bug real: revertido el fix
+  temporalmente, el mismo payload crea 7 elementos `<img onerror>` en
+  el DOM (uno por cada sitio de interpolación que toca esa fila).
 
 **Cost-management.html** (módulo "Planificar la Gestión Financiera")
 - La otra excepción con atributos `onclick`/`onchange`/`oninput`

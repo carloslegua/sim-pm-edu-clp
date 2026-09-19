@@ -76,6 +76,36 @@ function markProjectStale(): void {
 
 function $(id: string): HTMLElement { return document.getElementById(id) as HTMLElement; }
 function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)); }
+// Bug real reportado por el usuario: un id de requisito/modificación
+// importado desde un .json se interpolaba SIN escapar dentro de un
+// manejador onclick/onchange inline (ver renderList()/renderChanges()
+// más abajo) -- un id manipulado con una comilla doble rompía el
+// atributo HTML e inyectaba marcado que se ejecuta con solo abrir el
+// módulo, sin ningún clic. Mismo tipo de vulnerabilidad ya corregida en
+// Stakeholder Studio (ahí basta con escapar para HTML, porque el id
+// vive en un atributo data-* plano); acá hace falta una capa MÁS,
+// porque el id vive DENTRO de un literal de cadena JS ('...') que a su
+// vez vive dentro del atributo HTML onclick="..." -- escapar solo para
+// HTML no alcanza: el navegador decodifica las entidades del atributo
+// ANTES de compilar el manejador como JS, así que un id con una comilla
+// simple seguiría pudiendo cerrar el literal de cadena y ejecutar JS
+// arbitrario AL HACER CLIC aunque se hubiera escapado solo para HTML.
+// Defensa en dos capas:
+// 1) isSafeId(): todo id que entra por normalizeItem()/normalizeMod()
+//    -- de un .json importado o de datos ya guardados -- se valida
+//    contra un patrón seguro y se regenera si no lo cumple, así un id
+//    malicioso nunca llega a guardarse ni a renderizarse.
+// 2) escJsAttr(): cada sitio que igual interpola un id dentro de un
+//    onclick/onchange inline lo escapa PRIMERO para el literal de
+//    cadena JS (comilla simple, backslash) y RECIÉN DESPUÉS para el
+//    atributo HTML (comilla doble, &, <, >) -- defensa en profundidad,
+//    por si algún id llegara a state sin pasar por normalizeItem/
+//    normalizeMod.
+function isSafeId(v: unknown): v is string { return typeof v === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(v); }
+function escJsAttr(s: unknown): string {
+  const jsSafe = String(s == null ? "" : s).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  return esc(jsSafe);
+}
 function reqCode(n: number): string { return "REQ." + (n < 100 ? ("00" + n).slice(-3) : String(n)); }
 function modCode(n: number): string { return "MOD." + (n < 10 ? "0" + n : String(n)); }
 function todayISO(): string { return new Date().toISOString().slice(0, 10); }
@@ -146,7 +176,7 @@ function applyData(d: any): void {
 function normalizeItem(it: any): ReqUi {
   it = it || {};
   return {
-    id: it.id || ("q" + (state.idCounter++)), code: it.code || reqCode(state.items ? state.items.length + 1 : 1),
+    id: isSafeId(it.id) ? it.id : ("q" + (state.idCounter++)), code: it.code || reqCode(state.items ? state.items.length + 1 : 1),
     text: it.text || "", type: it.type || "funcional", priority: it.priority || "should",
     sourceRanIds: Array.isArray(it.sourceRanIds) ? it.sourceRanIds : [],
     stakeholderId: it.stakeholderId || "", _stkHint: it._stkHint || "",
@@ -160,7 +190,7 @@ function normalizeItem(it: any): ReqUi {
 function normalizeMod(m: any): ModUi {
   m = m || {};
   return {
-    id: m.id || ("m" + (state.changeCounter++)), code: m.code || modCode(state.changes ? state.changes.length + 1 : 1),
+    id: isSafeId(m.id) ? m.id : ("m" + (state.changeCounter++)), code: m.code || modCode(state.changes ? state.changes.length + 1 : 1),
     date: m.date || todayISO(), requestedBy: m.requestedBy || "", approver: m.approver || "",
     status: m.status || "propuesto", summary: m.summary || "", justification: m.justification || "",
     impact: Object.assign({ scope: "", schedule: "", cost: "", wbs: "" }, m.impact || {}), ccrRef: m.ccrRef || ""
@@ -417,8 +447,8 @@ function renderMatrix(): void {
       + '<td><span class="ver-dot ' + esc(it.verificationStatus) + '"></span>' + esc(lab(METHODS, it.verificationMethod) || "—") + '</td>'
       + '<td><span class="st ' + esc(it.status) + '">' + esc(lab(STATUS, it.status)) + '</span></td>'
       + '<td>' + originBadge(it) + '</td>'
-      + '<td><div class="mini-actions"><button class="icon-btn" title="Editar" aria-label="Editar requisito" onclick="openItemEditor(\'' + it.id + '\')">✎</button>'
-      + '<button class="icon-btn danger" title="Eliminar" aria-label="Eliminar requisito" onclick="removeItem(\'' + it.id + '\')">🗑</button></div></td>'
+      + '<td><div class="mini-actions"><button class="icon-btn" title="Editar" aria-label="Editar requisito" onclick="openItemEditor(\'' + escJsAttr(it.id) + '\')">✎</button>'
+      + '<button class="icon-btn danger" title="Eliminar" aria-label="Eliminar requisito" onclick="removeItem(\'' + escJsAttr(it.id) + '\')">🗑</button></div></td>'
       + '</tr>';
   });
   h += '</tbody></table></div></div>';
@@ -607,7 +637,7 @@ function renderCoverage(): void {
     h += '<div class="tbl-wrap"><table><thead><tr><th>Cód.</th><th>Requisito</th><th>Interesado</th><th></th></tr></thead><tbody>';
     emergent.forEach((it) => {
       h += '<tr><td class="mono">' + esc(it.code) + '</td><td>' + esc(it.text) + '</td><td>' + stkChip(it) + '</td>'
-        + '<td style="text-align:right"><button class="btn sm" onclick="promoteToRan(\'' + it.id + '\')">↥ Promover a RAN del Acta</button></td></tr>';
+        + '<td style="text-align:right"><button class="btn sm" onclick="promoteToRan(\'' + escJsAttr(it.id) + '\')">↥ Promover a RAN del Acta</button></td></tr>';
     });
     h += '</tbody></table></div><div class="note info" style="margin-top:12px">« Promover a RAN » agrega el texto del requisito como un nuevo requisito de alto nivel en el Acta y lo enlaza aquí, cerrando el panorama de alto nivel.</div>';
   }
@@ -700,9 +730,9 @@ function renderMods(): void {
         + '<div class="mh"><div><span class="code">' + esc(m.code) + '</span> <span class="st ' + statusToStClass(m.status) + '">' + esc(lab(MODSTATUS, m.status)) + '</span>'
         + '<div class="meta">' + repDate(m.date) + (m.requestedBy ? (' · solicita: ' + esc(m.requestedBy)) : "") + (m.approver ? (' · aprueba: ' + esc(m.approver)) : "") + '</div></div>'
         + '<div class="mini-actions">'
-        + '<button class="btn sm ' + (isActive ? 'primary' : '') + '" onclick="setActiveMod(\'' + m.id + '\')">' + (isActive ? '✓ Activa' : 'Activar') + '</button>'
-        + '<button class="icon-btn" title="Editar" aria-label="Editar modificación" onclick="openModEditor(\'' + m.id + '\')">✎</button>'
-        + '<button class="icon-btn danger" title="Eliminar" aria-label="Eliminar modificación" onclick="removeMod(\'' + m.id + '\')">🗑</button>'
+        + '<button class="btn sm ' + (isActive ? 'primary' : '') + '" onclick="setActiveMod(\'' + escJsAttr(m.id) + '\')">' + (isActive ? '✓ Activa' : 'Activar') + '</button>'
+        + '<button class="icon-btn" title="Editar" aria-label="Editar modificación" onclick="openModEditor(\'' + escJsAttr(m.id) + '\')">✎</button>'
+        + '<button class="icon-btn danger" title="Eliminar" aria-label="Eliminar modificación" onclick="removeMod(\'' + escJsAttr(m.id) + '\')">🗑</button>'
         + '</div></div>'
         + (m.summary ? '<div style="font-size:12.5px;margin-top:8px"><b>' + esc(m.summary) + '</b></div>' : '')
         + (m.justification ? '<div class="muted" style="font-size:12px;margin-top:3px">' + esc(m.justification) + '</div>' : '')
@@ -711,8 +741,8 @@ function renderMods(): void {
         + '</div>'
         + '<div style="margin-top:10px;font-size:12px"><b>Requisitos afectados:</b> ' + (aff.length ? ('<span class="chips" style="display:inline-flex">' + aff.map((it) => '<span class="chip ran">' + esc(it.code) + '</span>').join("") + '</span>') : '<span class="muted">ninguno aún — actívala y edita la matriz</span>') + '</div>'
         + '<div class="row row-2" style="margin-top:10px">'
-        + '<label class="f" style="margin:0"><span>Estado</span><select onchange="setModStatus(\'' + m.id + '\',this.value)">' + selOpts(MODSTATUS, m.status) + '</select></label>'
-        + '<label class="f" style="margin:0"><span>Solicitud de cambio (CCR) — Control Integrado de Cambios</span><input value="' + esc(m.ccrRef) + '" placeholder="ID de la solicitud (pendiente del módulo)" onchange="updateCcr(\'' + m.id + '\',this.value)"></label>'
+        + '<label class="f" style="margin:0"><span>Estado</span><select onchange="setModStatus(\'' + escJsAttr(m.id) + '\',this.value)">' + selOpts(MODSTATUS, m.status) + '</select></label>'
+        + '<label class="f" style="margin:0"><span>Solicitud de cambio (CCR) — Control Integrado de Cambios</span><input value="' + esc(m.ccrRef) + '" placeholder="ID de la solicitud (pendiente del módulo)" onchange="updateCcr(\'' + escJsAttr(m.id) + '\',this.value)"></label>'
         + '</div>'
         + '<div class="note info" style="margin-top:8px;font-size:11.5px">El campo CCR quedará enlazado automáticamente cuando exista el módulo <code class="k">changes</code> (Control Integrado de Cambios): este MOD referenciará su solicitud formal y la decisión del CCB.</div>'
         + '</div>';

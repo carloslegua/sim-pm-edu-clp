@@ -66,6 +66,46 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Recopilar Requisitos — un id importado se insertaba sin escapar en
+  manejadores onclick inline (XSS, extensión del arreglo de Stakeholder
+  Studio)** — el usuario reportó, con evidencia puntual
+  (`src/modules/requirements/main.ts:420`), que un identificador de
+  requisito importado se insertaba directamente en botones HTML, y
+  confirmó en Chrome que importar un `.json` de requisitos y abrir el
+  módulo ejecutaba un marcador JavaScript inocuo **sin pulsar el
+  botón**. Diagnóstico: a diferencia de casi todos los demás módulos
+  (que usan `data-*` + `addEventListener`), Recopilar Requisitos usa
+  `onclick`/`onchange` inline, así que el `id` no vive en un atributo
+  plano sino DENTRO de un literal de cadena JS que a su vez vive dentro
+  del atributo HTML — el arreglo de Stakeholder Studio (escapar solo
+  para HTML) no alcanza aquí: con una comilla doble sin escapar (el bug
+  real) ni hacía falta el clic, rompía el atributo `onclick="..."`
+  mismo e inyectaba marcado que se ejecuta al renderizar; y aun
+  escapando solo para HTML, una comilla simple seguiría pudiendo cerrar
+  el literal de cadena JS y ejecutar código al hacer clic, porque el
+  navegador decodifica las entidades del atributo ANTES de compilar el
+  manejador como JS. Corrección en dos capas, preservando el patrón
+  `onclick` inline existente (no se reescribió la arquitectura de
+  eventos del módulo): (1) `isSafeId()` — todo `id` que entra por
+  `normalizeItem()`/`normalizeMod()` se valida contra un patrón seguro
+  (`/^[A-Za-z0-9_-]{1,64}$/`) y se regenera si no lo cumple, así un
+  `id` malicioso nunca llega a guardarse ni a renderizarse; (2)
+  `escJsAttr()` — los 8 sitios que interpolan un `id` dentro de un
+  `onclick`/`onchange` inline lo escapan primero para el literal de
+  cadena JS y recién después para HTML, defensa en profundidad. Se
+  auditaron los 13 módulos buscando el mismo patrón: ningún otro
+  interpola un identificador crudo dentro de un manejador inline
+  (`cost.ts`, la otra excepción con `onclick` inline, solo usa un
+  índice de arreglo interno, nunca atacante-controlable). Nuevo caso en
+  `tests/smoke/recopilar-requisitos.smoke.test.ts`: importa un `id` con
+  un payload de ruptura de atributo para un requisito y una
+  modificación, confirma que no se ejecuta ningún marcador ni se inyecta
+  ningún elemento, y que los botones siguen funcionando con un `id`
+  regenerado y seguro. Verificado que el test detecta el bug real:
+  revertido el fix temporalmente, el mismo payload crea 7 elementos
+  `<img onerror>` en el DOM. Ver ARCHITECTURE.md, sección
+  `Recopilar_Requisitos.html`.
+
 - **JSZip dependía de un CDN externo y el mensaje de error resultaba
   engañoso cuando faltaba** — el usuario reportó: con la CDN bloqueada,
   un archivo `.xlsx` válido produjo el mensaje "no parece ser un .xlsx
