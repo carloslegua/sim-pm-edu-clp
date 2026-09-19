@@ -353,6 +353,81 @@ a fondo: sus escrituras son acciones directas del usuario sobre el
 proyecto que el propio Panel acaba de activar/crear, un patrón distinto
 al de los 13 módulos de herramienta.
 
+### El hueco que dejó la primera pasada: guardados SECUNDARIOS que llaman al núcleo directo
+
+Bug real reportado por el usuario (2026-09), señalando que la
+corrección de arriba estaba incompleta: **"El guardado principal está
+protegido, pero estas operaciones llaman directamente al núcleo sin
+pasar el identificador esperado."** Reprodujo dos caminos:
+
+- `src/modules/wbs/main.ts`, `seedFromScope()` (botón "Sembrar
+  Entregables"): abrir WBS en A, activar B desde otra pestaña y pulsar
+  el botón — B recibía la EDT de A (todavía en memoria en esta pestaña)
+  mezclada con los entregables de B (leídos frescos en el momento del
+  clic). La función llamaba `window.GPI.setModule("wbs", {...})`
+  directo, sin `loadedProjectId` ni el chequeo de identidad — un
+  camino de escritura totalmente aparte de `push()` (la función
+  principal, correctamente protegida desde el fix anterior).
+- `src/modules/requirements/main.ts`, `promoteToRan()` (botón
+  "Promover a RAN"): iniciar la promoción en A, activar B desde otra
+  pestaña MIENTRAS el diálogo de confirmación seguía abierto, y
+  confirmar — el requisito de A se agregaba al Acta (`charter`) de B.
+  El callback `.then()` del diálogo llamaba
+  `GPI.setModule("charter", ch)` directo, sin `loadedProjectId`.
+
+Ambos son **guardados secundarios**: no pasan por la función principal
+de guardado del módulo (`push()`/`save()`), sino que llaman al núcleo
+por su cuenta — típicamente disparados por un botón de una operación
+puntual, a veces detrás de un diálogo de confirmación async (`.then()`)
+que deja una ventana de tiempo real para que otra pestaña cambie el
+proyecto activo antes de que la escritura ocurra. La auditoría de la
+corrección original solo cubrió la función principal de cada módulo;
+no buscó sistemáticamente OTRAS llamadas directas a
+`setModule`/`patchMeta` fuera de ella. Una auditoría posterior (agente
+de exploración, `grep` de todo uso de `.setModule(`/`.patchMeta(` en
+los 13 módulos, seguido de lectura manual del contexto de cada una)
+confirmó que estos eran los ÚNICOS dos casos — los otros 11 módulos no
+tienen ninguna llamada al núcleo fuera de su función principal ya
+protegida.
+
+Corrección, con un patrón distinto en cada archivo según su
+arquitectura:
+
+- **`wbs.ts`**: `loadedProjectId`/`markProjectStale()`/`push()` viven
+  dentro del closure `gpiBridge()` (patrón ya documentado en la sección
+  de arriba), inaccesibles desde `seedFromScope()`, que es una función
+  de nivel de módulo declarada ANTES de ese closure. En vez de duplicar
+  el chequeo de identidad ahí (repetir la lógica en dos sitios, con
+  riesgo de que diverjan), `seedFromScope()` ahora llama a
+  `markDirty()` — el mecanismo YA existente en este archivo para "avisá
+  al Panel de cualquier cambio estructural" (lo usan también "+ Fase"/
+  "+ Subtarea"), que dispara `requestGpiPush()` → el `push()` real y ya
+  protegido, con el mismo debounce de 800 ms que el resto de las
+  ediciones. Además, gana su propia comprobación de identidad
+  ANTES de leer los entregables del Enunciado del Alcance (variable
+  módulo-nivel nueva `ensureProjectFresh`, asignada por `gpiBridge()`
+  igual que `requestGpiPush`) — así evita el trabajo y el mensaje de
+  "listo" engañoso cuando el proyecto ya cambió, en vez de descubrirlo
+  recién al guardar.
+- **`requirements.ts`**: `loadedProjectId`/`markProjectStale()` SÍ son
+  variables de nivel de módulo (no hay closure), así que
+  `promoteToRan()` gana el mismo chequeo inline que ya usa `save()`,
+  justo al entrar al callback `.then()` del diálogo — es decir,
+  **se comprueba la identidad al EJECUTAR la operación** (cuando el
+  usuario confirma), no al iniciarla (cuando aún no se sabe si va a
+  confirmar) — y pasa `loadedProjectId` a `setModule("charter", ch,
+  loadedProjectId)`.
+
+Cubierto en `tests/smoke/wbs-builder.smoke.test.ts` y
+`tests/smoke/recopilar-requisitos.smoke.test.ts`: reproducen cada
+repro exacta (segunda pestaña activa B vía evento `storage`, antes/
+durante la confirmación) y confirman que B no recibe los datos de A ni
+A se corrompe. Verificado que ambos tests detectan el bug real:
+revertido cada fix por separado, "Sembrar Entregables" efectivamente
+mezcla la EDT de A con el entregable de B, y "Promover a RAN"
+efectivamente agrega el RAN de A al Acta de B (2 requisitos en vez de
+1).
+
 ## Las tres formas de referenciar el núcleo
 
 Cada módulo referencia `GPI` de una de tres formas — no asumir que es

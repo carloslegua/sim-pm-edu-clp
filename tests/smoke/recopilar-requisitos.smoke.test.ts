@@ -148,4 +148,66 @@ describe("Recopilar_Requisitos.html (migrado a requirements.js)", () => {
     expect(modOnclick).not.toContain('"');
     expect(modOnclick).toMatch(/^openModEditor\('[A-Za-z0-9_-]+'\)$/);
   });
+
+  it("BUG REPORTADO: 'Promover a RAN' no debe agregar el requisito de A al Acta de B si otra pestaña activó B durante la confirmación", async () => {
+    // Repro: "Iniciar Promover a RAN en Requisitos de A, cambiar a B y
+    // confirmar: el requisito de A se agrega al Acta de B." -- p1 (A) y p2
+    // (B) coexisten desde el arranque; Recopilar Requisitos carga con p1
+    // activo. El requisito sembrado NO tiene sourceRanIds, así que aparece
+    // como "emergente" (con el botón "Promover a RAN").
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto A", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            charter: { requirements: [] },
+            requirements: {
+              baseline: { frozen: false, version: "1.0", date: "", approver: "", snapshot: [] },
+              items: [{ id: "q1", code: "REQ.001", text: "Requisito de A", type: "funcional", priority: "should", status: "propuesto", sourceRanIds: [] }],
+              changes: [], idCounter: 2, changeCounter: 1
+            }
+          }
+        },
+        p2: {
+          schema: "gpi.project/v1",
+          meta: { id: "p2", name: "Proyecto B", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            charter: { requirements: [{ id: "ranB1", code: "RAN.01", text: "RAN real de B" }] }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Recopilar_Requisitos.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document, win = dom.window as any;
+
+    // Iniciar "Promover a RAN" -- abre el diálogo de confirmación.
+    win.promoteToRan("q1");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(doc.getElementById("ov")!.classList.contains("open")).toBe(true);
+
+    // Sin cerrar el diálogo, otra pestaña (el Panel de Control) activa B.
+    const db2 = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    db2.activeId = "p2";
+    dom.window.localStorage.setItem("gpi_db", JSON.stringify(db2));
+    dom.window.dispatchEvent(new dom.window.StorageEvent("storage", { key: "gpi_db" }));
+    await new Promise((r) => setTimeout(r, 50));
+
+    // El alumno, sin saber que B ya está activo, confirma el diálogo.
+    (doc.getElementById("ovOk") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 100));
+
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    // B (el proyecto activo ahora) NUNCA debe recibir el RAN de A.
+    expect(saved.projects.p2.modules.charter.requirements).toHaveLength(1);
+    expect(saved.projects.p2.modules.charter.requirements[0].code).toBe("RAN.01");
+    // A tampoco debe corromperse (la escritura, correctamente bloqueada, no
+    // debe tocarlo).
+    expect(saved.projects.p1.modules.charter.requirements).toHaveLength(0);
+  });
 });

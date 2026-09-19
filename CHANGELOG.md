@@ -66,6 +66,50 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Algunos guardados secundarios omitían la protección de identidad del
+  proyecto agregada en un fix anterior** — el usuario reportó, con
+  evidencia puntual, dos caminos: abrir WBS en A, activar B y pulsar
+  "Sembrar Entregables" — B recibía la EDT de A mezclada con sus
+  entregables; e iniciar "Promover a RAN" en Requisitos de A, cambiar a
+  B y confirmar — el requisito de A se agregaba al Acta de B. "El
+  guardado principal está protegido, pero estas operaciones llaman
+  directamente al núcleo sin pasar el identificador esperado."
+  Diagnóstico: la corrección anterior ("Ningún módulo guarda sin
+  verificar que el proyecto activo sigue siendo el que cargó") solo
+  auditó la función PRINCIPAL de guardado de cada módulo (`push()`/
+  `save()`); no buscó sistemáticamente otras llamadas directas a
+  `GPI.setModule()`/`GPI.patchMeta()` fuera de ella. Una auditoría
+  posterior (grep exhaustivo de `.setModule(`/`.patchMeta(` en los 13
+  módulos + lectura manual del contexto de cada una) confirmó que había
+  exactamente dos guardados secundarios así: `seedFromScope()` en
+  `src/modules/wbs/main.ts` (botón "Sembrar Entregables", sin diálogo de
+  confirmación pero con la misma falta de chequeo) y `promoteToRan()` en
+  `src/modules/requirements/main.ts` (botón "Promover a RAN", dentro del
+  callback `.then()` de un diálogo de confirmación — la ventana de
+  tiempo entre iniciar la acción y confirmarla es exactamente donde otra
+  pestaña puede cambiar el proyecto activo). Los otros 11 módulos no
+  tienen ninguna llamada al núcleo fuera de su función principal ya
+  protegida. Corrección, con un patrón distinto en cada archivo: en
+  `wbs.ts`, `seedFromScope()` ahora llama a `markDirty()` (el mecanismo
+  ya existente para avisar cualquier cambio estructural, que dispara el
+  `push()` real y ya protegido) en vez de escribir directo, y gana
+  además su propia comprobación de identidad ANTES de leer los
+  entregables (variable módulo-nivel nueva `ensureProjectFresh`,
+  asignada por `gpiBridge()` igual que `requestGpiPush`), para evitar el
+  mensaje de "listo" engañoso cuando el proyecto ya cambió; en
+  `requirements.ts`, `promoteToRan()` gana el mismo chequeo inline que
+  ya usa `save()`, justo al entrar al callback `.then()` del diálogo —
+  se comprueba la identidad al EJECUTAR la operación, no al iniciarla —
+  y pasa `loadedProjectId` a `setModule("charter", ch, loadedProjectId)`.
+  Nuevos casos en `tests/smoke/wbs-builder.smoke.test.ts` y
+  `tests/smoke/recopilar-requisitos.smoke.test.ts` que reproducen cada
+  repro exacta. Verificado que ambos detectan el bug real: revertido
+  cada fix por separado, "Sembrar Entregables" efectivamente mezcla la
+  EDT de A con el entregable de B, y "Promover a RAN" efectivamente
+  agrega el RAN de A al Acta de B (2 requisitos en vez de 1). Ver
+  ARCHITECTURE.md, sección "El hueco que dejó la primera pasada:
+  guardados SECUNDARIOS que llaman al núcleo directo".
+
 - **Recopilar Requisitos — un id importado se insertaba sin escapar en
   manejadores onclick inline (XSS, extensión del arreglo de Stakeholder
   Studio)** — el usuario reportó, con evidencia puntual

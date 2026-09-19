@@ -649,11 +649,18 @@ function promoteToRan(id: string): void {
   if (!gpiOn()) { ovAlert("Modo suelto", "Para promover un requisito a RAN del Acta, abre este módulo desde el Panel de Control (así se comparte el Acta del proyecto)."); return; }
   ovConfirm("Promover a RAN", "Se agregará este requisito como un nuevo RAN en el Acta de Constitución y se enlazará como su origen. ¿Continuar?", "Promover").then((ok) => {
     if (!ok) return;
+    // Guardado secundario reportado por el usuario: entre el clic en
+    // "Promover a RAN" y la confirmación del diálogo hay una ventana real
+    // para que otra pestaña active un proyecto B -- este callback escribía
+    // directo en GPI.setModule("charter", ...) sin pasar loadedProjectId
+    // ni comprobar identidad, así que el requisito de A terminaba
+    // agregado al Acta de B. Mismo guard que usa save() más arriba.
+    if (loadedProjectId != null && (GPI as GpiApi).activeId() !== loadedProjectId) { markProjectStale(); return; }
     const ch = (GPI as GpiApi).getModule("charter") || ({} as CharterModule); ch.requirements = Array.isArray(ch.requirements) ? ch.requirements : [];
     let mx = 0; ch.requirements.forEach((r) => { const m = r && typeof r === "object" && r.code && /RAN\.0*(\d+)/.exec(r.code); if (m) mx = Math.max(mx, Number(m[1])); });
     const num = mx + 1, code = "RAN." + (num < 10 ? "0" + num : num), rid = "ran" + num;
     ch.requirements.push({ id: rid, code, text: it.text });
-    (GPI as GpiApi).setModule("charter", ch);
+    (GPI as GpiApi).setModule("charter", ch, loadedProjectId);
     it.sourceRanIds = (it.sourceRanIds || []).concat([rid]);
     touch(); showToast(it.code + " ahora traza a " + code + " (agregado al Acta).");
   });

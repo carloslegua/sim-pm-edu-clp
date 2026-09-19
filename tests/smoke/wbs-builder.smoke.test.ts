@@ -273,4 +273,66 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
     expect(cost.value).toBe("700"); // conserva el valor manual sembrado, no se pisa con un estimado incompleto
     expect(doc.getElementById("propsPanel")!.textContent).not.toMatch(/Tomado de Estimar los Costos/);
   });
+
+  it("BUG REPORTADO: 'Sembrar Entregables' no debe mezclar la EDT de A con los entregables de B si otra pestaña activó B mientras tanto", async () => {
+    // Repro: "Abrir WBS en A, activar B y pulsar Sembrar Entregables: B
+    // recibe la EDT de A mezclada con sus entregables." -- p1 (A) y p2 (B)
+    // coexisten desde el arranque; WBS Builder carga con p1 activo.
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto A", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 2,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto A", children: ["w1"], duration: 0, cost: 0, resource: "", percent: 0, start: "", end: "", notes: "", collapsed: false, orientation: "spread" },
+                w1: { id: "w1", parentId: "root", name: "Paquete de A", duration: 5, cost: 1000, resource: "", percent: 0, start: "", end: "", notes: "", children: [], collapsed: false, orientation: "spread" }
+              }
+            },
+            scopeStatement: { deliverables: [{ id: "delA", code: "DEL.01", name: "Entregable de A" }], idCounter: 2, delCounter: 2 }
+          }
+        },
+        p2: {
+          schema: "gpi.project/v1",
+          meta: { id: "p2", name: "Proyecto B", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            scopeStatement: { deliverables: [{ id: "delB", code: "DEL.01", name: "Entregable de B" }], idCounter: 2, delCounter: 2 }
+            // B NUNCA tuvo EDT -- justamente lo que no debe recibir la de A.
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "WBS_Builder.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    expect(Array.from(doc.querySelectorAll("#canvas .node")).some((n) => n.textContent?.includes("Paquete de A"))).toBe(true);
+
+    // Otra pestaña (el Panel de Control) activa B -- mismo mecanismo que
+    // tests/smoke/project-charter.smoke.test.ts y
+    // tests/e2e/wbs-authority-propagation.spec.ts.
+    const db2 = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    db2.activeId = "p2";
+    dom.window.localStorage.setItem("gpi_db", JSON.stringify(db2));
+    dom.window.dispatchEvent(new dom.window.StorageEvent("storage", { key: "gpi_db" }));
+    await new Promise((r) => setTimeout(r, 50));
+
+    // El alumno, sin recargar esta pestaña, pulsa "Sembrar Entregables".
+    (doc.getElementById("btnSeedScope") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 200));
+
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    // B (el proyecto activo ahora) NUNCA debe recibir la EDT de A.
+    expect(saved.projects.p2.modules.wbs).toBeUndefined();
+    // A tampoco debe corromperse (la escritura, correctamente bloqueada,
+    // no debe tocarlo -- y esta pestaña ya no puede guardar aquí).
+    expect(saved.projects.p1.modules.wbs.nodes.w1.name).toBe("Paquete de A");
+    // El aviso de proyecto desactualizado quedó visible.
+    expect(doc.getElementById("statusLeft")!.textContent).toMatch(/proyecto activo cambió/);
+  });
 });

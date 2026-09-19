@@ -87,6 +87,16 @@ let idCounter = 1;
 // cambios puramente de vista (zoom, orientación, colapsar/expandir), que
 // no son datos que otros módulos lean.
 let requestGpiPush: (() => void) | null = null;
+// Misma idea que requestGpiPush, pero para comprobar identidad ANTES de
+// empezar una operación que lee datos de OTRO módulo del proyecto activo
+// (p. ej. seedFromScope() trae entregables de "Enunciado del Alcance") --
+// gpiBridge() la asigna una vez que confirma qué proyecto cargó esta
+// pestaña. Sin esto, una operación así podía leer datos frescos de un
+// proyecto B recién activado en otra pestaña y mezclarlos con la EDT
+// vieja de A, todavía en memoria -- el guardado final (vía markDirty() /
+// push()) ya lo bloquea, pero comprobarlo también ACÁ evita el mensaje de
+// "listo" engañoso cuando en realidad no se guardó nada.
+let ensureProjectFresh: (() => boolean) | null = null;
 let dirtyTimer: ReturnType<typeof setTimeout> | undefined;
 function markDirty(): void {
   clearTimeout(dirtyTimer);
@@ -1412,6 +1422,14 @@ async function seedFromScope(): Promise<void> {
     await showAlert("La siembra de entregables necesita un proyecto activo. Abre la EDT desde el Panel de Control.", "Sembrar Entregables");
     return;
   }
+  // Bug real reportado por el usuario: activar OTRO proyecto (B) en otra
+  // pestaña mientras esta seguía sobre A y pulsar "Sembrar Entregables"
+  // traía los entregables de B (lectura fresca) y los mezclaba con la EDT
+  // de A (todavía en memoria aquí). Comprobar la identidad ANTES de leer
+  // el Enunciado del Alcance evita el trabajo y el mensaje de "listo"
+  // engañoso; markDirty() más abajo también la comprueba de nuevo justo
+  // antes de guardar.
+  if (ensureProjectFresh && !ensureProjectFresh()) return;
   const p = window.GPI.active();
   gpiScopeModule = (p && p.modules && p.modules.scopeStatement) || null;
   const dels = (gpiScopeModule && window.GPI.util) ? window.GPI.util.scopeDeliverables(gpiScopeModule) : [];
@@ -1436,7 +1454,19 @@ async function seedFromScope(): Promise<void> {
     added++;
   });
   render(); setTimeout(fitToScreen, 50);
-  if (window.GPI.active()) window.GPI.setModule("wbs", { rootId, idCounter, nodes });
+  // markDirty() (no un GPI.setModule(...) directo aquí) -- guardado
+  // secundario reportado por el usuario: esta función leía
+  // window.GPI.active() FRESCO en cada llamada (solo para saber si hay
+  // ALGÚN proyecto activo), pero nunca comprobaba que siguiera siendo el
+  // MISMO proyecto que esta pestaña cargó -- si otra pestaña activaba un
+  // proyecto B mientras esta seguía en A, "Sembrar Entregables" mezclaba
+  // los entregables de B (recién leídos) con la EDT de A (todavía en
+  // memoria) y la escribía sobre B, sin pasar por el guard de
+  // gpiBridge()/push(). markDirty() (ver su comentario al inicio del
+  // archivo) dispara requestGpiPush -> push(), que SÍ verifica
+  // GPI.activeId() === loadedProjectId antes de guardar -- mismo camino
+  // que ya usan "+ Fase"/"+ Subtarea" para cualquier cambio estructural.
+  markDirty();
   const msg = added
     ? ("Se sembraron " + added + " entregable(s) como ramas de la EDT" + (linked ? (" y se enlazaron " + linked + " existentes") : "") + ". Ahora descompón cada entregable en sus paquetes de trabajo.")
     : (linked ? ("Se enlazaron " + linked + " rama(s) existentes con sus entregables.")
@@ -1604,6 +1634,10 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
   // al Panel con el mismo debounce de 800ms que usan los demás módulos, sin
   // depender solo de ocultar la pestaña o cerrarla.
   requestGpiPush = push;
+  ensureProjectFresh = () => {
+    if (loadedProjectId != null && GPI.activeId() !== loadedProjectId) { markProjectStale(); return false; }
+    return true;
+  };
   // Sincronización ligera: si la Matriz RACI cambia en OTRA pestaña (p. ej. se
   // asigna un nuevo "R"), refresca solo los campos "Responsable" ya afectados —
   // sin tocar selección, zoom ni el resto de campos que el usuario esté editando.

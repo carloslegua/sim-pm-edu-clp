@@ -30,6 +30,7 @@
 	var currentView = "tree";
 	var idCounter = 1;
 	var requestGpiPush = null;
+	var ensureProjectFresh = null;
 	var dirtyTimer;
 	function markDirty() {
 		clearTimeout(dirtyTimer);
@@ -1435,6 +1436,7 @@
 			await showAlert("La siembra de entregables necesita un proyecto activo. Abre la EDT desde el Panel de Control.", "Sembrar Entregables");
 			return;
 		}
+		if (ensureProjectFresh && !ensureProjectFresh()) return;
 		const p = window.GPI.active();
 		gpiScopeModule = p && p.modules && p.modules.scopeStatement || null;
 		const dels = gpiScopeModule && window.GPI.util ? window.GPI.util.scopeDeliverables(gpiScopeModule) : [];
@@ -1466,11 +1468,7 @@
 		});
 		render();
 		setTimeout(fitToScreen, 50);
-		if (window.GPI.active()) window.GPI.setModule("wbs", {
-			rootId,
-			idCounter,
-			nodes
-		});
+		markDirty();
 		const msg = added ? "Se sembraron " + added + " entregable(s) como ramas de la EDT" + (linked ? " y se enlazaron " + linked + " existentes" : "") + ". Ahora descompón cada entregable en sus paquetes de trabajo." : linked ? "Se enlazaron " + linked + " rama(s) existentes con sus entregables." : "Todos los entregables del alcance ya están representados en la EDT.";
 		setStatus(msg);
 		await showAlert(msg, "Sembrar Entregables");
@@ -1653,6 +1651,13 @@
 			}, loadedProjectId);
 		}
 		requestGpiPush = push;
+		ensureProjectFresh = () => {
+			if (loadedProjectId != null && GPI.activeId() !== loadedProjectId) {
+				markProjectStale();
+				return false;
+			}
+			return true;
+		};
 		function refreshRaciSync() {
 			const p = GPI.active();
 			if (!p) return;

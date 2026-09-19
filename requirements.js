@@ -1011,6 +1011,10 @@
 		}
 		ovConfirm("Promover a RAN", "Se agregará este requisito como un nuevo RAN en el Acta de Constitución y se enlazará como su origen. ¿Continuar?", "Promover").then((ok) => {
 			if (!ok) return;
+			if (loadedProjectId != null && GPI.activeId() !== loadedProjectId) {
+				markProjectStale();
+				return;
+			}
 			const ch = GPI.getModule("charter") || {};
 			ch.requirements = Array.isArray(ch.requirements) ? ch.requirements : [];
 			let mx = 0;
@@ -1024,7 +1028,7 @@
 				code,
 				text: it.text
 			});
-			GPI.setModule("charter", ch);
+			GPI.setModule("charter", ch, loadedProjectId);
 			it.sourceRanIds = (it.sourceRanIds || []).concat([rid]);
 			touch();
 			showToast(it.code + " ahora traza a " + code + " (agregado al Acta).");
