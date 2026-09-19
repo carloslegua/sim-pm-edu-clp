@@ -245,12 +245,12 @@
 <div class="toast" id="toast"></div>
 
 <!-- JSZip: genera la plantilla combinada .xlsx (varias hojas, una por módulo
-     que importa desde Excel). integrity: hash SRI oficial de cdnjs para esta
-     versión exacta -- si el CDN sirviera contenido distinto, el navegador
-     rechaza el script en vez de ejecutarlo. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
-        integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+     que importa desde Excel). Vendorizado en el repo (jszip.min.js, ver
+     scripts/sync-jszip.mjs / "npm run build:jszip") en vez de cargarse desde
+     un CDN: antes dependía de Internet incluso bajo file:// o con `npm run
+     dev` -- bug real reportado por el usuario (mensaje engañoso al fallar la
+     importación de .xlsx en otros módulos con el CDN bloqueado). -->
+<script src="jszip.min.js"></script>
 <script src="gpi-core.js"></script>
 <script src="panel-control.js"></script>
 </body>

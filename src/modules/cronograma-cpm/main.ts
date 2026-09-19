@@ -991,6 +991,17 @@ function rowsToPasted(rows: string[][], colMap: ColumnMap): PastedRowLocal[] {
   return out;
 }
 async function importScheduleExcel(file: File): Promise<void> {
+  // Distinguir "la librería para leer .xlsx no cargó" de "el archivo está
+  // mal" -- bug real reportado por el usuario: con JSZip vendorizado en el
+  // repo (ver Cronograma_CPM.html) esto ya no depende de Internet, pero
+  // sigue siendo la comprobación correcta si el script no llegó a cargar por
+  // cualquier otro motivo. Antes, sin esta comprobación, window.JSZip
+  // undefined hacía fallar el try/catch de abajo con el mismo mensaje que un
+  // archivo corrupto -- engañoso.
+  if (!window.JSZip) {
+    await showAlert("No se pudo cargar la librería para leer archivos .xlsx (JSZip). Recargá la página e intentá de nuevo; este archivo no llegó a leerse, no es que el .xlsx esté mal.");
+    return;
+  }
   let parsed: ParsedXlsx;
   try {
     parsed = await parseScheduleXlsx(file);

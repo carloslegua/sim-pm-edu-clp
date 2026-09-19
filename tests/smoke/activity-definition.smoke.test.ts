@@ -181,6 +181,41 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
     expect(saved.projects.p1.modules.activities).toBeUndefined();
   });
 
+  it("SEGURIDAD/UX: si JSZip no llegó a cargar, el aviso lo dice -- no confunde 'librería ausente' con 'archivo inválido'", async () => {
+    // Bug real reportado por el usuario: con el CDN de JSZip bloqueado, un
+    // .xlsx VÁLIDO producía el mismo mensaje engañoso que un archivo
+    // corrupto ("no parece ser un .xlsx válido"). JSZip ahora se vendoriza
+    // en el repo (jszip.min.js, ver Activity_Definition.html) en vez de
+    // depender de un CDN, así que esto ya no puede pasar por falta de
+    // Internet -- pero la comprobación explícita sigue siendo necesaria por
+    // cualquier otro motivo por el que window.JSZip no llegue a existir
+    // (bloqueo del navegador, caché corrupta, etc.). Se simula borrando
+    // window.JSZip después de que la página cargó, igual que "CDN bloqueado"
+    // desde el punto de vista del código que importa el archivo.
+    const dom = await JSDOM.fromURL(base + "Activity_Definition.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    const win = dom.window as any;
+    expect(win.JSZip).toBeDefined(); // confirma que sí cargó localmente antes de borrarlo a propósito
+    delete win.JSZip;
+
+    const anyFile = new win.File(["contenido irrelevante"], "actividades.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const input = doc.getElementById("xlsxFileInput") as HTMLInputElement;
+    Object.defineProperty(input, "files", { value: [anyFile], writable: false, configurable: true });
+    input.dispatchEvent(new win.Event("change", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect((doc.getElementById("modalOverlay") as HTMLElement).classList.contains("open")).toBe(true);
+    const msg = (doc.getElementById("modalMsg") as HTMLElement).textContent || "";
+    expect(msg).toMatch(/no se pudo cargar la librería/i);
+    expect(msg).not.toMatch(/no parece ser un \.xlsx válido/);
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    expect(saved.projects.p1.modules.activities).toBeUndefined();
+  });
+
   it("'⇩ Cargar ejemplo en el proyecto' SÍ reemplaza las actividades del proyecto activo real, emparejando por Código EDT", async () => {
     // A diferencia del "Modo ejemplo" (sandbox), esta acción reconcilia las
     // actividades de ejemplo de DISTRIB+ contra la EDT REAL -- ver el

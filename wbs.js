@@ -1348,6 +1348,10 @@
 		selectedId = rootId;
 	}
 	async function importWbsExcel(file) {
+		if (!window.JSZip) {
+			await showAlert("No se pudo cargar la librería para leer archivos .xlsx (JSZip). Recargá la página e intentá de nuevo; este archivo no llegó a leerse, no es que el .xlsx esté mal.");
+			return;
+		}
 		let parsed;
 		try {
 			parsed = await parseWbsXlsx(file);

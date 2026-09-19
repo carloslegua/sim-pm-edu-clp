@@ -118,6 +118,8 @@ src/shared/styles/shared.css     → gpi-shared.css        (CSS común)
 configs/<clave>.vite.config.ts   → config de build de ese módulo
 configs/lib.config.mjs           → factory compartida de vite.config
 scripts/sync-artifact.mjs        → copia .build-tmp/<clave>/* a la raíz
+scripts/sync-jszip.mjs           → vendoriza node_modules/jszip/dist/jszip.min.js
+                                    (npm run build:jszip -- ver "Trampas")
 scripts/build-all.mjs            → build:all (ver Regla #2)
 scripts/verify-deploy.mjs        → verify:deploy
 tests/unit/                      → GPI.util puro (cpm, pertProbability, audits…)
@@ -252,6 +254,26 @@ scripts/static-server.mjs        → servidor HTTP mínimo, usado por tests/e2e
   parte que cuelga). El fixture `.xlsx` de ese E2E se arma con el paquete
   `jszip` de npm en Node puro (no con `window.JSZip` del navegador), para
   no depender en absoluto de la ruta rota.
+- **`JSZip` está vendorizado en el repo (`jszip.min.js`, raíz), no se
+  carga desde un CDN**: cargaba antes desde `cdnjs.cloudflare.com` con
+  hash SRI fijado. Bug real reportado por el usuario: con el CDN
+  bloqueado (red del aula, sin conexión), la importación de un `.xlsx`
+  real en `activities`/`cost-estimate`/`cronograma-cpm`/`wbs` fallaba
+  con el mismo mensaje que un archivo corrupto ("no parece ser un .xlsx
+  válido"), porque `window.JSZip` quedaba `undefined` y el `try/catch`
+  genérico no distinguía las dos causas. `npm run build:jszip`
+  (`scripts/sync-jszip.mjs` + `sync-artifact.mjs`) copia
+  `node_modules/jszip/dist/jszip.min.js` — la MISMA versión que ya usan
+  los fixtures de `tests/e2e/*-import.spec.ts` — a la raíz; los 5 HTML
+  que lo usan (`Activity_Definition`, `Cronograma_CPM`, `Estimar_Costos`,
+  `Panel_Control`, `WBS_Builder`) cargan `<script src="jszip.min.js">`
+  en vez del CDN. `npm run build:all` incluye este paso y detecta si el
+  vendorizado quedó desfasado de `node_modules/jszip`, igual que
+  cualquier otro artefacto (ver Regla #2). Los 4 módulos que importan
+  `.xlsx` además comprueban `window.JSZip` explícitamente ANTES de
+  intentar parsear, para seguir distinguiendo "la librería no cargó" de
+  "el archivo está mal" aunque `jszip.min.js` falle por cualquier otro
+  motivo (caché corrupta, bloqueo del navegador).
 - `eslint.config.mjs` usa extensión `.mjs`, no `.js`: `scripts/verify-deploy.mjs`
   trata cualquier `*.js` en la raíz del repo como un artefacto IIFE
   compilado, y un archivo de config con `import`/`export` a nivel

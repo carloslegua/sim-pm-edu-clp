@@ -66,6 +66,45 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **JSZip dependía de un CDN externo y el mensaje de error resultaba
+  engañoso cuando faltaba** — el usuario reportó: con la CDN bloqueada,
+  un archivo `.xlsx` válido produjo el mensaje "no parece ser un .xlsx
+  válido" al importarlo; con acceso autorizado, las pruebas pasaron. La
+  exportación ofrece CSV de reserva, pero eso no resuelve la
+  importación de `.xlsx` sin conexión. Diagnóstico:
+  `Activity_Definition.html`, `Cronograma_CPM.html`, `Estimar_Costos.html`,
+  `Panel_Control.html` y `WBS_Builder.html` cargaban JSZip desde
+  `cdnjs.cloudflare.com`; con el CDN inalcanzable, `window.JSZip`
+  quedaba `undefined`, `(window.JSZip as JSZipCtor).loadAsync(buf)`
+  lanzaba un `TypeError` inmediato, y el `try/catch` genérico alrededor
+  del parseo de `activities`/`cost-estimate`/`cronograma-cpm`/`wbs` no
+  distinguía "la librería no cargó" de "el archivo está mal". Corrección
+  en dos partes, exactamente la recomendada: (1) JSZip se vendoriza en
+  el repo — `npm run build:jszip` (`scripts/sync-jszip.mjs` nuevo, más
+  `sync-artifact.mjs`) copia `node_modules/jszip/dist/jszip.min.js`
+  (bundle UMD, sin ESM, la misma versión que ya usan los fixtures de
+  `tests/e2e/*-import.spec.ts`) a la raíz como `jszip.min.js`, y los 5
+  HTML cargan ese archivo local en vez de la URL del CDN — elimina la
+  dependencia de Internet para el uso normal (`file://`, GitHub Pages,
+  `npm run dev`); `npm run build:all` reconstruye y verifica su frescura
+  igual que a cualquier otro artefacto. (2) Los 4 módulos que importan
+  `.xlsx` comprueban `!window.JSZip` como primer paso, antes de intentar
+  parsear, y muestran un aviso distinto si la librería no está —
+  defensa en profundidad por si `jszip.min.js` falla por cualquier otro
+  motivo (caché corrupta, bloqueo del navegador), ya no solo por
+  Internet. Nuevo caso en `tests/smoke/activity-definition.smoke.test.ts`
+  (representativo de los 4 módulos, mismo parche mecánico): borra
+  `window.JSZip` tras cargar la página y confirma que el aviso
+  distingue "librería ausente" de "archivo inválido". Verificado que el
+  test detecta el bug real: revertidos temporalmente el HTML y el
+  `.ts` de `activities`, el mismo intento de import reproduce el
+  mensaje engañoso que reportó el usuario. Efecto colateral positivo:
+  los propios smoke tests dependían silenciosamente de que el CDN fuera
+  alcanzable desde el entorno de test; con el vendorizado local esa
+  dependencia de red desaparece también de la suite. Ver
+  ARCHITECTURE.md, sección "JSZip vendorizado en el repo, no cargado
+  desde un CDN".
+
 - **`scripts/static-server.mjs` — el servidor local permitía leer
   archivos fuera del repositorio (path traversal)** — el usuario
   reportó: una ruta con segmentos `..` codificados recibió HTTP 200 y

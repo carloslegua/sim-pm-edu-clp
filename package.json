@@ -7,6 +7,7 @@
     "dev": "node scripts/static-server.mjs",
     "build:core": "vite build --config configs/core.vite.config.ts && node scripts/sync-artifact.mjs gpi-core.js",
     "build:shared": "node scripts/build-shared-css.mjs",
+    "build:jszip": "node scripts/sync-jszip.mjs && node scripts/sync-artifact.mjs jszip.min.js",
     "build:obs": "vite build --config configs/obs.vite.config.ts && node scripts/sync-artifact.mjs obs.js",
     "build:raci": "vite build --config configs/raci.vite.config.ts && node scripts/sync-artifact.mjs raci.js",
     "build:cost": "vite build --config configs/cost.vite.config.ts && node scripts/sync-artifact.mjs cost.js",

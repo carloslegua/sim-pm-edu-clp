@@ -1190,6 +1190,65 @@ Costs")
   siguieron los demás (`addEventListener`, `window.GPI`, `esc()` local,
   `gpi-shared.css` para el modal).
 
+## JSZip vendorizado en el repo, no cargado desde un CDN
+
+Bug real reportado por el usuario: `Activity_Definition.html`,
+`Cronograma_CPM.html`, `Estimar_Costos.html`, `Panel_Control.html` y
+`WBS_Builder.html` cargaban JSZip desde `cdnjs.cloudflare.com` (con hash
+SRI fijado a la versión exacta). Con el CDN bloqueado (red del aula,
+firewall corporativo, sin conexión), un `.xlsx` completamente válido
+producía el mensaje "El archivo no parece ser un .xlsx válido" al
+importarlo en `activities`/`cost-estimate`/`cronograma-cpm`/`wbs` — el
+mismo mensaje que un archivo corrupto. Causa: `window.JSZip` quedaba
+`undefined`, `(window.JSZip as JSZipCtor).loadAsync(buf)` lanzaba un
+`TypeError` inmediato, y el `try/catch` genérico alrededor de
+`parseXxxXlsx()` no distinguía "la librería no cargó" de "el archivo
+está mal". La exportación tiene un CSV de reserva cuando JSZip no está
+(documentado desde antes en cada módulo), pero eso no resuelve la
+IMPORTACIÓN de `.xlsx`, que sí necesita JSZip sí o sí.
+
+Corrección en dos partes:
+
+1. **Vendorizado, no CDN**: `npm run build:jszip`
+   (`scripts/sync-jszip.mjs` + `scripts/sync-artifact.mjs`) copia
+   `node_modules/jszip/dist/jszip.min.js` — un bundle UMD clásico, sin
+   sintaxis ESM, que cuelga `window.JSZip` igual que la copia de CDN, y
+   es la MISMA versión que ya usan los fixtures de
+   `tests/e2e/*-import.spec.ts` (paquete `jszip` de npm) — a la raíz del
+   repo, tratado como cualquier otro artefacto (`npm run build:all` lo
+   reconstruye y verifica su frescura contra `node_modules/jszip` igual
+   que a los `.js` compilados por Vite, ver Regla #2 de CLAUDE.md). Los
+   5 HTML cargan `<script src="jszip.min.js">` en vez de la URL del
+   CDN. Esto elimina la dependencia de Internet para el uso normal
+   (`file://`, GitHub Pages, `npm run dev`) — la misma filosofía que ya
+   aplicaba a todo el resto de la suite.
+2. **Distinguir "librería ausente" de "archivo inválido"**: los 4
+   módulos que importan `.xlsx` (`activities`, `cost-estimate`,
+   `cronograma-cpm`, `wbs`) comprueban `!window.JSZip` como PRIMER paso
+   de su función de import, antes del `try/catch` que parsea el
+   archivo, y muestran un aviso distinto ("No se pudo cargar la
+   librería para leer archivos .xlsx (JSZip)...") si la librería no
+   está. Con JSZip vendorizado esto ya no puede pasar por falta de
+   Internet, pero sigue siendo la comprobación correcta si el script no
+   carga por cualquier otro motivo (caché corrupta, bloqueo del
+   navegador) — defensa en profundidad, mismo criterio que otras
+   correcciones de esta sesión.
+
+Cubierto en `tests/smoke/activity-definition.smoke.test.ts` (nuevo
+caso, representativo de los 4 módulos con el mismo parche mecánico):
+borra `window.JSZip` después de que la página cargó (simula "CDN
+bloqueado"/"script no disponible" desde el punto de vista del código
+que importa) y confirma que el aviso distingue "librería ausente" de
+"archivo inválido". Verificado que el test detecta el bug real:
+revertidos temporalmente el HTML y el `.ts` de `activities` (y
+reconstruido su artefacto), el mismo intento de import muestra el
+mensaje engañoso de "archivo inválido" que reportó el usuario. Como
+efecto colateral positivo: antes, los propios smoke tests (jsdom con
+`resources:"usable"`) dependían silenciosamente de que
+`cdnjs.cloudflare.com` fuera alcanzable desde el entorno de test para
+que `window.JSZip` cargara — con el vendorizado local, esa dependencia
+de red también desaparece de la suite de tests.
+
 ## `scripts/static-server.mjs` — la ruta pedida se resuelve DENTRO de la raíz del repo
 
 Bug real reportado por el usuario: el servidor mínimo que usan `npm run

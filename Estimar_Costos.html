@@ -187,12 +187,13 @@
 <link rel="stylesheet" href="gpi-shared.css">
 <script src="gpi-core.js"></script>
 <!-- JSZip: generación/lectura de .xlsx en el navegador (si no carga, se exporta
-     CSV equivalente). integrity: hash SRI oficial de cdnjs para esta versión
-     exacta -- si el CDN sirviera contenido distinto, el navegador rechaza el
-     script en vez de ejecutarlo, y la app cae al CSV de todas formas. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
-        integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+     CSV equivalente). Vendorizado en el repo (jszip.min.js, ver
+     scripts/sync-jszip.mjs / "npm run build:jszip") en vez de cargarse desde
+     un CDN: antes dependía de Internet incluso bajo file:// o con `npm run
+     dev`, y si el CDN estaba bloqueado, la importación de un .xlsx real
+     fallaba con un mensaje engañoso ("no parece ser un .xlsx válido") en vez
+     de avisar que la librería no cargó -- bug real reportado por el usuario. -->
+<script src="jszip.min.js"></script>
 </head>
 <body>
 
