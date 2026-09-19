@@ -40,6 +40,14 @@ let mem: GpiDb | null = null;
 // (incluida exportActive()) ve los cambios pendientes, y un futuro
 // guardado exitoso (el alumno libera espacio) la limpia.
 let pendingUnsaved: GpiDb | null = null;
+// Foto de la base tal como estaba en disco ANTES de la primera falla de
+// esta racha de cuota agotada -- ver mergeWithDisk(). Sin esto, al
+// reconciliar solo podríamos comparar "mi copia" contra "lo que hay en
+// disco ahora", sin saber qué cambió cada lado respecto de un punto en
+// común, y perderíamos de todas formas el módulo que la OTRA pestaña
+// alcanzó a guardar si esta pestaña vuelve a tocar el mismo proyecto
+// (aunque sea un módulo distinto) antes de reintentar.
+let pendingBase: GpiDb | null = null;
 
 function avail(): boolean {
   try {
@@ -55,12 +63,16 @@ export { avail as available };
 
 function fresh(): GpiDb { return { version: 1, activeId: null, projects: {} }; }
 function db(): GpiDb {
-  if (!avail()) return mem || (mem = fresh());
   // Hay una versión más reciente que localStorage rechazó por cuota --
   // servirla a toda lectura/escritura hasta que un guardado futuro
   // vuelva a tener éxito, en vez de volver silenciosamente a la última
   // que sí quedó en disco (que ya no refleja el trabajo del alumno).
+  // Va ANTES que avail(): si la cuota empeora tanto que hasta la sonda
+  // de 1 byte de avail() empieza a fallar, esto ya no debe devolver un
+  // respaldo VACÍO (bug real reportado por el usuario) -- pendingUnsaved
+  // sigue siendo la mejor versión conocida, con o sin acceso a disco.
   if (pendingUnsaved) return pendingUnsaved;
+  if (!avail()) return mem || (mem = fresh());
   try {
     return (JSON.parse(localStorage.getItem(KEY) as string) as GpiDb) || fresh();
   } catch (e) {
@@ -75,6 +87,70 @@ export { db as raw };
 // además del aviso visual ya existente.
 export function hasUnsavedChanges(): boolean { return pendingUnsaved !== null; }
 
+// Cuando "d" es la propia pendingUnsaved (un reintento tras una cuota
+// agotada, ver save()), esta pestaña puede llevar minutos u horas
+// desconectada de lo que OTRAS pestañas sí lograron guardar
+// normalmente en ese lapso -- pendingUnsaved es un clon COMPLETO de
+// toda la base (todos los proyectos), tomado ANTES de que empezara el
+// fallo. Escribirlo tal cual pisaría cualquier proyecto (o módulo
+// dentro de un proyecto) que otra pestaña haya guardado mientras esta
+// seguía atascada -- bug real reportado por el usuario: dos pestañas
+// comparten almacenamiento, A retiene un cambio pendiente por cuota, B
+// guarda una actualización de costos, A recupera la capacidad de
+// guardar y escribe su copia completa anterior: la actualización de
+// costos desaparece.
+//
+// Concilia a TRES bandas (base/ours/theirs), no solo "ours vs. theirs":
+// - projects que solo están en disco (theirs) -- de un proyecto que
+//   esta pestaña ni siquiera conoce -- se conservan tal cual.
+// - projects que solo están en "d" (ours) -- creados por esta pestaña
+//   mientras estaba atascada -- se agregan tal cual.
+// - projects en ambos lados: se concilia MÓDULO POR MÓDULO contra
+//   pendingBase (la foto de disco al momento de la primera falla): un
+//   módulo que cambió de un solo lado respecto de la base se conserva
+//   del lado que cambió; si NINGÚN lado lo tocó, se conserva tal cual
+//   (da igual cuál); si AMBOS lados lo cambiaron (conflicto real, poco
+//   común), gana "ours" -- esta pestaña es la que está guardando en
+//   este momento, y es preferible conservar su trabajo a descartarlo
+//   en silencio, que es como se comportaba el bug. Sin pendingBase
+//   (no debería pasar en el flujo normal) cae al criterio anterior,
+//   más simple: todo el proyecto de quien tenga el meta.updatedAt más
+//   reciente.
+//
+// activeId se toma de disco cuando existe: es un puntero global, y otra
+// pestaña pudo haber activado un proyecto distinto mientras esta seguía
+// atascada.
+function mergeProjectModules(ours: GpiProject, theirs: GpiProject, base: GpiProject | undefined): GpiProject {
+  if (!base) return (ours.meta.updatedAt || 0) >= (theirs.meta.updatedAt || 0) ? ours : theirs;
+  const oursMods = (ours.modules || {}) as Record<string, unknown>;
+  const theirsMods = (theirs.modules || {}) as Record<string, unknown>;
+  const baseMods = (base.modules || {}) as Record<string, unknown>;
+  const merged: Record<string, unknown> = Object.assign({}, theirsMods);
+  const keys = new Set([...Object.keys(oursMods), ...Object.keys(theirsMods), ...Object.keys(baseMods)]);
+  keys.forEach((mk) => {
+    const oursChanged = JSON.stringify(oursMods[mk]) !== JSON.stringify(baseMods[mk]);
+    if (oursChanged) merged[mk] = oursMods[mk];
+  });
+  return {
+    schema: ours.schema,
+    meta: (ours.meta.updatedAt || 0) >= (theirs.meta.updatedAt || 0) ? ours.meta : theirs.meta,
+    modules: merged as GpiProject["modules"]
+  };
+}
+function mergeWithDisk(d: GpiDb): GpiDb {
+  let diskRaw: string | null = null;
+  try { diskRaw = localStorage.getItem(KEY); } catch (_) { /* noop */ }
+  if (!diskRaw) return d;
+  let disk: GpiDb;
+  try { disk = JSON.parse(diskRaw) as GpiDb; } catch (_) { return d; }
+  const projects: Record<string, GpiProject> = Object.assign({}, disk.projects);
+  Object.keys(d.projects).forEach((id) => {
+    const ours = d.projects[id], theirs = disk.projects[id];
+    projects[id] = theirs ? mergeProjectModules(ours, theirs, pendingBase ? pendingBase.projects[id] : undefined) : ours;
+  });
+  return { version: d.version, activeId: disk.activeId != null ? disk.activeId : d.activeId, projects };
+}
+
 // Devuelve true si el guardado llegó a localStorage, false si falló
 // (queda igual retenido en pendingUnsaved -- ver db()). Antes esta
 // función no devolvía nada y sus llamadoras (setModule, patchMeta...)
@@ -83,8 +159,9 @@ export function hasUnsavedChanges(): boolean { return pendingUnsaved !== null; }
 function save(d: GpiDb): boolean {
   if (!avail()) { mem = d; return true; } // modo memoria (sin localStorage): degradado pero no es un fallo de escritura
   try {
-    localStorage.setItem(KEY, JSON.stringify(d));
-    pendingUnsaved = null; // volvió a guardar bien: ya no hace falta el respaldo en memoria
+    const toWrite = d === pendingUnsaved ? mergeWithDisk(d) : d;
+    localStorage.setItem(KEY, JSON.stringify(toWrite));
+    pendingUnsaved = null; pendingBase = null; // volvió a guardar bien: ya no hace falta ni el respaldo ni la base de conciliación
     hideQuotaNotice();
     return true;
   } catch (e) {
@@ -92,6 +169,13 @@ function save(d: GpiDb): boolean {
     // antes esto fallaba EN SILENCIO y el alumno perdía cambios sin
     // avisar. Ahora se retiene la versión intentada (pendingUnsaved,
     // ver arriba) en vez de descartarla.
+    if (pendingUnsaved == null) {
+      // primera falla de esta racha: capturar la foto de disco de la
+      // que "d" partió, para poder conciliar por módulo más adelante
+      // (ver mergeWithDisk) -- en fallas consecutivas de la MISMA
+      // racha, pendingBase ya está capturada y no se vuelve a tocar.
+      try { pendingBase = JSON.parse(localStorage.getItem(KEY) as string) as GpiDb; } catch (_) { pendingBase = null; }
+    }
     pendingUnsaved = d;
     showQuotaNotice();
     return false;

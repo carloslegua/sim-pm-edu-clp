@@ -110,6 +110,54 @@ que deben poder reabrirse.
   exitoso (el alumno libera espacio borrando proyectos viejos desde el
   Panel, o el navegador deja de estar lleno). Cubierto en
   `tests/unit/quota-recovery.test.ts`.
+  - **Ese primer fix, a su vez, tenía dos huecos reales (reportados
+    después) al compartir `localStorage` entre pestañas**: (1) `db()`
+    comprobaba `avail()` ANTES que `pendingUnsaved` — si la cuota
+    empeoraba tanto que hasta la sonda de 1 byte de `avail()` empezaba a
+    fallar, la lectura devolvía un respaldo VACÍO (`fresh()`) en vez del
+    cambio pendiente que sí tenía en memoria; corregido invirtiendo el
+    orden (`pendingUnsaved` se comprueba primero, sin importar si
+    `avail()` sigue funcionando). (2) Al recuperar la capacidad de
+    guardar, `save()` escribía `pendingUnsaved` TAL CUAL — un clon
+    completo de TODA la base, tomado ANTES de que empezara el fallo. Si
+    OTRA pestaña (compartiendo el mismo `localStorage`) sí lograba
+    guardar algo mientras esta seguía atascada (p. ej. una actualización
+    de costos), esa escritura la pisaba por completo al recuperarse —
+    "A recuperó la capacidad de guardar y escribió su copia completa
+    anterior: la actualización de costos desapareció". `pendingUnsaved`
+    es en sí mismo una variable de módulo por pestaña (no cruza
+    pestañas): eso significa que, MIENTRAS una pestaña sigue atascada,
+    otra pestaña (p. ej. el Panel) que exporte leerá la última versión
+    persistida en disco, sin ese cambio pendiente — limitación inherente
+    a no tener ningún canal entre pestañas (`BroadcastChannel` o
+    similar) más allá de `localStorage` mismo; lo que SÍ se corrigió es
+    que, cuando la pestaña atascada finalmente guarda con éxito, ya no
+    destruye lo que las demás lograron guardar en el ínterin.
+    `mergeWithDisk()`/`mergeProjectModules()` (nuevas) reconcilian a TRES
+    bandas antes de escribir — base/`ours`/`theirs` — contra
+    `pendingBase` (una foto de disco capturada en la PRIMERA falla de
+    cada racha de cuota agotada, no en cada reintento): por proyecto (un
+    proyecto que sólo existe de un lado se conserva tal cual) y, dentro
+    de cada proyecto que existe en ambos lados, MÓDULO POR MÓDULO (un
+    módulo que cambió de un solo lado respecto de la base se conserva
+    del lado que cambió; si ninguno lo tocó, da igual cuál; si AMBOS lo
+    cambiaron — conflicto real, poco común — gana `ours`, la pestaña que
+    está guardando en ese momento, antes que descartar su trabajo en
+    silencio). `activeId` se toma de disco cuando existe, por ser un
+    puntero global que otra pestaña pudo haber cambiado mientras tanto.
+    Sin `pendingBase` disponible (no debería pasar en el flujo normal),
+    cae al criterio más simple de antes: todo el proyecto de quien tenga
+    `meta.updatedAt` más reciente. Cubierto con dos casos nuevos en
+    `tests/unit/quota-recovery.test.ts`: uno simula dos pestañas
+    reales compartiendo `localStorage` (dos instancias de módulo
+    independientes vía `vi.resetModules()` + reimport dinámico, cada
+    una con su propio `pendingUnsaved`/`pendingBase`) y confirma que ni
+    el cambio de A ni el de B se pierden; el otro confirma que, si
+    también falla `avail()`, la lectura sigue sirviendo el cambio
+    pendiente. Verificado que ambos detectan los bugs reales:
+    revertido el fix temporalmente, el primero pierde la actualización
+    de costos de B y el segundo devuelve `null` en vez del cambio
+    pendiente.
 
 ### Forma general
 

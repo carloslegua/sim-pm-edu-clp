@@ -66,6 +66,57 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **La recuperación de cuota podía sobrescribir cambios de otra pestaña
+  (regresión del fix anterior de cuota agotada)** — el usuario reportó,
+  simulando dos contextos compartiendo `localStorage`: A conservó un
+  cambio pendiente por fallo de cuota; B guardó una actualización de
+  costos; A recuperó la capacidad de guardar y escribió su copia
+  completa anterior — la actualización de costos desapareció. Además,
+  el Panel abierto en otra pestaña exporta la versión antigua, porque
+  `pendingUnsaved` solo existe en la pestaña que falló; y si también
+  falla la sonda de disponibilidad (`avail()`), la lectura devolvía el
+  respaldo vacío ANTES de consultar los cambios pendientes. Diagnóstico:
+  el fix anterior (`pendingUnsaved`, ver la entrada de más abajo)
+  resolvía correctamente "no perder el cambio de ESTA pestaña", pero
+  tenía dos huecos al compartir `localStorage` con otras pestañas: (1)
+  `db()` comprobaba `avail()` antes que `pendingUnsaved`, así que una
+  cuota que empeora hasta tumbar la sonda de 1 byte de `avail()` hacía
+  que la lectura devolviera `fresh()` (vacío) en vez del cambio
+  pendiente; (2) al recuperar la capacidad de guardar, `save()`
+  escribía `pendingUnsaved` TAL CUAL — un clon completo de toda la base
+  tomado ANTES del fallo — pisando por completo cualquier cosa que otra
+  pestaña hubiera guardado mientras esta seguía atascada. Corrección:
+  `db()` ahora comprueba `pendingUnsaved` ANTES que `avail()`. Al
+  recuperar la capacidad de guardar, `save()` ya no escribe
+  `pendingUnsaved` sin más — dos funciones nuevas,
+  `mergeWithDisk()`/`mergeProjectModules()`, reconcilian a tres bandas
+  (base/`ours`/`theirs`) contra `pendingBase` (una foto de disco
+  capturada en la primera falla de cada racha de cuota agotada): por
+  proyecto, y dentro de cada proyecto por MÓDULO — un módulo que cambió
+  de un solo lado respecto de la base se conserva del lado que cambió;
+  si ambos lo cambiaron (conflicto real, poco común), gana la pestaña
+  que está guardando en ese momento, en vez de descartar su trabajo en
+  silencio. `activeId` se toma de disco cuando existe, por ser un
+  puntero global que otra pestaña pudo haber cambiado mientras tanto.
+  La limitación de que el Panel en otra pestaña exporte una versión
+  desactualizada MIENTRAS la pestaña atascada sigue sin recuperarse es
+  inherente a que `pendingUnsaved` es memoria por pestaña sin ningún
+  canal entre pestañas más allá de `localStorage` mismo — no se intentó
+  resolver con un mecanismo nuevo tipo `BroadcastChannel` (desproporcionado
+  frente al reporte); lo que sí se garantiza ahora es que, en cuanto la
+  pestaña atascada logra guardar, ya no destruye lo que las demás
+  lograron guardar en el ínterin. Dos casos nuevos en
+  `tests/unit/quota-recovery.test.ts`: uno simula dos pestañas reales
+  compartiendo `localStorage` (dos instancias de módulo independientes
+  vía `vi.resetModules()` + reimport dinámico) y confirma que ni el
+  cambio de A ni el de B se pierden; el otro confirma que, si también
+  falla `avail()`, la lectura sigue sirviendo el cambio pendiente.
+  Verificado que ambos detectan los bugs reales: revertido el fix
+  temporalmente, el primero efectivamente pierde la actualización de
+  costos de B y el segundo devuelve un valor nulo en vez del cambio
+  pendiente. Ver ARCHITECTURE.md, sección "Esquema de
+  `localStorage["gpi_db"]`" → "Cuota llena".
+
 - **Algunos guardados secundarios omitían la protección de identidad del
   proyecto agregada en un fix anterior** — el usuario reportó, con
   evidencia puntual, dos caminos: abrir WBS en A, activar B y pulsar

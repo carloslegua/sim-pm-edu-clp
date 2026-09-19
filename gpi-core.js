@@ -5,6 +5,7 @@ var GPI = (function(exports) {
 	var SCHEMA = "gpi.project/v1";
 	var mem = null;
 	var pendingUnsaved = null;
+	var pendingBase = null;
 	function avail() {
 		try {
 			const k = "__gpi_t";
@@ -23,8 +24,8 @@ var GPI = (function(exports) {
 		};
 	}
 	function db() {
-		if (!avail()) return mem || (mem = fresh());
 		if (pendingUnsaved) return pendingUnsaved;
+		if (!avail()) return mem || (mem = fresh());
 		try {
 			return JSON.parse(localStorage.getItem("gpi_db")) || fresh();
 		} catch (e) {
@@ -34,17 +35,66 @@ var GPI = (function(exports) {
 	function hasUnsavedChanges() {
 		return pendingUnsaved !== null;
 	}
+	function mergeProjectModules(ours, theirs, base) {
+		if (!base) return (ours.meta.updatedAt || 0) >= (theirs.meta.updatedAt || 0) ? ours : theirs;
+		const oursMods = ours.modules || {};
+		const theirsMods = theirs.modules || {};
+		const baseMods = base.modules || {};
+		const merged = Object.assign({}, theirsMods);
+		(/* @__PURE__ */ new Set([
+			...Object.keys(oursMods),
+			...Object.keys(theirsMods),
+			...Object.keys(baseMods)
+		])).forEach((mk) => {
+			if (JSON.stringify(oursMods[mk]) !== JSON.stringify(baseMods[mk])) merged[mk] = oursMods[mk];
+		});
+		return {
+			schema: ours.schema,
+			meta: (ours.meta.updatedAt || 0) >= (theirs.meta.updatedAt || 0) ? ours.meta : theirs.meta,
+			modules: merged
+		};
+	}
+	function mergeWithDisk(d) {
+		let diskRaw = null;
+		try {
+			diskRaw = localStorage.getItem(KEY);
+		} catch (_) {}
+		if (!diskRaw) return d;
+		let disk;
+		try {
+			disk = JSON.parse(diskRaw);
+		} catch (_) {
+			return d;
+		}
+		const projects = Object.assign({}, disk.projects);
+		Object.keys(d.projects).forEach((id) => {
+			const ours = d.projects[id], theirs = disk.projects[id];
+			projects[id] = theirs ? mergeProjectModules(ours, theirs, pendingBase ? pendingBase.projects[id] : void 0) : ours;
+		});
+		return {
+			version: d.version,
+			activeId: disk.activeId != null ? disk.activeId : d.activeId,
+			projects
+		};
+	}
 	function save(d) {
 		if (!avail()) {
 			mem = d;
 			return true;
 		}
 		try {
-			localStorage.setItem(KEY, JSON.stringify(d));
+			const toWrite = d === pendingUnsaved ? mergeWithDisk(d) : d;
+			localStorage.setItem(KEY, JSON.stringify(toWrite));
 			pendingUnsaved = null;
+			pendingBase = null;
 			hideQuotaNotice();
 			return true;
 		} catch (e) {
+			if (pendingUnsaved == null) try {
+				pendingBase = JSON.parse(localStorage.getItem(KEY));
+			} catch (_) {
+				pendingBase = null;
+			}
 			pendingUnsaved = d;
 			showQuotaNotice();
 			return false;
