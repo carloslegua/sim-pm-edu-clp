@@ -100,6 +100,23 @@ describe("pertCriticalChain -- una sola cadena", () => {
   });
 });
 
+describe("pertCriticalChain -- desfases en días transcurridos", () => {
+  const nodes = [{ id: "a", dur: 4 }, { id: "b", dur: 6 }], links = [L("a", "b", "FS", 3, "ed")];
+  it("con fecha de inicio el desfase se calcula sobre fechas reales (depende de fines de semana/feriados): no es una constante que sumar -> 'elapsed', sin inventar un número", () => {
+    const res = cpm(nodes, links, null, { startDate: "2026-07-06" });
+    expect(pertCriticalChain(res, links, null, { a: 1, b: 1 })).toEqual({ ok: false, reason: "elapsed" });
+  });
+  it("sin fecha de inicio se usa la aproximación proporcional y sigue siendo una cadena", () => {
+    const res = cpm(nodes, links, null, {});
+    expect(pertCriticalChain(res, links, null, { a: 1, b: 1 })).toMatchObject({ ok: true, ids: ["a", "b"], variance: 2 });
+  });
+  it("un desfase transcurrido de 0 no cuenta como tal", () => {
+    const l0 = [L("a", "b", "FS", 0, "ed")];
+    const res = cpm(nodes, l0, null, { startDate: "2026-07-06" });
+    expect(pertCriticalChain(res, l0, null, { a: 1, b: 1 })).toMatchObject({ ok: true, mean: 10, variance: 2 });
+  });
+});
+
 describe("pertCriticalChain -- entradas degeneradas", () => {
   it("sin actividades críticas -> empty", () => {
     const res = cpm([], [], null, {});

@@ -267,6 +267,60 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
     expect(doc.getElementById("probOut")!.innerHTML).toBe(antes);
   });
 
+  // Hallazgo "alta" de revisión externa: los desfases en días TRANSCURRIDOS se
+  // convertían con una proporción semanal (lag × 5/7). Un hito el viernes 10/07/2026
+  // + 3 días transcurridos es el lunes 13/07 (offset 1), no el martes 14/07 (offset 2).
+  function seedEd(startDate: string) {
+    return {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1, startDate },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 3,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] },
+                w1: { id: "w1", parentId: "root", name: "Fase 1", children: ["w2"] },
+                w2: { id: "w2", parentId: "w1", name: "Paquete A", children: [] }
+              }
+            },
+            activities: {
+              byLeaf: { w2: [{ id: "a1", name: "Sucesora", unit: "m³", qty: 20, perf: 10, teams: 1 }] },
+              idCounter: 2,
+              milestones: [{ id: "m1", code: "H1", name: "Hito del viernes", leafId: "w2" }]
+            },
+            schedule: { links: [{ id: "L1", from: "m1", to: "a1", type: "FS", lag: 3, lagUnit: "ed", source: "manual" }], linkCounter: 2, import: null, baseline: null }
+          }
+        }
+      }
+    };
+  }
+  async function abrirEd(startDate: string) {
+    const dom = await JSDOM.fromURL(base + "Cronograma_CPM.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedEd(startDate))); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    return dom.window.document;
+  }
+  const esOf = (doc: Document, code: string) => {
+    const row = Array.from(doc.querySelectorAll("#cpmBody tr.act-row")).find((r) => r.querySelector(".act-name")!.textContent!.includes(code))!;
+    return row.querySelectorAll("td")[4].textContent;
+  };
+
+  it("REPRO (alta): hito el viernes 10/07/2026 + 3 días transcurridos -> la sucesora arranca en el offset 1 (lunes 13/07), no en el 2 (martes 14/07)", async () => {
+    const doc = await abrirEd("2026-07-10");
+    expect(esOf(doc, "Sucesora")).toBe("1");                            // antes: "2"
+    expect(doc.getElementById("issues")!.textContent).not.toMatch(/aproximada/); // hay fecha de inicio: cálculo real, sin aviso
+  });
+
+  it("sin fecha de inicio no hay fechas reales: se conserva la proporción y se avisa que es aproximada", async () => {
+    const doc = await abrirEd("");
+    expect(doc.getElementById("issues")!.textContent).toMatch(/días transcurridos.*aproximada/);
+  });
+
   it("Cronograma-CPM ahora sí ve los hitos: su Id (netId) coincide con Definir las Actividades/Estimar los Costos", async () => {
     // Mismo seed (EDT + actividades + hito en 'activities') que
     // activity-definition/cost-estimate.smoke.test.ts -- esos dos módulos

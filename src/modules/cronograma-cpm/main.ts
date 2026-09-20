@@ -366,6 +366,7 @@ function renderValidation(R: RunCpmResult): void {
     if (os > 1) out.push({ c: "warn", ic: "◁", t: os + " actividades sin predecesora (cuelgan del inicio). Verifica si falta algún enlace." });
     if (oe > 1) out.push({ c: "warn", ic: "▷", t: oe + " actividades sin sucesora (no llegan al fin). Verifica si falta algún enlace." });
   }
+  if (R.cpm.ok && R.cpm.elapsedApprox) out.push({ c: "warn", ic: "⚠", t: "Hay desfases en <b>días transcurridos</b> y el proyecto no tiene fecha de inicio: se convierten con una proporción semanal <b>aproximada</b>. Define la fecha de inicio en el Panel para calcularlos sobre fechas reales (fines de semana y feriados)." });
   if (!hasLinks) out.push({ c: "warn", ic: "▤", t: "Aún no hay enlaces. Usa <b>⇧ Importar desde Excel</b> o <b>＋ Enlace manual</b> para construir la red." });
   else if (R.cpm.ok && !R.val.dangling.length && !R.val.selfLoops.length) out.push({ c: "ok", ic: "✓", t: "Red válida y acíclica — CPM calculado." });
   box.innerHTML = out.map((i) => "<div class='issue " + i.c + "'><span class='ic'>" + i.ic + "</span><span>" + i.t + "</span></div>").join("");
@@ -378,7 +379,7 @@ function renderValidation(R: RunCpmResult): void {
 // recalcula con las duraciones ESPERADAS (TE) -- el modo "Duración" de la
 // pantalla no cambia el resultado -- y solo se calcula si las críticas forman
 // UNA cadena (GPI.util.pertCriticalChain); si no, `reason` dice por qué.
-interface CriticalPertSums { mean: number; sumVar: number; allValid: boolean; count: number; reason?: "empty" | "parallel" | "inconsistent"; }
+interface CriticalPertSums { mean: number; sumVar: number; allValid: boolean; count: number; reason?: "empty" | "parallel" | "inconsistent" | "elapsed"; }
 function criticalPertSums(R: RunCpmResult): CriticalPertSums {
   if (!R.cpm.ok) return { mean: 0, sumVar: 0, allValid: false, count: 0, reason: "empty" };
   const idx: Record<string, Row> = {}; R.snap.forEach((r) => { if (r.kind === "activity") idx[r.activityId as string] = r; });
@@ -404,6 +405,7 @@ function renderProbability(R: RunCpmResult): void {
   if (!R.cpm.ok) { out.innerHTML = "<div class='p'>—</div><div class='z'>red con ciclo</div>"; return; }
   const s = criticalPertSums(R);
   if (s.reason === "parallel") { out.innerHTML = "<div class='p'>—</div><div class='z'>no aplicable: hay <b>" + s.count + "</b> actividades críticas en ramas paralelas o convergentes. PERT de una sola ruta no vale ahí (subestima el riesgo: el fin depende de que TODAS las ramas terminen a tiempo) — requiere simular la red completa</div>"; return; }
+  if (s.reason === "elapsed") { out.innerHTML = "<div class='p'>—</div><div class='z'>no aplicable: la ruta crítica tiene desfases en <b>días transcurridos</b>, que se calculan sobre fechas reales (fines de semana y feriados) y no son un tiempo fijo que sumar a la media PERT. Exprésalos en días laborables para obtener la probabilidad</div>"; return; }
   if (s.reason) { out.innerHTML = "<div class='p'>—</div><div class='z'>no aplicable: no se pudo aislar una ruta crítica única</div>"; return; }
   if (!s.allValid) { out.innerHTML = "<div class='p'>—</div><div class='z'>completa O/M/P en PERT para la ruta crítica</div>"; return; }
   if (!isFinite(t) || t <= 0) { out.innerHTML = "<div class='p'>—</div><div class='z'>E[T]=" + fmt(s.mean) + " d · ingresa un plazo objetivo</div>"; return; }

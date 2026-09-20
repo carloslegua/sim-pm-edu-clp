@@ -1141,6 +1141,47 @@ ruta". Ahora:
   (la repro exacta del reporte y una cadena con desfase), verificados
   contra el código anterior.
 
+**Desfases en días transcurridos (`ed`) del CPM: sobre fechas reales**
+(`cpm()` + `makeRealTimeAxis()` en `gpi-core.ts`). Revisión externa
+(severidad alta): `cpm()` convertía un desfase `ed` a días laborables con
+una proporción constante, `lag × (laborables/7)`. Un hito el viernes
+10/07/2026 con 3 días transcurridos corresponde al lunes 13/07 (sábado,
+domingo, lunes), pero se fechaba la sucesora el martes 14/07 (3 × 5/7 =
+2,14 → 2 días laborables); con un feriado el lunes salía el miércoles. Un
+desfase transcurrido es tiempo de **reloj**, no una fracción de días
+laborables: la proporción no representa fines de semana ni feriados.
+- El CPM sigue trabajando en *offsets* de días laborables (cada día
+  laborable ocupa `[n, n+1)`, los no laborables no ocupan nada). Con fecha
+  de inicio, para un enlace `ed` se pasa el offset del predecesor a un
+  **instante real** (`realEnd`: el fin de un viernes es el sábado 0:00;
+  `realStart`: el inicio del día), se le suma el desfase en días de
+  calendario y se vuelve al **primer tiempo laborable** del calendario
+  (`ceilWork`), que salta fines de semana y feriados. La pasada hacia
+  atrás y la holgura libre usan la inversa (`floorEnd`/`floorStart` vía
+  `edMax`), así que ida y vuelta son coherentes: tras un fin de semana
+  hay holgura real (una actividad que termina el jueves con un desfase
+  de 2 días transcurridos puede acabar el viernes sin mover a la sucesora
+  del lunes).
+- Los desfases en días laborables (`d`), horas (`h`) y semanas (`w`) no
+  cambian: siguen siendo una constante en días laborables.
+- **Sin fecha de inicio no hay fechas reales**: se conserva la proporción
+  semanal como aproximación y el resultado lo avisa
+  (`elapsedApprox`; Cronograma/CPM lo muestra en Validación, PERT en el
+  detalle de la ruta crítica). `elapsedReal` indica lo contrario. El
+  módulo PERT ahora pasa a `cpm()` la fecha de inicio del proyecto para
+  no divergir de Cronograma/CPM.
+- La probabilidad de plazo PERT (sección anterior) **no aplica** si la
+  ruta crítica tiene un desfase `ed` calculado sobre fechas reales
+  (`reason:"elapsed"`): su efecto depende de la fecha, no es una constante
+  que sumar a la media; se dice en pantalla en vez de inventar un número.
+- Cubierto por `tests/unit/cpm-elapsed-lag.test.ts` (la repro exacta,
+  feriado, SS, FF, holgura de fin de semana, coherencia de la pasada
+  atrás y 300 redes aleatorias con los 4 tipos de enlace) y por el smoke
+  de Cronograma/CPM. Observación previa e independiente: con enlaces SF
+  cuyo nodo final tiene sucesoras, `cpm()` puede dejar redes sin ninguna
+  actividad crítica (ocurre igual con desfases en días laborables); no se
+  tocó aquí.
+
 **Schedule_Management_Plan.html**
 - Es un **documento vivo** de 15 secciones (checklist AACE RP 38R-06),
   no un módulo de cálculo con "modo ejemplo" separado: `init()` carga

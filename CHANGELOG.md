@@ -66,6 +66,25 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Los desfases en días transcurridos se calculan sobre fechas reales,
+  no con una proporción semanal (revisión externa, alta)** — `cpm()`
+  convertía un desfase `ed` con `lag × (días laborables / 7)`. Un hito el
+  viernes 10/07/2026 con 3 días transcurridos corresponde al lunes 13/07,
+  pero la sucesora se fechaba el martes 14/07 (con un feriado el lunes,
+  el miércoles). Ahora, con fecha de inicio, el desfase se suma sobre el
+  instante real del predecesor y se vuelve al primer tiempo laborable del
+  calendario de la sucesora (fines de semana y feriados incluidos); la
+  pasada hacia atrás y la holgura libre son coherentes (`makeRealTimeAxis`,
+  ver ARCHITECTURE.md). Los desfases en días laborables, horas y semanas
+  no cambian. Sin fecha de inicio se conserva la aproximación proporcional
+  y ahora se avisa (Cronograma/CPM en Validación, PERT en la ruta
+  crítica); PERT pasa a `cpm()` la fecha de inicio del proyecto. La
+  probabilidad de plazo PERT declara «no aplicable» si la ruta crítica
+  tiene un desfase transcurrido. Pruebas: `cpm-elapsed-lag.test.ts` (la
+  repro exacta, feriado, SS, FF, holgura de fin de semana y 300 redes
+  aleatorias) y smoke de Cronograma/CPM verificado contra el código
+  anterior.
+
 - **La probabilidad de plazo PERT ya no suma ramas paralelas ni omite
   desfases (revisión externa, alta)** — `criticalPertSums()` (Cronograma/
   CPM) y `criticalPathStats()` (PERT) sumaban ΣTE y Σσ² de todas las

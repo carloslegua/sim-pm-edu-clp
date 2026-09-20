@@ -2186,6 +2186,84 @@ var GPI = (function(exports) {
 			provisional: false
 		};
 	}
+	function makeRealTimeAxis(start, calendar) {
+		const DAY = 864e5, EPS = 1e-9;
+		const work = {};
+		(calendar.workDayIdx && calendar.workDayIdx.length ? calendar.workDayIdx : [
+			1,
+			2,
+			3,
+			4,
+			5
+		]).forEach((d) => {
+			work[d] = true;
+		});
+		const hol = {};
+		(calendar.holidays || []).forEach((h) => {
+			hol[String(h).slice(0, 10)] = true;
+		});
+		const isWork = (s) => !!work[((s + 4) % 7 + 7) % 7] && !hol[(/* @__PURE__ */ new Date(s * DAY)).toISOString().slice(0, 10)];
+		const nextWork = (s) => {
+			while (!isWork(s)) s++;
+			return s;
+		};
+		const prevWork = (s) => {
+			while (!isWork(s)) s--;
+			return s;
+		};
+		const s0 = nextWork(Math.floor(start.getTime() / DAY));
+		const fwd = [s0], bwd = [], idx = /* @__PURE__ */ new Map([[s0, 0]]);
+		function D(n) {
+			if (n >= 0) {
+				while (fwd.length <= n) {
+					const s = nextWork(fwd[fwd.length - 1] + 1);
+					idx.set(s, fwd.length);
+					fwd.push(s);
+				}
+				return fwd[n];
+			}
+			const k = -n - 1;
+			while (bwd.length <= k) {
+				const s = prevWork((bwd.length ? bwd[bwd.length - 1] : s0) - 1);
+				idx.set(s, -(bwd.length + 1));
+				bwd.push(s);
+			}
+			return bwd[k];
+		}
+		function idxOf(s) {
+			if (!idx.has(s)) {
+				if (s > s0) while (fwd[fwd.length - 1] < s) D(fwd.length);
+				else while (!bwd.length || bwd[bwd.length - 1] > s) D(-(bwd.length + 1));
+			}
+			return idx.get(s);
+		}
+		const split = (t) => {
+			const d = Math.floor(t + EPS), g = t - d;
+			return [d, g < EPS ? 0 : g];
+		};
+		return {
+			realStart(x) {
+				const [n, f] = split(x);
+				return D(n) + f;
+			},
+			realEnd(x) {
+				const [n, f] = split(x);
+				return f > 0 ? D(n) + f : n === 0 ? D(0) : D(n - 1) + 1;
+			},
+			ceilWork(t) {
+				const [d, g] = split(t);
+				return isWork(d) ? idxOf(d) + g : idxOf(nextWork(d));
+			},
+			floorEnd(t) {
+				const [d, g] = split(t);
+				return g > 0 && isWork(d) ? idxOf(d) + g : idxOf(prevWork(d - 1)) + 1;
+			},
+			floorStart(t) {
+				const [d, g] = split(t);
+				return isWork(d) ? idxOf(d) + g : idxOf(prevWork(d)) + 1;
+			}
+		};
+	}
 	function lagToWorkDays(l, calendar) {
 		const cal = calendar || {
 			workDayIdx: [
@@ -2219,6 +2297,14 @@ var GPI = (function(exports) {
 			hoursPerDay: 8,
 			holidays: [],
 			provisional: true
+		};
+		const start = o.startDate ? parseISO(o.startDate) : null;
+		const rt = start ? makeRealTimeAxis(start, cal) : null;
+		const isEd = (l) => !!rt && (l.lagUnit || "d") === "ed";
+		const edLag = (l) => Number(l.lag) || 0;
+		const edMax = (l, y) => {
+			const t = rt.realStart(y) - edLag(l);
+			return l.type === "SS" || l.type === "SF" ? rt.floorStart(t) : rt.floorEnd(t);
 		};
 		function lagWD(l) {
 			return lagToWorkDays(l, cal);
@@ -2270,12 +2356,20 @@ var GPI = (function(exports) {
 		});
 		order.forEach((id) => {
 			inc[id].forEach((l) => {
-				const g = lagWD(l);
 				let lb;
-				if (l.type === "SS") lb = ES[l.from] + g;
-				else if (l.type === "FF") lb = EF[l.from] + g - dur[id];
-				else if (l.type === "SF") lb = ES[l.from] + g - dur[id];
-				else lb = EF[l.from] + g;
+				if (isEd(l)) {
+					const R = rt, v = edLag(l);
+					if (l.type === "SS") lb = R.ceilWork(R.realStart(ES[l.from]) + v);
+					else if (l.type === "FF") lb = R.ceilWork(R.realEnd(EF[l.from]) + v) - dur[id];
+					else if (l.type === "SF") lb = R.ceilWork(R.realStart(ES[l.from]) + v) - dur[id];
+					else lb = R.ceilWork(R.realEnd(EF[l.from]) + v);
+				} else {
+					const g = lagWD(l);
+					if (l.type === "SS") lb = ES[l.from] + g;
+					else if (l.type === "FF") lb = EF[l.from] + g - dur[id];
+					else if (l.type === "SF") lb = ES[l.from] + g - dur[id];
+					else lb = EF[l.from] + g;
+				}
 				if (lb > ES[id]) ES[id] = lb;
 			});
 			if (ES[id] < 0) ES[id] = 0;
@@ -2294,12 +2388,19 @@ var GPI = (function(exports) {
 			if (outdeg[id] > 0) {
 				LF[id] = Infinity;
 				out[id].forEach((l) => {
-					const g = lagWD(l);
 					let ub;
-					if (l.type === "SS") ub = LF[l.to] - dur[l.to] - g + dur[id];
-					else if (l.type === "FF") ub = LF[l.to] - g;
-					else if (l.type === "SF") ub = LF[l.to] - g + dur[id];
-					else ub = LF[l.to] - dur[l.to] - g;
+					if (isEd(l)) {
+						if (l.type === "SS") ub = edMax(l, LF[l.to] - dur[l.to]) + dur[id];
+						else if (l.type === "FF") ub = edMax(l, LF[l.to]);
+						else if (l.type === "SF") ub = edMax(l, LF[l.to]) + dur[id];
+						else ub = edMax(l, LF[l.to] - dur[l.to]);
+					} else {
+						const g = lagWD(l);
+						if (l.type === "SS") ub = LF[l.to] - dur[l.to] - g + dur[id];
+						else if (l.type === "FF") ub = LF[l.to] - g;
+						else if (l.type === "SF") ub = LF[l.to] - g + dur[id];
+						else ub = LF[l.to] - dur[l.to] - g;
+					}
 					if (ub < LF[id]) LF[id] = ub;
 				});
 			}
@@ -2308,18 +2409,24 @@ var GPI = (function(exports) {
 		const EPS = 1e-6;
 		const rows = {};
 		const criticalIds = [];
-		const start = o.startDate ? parseISO(o.startDate) : null;
 		ids.forEach((id) => {
 			const tf = LS[id] - ES[id];
 			let ff = Infinity;
 			if (outdeg[id] === 0) ff = tf;
 			else out[id].forEach((l) => {
-				const g = lagWD(l);
 				let s;
-				if (l.type === "SS") s = ES[l.to] - ES[id] - g;
-				else if (l.type === "FF") s = EF[l.to] - EF[id] - g;
-				else if (l.type === "SF") s = EF[l.to] - ES[id] - g;
-				else s = ES[l.to] - EF[id] - g;
+				if (isEd(l)) {
+					if (l.type === "SS") s = edMax(l, ES[l.to]) - ES[id];
+					else if (l.type === "FF") s = edMax(l, EF[l.to]) - EF[id];
+					else if (l.type === "SF") s = edMax(l, EF[l.to]) - ES[id];
+					else s = edMax(l, ES[l.to]) - EF[id];
+				} else {
+					const g = lagWD(l);
+					if (l.type === "SS") s = ES[l.to] - ES[id] - g;
+					else if (l.type === "FF") s = EF[l.to] - EF[id] - g;
+					else if (l.type === "SF") s = EF[l.to] - ES[id] - g;
+					else s = ES[l.to] - EF[id] - g;
+				}
 				if (s < ff) ff = s;
 			});
 			const crit = tf <= EPS;
@@ -2336,6 +2443,7 @@ var GPI = (function(exports) {
 				finishDate: start ? addWorkingDays(start, Math.max(Math.round(ES[id]), Math.round(EF[id]) - (dur[id] > 0 ? 1 : 0)), cal) : ""
 			};
 		});
+		const hasEd = lk.some((l) => inSet[l.from] && inSet[l.to] && l.from !== l.to && (l.lagUnit || "d") === "ed" && Number(l.lag) !== 0);
 		return {
 			ok: true,
 			rows,
@@ -2343,7 +2451,9 @@ var GPI = (function(exports) {
 			criticalIds,
 			projectDuration: projDur,
 			projectStart: start ? addWorkingDays(start, 0, cal) : "",
-			projectFinishDate: start ? addWorkingDays(start, Math.max(0, Math.round(projDur) - 1), cal) : ""
+			projectFinishDate: start ? addWorkingDays(start, Math.max(0, Math.round(projDur) - 1), cal) : "",
+			elapsedReal: !!rt,
+			elapsedApprox: !rt && hasEd
 		};
 	}
 	function pertCriticalChain(res, links, calendar, variances) {
@@ -2360,8 +2470,13 @@ var GPI = (function(exports) {
 			inE[id] = [];
 			outN[id] = 0;
 		});
+		let elapsedOnPath = false;
 		(links || []).forEach((l) => {
 			if (l.from === l.to || !crit[l.from] || !crit[l.to]) return;
+			if (res.elapsedReal && (l.lagUnit || "d") === "ed" && Number(l.lag) !== 0) {
+				elapsedOnPath = true;
+				return;
+			}
 			const a = rows[l.from], b = rows[l.to], g = lagToWorkDays(l, calendar);
 			const lhs = l.type === "FF" || l.type === "SF" ? b.ef : b.es;
 			const rhs = l.type === "SS" || l.type === "SF" ? a.es + g : a.ef + g;
@@ -2372,6 +2487,10 @@ var GPI = (function(exports) {
 			});
 			outN[l.from]++;
 		});
+		if (elapsedOnPath) return {
+			ok: false,
+			reason: "elapsed"
+		};
 		const sources = res.criticalIds.filter((id) => !inE[id].length);
 		if (sources.length !== 1 || res.criticalIds.some((id) => inE[id].length > 1 || outN[id] > 1)) return {
 			ok: false,

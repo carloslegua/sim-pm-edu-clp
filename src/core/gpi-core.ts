@@ -2062,9 +2062,63 @@ export function projectCalendar(sp?: SchedulePlanModule | null): ProjectCalendar
   };
 }
 
+// Eje de tiempo REAL del calendario, para los desfases en días transcurridos
+// ("ed"; hallazgo "alta" de revisión externa). El CPM trabaja en "offsets" de
+// días laborables (0 = primer día laborable del proyecto; cada día laborable
+// ocupa [n, n+1) y los no laborables/feriados no ocupan nada), pero un desfase
+// transcurrido es tiempo de RELOJ: convertirlo con una proporción
+// (lag × laborables/7) fechaba un hito del viernes + 3 días el martes en vez del
+// lunes. Aquí se pasa de offset a instante real (días desde 1970 con fracción),
+// se suma el desfase y se vuelve al primer instante LABORABLE -- así los fines
+// de semana y feriados se comportan como en el calendario.
+//   · realStart(x): instante en que EMPIEZA el punto x (inicio del día x).
+//   · realEnd(x): instante en que TERMINA x (fin del día x-1: el fin de un
+//     viernes es el sábado 0:00, no el lunes 0:00); x=0 es el inicio del día 0.
+//   · ceilWork(T): primer tiempo laborable ≥ T (hacia adelante).
+//   · floorEnd/floorStart(T): último punto cuyo fin/inicio real es ≤ T (pasada
+//     hacia atrás y holgura libre).
+interface RealTimeAxis {
+  realStart(x: number): number; realEnd(x: number): number;
+  ceilWork(t: number): number; floorEnd(t: number): number; floorStart(t: number): number;
+}
+function makeRealTimeAxis(start: Date, calendar: { workDayIdx?: number[]; holidays?: string[] }): RealTimeAxis {
+  const DAY = 86400000, EPS = 1e-9;
+  const work: Record<number, boolean> = {};
+  (calendar.workDayIdx && calendar.workDayIdx.length ? calendar.workDayIdx : [1, 2, 3, 4, 5]).forEach((d) => { work[d] = true; });
+  const hol: Record<string, boolean> = {}; (calendar.holidays || []).forEach((h) => { hol[String(h).slice(0, 10)] = true; });
+  const isWork = (s: number): boolean => !!work[((s + 4) % 7 + 7) % 7] && !hol[new Date(s * DAY).toISOString().slice(0, 10)]; // 1970-01-01 fue jueves
+  const nextWork = (s: number): number => { while (!isWork(s)) s++; return s; };
+  const prevWork = (s: number): number => { while (!isWork(s)) s--; return s; };
+  const s0 = nextWork(Math.floor(start.getTime() / DAY));  // índice 0 = primer día laborable ≥ inicio (igual que addWorkingDays)
+  const fwd = [s0], bwd: number[] = [], idx = new Map<number, number>([[s0, 0]]);
+  function D(n: number): number { // fecha (día) del n-ésimo día laborable, n entero
+    if (n >= 0) {
+      while (fwd.length <= n) { const s = nextWork(fwd[fwd.length - 1] + 1); idx.set(s, fwd.length); fwd.push(s); }
+      return fwd[n];
+    }
+    const k = -n - 1;
+    while (bwd.length <= k) { const s = prevWork((bwd.length ? bwd[bwd.length - 1] : s0) - 1); idx.set(s, -(bwd.length + 1)); bwd.push(s); }
+    return bwd[k];
+  }
+  function idxOf(s: number): number { // s = día laborable
+    if (!idx.has(s)) { if (s > s0) { while (fwd[fwd.length - 1] < s) D(fwd.length); } else { while (!bwd.length || bwd[bwd.length - 1] > s) D(-(bwd.length + 1)); } }
+    return idx.get(s) as number;
+  }
+  const split = (t: number): [number, number] => { const d = Math.floor(t + EPS), g = t - d; return [d, g < EPS ? 0 : g]; };
+  return {
+    realStart(x) { const [n, f] = split(x); return D(n) + f; },
+    realEnd(x) { const [n, f] = split(x); return f > 0 ? D(n) + f : (n === 0 ? D(0) : D(n - 1) + 1); },
+    ceilWork(t) { const [d, g] = split(t); return isWork(d) ? idxOf(d) + g : idxOf(nextWork(d)); },
+    floorEnd(t) { const [d, g] = split(t); return (g > 0 && isWork(d)) ? idxOf(d) + g : idxOf(prevWork(d - 1)) + 1; },
+    floorStart(t) { const [d, g] = split(t); return isWork(d) ? idxOf(d) + g : idxOf(prevWork(d)) + 1; }
+  };
+}
+
 // Desfase (lag) de un enlace en días laborables: h → horas/jornada, w → semanas
 // laborables, ed → días calendario proporcionales, d → tal cual. Lo comparten
 // cpm() y pertCriticalChain(): ambos deben leer el desfase exactamente igual.
+// OJO: la conversión de "ed" es solo la APROXIMACIÓN para cuando no hay fecha de
+// inicio; con fecha, cpm() calcula los "ed" sobre fechas reales (makeRealTimeAxis).
 function lagToWorkDays(l: ScheduleLink, calendar?: ProjectCalendar | null): number {
   const cal = calendar || { workDayIdx: [1, 2, 3, 4, 5], hoursPerDay: 8 };
   const wpw = (cal.workDayIdx && cal.workDayIdx.length) ? cal.workDayIdx.length : 5;
@@ -2083,7 +2137,13 @@ export interface CpmRow {
 }
 export type CpmResult =
   | { ok: false; cycles: string[] }
-  | { ok: true; rows: Record<string, CpmRow>; order: string[]; criticalIds: string[]; projectDuration: number; projectStart: string; projectFinishDate: string };
+  | {
+    ok: true; rows: Record<string, CpmRow>; order: string[]; criticalIds: string[]; projectDuration: number; projectStart: string; projectFinishDate: string;
+    // Los desfases en días transcurridos ("ed") se calcularon sobre fechas reales (hay fecha de inicio).
+    elapsedReal: boolean;
+    // Hay desfases "ed" pero NO fecha de inicio: se convirtieron con una proporción semanal APROXIMADA.
+    elapsedApprox: boolean;
+  };
 
 // Método de la Ruta Crítica (CPM). Nodos = actividades hoja {id, dur} (dur
 // en días laborables); links = aristas tipadas {from,to,type,lag,lagUnit}.
@@ -2093,9 +2153,23 @@ export type CpmResult =
 // interviene al mapear offsets → fechas.
 //   FS: ES(j) ≥ EF(i)+lag   SS: ES(j) ≥ ES(i)+lag
 //   FF: EF(j) ≥ EF(i)+lag   SF: EF(j) ≥ ES(i)+lag
+// Los desfases en días transcurridos ("ed") son tiempo de reloj: con fecha de
+// inicio se aplican sobre fechas reales (ver makeRealTimeAxis); sin ella no hay
+// fechas y se usa la proporción semanal (elapsedApprox lo avisa).
 export function cpm(nodes?: CpmNode[] | null, links?: ScheduleLink[] | null, calendar?: ProjectCalendar | null, opts?: { startDate?: string }): CpmResult {
   const nd = nodes || [], lk = links || []; const o = opts || {};
   const cal = calendar || { workDayIdx: [1, 2, 3, 4, 5], hoursPerDay: 8, holidays: [], provisional: true };
+  const start = o.startDate ? parseISO(o.startDate) : null;
+  const rt = start ? makeRealTimeAxis(start, cal) : null;
+  const isEd = (l: ScheduleLink): boolean => !!rt && (l.lagUnit || "d") === "ed";
+  const edLag = (l: ScheduleLink): number => Number(l.lag) || 0;
+  // Cota del inicio/fin del predecesor para que el sucesor conserve su posición
+  // y: y = ES/LS del sucesor (FS, SS) o EF/LF (FF, SF); devuelve el EF máximo
+  // (FS, FF) o el ES máximo (SS, SF) del predecesor. Inversa de la pasada adelante.
+  const edMax = (l: ScheduleLink, y: number): number => {
+    const t = (rt as RealTimeAxis).realStart(y) - edLag(l);
+    return (l.type === "SS" || l.type === "SF") ? (rt as RealTimeAxis).floorStart(t) : (rt as RealTimeAxis).floorEnd(t);
+  };
   function lagWD(l: ScheduleLink): number { return lagToWorkDays(l, cal); }
   const dur: Record<string, number> = {}, ids: string[] = [];
   nd.forEach((n) => { dur[n.id] = Number(n.dur) || 0; ids.push(n.id); });
@@ -2118,11 +2192,20 @@ export function cpm(nodes?: CpmNode[] | null, links?: ScheduleLink[] | null, cal
   ids.forEach((id) => { ES[id] = 0; });
   order.forEach((id) => {
     inc[id].forEach((l) => {
-      const g = lagWD(l); let lb: number;
-      if (l.type === "SS") lb = ES[l.from] + g;
-      else if (l.type === "FF") lb = EF[l.from] + g - dur[id];
-      else if (l.type === "SF") lb = ES[l.from] + g - dur[id];
-      else lb = EF[l.from] + g; // FS
+      let lb: number;
+      if (isEd(l)) { // desfase transcurrido: sobre fechas reales, no proporcional
+        const R = rt as RealTimeAxis, v = edLag(l);
+        if (l.type === "SS") lb = R.ceilWork(R.realStart(ES[l.from]) + v);
+        else if (l.type === "FF") lb = R.ceilWork(R.realEnd(EF[l.from]) + v) - dur[id];
+        else if (l.type === "SF") lb = R.ceilWork(R.realStart(ES[l.from]) + v) - dur[id];
+        else lb = R.ceilWork(R.realEnd(EF[l.from]) + v); // FS
+      } else {
+        const g = lagWD(l);
+        if (l.type === "SS") lb = ES[l.from] + g;
+        else if (l.type === "FF") lb = EF[l.from] + g - dur[id];
+        else if (l.type === "SF") lb = ES[l.from] + g - dur[id];
+        else lb = EF[l.from] + g; // FS
+      }
       if (lb > ES[id]) ES[id] = lb;
     });
     if (ES[id] < 0) ES[id] = 0;
@@ -2137,11 +2220,19 @@ export function cpm(nodes?: CpmNode[] | null, links?: ScheduleLink[] | null, cal
     if (outdeg[id] > 0) {
       LF[id] = Infinity;
       out[id].forEach((l) => {
-        const g = lagWD(l); let ub: number;
-        if (l.type === "SS") ub = (LF[l.to] - dur[l.to]) - g + dur[id];
-        else if (l.type === "FF") ub = LF[l.to] - g;
-        else if (l.type === "SF") ub = LF[l.to] - g + dur[id];
-        else ub = (LF[l.to] - dur[l.to]) - g; // FS: LS(to)-lag
+        let ub: number;
+        if (isEd(l)) {
+          if (l.type === "SS") ub = edMax(l, LF[l.to] - dur[l.to]) + dur[id];
+          else if (l.type === "FF") ub = edMax(l, LF[l.to]);
+          else if (l.type === "SF") ub = edMax(l, LF[l.to]) + dur[id];
+          else ub = edMax(l, LF[l.to] - dur[l.to]); // FS
+        } else {
+          const g = lagWD(l);
+          if (l.type === "SS") ub = (LF[l.to] - dur[l.to]) - g + dur[id];
+          else if (l.type === "FF") ub = LF[l.to] - g;
+          else if (l.type === "SF") ub = LF[l.to] - g + dur[id];
+          else ub = (LF[l.to] - dur[l.to]) - g; // FS: LS(to)-lag
+        }
         if (ub < LF[id]) LF[id] = ub;
       });
     }
@@ -2149,17 +2240,24 @@ export function cpm(nodes?: CpmNode[] | null, links?: ScheduleLink[] | null, cal
   }
   // holguras, ruta crítica, fechas
   const EPS = 1e-6; const rows: Record<string, CpmRow> = {}; const criticalIds: string[] = [];
-  const start = o.startDate ? parseISO(o.startDate) : null;
   ids.forEach((id) => {
     const tf = LS[id] - ES[id];
     let ff = Infinity;
     if (outdeg[id] === 0) ff = tf;
     else out[id].forEach((l) => {
-      const g = lagWD(l); let s: number;
-      if (l.type === "SS") s = ES[l.to] - ES[id] - g;
-      else if (l.type === "FF") s = EF[l.to] - EF[id] - g;
-      else if (l.type === "SF") s = EF[l.to] - ES[id] - g;
-      else s = ES[l.to] - EF[id] - g; // FS
+      let s: number;
+      if (isEd(l)) {
+        if (l.type === "SS") s = edMax(l, ES[l.to]) - ES[id];
+        else if (l.type === "FF") s = edMax(l, EF[l.to]) - EF[id];
+        else if (l.type === "SF") s = edMax(l, EF[l.to]) - ES[id];
+        else s = edMax(l, ES[l.to]) - EF[id]; // FS
+      } else {
+        const g = lagWD(l);
+        if (l.type === "SS") s = ES[l.to] - ES[id] - g;
+        else if (l.type === "FF") s = EF[l.to] - EF[id] - g;
+        else if (l.type === "SF") s = EF[l.to] - ES[id] - g;
+        else s = ES[l.to] - EF[id] - g; // FS
+      }
       if (s < ff) ff = s;
     });
     const crit = tf <= EPS;
@@ -2172,11 +2270,14 @@ export function cpm(nodes?: CpmNode[] | null, links?: ScheduleLink[] | null, cal
       finishDate: start ? addWorkingDays(start, Math.max(Math.round(ES[id]), Math.round(EF[id]) - (dur[id] > 0 ? 1 : 0)), cal) : ""
     };
   });
+  const hasEd = lk.some((l) => inSet[l.from] && inSet[l.to] && l.from !== l.to && (l.lagUnit || "d") === "ed" && Number(l.lag) !== 0);
   return {
     ok: true, rows, order, criticalIds,
     projectDuration: projDur,
     projectStart: start ? addWorkingDays(start, 0, cal) : "",
-    projectFinishDate: start ? addWorkingDays(start, Math.max(0, Math.round(projDur) - 1), cal) : ""
+    projectFinishDate: start ? addWorkingDays(start, Math.max(0, Math.round(projDur) - 1), cal) : "",
+    elapsedReal: !!rt,
+    elapsedApprox: !rt && hasEd
   };
 }
 
@@ -2202,7 +2303,7 @@ export function cpm(nodes?: CpmNode[] | null, links?: ScheduleLink[] | null, cal
 // ---------------------------------------------------------------
 export type PertChainResult =
   | { ok: true; ids: string[]; mean: number; variance: number; weights: Record<string, number> }
-  | { ok: false; reason: "empty" | "parallel" | "inconsistent" };
+  | { ok: false; reason: "empty" | "parallel" | "inconsistent" | "elapsed" };
 
 export function pertCriticalChain(
   res: CpmResult, links: ScheduleLink[] | null | undefined, calendar: ProjectCalendar | null | undefined,
@@ -2213,14 +2314,20 @@ export function pertCriticalChain(
   res.criticalIds.forEach((id) => { crit[id] = true; });
   const inE: Record<string, Array<{ l: ScheduleLink; g: number }>> = {}, outN: Record<string, number> = {};
   res.criticalIds.forEach((id) => { inE[id] = []; outN[id] = 0; });
+  let elapsedOnPath = false;
   (links || []).forEach((l) => {
     if (l.from === l.to || !crit[l.from] || !crit[l.to]) return;
+    // Un desfase transcurrido calculado sobre fechas reales no es una constante en
+    // días laborables (depende de si cae en fin de semana o feriado), así que la
+    // forma lineal de más abajo no aplica: no se inventa un número.
+    if (res.elapsedReal && (l.lagUnit || "d") === "ed" && Number(l.lag) !== 0) { elapsedOnPath = true; return; }
     const a = rows[l.from], b = rows[l.to], g = lagToWorkDays(l, calendar);
     const lhs = (l.type === "FF" || l.type === "SF") ? b.ef : b.es;
     const rhs = (l.type === "SS" || l.type === "SF") ? a.es + g : a.ef + g;
     if (Math.abs(lhs - rhs) > EPS) return; // no es el enlace que fija la fecha del sucesor
     inE[l.to].push({ l, g }); outN[l.from]++;
   });
+  if (elapsedOnPath) return { ok: false, reason: "elapsed" };
   const sources = res.criticalIds.filter((id) => !inE[id].length);
   if (sources.length !== 1 || res.criticalIds.some((id) => inE[id].length > 1 || outN[id] > 1)) return { ok: false, reason: "parallel" };
 

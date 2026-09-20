@@ -334,9 +334,9 @@ function scheduleLinks(): ScheduleLink[] {
 
 type CriticalPathStats =
   | null
-  | { reason: "no-links" | "no-te" | "cycle" | "no-path" | "inconsistent" }
+  | { reason: "no-links" | "no-te" | "cycle" | "no-path" | "inconsistent" | "elapsed" }
   | { reason: "parallel"; count: number }
-  | { ids: string[]; names: string[]; te: number; va: number; duration: number; anyInvalid: number; missing: number; cpNoTe: number };
+  | { ids: string[]; names: string[]; te: number; va: number; duration: number; anyInvalid: number; missing: number; cpNoTe: number; elapsedApprox: boolean };
 
 function criticalPathStats(): CriticalPathStats {
   if (!window.GPI || !window.GPI.util || !window.GPI.util.cpm) return null;
@@ -361,12 +361,16 @@ function criticalPathStats(): CriticalPathStats {
   if (!teCount) return { reason: "no-te" };
   let cal = null;
   try { cal = window.GPI.util.projectCalendar(); } catch (e) { /* noop */ }
-  const res = window.GPI.util.cpm(nodes, links, cal, {});
+  // Los desfases en días transcurridos solo se pueden calcular sobre fechas
+  // reales si hay fecha de inicio: la del proyecto (el modo ejemplo no tiene).
+  let startDate = "";
+  if (mode !== "sample") { try { const m = window.GPI.meta(); startDate = (m && m.startDate) || ""; } catch (e) { /* noop */ } }
+  const res = window.GPI.util.cpm(nodes, links, cal, { startDate });
   if (!res || !res.ok) return { reason: "cycle" };
   if (!(res.criticalIds || []).length) return { reason: "no-path" };
   const vars: Record<string, number> = {}; Object.keys(byId).forEach((id) => { vars[id] = byId[id].va; });
   const ch = window.GPI.util.pertCriticalChain(res, links, cal, vars);
-  if (!ch.ok) return ch.reason === "parallel" ? { reason: "parallel", count: res.criticalIds.length } : ch.reason === "empty" ? { reason: "no-path" } : { reason: "inconsistent" };
+  if (!ch.ok) return ch.reason === "parallel" ? { reason: "parallel", count: res.criticalIds.length } : ch.reason === "empty" ? { reason: "no-path" } : ch.reason === "elapsed" ? { reason: "elapsed" } : { reason: "inconsistent" };
   // Media = duración del proyecto con TE (incluye desfases); varianza = la de las
   // actividades que de verdad deciden el fin (ver pertCriticalChain).
   const ids = ch.ids, te = ch.mean, va = ch.variance;
@@ -377,7 +381,7 @@ function criticalPathStats(): CriticalPathStats {
     const row = actsCache.filter((r) => (r.a as ActivityItem).id === id)[0];
     names.push((row ? (row.a as ActivityItem).name || id : id) + (c.est ? "" : " *"));
   });
-  return { ids, names, te, va, duration: res.projectDuration, anyInvalid, missing, cpNoTe };
+  return { ids, names, te, va, duration: res.projectDuration, anyInvalid, missing, cpNoTe, elapsedApprox: res.elapsedApprox };
 }
 
 let targetTouched = false;
@@ -396,6 +400,7 @@ function renderProbability(): void {
     if (cp.reason === "no-links") { clear("Sin red de precedencias. Abre <b>Cronograma / CPM</b> y define las relaciones entre actividades para obtener la ruta crítica."); return; }
     if (cp.reason === "no-te") { clear("Ninguna actividad tiene una terna O–M–P válida todavía."); return; }
     if (cp.reason === "cycle") { clear("La red tiene un <b>ciclo</b>: el CPM no puede resolverse. Corrígelo en Cronograma / CPM."); return; }
+    if (cp.reason === "elapsed") { clear("<b>No aplicable:</b> la ruta crítica tiene desfases en <b>días transcurridos</b>, que se calculan sobre fechas reales (fines de semana y feriados) y no son un tiempo fijo que sumar a la media PERT. Exprésalos en días laborables para obtener la probabilidad."); return; }
     if (cp.reason === "no-path" || cp.reason === "inconsistent") { clear("No se pudo determinar una ruta crítica única."); return; }
     if (cp.reason === "parallel") { clear("<b>No aplicable:</b> hay " + cp.count + " actividades críticas en ramas <b>paralelas o convergentes</b>. La probabilidad PERT de una sola ruta no vale ahí (subestima el riesgo: el fin depende de que <b>todas</b> las ramas terminen a tiempo); haría falta simular la red completa."); return; }
     return;
@@ -416,6 +421,7 @@ function renderProbability(): void {
   let warn = "";
   if (cp.anyInvalid) warn += "<br>⚠ " + cp.anyInvalid + " terna(s) inválida(s) (debe cumplirse O ≤ M ≤ P).";
   if (cp.missing) warn += "<br>⚠ " + cp.missing + " actividad(es) sin terna completa.";
+  if (cp.elapsedApprox) warn += "<br>⚠ Hay desfases en días transcurridos y el proyecto no tiene fecha de inicio: se aproximan con una proporción semanal. Define la fecha de inicio en el Panel para calcularlos sobre fechas reales.";
   if (cp.cpNoTe) warn += "<br>⚠ " + cp.cpNoTe + " actividad(es) de la ruta crítica (marcadas con *) entraron con su duración base y aportan σ² = 0: la probabilidad está <b>sobrestimada</b> hasta que completes su terna.";
   elPath!.innerHTML = "<b>Ruta crítica (" + cp.ids.length + " act.):</b> " + cp.names.map(esc).join(" → ") + warn;
 }

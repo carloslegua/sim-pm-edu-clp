@@ -453,7 +453,12 @@
 		try {
 			cal = window.GPI.util.projectCalendar();
 		} catch (e) {}
-		const res = window.GPI.util.cpm(nodes, links, cal, {});
+		let startDate = "";
+		if (mode !== "sample") try {
+			const m = window.GPI.meta();
+			startDate = m && m.startDate || "";
+		} catch (e) {}
+		const res = window.GPI.util.cpm(nodes, links, cal, { startDate });
 		if (!res || !res.ok) return { reason: "cycle" };
 		if (!(res.criticalIds || []).length) return { reason: "no-path" };
 		const vars = {};
@@ -464,7 +469,7 @@
 		if (!ch.ok) return ch.reason === "parallel" ? {
 			reason: "parallel",
 			count: res.criticalIds.length
-		} : ch.reason === "empty" ? { reason: "no-path" } : { reason: "inconsistent" };
+		} : ch.reason === "empty" ? { reason: "no-path" } : ch.reason === "elapsed" ? { reason: "elapsed" } : { reason: "inconsistent" };
 		const ids = ch.ids, te = ch.mean, va = ch.variance;
 		let cpNoTe = 0;
 		const names = [];
@@ -483,7 +488,8 @@
 			duration: res.projectDuration,
 			anyInvalid,
 			missing,
-			cpNoTe
+			cpNoTe,
+			elapsedApprox: res.elapsedApprox
 		};
 	}
 	var targetTouched = false;
@@ -510,6 +516,10 @@
 			}
 			if (cp.reason === "cycle") {
 				clear("La red tiene un <b>ciclo</b>: el CPM no puede resolverse. Corrígelo en Cronograma / CPM.");
+				return;
+			}
+			if (cp.reason === "elapsed") {
+				clear("<b>No aplicable:</b> la ruta crítica tiene desfases en <b>días transcurridos</b>, que se calculan sobre fechas reales (fines de semana y feriados) y no son un tiempo fijo que sumar a la media PERT. Exprésalos en días laborables para obtener la probabilidad.");
 				return;
 			}
 			if (cp.reason === "no-path" || cp.reason === "inconsistent") {
@@ -540,6 +550,7 @@
 		let warn = "";
 		if (cp.anyInvalid) warn += "<br>⚠ " + cp.anyInvalid + " terna(s) inválida(s) (debe cumplirse O ≤ M ≤ P).";
 		if (cp.missing) warn += "<br>⚠ " + cp.missing + " actividad(es) sin terna completa.";
+		if (cp.elapsedApprox) warn += "<br>⚠ Hay desfases en días transcurridos y el proyecto no tiene fecha de inicio: se aproximan con una proporción semanal. Define la fecha de inicio en el Panel para calcularlos sobre fechas reales.";
 		if (cp.cpNoTe) warn += "<br>⚠ " + cp.cpNoTe + " actividad(es) de la ruta crítica (marcadas con *) entraron con su duración base y aportan σ² = 0: la probabilidad está <b>sobrestimada</b> hasta que completes su terna.";
 		elPath.innerHTML = "<b>Ruta crítica (" + cp.ids.length + " act.):</b> " + cp.names.map(esc).join(" → ") + warn;
 	}

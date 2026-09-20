@@ -475,6 +475,11 @@
 				t: oe + " actividades sin sucesora (no llegan al fin). Verifica si falta algún enlace."
 			});
 		}
+		if (R.cpm.ok && R.cpm.elapsedApprox) out.push({
+			c: "warn",
+			ic: "⚠",
+			t: "Hay desfases en <b>días transcurridos</b> y el proyecto no tiene fecha de inicio: se convierten con una proporción semanal <b>aproximada</b>. Define la fecha de inicio en el Panel para calcularlos sobre fechas reales (fines de semana y feriados)."
+		});
 		if (!hasLinks) out.push({
 			c: "warn",
 			ic: "▤",
@@ -543,6 +548,10 @@
 		const s = criticalPertSums(R);
 		if (s.reason === "parallel") {
 			out.innerHTML = "<div class='p'>—</div><div class='z'>no aplicable: hay <b>" + s.count + "</b> actividades críticas en ramas paralelas o convergentes. PERT de una sola ruta no vale ahí (subestima el riesgo: el fin depende de que TODAS las ramas terminen a tiempo) — requiere simular la red completa</div>";
+			return;
+		}
+		if (s.reason === "elapsed") {
+			out.innerHTML = "<div class='p'>—</div><div class='z'>no aplicable: la ruta crítica tiene desfases en <b>días transcurridos</b>, que se calculan sobre fechas reales (fines de semana y feriados) y no son un tiempo fijo que sumar a la media PERT. Exprésalos en días laborables para obtener la probabilidad</div>";
 			return;
 		}
 		if (s.reason) {
