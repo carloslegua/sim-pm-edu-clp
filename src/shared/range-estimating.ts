@@ -25,8 +25,30 @@ export interface RangeLine { id: string; name: string; ml: number; lowPct: numbe
 // impacto en costo es triangular (low ≤ likely ≤ high, valores POSITIVOS). `sign` = +1 amenaza (suma al costo),
 // −1 oportunidad (lo reduce). Se simula como Bernoulli × triangular, independiente de las partidas y entre sí.
 // La estimación base NO incluye estos eventos: por eso no hay «costo más probable» que restar (AACE 40R-08).
-export interface RiskEventInput { id: string; name: string; prob: number; low: number; likely: number; high: number; sign: 1 | -1; }
-export interface RangeOptions { iterations?: number; seed?: number; correlation?: number; events?: RiskEventInput[]; }
+//
+// Análisis INTEGRADO de costo y cronograma (AACE 40R-08 / 65R-11): un evento puede traer además su impacto en PLAZO
+// (`days`, triangular, en días laborables) y las actividades del cronograma que retrasa (`targets`). Cuando el evento
+// ocurre, el MISMO sorteo produce su costo directo y su retraso; el efecto sobre el fin del proyecto lo da el CPM real
+// (`schedule.duration`), y cada día de extensión cuesta `schedule.costPerDay` (gastos generales, dirección, alquileres).
+// Un evento sin costo (solo plazo) se expresa con low = likely = high = 0.
+export interface RiskEventInput {
+  id: string; name: string; prob: number; low: number; likely: number; high: number; sign: 1 | -1;
+  days?: { low: number; likely: number; high: number }; targets?: string[];
+}
+export interface ScheduleSim {
+  base: number;                                                       // duración del proyecto sin retrasos (días laborables)
+  costPerDay: number;                                                 // costo de cada día de extensión del plazo (≥ 0)
+  duration: (delta: Record<string, number>) => number | null;         // duración con esos retrasos por actividad (CPM real)
+}
+export interface RangeOptions { iterations?: number; seed?: number; correlation?: number; events?: RiskEventInput[]; schedule?: ScheduleSim; outcomes?: EventOutcomes; }
+export interface ScheduleResult {
+  base: number; costPerDay: number;
+  p: Record<number, number>;        // duración del proyecto en los percentiles de PERCENTILES (días laborables)
+  mean: number;
+  probDelay: number;                // fracción de iteraciones en que el proyecto termina después de lo previsto (0..1)
+  timeCostMean: number;             // costo medio de la extensión del plazo (0 si costPerDay = 0)
+  events: number;                   // eventos que retrasan actividades del cronograma
+}
 export interface RangeResult {
   n: number;                        // partidas válidas simuladas
   excluded: number;                 // partidas inválidas que quedaron fuera
@@ -37,6 +59,7 @@ export interface RangeResult {
   mean: number; sd: number; min: number; max: number;
   p: Record<number, number>;        // costo total en los percentiles de PERCENTILES
   curve: number[];                  // costo total en P1..P99 (índice 0 = P1) para la curva S
+  schedule: ScheduleResult | null;  // resultado de plazo (solo si se pasó `schedule`)
 }
 
 export const PERCENTILES = [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95];
@@ -81,14 +104,63 @@ function quantile(sorted: Float64Array, p: number): number {
   return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
 }
 
+const daysOk = (d: RiskEventInput["days"]): boolean => !!d && isFinite(d.low) && isFinite(d.likely) && isFinite(d.high) && d.low >= 0 && d.low <= d.likely && d.likely <= d.high;
+// Eventos que se pueden simular: probabilidad en (0, 1], impactos en costo coherentes (≥ 0, mín ≤ más probable ≤ máx) y signo ±1.
+export function validEvents(events?: RiskEventInput[] | null): RiskEventInput[] {
+  return (events || []).filter((e) => e && isFinite(e.prob) && e.prob > 0 && e.prob <= 1 && isFinite(e.low) && isFinite(e.likely) && isFinite(e.high) && e.low >= 0 && e.low <= e.likely && e.likely <= e.high && (e.sign === 1 || e.sign === -1));
+}
+const normIterations = (v: unknown): number => Math.max(1000, Math.min(200000, Math.floor(Number(v) || DEFAULT_ITERATIONS)));
+const normSeed = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : DEFAULT_SEED);
+
+// Resultado de simular SOLO los eventos: por iteración, su costo directo neto y cuánto extienden el plazo. No depende de
+// las partidas, de la correlación ni del costo por día, así que se calcula UNA vez y se reutiliza (el CPM es lo caro).
+export interface EventOutcomes {
+  iterations: number; seed: number;
+  n: number;                        // eventos válidos simulados
+  direct: Float64Array;             // costo directo neto de los eventos en cada iteración
+  ext: Float64Array | null;         // extensión del plazo en cada iteración (días laborables; < 0 si acelera); null si no se simuló el plazo
+  base: number; delayers: number;   // duración base y eventos que retrasan actividades
+}
+// Los eventos tienen su PROPIO flujo aleatorio: sus ocurrencias no dependen de cuántas partidas haya ni de la
+// correlación, así que el mismo registro de riesgos da exactamente los mismos plazos en Costos y en el Registro de
+// riesgos, y agregar o quitar partidas no cambia qué eventos ocurren. Por evento SIEMPRE se consumen tres números
+// (ocurrencia, impacto en costo, impacto en plazo) aunque no ocurra, para que la secuencia no dependa de cuáles ocurren.
+export function simulateEvents(events: RiskEventInput[] | null | undefined, schedule?: Pick<ScheduleSim, "base" | "duration"> | null, iterations?: number, seed?: number): EventOutcomes {
+  const evs = validEvents(events), N = normIterations(iterations), S = normSeed(seed);
+  const sim = schedule && isFinite(schedule.base) ? schedule : null;
+  const direct = new Float64Array(N), ext = sim ? new Float64Array(N) : null, randE = mulberry32((S ^ 0x5bd1e995) >>> 0);
+  for (let i = 0; i < N; i++) {
+    let t = 0, delta: Record<string, number> | null = null;
+    for (let j = 0; j < evs.length; j++) {
+      const e = evs[j], occurs = randE() < e.prob, u = randE(), uT = randE();
+      if (!occurs) continue;
+      t += e.sign * triInv(u, e.low, e.likely, e.high);
+      if (sim && daysOk(e.days) && e.targets && e.targets.length) {
+        const d = e.sign * triInv(uT, (e.days as { low: number }).low, (e.days as { likely: number }).likely, (e.days as { high: number }).high);
+        delta = delta || {};
+        for (const id of e.targets) delta[id] = (delta[id] || 0) + d;
+      }
+    }
+    direct[i] = t;
+    if (sim && ext) { let dur = sim.base; if (delta) { const r = sim.duration(delta); if (r !== null) dur = r; } ext[i] = dur - sim.base; }
+  }
+  return { iterations: N, seed: S, n: evs.length, direct, ext, base: sim ? sim.base : 0, delayers: sim ? evs.filter((e) => daysOk(e.days) && e.targets && e.targets.length).length : 0 };
+}
+
 export function simulateRange(lines: RangeLine[] | null | undefined, opts?: RangeOptions): RangeResult | null {
   const o = opts || {};
-  const iterations = Math.max(1000, Math.min(200000, Math.floor(o.iterations || DEFAULT_ITERATIONS)));
-  const seed = Number.isFinite(o.seed) ? (o.seed as number) : DEFAULT_SEED;
+  const iterations = normIterations(o.iterations), seed = normSeed(o.seed);
   const rho = Math.max(0, Math.min(1, o.correlation === undefined || !isFinite(o.correlation) ? DEFAULT_CORRELATION : o.correlation));
   const valid = (lines || []).filter((l) => l && lineProblems(l).length === 0);
-  const evs = (o.events || []).filter((e) => e && isFinite(e.prob) && e.prob > 0 && e.prob <= 1 && isFinite(e.low) && isFinite(e.likely) && isFinite(e.high) && e.low >= 0 && e.low <= e.likely && e.likely <= e.high && (e.sign === 1 || e.sign === -1));
+  const evs = validEvents(o.events);
   if (!valid.length && !evs.length) return null;
+  const sim = o.schedule && isFinite(o.schedule.base) ? o.schedule : null;
+  const costPerDay = sim ? Math.max(0, Number(sim.costPerDay) || 0) : 0;
+  // Los eventos se simulan aparte y una sola vez: si quien llama ya tiene sus resultados (mismos eventos, iteraciones y
+  // semilla) los pasa en `outcomes` y no se vuelve a correr el CPM.
+  const oc = o.outcomes, reuse = !!oc && oc.iterations === iterations && oc.seed === seed && oc.n === evs.length && (!sim || !!oc.ext);
+  const eo: EventOutcomes | null = evs.length ? (reuse ? (oc as EventOutcomes) : simulateEvents(evs, sim, iterations, seed)) : null;
+  const dir = eo ? eo.direct : null, ext = sim && eo ? eo.ext : null;
   const a = valid.map((l) => num(l.ml) * (1 + num(l.lowPct) / 100));
   const m = valid.map((l) => num(l.ml));
   const b = valid.map((l) => num(l.ml) * (1 + num(l.highPct) / 100));
@@ -103,8 +175,8 @@ export function simulateRange(lines: RangeLine[] | null | undefined, opts?: Rang
     spare = r * Math.sin(th); return r * Math.cos(th);
   };
   const sr = Math.sqrt(rho), se = Math.sqrt(1 - rho);
-  const totals = new Float64Array(iterations);
-  let sum = 0, sumSq = 0;
+  const totals = new Float64Array(iterations), durs = sim ? new Float64Array(iterations) : null;
+  let sum = 0, sumSq = 0, sumDur = 0, nDelayed = 0, timeCostSum = 0;
   for (let i = 0; i < iterations; i++) {
     const zc = normal();
     let t = 0;
@@ -112,11 +184,12 @@ export function simulateRange(lines: RangeLine[] | null | undefined, opts?: Rang
       if (b[j] <= a[j]) { t += m[j]; continue; }                       // sin incertidumbre: constante
       t += triInv(normCdf(sr * zc + se * normal()), a[j], m[j], b[j]);
     }
-    // Eventos de riesgo: SIEMPRE se consumen los dos números aleatorios (ocurrencia e impacto) aunque el evento no
-    // ocurra, para que la secuencia de las partidas no dependa de qué eventos se incluyan.
-    for (let j = 0; j < evs.length; j++) {
-      const occurs = rand() < evs[j].prob, u = rand();
-      if (occurs) t += evs[j].sign * triInv(u, evs[j].low, evs[j].likely, evs[j].high);
+    if (dir) t += dir[i];
+    if (sim && durs) {
+      const x = ext ? ext[i] : 0, dur = sim.base + x;
+      durs[i] = dur; sumDur += dur;
+      if (x > 1e-9) nDelayed++;
+      const cost = x * costPerDay; t += cost; timeCostSum += cost;
     }
     totals[i] = t; sum += t; sumSq += t * t;
   }
@@ -127,7 +200,13 @@ export function simulateRange(lines: RangeLine[] | null | undefined, opts?: Rang
   const curve: number[] = [];
   for (let q = 1; q <= 99; q++) curve.push(quantile(sorted, q));
   const eventsEV = evs.reduce((s, e) => s + e.sign * e.prob * (e.low + e.likely + e.high) / 3, 0);
-  return { n: valid.length, excluded: (lines || []).length - valid.length, events: evs.length, eventsEV, iterations, seed, correlation: rho, ml, mean, sd, min: sorted[0], max: sorted[iterations - 1], p, curve };
+  let schedule: ScheduleResult | null = null;
+  if (sim && durs) {
+    const sd2 = Float64Array.from(durs).sort(), pd: Record<number, number> = {};
+    PERCENTILES.forEach((q) => { pd[q] = quantile(sd2, q); });
+    schedule = { base: sim.base, costPerDay, p: pd, mean: sumDur / iterations, probDelay: nDelayed / iterations, timeCostMean: timeCostSum / iterations, events: eo ? eo.delayers : 0 };
+  }
+  return { n: valid.length, excluded: (lines || []).length - valid.length, events: evs.length, eventsEV, iterations, seed, correlation: rho, ml, mean, sd, min: sorted[0], max: sorted[iterations - 1], p, curve, schedule };
 }
 
 // Contingencia = percentil de decisión − estimado base (Σ más probable). Nunca negativa: si el

@@ -214,6 +214,7 @@ var GPI = (function(exports) {
 			type,
 			category: str(x.category),
 			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str).filter(Boolean) : [],
+			actIds: Array.isArray(x.actIds) ? x.actIds.map(str).filter(Boolean) : [],
 			owner: str(x.owner),
 			proximity: PROXIMITY.indexOf(str(x.proximity)) >= 0 ? str(x.proximity) : "",
 			identifiedOn: str(x.identifiedOn),
@@ -2958,25 +2959,25 @@ var GPI = (function(exports) {
 		return iso(d);
 	}
 	function scheduleStats() {
-		let sched = null, m = null, nodes = [];
+		let sched = null, m = null, net = null;
 		try {
 			sched = getModule("schedule");
 		} catch (e) {}
 		const links = sched && Array.isArray(sched.links) ? sched.links : [];
 		try {
-			nodes = (pertStats(getModule("pert"), getModule("activities"), getModule("wbs")).rows || []).map((r) => ({
-				id: r.id,
-				dur: r.dur || 0
-			}));
-		} catch (e2) {}
-		try {
 			m = meta();
 		} catch (e3) {}
-		const result = cpm(nodes, links, projectCalendar(), { startDate: m ? m.startDate : void 0 });
+		try {
+			net = scheduleNetwork(getModule("wbs"), getModule("activities"), getModule("pert"), sched, getModule("schedulePlan"), m ? m.startDate : "");
+		} catch (e2) {}
+		const result = cpm(net ? net.nodes.map((n) => ({
+			id: n.id,
+			dur: n.dur
+		})) : [], net ? net.links : [], net ? net.calendar : projectCalendar(), { startDate: m ? m.startDate : void 0 });
 		return {
 			hasSlice: !!sched,
 			links: links.length,
-			activities: nodes.length,
+			activities: net ? net.nodes.filter((n) => !n.isMilestone).length : 0,
 			ok: result.ok,
 			projectDuration: result.ok ? result.projectDuration : null,
 			criticalCount: result.ok ? result.criticalIds.length : 0,
@@ -2999,6 +3000,78 @@ var GPI = (function(exports) {
 		esc,
 		kpi
 	};
+	function scheduleNetwork(wbs, act, pert, sched, sp, startDate) {
+		const a = act || {}, byLeaf = a.byLeaf || {}, milestones = a.milestones || [];
+		const dur = {};
+		try {
+			pertStats(pert, act, wbs).rows.forEach((r) => {
+				dur[r.id] = r.dur;
+			});
+		} catch (e) {}
+		const nodes = [];
+		const leaves = wbsLeaves(wbs);
+		const known = {};
+		leaves.forEach((l) => {
+			known[l.id] = true;
+		});
+		const loose = milestones.filter((m) => !m.leafId), start = [], orphan = [], after = {};
+		loose.forEach((m) => {
+			if (!m.afterLeafId) start.push(m);
+			else if (known[m.afterLeafId]) (after[m.afterLeafId] = after[m.afterLeafId] || []).push(m);
+			else orphan.push(m);
+		});
+		const pushMs = (m, leafId) => {
+			nodes.push({
+				id: m.id,
+				code: m.code,
+				name: m.name,
+				leafId,
+				dur: 0,
+				hasDur: true,
+				isMilestone: true
+			});
+		};
+		start.forEach((m) => pushMs(m, null));
+		leaves.forEach((l) => {
+			(byLeaf[l.id] || []).forEach((av, i) => {
+				const d = dur[av.id];
+				nodes.push({
+					id: av.id,
+					code: l.code + "." + (i + 1),
+					name: av.name || "",
+					leafId: l.id,
+					dur: d == null ? 0 : d,
+					hasDur: d != null,
+					isMilestone: false
+				});
+			});
+			milestones.filter((m) => m.leafId === l.id).forEach((m) => pushMs(m, l.id));
+			(after[l.id] || []).forEach((m) => pushMs(m, null));
+		});
+		orphan.forEach((m) => pushMs(m, null));
+		const inNet = {};
+		nodes.forEach((n) => {
+			inNet[n.id] = true;
+		});
+		const links = (sched && Array.isArray(sched.links) ? sched.links : []).filter((l) => inNet[l.from] && inNet[l.to] && l.from !== l.to);
+		return {
+			nodes,
+			links,
+			calendar: projectCalendar(sp),
+			startDate: startDate || "",
+			hasElapsedLags: links.some((l) => (l.lagUnit || "d") === "ed" && Number(l.lag) !== 0)
+		};
+	}
+	function activeScheduleNetwork() {
+		try {
+			if (!avail() || !active()) return null;
+			const m = meta();
+			const net = scheduleNetwork(getModule("wbs"), getModule("activities"), getModule("pert"), getModule("schedule"), getModule("schedulePlan"), m ? m.startDate : "");
+			return net.nodes.some((n) => !n.isMilestone) ? net : null;
+		} catch (e) {
+			return null;
+		}
+	}
 	var util = {
 		wbsRollup,
 		wbsResources,
@@ -3038,7 +3111,9 @@ var GPI = (function(exports) {
 		cpm,
 		parseISO,
 		addWorkingDays,
-		scheduleStats
+		scheduleStats,
+		scheduleNetwork,
+		activeScheduleNetwork
 	};
 	var schema = SCHEMA;
 	//#endregion
@@ -3079,6 +3154,7 @@ var GPI = (function(exports) {
 	exports.KEY = KEY;
 	exports.active = active;
 	exports.activeId = activeId;
+	exports.activeScheduleNetwork = activeScheduleNetwork;
 	exports.activitiesStats = activitiesStats;
 	exports.addWorkingDays = addWorkingDays;
 	exports.applyCostEstimateToWbs = applyCostEstimateToWbs;
@@ -3130,6 +3206,7 @@ var GPI = (function(exports) {
 	exports.saveMeta = saveMeta;
 	exports.saveModule = saveModule;
 	exports.saveState = saveState;
+	exports.scheduleNetwork = scheduleNetwork;
 	exports.schedulePlanAudit = schedulePlanAudit;
 	exports.scheduleStats = scheduleStats;
 	exports.scheduleValidate = scheduleValidate;

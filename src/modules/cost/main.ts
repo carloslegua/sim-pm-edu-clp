@@ -29,14 +29,16 @@ import type * as GpiCore from "../../core/gpi-core";
 import type { ActivitiesModule, CostEstimateModule, CostModule, EditSession, ProjectMeta, WbsModule, WriteResult } from "../../core/types";
 import { classifyVariance, validateThresholds, type CostThresholds, type VarianceLevel } from "../../shared/cost-variance";
 import {
-  contingencyAt, lineProblems, rangeAdvisories, simulateRange, DEFAULT_CORRELATION, DEFAULT_ITERATIONS, DEFAULT_SEED,
-  type RangeLine, type RangeResult
+  contingencyAt, lineProblems, rangeAdvisories, simulateEvents, simulateRange, DEFAULT_CORRELATION, DEFAULT_ITERATIONS, DEFAULT_SEED,
+  type EventOutcomes, type RangeLine, type RangeResult
 } from "../../shared/range-estimating";
 import {
   STATUS_LABEL, normalizePlan as normalizeRiskPlan, normalizeRisk, riskEventsOf, toRiskRef,
   type ExcludedRisk, type Risk, type RiskEvent, type RiskPlan
 } from "../../shared/risk-analysis";
 import { SAMPLE_PLAN as SAMPLE_RISK_PLAN, buildSampleRisks } from "../../shared/risk-sample";
+import { SAMPLE_START_DATE, sampleScheduleModules } from "../../shared/schedule-sample";
+import { fmtDays, makeEngine, resolveTargets, type Engine, type Network } from "../../shared/schedule-risk";
 import {
   analyzeChangeOrders, contingencyByRisk, orderEffect, planBaselining, validateApproval,
   CO_KIND_HINT, CO_KIND_LABEL, FUND_CONT, FUND_EXTRA,
@@ -105,6 +107,12 @@ const SAMPLE_RANGES: RangeLine[] = [
   { id: "m-4", name: "4 Construcción", ml: 3315000, lowPct: -6, highPct: 18, basis: "Metrados y precios unitarios de subcontratos aún por cerrar (los rendimientos, el suelo, el paro y los vecinos son eventos del registro: R-09, R-03, R-05, R-07)." },
   { id: "m-5", name: "5 Pruebas y Puesta en Marcha", ml: 285000, lowPct: -3, highPct: 10, basis: "Alcance de las pruebas de instalaciones por confirmar con QA/QC." }
 ];
+
+/* Costo de cada día de extensión del plazo del caso de ejemplo (solo modo independiente): Dirección de Proyecto y gastos
+   generales de obra, repartidos en los 273 días laborables del cronograma DISTRIB+. Los rangos de costo de los riesgos
+   son DIRECTOS; el costo del retraso lo calcula la simulación como días de extensión × este costo por día. */
+const SAMPLE_TIME_COST = 1500;
+const SAMPLE_TIME_BASIS = "Dirección de Proyecto y gastos generales de obra (supervisión, alquileres, seguros): ≈ 410.000, el 5,8 % del costo base, repartidos en los 273 días laborables del cronograma.";
 
 interface BudgetComputed { base: number; cont: number; esc: number; bac: number; mgmt: number; total: number; }
 type ChangeTotals = CoAnalysis;
@@ -212,18 +220,59 @@ function riskCtx(): RiskCtx {
 }
 const riskRefs = (ctx: RiskCtx) => ctx.risks.map((r) => ({ ...toRiskRef(r), plannedMax: r.costImpact.high !== null ? r.costImpact.high : r.costImpact.likely }));
 function includeRisksOn(): boolean { const c = document.getElementById("rngRisks") as HTMLInputElement | null; return !c || c.checked; }
-interface EventsCtx { source: RiskCtx["source"]; events: RiskEvent[]; excluded: ExcludedRisk[]; ev: number; responseCost: number; open: number; }
-function eventsCtx(): EventsCtx {
-  const c = riskCtx(), e = riskEventsOf(c.risks, c.plan);
-  const open = c.risks.filter((r) => r.status !== "materializado" && r.status !== "cerrado");
-  return { source: c.source, events: e.events, excluded: e.excluded, ev: e.ev, responseCost: open.reduce((s, r) => s + (r.responseCost || 0), 0), open: open.length };
+// ---- cronograma: la red de actividades y el CPM (AACE 40R-08 / 65R-11: el riesgo de plazo cuesta) ----
+// Costos LEE la red, no la escribe: conectado, la del proyecto; independiente, la red DISTRIB+ completa. Se arma
+// perezosamente y se invalida cuando otro módulo cambia el proyecto o al volver a esta pestaña.
+let net: Network | null = null, eng: Engine | null = null, netDirty = true;
+function getEng(): Engine | null {
+  if (!netDirty) return eng;
+  netDirty = false; net = null; eng = null;
+  Object.keys(simCache).forEach((k) => { delete simCache[k]; });   // la red cambió: las simulaciones guardadas ya no valen
+  Object.keys(eventOutcomes).forEach((k) => { delete eventOutcomes[k]; });
+  try {
+    if (typeof GPI === "undefined" || !GPI || !GPI.util || !GPI.util.cpm || !GPI.util.scheduleNetwork) return null;
+    if (gpiOn()) net = GPI.util.activeScheduleNetwork();
+    else { const m = sampleScheduleModules(); net = GPI.util.scheduleNetwork(m.wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE); }
+    eng = makeEngine(net, GPI.util.cpm);
+  } catch (e) { net = null; eng = null; }
+  return eng;
 }
-function simulate(rho: number, withEvents: boolean = includeRisksOn()): RangeResult | null {
+// Costo de cada día de extensión del plazo (gastos generales, dirección, alquileres): lo que convierte un retraso en costo.
+function timeCostPerDay(): number { const el = document.getElementById("rngTimeCost") as HTMLInputElement | null, v = el ? parseFloat(el.value) : 0; return isFinite(v) && v > 0 ? v : 0; }
+function finishOf(days: number): string {
+  if (typeof GPI === "undefined" || !GPI || !net || !net.startDate) return "";
+  try { return GPI.util.addWorkingDays(GPI.util.parseISO(net.startDate), Math.max(0, Math.ceil(days - 1e-9) - 1), net.calendar as { workDayIdx?: number[]; holidays?: string[] }); } catch (e) { return ""; }
+}
+interface EventsCtx { source: RiskCtx["source"]; events: RiskEvent[]; excluded: ExcludedRisk[]; unmapped: string[]; ev: number; responseCost: number; open: number; }
+function eventsCtx(): EventsCtx {
+  const c = riskCtx(), g = getEng();
+  const e = riskEventsOf(c.risks, c.plan, { targets: (r) => (g ? resolveTargets(r, g).targets.map((t) => t.id) : []) });
+  const open = c.risks.filter((r) => r.status !== "materializado" && r.status !== "cerrado");
+  return { source: c.source, events: e.events, excluded: e.excluded, unmapped: e.unmapped, ev: e.ev, responseCost: open.reduce((s, r) => s + (r.responseCost || 0), 0), open: open.length };
+}
+// Los eventos (su costo directo y cuánto extienden el plazo) NO dependen de las partidas, de la correlación ni del costo
+// por día: se simulan UNA vez por conjunto de eventos y red (el CPM es lo caro) y se reutilizan en cada recálculo.
+const eventOutcomes: Record<string, EventOutcomes> = {};
+function outcomesFor(events: RiskEvent[], g: Engine | null): EventOutcomes | undefined {
+  if (!events.length) return undefined;
+  const key = JSON.stringify([events.map((e) => [e.id, e.prob, e.low, e.likely, e.high, e.sign, e.days, e.targets]), g ? g.base : null]);
+  if (!(key in eventOutcomes)) {
+    if (Object.keys(eventOutcomes).length > 6) Object.keys(eventOutcomes).forEach((k) => { delete eventOutcomes[k]; });
+    eventOutcomes[key] = simulateEvents(events, g ? { base: g.base, duration: (d) => g.duration(d) } : null, DEFAULT_ITERATIONS, DEFAULT_SEED);
+  }
+  return eventOutcomes[key];
+}
+// `withSchedule = false` simula solo el costo directo de los eventos (para separar su aporte del costo del retraso).
+function simulate(rho: number, withEvents: boolean = includeRisksOn(), withSchedule: boolean = true): RangeResult | null {
   const events = withEvents ? eventsCtx().events : [];
-  const key = JSON.stringify([state.ranges.map((l) => [l.ml, l.lowPct, l.highPct]), rho, events.map((e) => [e.id, e.prob, e.low, e.likely, e.high, e.sign])]);
+  const g = withEvents ? getEng() : null, cpd = g && withSchedule ? timeCostPerDay() : 0;
+  const key = JSON.stringify([state.ranges.map((l) => [l.ml, l.lowPct, l.highPct]), rho, events.map((e) => [e.id, e.prob, e.low, e.likely, e.high, e.sign, e.days, e.targets]), g && withSchedule ? [g.base, cpd] : null]);
   if (!(key in simCache)) {
     if (Object.keys(simCache).length > 24) Object.keys(simCache).forEach((k) => { delete simCache[k]; });
-    simCache[key] = simulateRange(state.ranges, { correlation: rho, iterations: DEFAULT_ITERATIONS, seed: DEFAULT_SEED, events });
+    simCache[key] = simulateRange(state.ranges, {
+      correlation: rho, iterations: DEFAULT_ITERATIONS, seed: DEFAULT_SEED, events, outcomes: outcomesFor(events, g),
+      schedule: g && withSchedule ? { base: g.base, costPerDay: cpd, duration: (d) => g.duration(d) } : undefined
+    });
   }
   return simCache[key];
 }
@@ -283,6 +332,13 @@ function eventAdvisories(): string[] {
   const ec = eventsCtx(), out: string[] = [];
   if (ec.source === "sin registro") out.push("Este proyecto no tiene Registro de Riesgos: la contingencia solo cubre la incertidumbre del estimado. Registra los riesgos para incluir los eventos discretos.");
   if (ec.events.length) out.push("Doble conteo: los rangos de las partidas deben expresar solo la incertidumbre del estimado (metrados, precios). Si ya incluyen los eventos del registro (p. ej. precio del acero, suelo, paros), esos riesgos se cuentan dos veces.");
+  const g = getEng(), cpd = timeCostPerDay(), delayers = ec.events.filter((e) => e.days && e.targets && e.targets.length).length;
+  if (ec.unmapped.length) out.push(!g
+    ? "El proyecto no tiene cronograma (actividades y enlaces): el impacto en plazo de " + ec.unmapped.length + " riesgo(s) (" + ec.unmapped.slice(0, 4).join(", ") + (ec.unmapped.length > 4 ? "…" : "") + ") no se refleja, ni tampoco su costo."
+    : ec.unmapped.length + " riesgo(s) con impacto en plazo no están ubicados en el cronograma (" + ec.unmapped.slice(0, 4).join(", ") + (ec.unmapped.length > 4 ? "…" : "") + "): su retraso, y el costo de ese retraso, no entran. Indica sus paquetes o actividades en el Registro de Riesgos.");
+  if (delayers && cpd <= 0) out.push("Estos riesgos retrasan el proyecto, pero no hay un costo por día de extensión del plazo: ese retraso no se traduce a costo (AACE 40R-08). Defínelo (gastos generales, dirección, alquileres por día).");
+  if (delayers && cpd > 0) out.push("Costo del plazo: el rango de costo de cada riesgo debe incluir solo costos DIRECTOS. Lo que depende del tiempo (gastos generales, dirección, alquileres) ya lo calcula la simulación (días de extensión × costo por día); si también está en el rango del riesgo, se cuenta dos veces.");
+  if (g && net && net.hasElapsedLags) out.push("La red tiene desfases en días transcurridos («ed»): sin fecha de inicio real el cálculo los aproxima, así que el plazo base puede diferir del de Cronograma/CPM.");
   if (ec.excluded.length) out.push(ec.excluded.length + " riesgo(s) abierto(s) no se pueden cuantificar y no suman a la contingencia: " + ec.excluded.slice(0, 4).map((x) => x.code + " (" + x.reason + ")").join(", ") + (ec.excluded.length > 4 ? "…" : "") + ".");
   if (ec.responseCost > 0) out.push("El costo de las respuestas planificadas (" + fmt(ec.responseCost) + ") debe estar dentro del estimado base o de la línea base, no en la contingencia.");
   return out;
@@ -293,16 +349,32 @@ function renderEvents(res: RangeResult | null, p: number): void {
   if (!on) { box.innerHTML = `<div class="muted small">Los eventos de riesgo NO se incluyen: la contingencia cubre solo la incertidumbre de las partidas.</div>`; return; }
   const ec = eventsCtx();
   const src = ec.source === "registro" ? "Registro de Riesgos del proyecto" : ec.source === "ejemplo" ? "caso de ejemplo DISTRIB+ (modo independiente)" : "sin Registro de Riesgos";
-  if (!ec.events.length) { box.innerHTML = `<div class="muted small"><b>Fuente:</b> ${esc(src)}. ${ec.source === "sin registro" ? "" : "No hay riesgos abiertos con probabilidad e impacto en costo cuantificados."}</div>`; return; }
-  const only = simulate(corrValue(), false), cA = only ? contingencyAt(only, p).amount : 0, cB = res ? contingencyAt(res, p).amount : 0;
-  const rows = ec.events.slice(0, 14).map((e) => `<tr><td class="mono">${esc(e.code)}</td><td>${esc(e.title)}</td><td>${e.type === "amenaza" ? "Amenaza" : "Oportunidad"}</td><td class="num">${Math.round(e.prob * 100)} %</td><td class="num">${fmt(e.low)} / ${fmt(e.likely)} / ${fmt(e.high)}</td><td class="muted">${esc(e.basis)}</td><td class="num">${e.sign < 0 ? "−" : ""}${fmt(e.prob * (e.low + e.likely + e.high) / 3)}</td></tr>`).join("");
+  if (!ec.events.length) { box.innerHTML = `<div class="muted small"><b>Fuente:</b> ${esc(src)}. ${ec.source === "sin registro" ? "" : "No hay riesgos abiertos con probabilidad e impacto en costo o en plazo cuantificados."}</div>`; return; }
+  const g = getEng(), cpd = timeCostPerDay(), s = res ? res.schedule : null;
+  const only = simulate(corrValue(), false), direct = simulate(corrValue(), true, false);
+  const cA = only ? contingencyAt(only, p).amount : 0, cB = direct ? contingencyAt(direct, p).amount : 0, cC = res ? contingencyAt(res, p).amount : 0;
+  // Efecto de un evento sobre el fin del proyecto con su impacto en plazo más probable (el CPM se vuelve a correr).
+  const plazoDe = (e: RiskEvent): string => {
+    if (!e.days || !e.targets || !e.targets.length || !g) return "—";
+    const d: Record<string, number> = {}; e.targets.forEach((id) => { d[id] = e.sign * (e.days as { likely: number }).likely; });
+    const dur = g.duration(d);
+    return e.days.likely + " d → " + (dur === null ? "—" : fmtDays(Math.round(Math.abs(dur - g.base) * 10) / 10));
+  };
+  const rows = ec.events.slice(0, 14).map((e) => `<tr><td class="mono">${esc(e.code)}</td><td>${esc(e.title)}</td><td>${e.type === "amenaza" ? "Amenaza" : "Oportunidad"}</td><td class="num">${Math.round(e.prob * 100)} %</td><td class="num">${e.low || e.likely || e.high ? fmt(e.low) + " / " + fmt(e.likely) + " / " + fmt(e.high) : "—"}</td><td class="num">${plazoDe(e)}</td><td class="muted">${esc(e.basis)}</td><td class="num">${e.sign < 0 ? "−" : ""}${fmt(e.prob * (e.low + e.likely + e.high) / 3)}</td></tr>`).join("");
+  const showTime = !!s && cpd > 0;
+  const sched = s && g ? `<div class="eyebrow" style="margin:14px 0 6px">Plazo con los riesgos (CPM real · reserva de plazo)</div>
+    <table class="rng-res" style="max-width:520px"><thead><tr><th>Confianza</th><th class="num">Duración</th><th class="num">Reserva de plazo</th><th>Fin</th></tr></thead><tbody>
+      <tr><td>Plan (sin riesgos)</td><td class="num">${fmtDays(s.base)}</td><td class="num">—</td><td>${esc(finishOf(s.base)) || "—"}</td></tr>
+      ${[50, 70, 80, 90].map((q) => `<tr class="${q === p ? "rng-selrow" : ""}"><td>P${q}${q === p ? " · decisión" : ""}</td><td class="num">${fmtDays(s.p[q])}</td><td class="num">${fmtDays(Math.max(0, s.p[q] - s.base))}</td><td>${esc(finishOf(s.p[q])) || "—"}</td></tr>`).join("")}</tbody></table>
+    <div class="muted" style="font-size:11.5px;margin-top:6px">${s.events} evento(s) retrasan actividades del cronograma · probabilidad de terminar después de lo previsto ${Math.round(s.probDelay * 1000) / 10} % · retraso medio ${fmtDays(Math.round((s.mean - s.base) * 10) / 10)}${cpd > 0 ? " · costo medio de la extensión " + fmt(s.timeCostMean) + " (a " + fmt(cpd) + " por día)" : ""}. Es la misma simulación del Registro de Riesgos (mismos eventos y semilla).</div>` : "";
   box.innerHTML = `<div class="muted small" style="margin-bottom:6px"><b>Fuente:</b> ${esc(src)} · ${ec.open} riesgo(s) abierto(s): <b>${ec.events.length}</b> entran a la simulación${ec.excluded.length ? ", " + ec.excluded.length + " sin cuantificar" : ""}. La contingencia cubre la exposición que <b>queda tras la respuesta</b> (residual).</div>
-    <div style="overflow-x:auto"><table class="rng-res"><thead><tr><th>Cód.</th><th>Riesgo</th><th>Tipo</th><th class="num">Prob.</th><th class="num">Mín / Más prob. / Máx</th><th>Base</th><th class="num">Valor esperado</th></tr></thead><tbody>${rows}</tbody>
-      <tfoot><tr style="font-weight:700"><td colspan="6">Valor esperado neto de los eventos${ec.events.length > 14 ? " (incluye los " + (ec.events.length - 14) + " no mostrados)" : ""}</td><td class="num">${fmt(ec.ev)}</td></tr></tfoot></table></div>
+    <div style="overflow-x:auto"><table class="rng-res"><thead><tr><th>Cód.</th><th>Riesgo</th><th>Tipo</th><th class="num">Prob.</th><th class="num">Costo directo: mín / más prob. / máx</th><th class="num">Plazo: más prob. → fin del proyecto</th><th>Base</th><th class="num">Valor esperado (costo)</th></tr></thead><tbody>${rows}</tbody>
+      <tfoot><tr style="font-weight:700"><td colspan="7">Valor esperado neto de los eventos${ec.events.length > 14 ? " (incluye los " + (ec.events.length - 14) + " no mostrados)" : ""}</td><td class="num">${fmt(ec.ev)}</td></tr></tfoot></table></div>
     <table class="rng-res" style="margin-top:10px;max-width:520px"><thead><tr><th>Contingencia P${p}</th><th class="num">Monto</th></tr></thead><tbody>
       <tr><td>Solo incertidumbre de las partidas</td><td class="num">${fmt(cA)}</td></tr>
-      <tr><td>+ aporte de los eventos de riesgo</td><td class="num">${fmt(cB - cA)}</td></tr>
-      <tr class="rng-selrow"><td>Contingencia total (partidas + eventos)</td><td class="num">${fmt(cB)}</td></tr></tbody></table>`;
+      <tr><td>+ aporte de los eventos de riesgo (costo directo)</td><td class="num">${fmt(cB - cA)}</td></tr>
+      ${showTime ? `<tr><td>+ costo de la extensión del plazo (días × costo por día)</td><td class="num">${fmt(cC - cB)}</td></tr>` : ""}
+      <tr class="rng-selrow"><td>Contingencia total${showTime ? " (partidas + eventos + plazo)" : " (partidas + eventos)"}</td><td class="num">${fmt(cC)}</td></tr></tbody></table>${sched}`;
 }
 function renderRange(calc: ContCalc, base: number): void {
   const res = calc.res, p = pctNum(), cls = CLASSES[state.curClass];
@@ -619,8 +691,13 @@ function rangeDocHtml(): string {
   const evTxt = ec && ec.events.length
     ? `Incluye <b>${ec.events.length} evento(s) de riesgo</b> del ${ec.source === "registro" ? "Registro de Riesgos del proyecto" : "caso de ejemplo"} (${esc(ec.events.slice(0, 6).map((e) => e.code).join(", "))}${ec.events.length > 6 ? "…" : ""}), con su riesgo <b>residual</b> cuando está cuantificado; valor esperado neto ${fmt(ec.ev)}.`
     : "No incluye eventos de riesgo discretos (ninguno cuantificado en el registro, o se excluyeron).";
+  // Plazo integrado (AACE 65R-11): efecto de los eventos sobre el fin del proyecto y su costo.
+  const sc = res && res.schedule, cpd = timeCostPerDay(), basisT = (($("rngTimeBasis") as HTMLInputElement | null) || { value: "" }).value.trim();
+  const schedTxt = sc && sc.events
+    ? ` <b>Plazo:</b> ${sc.events} evento(s) retrasan actividades del cronograma (CPM real, duración base ${fmtDays(sc.base)}); con P${p} el plazo es ${fmtDays(sc.p[p])} (reserva de plazo ${fmtDays(Math.max(0, sc.p[p] - sc.base))}${finishOf(sc.p[p]) ? ", fin " + esc(finishOf(sc.p[p])) : ""}).${cpd > 0 ? " La extensión del plazo se costea a " + fmt(cpd) + " por día" + (basisT ? " (" + esc(basisT) + ")" : "") + ": costo medio " + fmt(sc.timeCostMean) + ", incluido en la contingencia." : " No se definió un costo por día de extensión: el retraso no se traduce a costo."}`
+    : "";
   return `<p style="font-size:12.5px;margin:10px 0 4px"><b>Base de la contingencia — estimación por rangos y simulación Monte Carlo (AACE RP 41R-08 y 40R-08).</b> ${res
-    ? `Distribución triangular por partida; correlación entre partidas ${Math.round(res.correlation * 100)} %; ${res.iterations.toLocaleString("es-PE")} iteraciones (semilla ${res.seed}, reproducible). Estimado base Σ más probable ${fmt(res.ml)}; P50 ${fmt(res.p[50])}, P${p} ${fmt(res.p[p])}. Contingencia = P${p} − estimado base = <b>${fmt(contingencyAt(res, p).amount)}</b>. Cubre la incertidumbre de los rangos del estimado. ${evTxt}`
+    ? `Distribución triangular por partida; correlación entre partidas ${Math.round(res.correlation * 100)} %; ${res.iterations.toLocaleString("es-PE")} iteraciones (semilla ${res.seed}, reproducible). Estimado base Σ más probable ${fmt(res.ml)}; P50 ${fmt(res.p[50])}, P${p} ${fmt(res.p[p])}. Contingencia = P${p} − estimado base = <b>${fmt(contingencyAt(res, p).amount)}</b>. Cubre la incertidumbre de los rangos del estimado. ${evTxt}${schedTxt}`
     : "Aún no hay partidas válidas."}</p>
     <table class="dt"><thead><tr><td style="font-weight:700;color:var(--muted)">Partida</td><td style="font-weight:700;color:var(--muted);text-align:right">Más probable</td><td style="font-weight:700;color:var(--muted);text-align:right">Mín / Máx</td><td style="font-weight:700;color:var(--muted)">Fundamento del rango</td></tr></thead><tbody>${lines}</tbody></table>`;
 }
@@ -750,7 +827,10 @@ function collect(): Record<string, unknown> {
         rate: state._budget && state._budget.base ? state._budget.cont / state._budget.base : 0,
         manualPct: +($("manualPct") as HTMLInputElement).value || 0, manualBasis: ($("manualBasis") as HTMLTextAreaElement).value
       },
-      rangeAnalysis: { lines: state.ranges, correlation: corrValue(), iterations: DEFAULT_ITERATIONS, seed: DEFAULT_SEED, includeRisks: includeRisksOn(), results: rangeSummary() },
+      rangeAnalysis: {
+        lines: state.ranges, correlation: corrValue(), iterations: DEFAULT_ITERATIONS, seed: DEFAULT_SEED, includeRisks: includeRisksOn(),
+        timeCostPerDay: timeCostPerDay(), timeCostBasis: (($("rngTimeBasis") as HTMLInputElement | null) || { value: "" }).value, results: rangeSummary()
+      },
       mgmtReservePct: +($("mgmtPct") as HTMLInputElement).value, escalation: {
         inflation: +($("inflRate") as HTMLInputElement).value, years: +($("inflYears") as HTMLInputElement).value,
         fxShare: +($("fxShare") as HTMLInputElement).value, fxMode: ($("fxMode") as HTMLSelectElement).value, fxBand: +($("fxBand") as HTMLInputElement).value
@@ -763,7 +843,10 @@ function collect(): Record<string, unknown> {
 // Resumen guardado del análisis de rangos (la simulación es determinista: se puede recalcular igual).
 function rangeSummary(): Record<string, number> | null {
   const r = simulate(corrValue());
-  return r ? { ml: r.ml, mean: r.mean, sd: r.sd, p10: r.p[10], p50: r.p[50], p70: r.p[70], p80: r.p[80], p90: r.p[90], events: r.events, eventsEV: r.eventsEV } : null;
+  if (!r) return null;
+  const out: Record<string, number> = { ml: r.ml, mean: r.mean, sd: r.sd, p10: r.p[10], p50: r.p[50], p70: r.p[70], p80: r.p[80], p90: r.p[90], events: r.events, eventsEV: r.eventsEV };
+  if (r.schedule) Object.assign(out, { schedBase: r.schedule.base, schedP50: r.schedule.p[50], schedP70: r.schedule.p[70], schedP80: r.schedule.p[80], schedP90: r.schedule.p[90], schedProbDelay: r.schedule.probDelay, timeCostMean: r.schedule.timeCostMean });
+  return out;
 }
 function buildJSON(): void { $("jsonView").textContent = JSON.stringify(collect(), null, 2); }
 
@@ -943,6 +1026,9 @@ function applyData(d: any): void {
     if (ra.correlation != null && isFinite(Number(ra.correlation))) ($("corrPct") as HTMLInputElement).value = String(Math.round(Number(ra.correlation) * 100));
     // Proyectos guardados antes de incluir los eventos de riesgo no traen el campo: se leen como «incluidos» (el valor por omisión).
     if (ra.includeRisks === false) ($("rngRisks") as HTMLInputElement).checked = false;
+    // Campos de la integración con el cronograma: los proyectos guardados antes no los traen y se leen como «sin costo por día».
+    if (ra.timeCostPerDay != null && isFinite(Number(ra.timeCostPerDay))) ($("rngTimeCost") as HTMLInputElement).value = String(ra.timeCostPerDay > 0 ? ra.timeCostPerDay : "");
+    if (ra.timeCostBasis != null) ($("rngTimeBasis") as HTMLInputElement).value = String(ra.timeCostBasis);
   }
   if (d.changeOrders) state.co = d.changeOrders;
   if (Array.isArray(d.baselineLog)) state.baselines = d.baselineLog; // .json antiguos: sin versiones de línea base
@@ -956,7 +1042,10 @@ function load(): void {
   // Modo independiente (sin gpi-core): demo autocontenida con caso de ejemplo.
   let d; try { d = JSON.parse(localStorage.getItem(STORE_KEY) as string); } catch (e) { /* noop */ }
   if (d) applyData(d);
-  else { state.co = JSON.parse(JSON.stringify(SAMPLE_CO)); state.ranges = JSON.parse(JSON.stringify(SAMPLE_RANGES)); }
+  else {
+    state.co = JSON.parse(JSON.stringify(SAMPLE_CO)); state.ranges = JSON.parse(JSON.stringify(SAMPLE_RANGES));
+    ($("rngTimeCost") as HTMLInputElement).value = String(SAMPLE_TIME_COST); ($("rngTimeBasis") as HTMLInputElement).value = SAMPLE_TIME_BASIS;
+  }
 }
 /* ---------- Barra de proyecto (badge flotante) ---------- */
 function gpiBadge(): void {
@@ -999,10 +1088,11 @@ function init(reload: boolean): void {
   if (connected) {
     gpiBadge();
     window.addEventListener("beforeunload", save);
-    document.addEventListener("visibilitychange", function () { if (document.hidden) save(); });
+    document.addEventListener("visibilitychange", function () { if (document.hidden) save(); else { netDirty = true; recalcCont(); } });
     // Reactividad entre pestañas: si cambian los metadatos o la EDT en otra
     // pestaña, refresca el nombre del proyecto que muestra el badge flotante.
     if ((GPI as GpiApi).onChange) (GPI as GpiApi).onChange(function () {
+      netDirty = true;   // el cronograma (actividades, enlaces, calendario) lo editan otros módulos
       if (loadedProjectId != null && (GPI as GpiApi).activeId() !== loadedProjectId) { markProjectStale(); return; }
       try {
         const el = document.querySelector("#gpiBadge b"); const m = (GPI as GpiApi).meta();

@@ -126,6 +126,11 @@ src/shared/range-estimating.ts   → (se inlinea en cost.js) contingencia por ra
                                     riesgo discretos (Bernoulli × triangular) del Registro
 src/shared/risk-sample.ts        → (se inlinea en risks.js y cost.js) ÚNICA fuente del ejemplo
                                     DISTRIB+ de riesgos (plan, 10 riesgos, órdenes vinculadas)
+src/shared/schedule-risk.ts      → (se inlinea en risks.js y cost.js) riesgo de plazo: motor sobre el CPM
+                                    del núcleo, ubicación de un riesgo en actividades, efecto en el fin
+src/shared/schedule-sample.ts    → (se inlinea en risks.js y cost.js) red DISTRIB+ completa (43 act.,
+                                    3 hitos, 51 enlaces) para los modos independientes; prueba de oro
+                                    en tests/unit/schedule-sample.test.ts (273 d, 34 críticos)
 src/shared/stakeholder-engagement.ts → (se inlinea en stakeholder-studio.js) matriz de compromiso
                                     de interesados: brecha, prioridad, hallazgos
 src/shared/write-session.ts      → (se inlinea en cada IIFE) guardado con sesión de

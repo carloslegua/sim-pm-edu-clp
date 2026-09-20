@@ -255,6 +255,110 @@ describe("Risk_Register.html (Registro de riesgos)", () => {
     expect(dom.window.document.getElementById("calc-m2")!.textContent).not.toMatch(/orden de cambio vinculada/);
   });
 
+  // ---- Tercera entrega: riesgo de plazo (el efecto de cada riesgo en el fin del proyecto, con el CPM real) ----
+  const calc = (doc: Document) => doc.querySelector(".calc")!.textContent!.replace(/\s+/g, " ");
+  const elegir = (dom: any, sel: HTMLSelectElement, start: string) => {
+    Array.from(sel.options).forEach((o) => { o.selected = o.text.startsWith(start); });
+    sel.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  };
+
+  it("un riesgo con impacto en plazo muestra su efecto en el fin del proyecto: la actividad crítica traslada el retraso íntegro", async () => {
+    const dom = await abrir(), doc = dom.window.document;
+    fila(doc, "R-01").click();
+    const t = calc(doc);
+    expect(t).toMatch(/Efecto en el cronograma \(CPM\)/);
+    expect(t).toMatch(/Se aplica una vez, a la actividad de menor holgura de sus paquetes/);
+    expect(t).toMatch(/2\.4\.1.*Trámite de licencia.*crítica/);
+    expect(t).toMatch(/Mínimo\s*10 d\s*10 d\s*Más probable\s*20 d\s*20 d\s*Máximo\s*35 d\s*35 d/);       // en la ruta crítica: días del riesgo = días del proyecto
+    expect(t).toMatch(/Retrasa el fin del proyecto 20 d \(actividad crítica\)/);
+    expect(t).toMatch(/Sin hallazgos de coherencia/);                                     // el ejemplo sigue limpio
+  });
+
+  it("afinar con una actividad con holgura: el retraso se absorbe (R20/R21) y el máximo que supera la holgura sí retrasa el proyecto", async () => {
+    const dom = await abrir(), doc = dom.window.document;
+    fila(doc, "R-08").click();                                                            // paquetes 3.1 y 4.3; retraso 15/25/45 d; nivel de plazo declarado 4
+    elegir(dom, campo(doc, "actIds") as HTMLSelectElement, "3.1.1");                      // solo la fabricación, con 78 d de holgura
+    let t = calc(doc);
+    expect(t).toMatch(/cada.*actividad elegida/);
+    expect(t).toMatch(/3\.1\.1.*Fabricación de estructuras metálicas.*holgura 78 d/);
+    expect(t).toMatch(/Más probable\s*25 d\s*0 d/);                                           // 25 d < 78 d de holgura: no mueve el fin
+    expect(t).toMatch(/[Ll]a holgura de las actividades afectadas \(78 d\) absorbe el impacto más probable/);
+    expect(t).toMatch(/El nivel de impacto en plazo \(4\) no concuerda con el efecto real sobre el fin del proyecto/);   // R21
+    // con un máximo mayor que la holgura sí retrasa: 90 − 78 = 12 d
+    poner(dom, campo(doc, "timeImpact", "high"), "90", "input");
+    t = calc(doc);
+    expect(t).toMatch(/Máximo\s*90 d\s*12 d/);
+    expect(Array.from(doc.querySelectorAll("#sidebar .stat .v"))[2].textContent).toBe("1");   // ahora hay un riesgo con hallazgos
+  });
+
+  it("sin paquetes ni actividades no se puede ubicar: se dice, no se inventa un efecto (R19)", async () => {
+    const dom = await abrir(), doc = dom.window.document;
+    fila(doc, "R-01").click();
+    (campo(doc, "wbsIds") as HTMLSelectElement).selectedIndex = -1;
+    Array.from((campo(doc, "wbsIds") as HTMLSelectElement).options).forEach((o) => { o.selected = false; });
+    campo(doc, "wbsIds").dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    const t = calc(doc);
+    expect(t).toMatch(/No se puede ubicar en el cronograma: no indica paquetes de la EDT ni actividades/);
+    expect(t).toMatch(/no se puede ubicar en el cronograma \(no indica paquetes/);       // R19
+  });
+
+  it("cambiar los paquetes descarta las actividades elegidas que ya no son de ellos", async () => {
+    const dom = await abrir(), doc = dom.window.document;
+    fila(doc, "R-08").click();
+    elegir(dom, campo(doc, "actIds") as HTMLSelectElement, "3.1.1");
+    Array.from((campo(doc, "wbsIds") as HTMLSelectElement).options).forEach((o) => { o.selected = o.text.startsWith("4.3"); });   // quita 3.1
+    campo(doc, "wbsIds").dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    expect(Array.from((campo(doc, "actIds") as HTMLSelectElement).selectedOptions)).toHaveLength(0);
+    expect(calc(doc)).toMatch(/Se aplica una vez/);                                       // vuelve a la regla por paquete
+  });
+
+  it("Análisis: la simulación de plazo (10.000 iteraciones, CPM real) da la reserva de plazo y las fechas de fin, y cada riesgo su efecto", async () => {
+    const dom = await abrir(), doc = dom.window.document;
+    await vista(dom, "analisis");
+    const t = doc.getElementById("mainArea")!.textContent!.replace(/\s+/g, " ");
+    expect(t).toMatch(/Riesgo de plazo — efecto en el fin del proyecto \(CPM\)/);
+    expect(t).toMatch(/base 273 d, fin 2027-07-21/);
+    expect(t).toMatch(/Plan \(sin riesgos\)\s*273 d\s*—\s*2027-07-21/);
+    const p80 = t.match(/P80\s*(\d+(?:\.\d+)?) d\s*([\d.]+) d\s*(\d{4}-\d{2}-\d{2})/)!;
+    expect(Number(p80[1])).toBeGreaterThan(273);
+    expect(Number(p80[2])).toBeCloseTo(Number(p80[1]) - 273, 0);                         // reserva = P80 − plan
+    expect(p80[3] > "2027-07-21").toBe(true);
+    expect(t).toMatch(/6 evento\(s\) simulados sobre la red/);                           // los 6 abiertos con plazo: R-01, R-05, R-06, R-07, R-08, R-09
+    const filasPlazo = Array.from(doc.querySelectorAll("#mainArea .card table.an")).find((x) => /Fin del proyecto/.test(x.textContent!))!;
+    expect(filasPlazo.querySelectorAll("tbody tr").length).toBe(7);                      // 6 riesgos + la suma indicativa
+    expect(filasPlazo.textContent).toMatch(/R-01.*2\.4\.1.*crítica/);
+    expect(doc.getElementById("mainArea")!.textContent).not.toMatch(/Sin ubicar en el cronograma/);
+  });
+
+  it("conectado: usa la red del PROYECTO (EDT + actividades + enlaces), no la del ejemplo; lo que tiene holgura la absorbe", async () => {
+    const wbs = { rootId: "r", idCounter: 9, nodes: { r: { id: "r", name: "P", children: ["f1"] }, f1: { id: "f1", name: "Fase", children: ["w1", "w2", "w3"] }, w1: { id: "w1", name: "Uno", children: [] }, w2: { id: "w2", name: "Dos", children: [] }, w3: { id: "w3", name: "Tres", children: [] } } };
+    const activities = { idCounter: 4, byLeaf: { w1: [{ id: "a1", name: "Excavar", unit: "m", qty: 10, perf: 1, teams: 1 }], w2: [{ id: "a2", name: "Rellenar", unit: "m", qty: 5, perf: 1, teams: 1 }], w3: [{ id: "a3", name: "Limpiar", unit: "m", qty: 2, perf: 1, teams: 1 }] } };
+    const schedule = { linkCounter: 3, import: null, baseline: null, links: [{ id: "L1", from: "a1", to: "a2", type: "FS", lag: 0, lagUnit: "d" }, { id: "L2", from: "a1", to: "a3", type: "FS", lag: 0, lagUnit: "d" }] };
+    const riesgo = (id: string, code: string, w: string) => ({ id, code, title: "Riesgo " + code, cause: "c", event: "e", effect: "f", type: "amenaza", status: "monitoreo", owner: "PM", wbsIds: [w], prob: 3, impCost: 1, impTime: 2, impScope: 1, timeImpact: { low: 3, likely: 5, high: 8 } });
+    const seed = proyecto({ wbs, activities, schedule, risks: { plan: {}, idCounter: 3, risks: [riesgo("k1", "R-01", "w2"), riesgo("k2", "R-02", "w3")] } });
+    (seed.projects.p1.meta as Record<string, unknown>).startDate = "2026-07-06";
+    const dom = await abrir(seed), doc = dom.window.document;
+    fila(doc, "R-01").click();                                                            // w2 (Rellenar, 5 d) está en la ruta crítica: 10 + 5 = 15 d
+    expect(calc(doc)).toMatch(/1\.2\.1.*Rellenar.*crítica/);
+    expect(calc(doc)).toMatch(/Más probable\s*5 d\s*5 d/);
+    fila(doc, "R-02").click();                                                            // w3 (Limpiar, 2 d) tiene 3 d de holgura: 5 − 3 = 2 d
+    const t2 = doc.querySelector(`#det-k2 .calc`)!.textContent!.replace(/\s+/g, " ");
+    expect(t2).toMatch(/1\.3\.1.*Limpiar.*holgura 3 d/);
+    expect(t2).toMatch(/Mínimo\s*3 d\s*0 d\s*Más probable\s*5 d\s*2 d\s*Máximo\s*8 d\s*5 d/);
+    await vista(dom, "analisis");
+    expect(doc.getElementById("mainArea")!.textContent).toMatch(/base 15 d, fin 2026-07-24/);   // 15 días laborables desde el lunes 2026-07-06
+  });
+
+  it("conectado sin actividades: avisa que falta el cronograma en vez de inventar un efecto", async () => {
+    const r = { id: "k1", code: "R-01", title: "T", cause: "c", event: "e", effect: "f", type: "amenaza", status: "monitoreo", owner: "PM", wbsIds: [], prob: 3, impCost: 1, impTime: 2, impScope: 1, timeImpact: { low: 3, likely: 5, high: 8 } };
+    const dom = await abrir(proyecto({ risks: { plan: {}, idCounter: 2, risks: [r] } })), doc = dom.window.document;
+    fila(doc, "R-01").click();
+    expect(calc(doc)).toMatch(/El proyecto aún no tiene actividades enlazadas/);
+    expect(doc.querySelector('[data-f="actIds"]')).toBeNull();                            // no hay actividades que elegir
+    await vista(dom, "analisis");
+    expect(doc.getElementById("mainArea")!.textContent).toMatch(/aún no tiene actividades enlazadas en el cronograma/);
+  });
+
   it("el Panel de Control ya lista el módulo y su indicador (riesgos abiertos y altos)", async () => {
     const seed = proyecto({ risks: { risks: [
       { id: "a", code: "R-01", title: "x", prob: 5, impCost: 5, status: "identificado" }, { id: "b", code: "R-02", title: "y", prob: 1, impCost: 1 }, { id: "c", code: "R-03", title: "z", prob: 5, impCost: 5, status: "cerrado" }] } });

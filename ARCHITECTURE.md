@@ -1235,7 +1235,41 @@ contingencia de Costos (los riesgos abiertos entran a la simulación como
 eventos, `riskEventsOf`) y con las órdenes de cambio (vínculo orden ↔ riesgo,
 consumo de contingencia por riesgo, hallazgos R17/R18); ver la sección de
 `Cost-management.html`. El ejemplo vive en `src/shared/risk-sample.ts`,
-compartido por Riesgos y Costos.
+compartido por Riesgos y Costos. Tercera (entregada): **riesgo de plazo** con
+el CPM real (ver abajo).
+- **Riesgo de plazo (AACE 40R-08 / 65R-11 + PMBOK).** El impacto en plazo de un
+  riesgo (`timeImpact`, días) se traduce al **fin del proyecto** volviendo a
+  correr el CPM con la duración afectada (`src/shared/schedule-risk.ts`): una
+  actividad crítica traslada el retraso íntegro, una con holgura lo absorbe
+  hasta agotarla y traslada el exceso. No se usa «días − holgura total»:
+  con enlaces SS/FF esa fórmula es inexacta y el CPM recalculado no.
+  - **Ubicación en el cronograma**: `wbsIds` (paquetes) y el nuevo `actIds`
+    (actividades, opcional, campo nuevo que los `.json` viejos no traen y se lee
+    como `[]`). Con actividades elegidas el retraso se aplica a **cada una**;
+    solo con paquetes, **una vez** a la actividad de **menor holgura** de esos
+    paquetes (criterio conservador: el máximo efecto de un solo retraso allí).
+    Sin ninguno no se ubica y se dice (no se inventa un efecto).
+  - **Red**: `GPI.util.scheduleNetwork(wbs, activities, pert, schedule, plan,
+    inicio)` (núcleo) arma nodos (actividades + hitos de duración 0, en el
+    orden de la EDT), enlaces y calendario con el mismo criterio que
+    Cronograma/CPM; `activeScheduleNetwork()` lee el proyecto activo. En modo
+    independiente los módulos le pasan la **red DISTRIB+ completa** de
+    `src/shared/schedule-sample.ts` (43 actividades, 3 hitos, 51 enlaces), copia de la
+    que siembran «Definir las Actividades» y Cronograma/CPM; la **prueba de oro**
+    `tests/unit/schedule-sample.test.ts` (273 d, 34 críticos, fin 2027-07-21) impide
+    que se desalinee, y el e2e `risk-schedule-integration.spec.ts` la contrasta en
+    Chrome real con el proyecto armado con los botones reales.
+  - **Hallazgos** R19 (impacto en plazo que no se puede ubicar), R20 (la holgura
+    absorbe el impacto más probable) y R21 (el nivel de plazo declarado no
+    concuerda con el efecto real sobre el fin: contraste cualitativo ↔ CPM).
+  - **Vista Análisis**: por riesgo, actividad afectada, holgura, efecto en el fin
+    y valor esperado en días (antes/residual); y la **simulación de plazo** de los
+    eventos abiertos (residual): P50–P90, **reserva de plazo** (P − plan, nunca
+    negativa) y fechas de fin. Es la misma simulación que usa Costos.
+  - **Límites declarados**: solo eventos de riesgo sobre duraciones
+    determinísticas (no incluye la incertidumbre PERT de las duraciones); sin
+    fecha de inicio real el CPM aproxima los desfases en días transcurridos
+    (`hasElapsedLags` lo avisa).
 - **Base metodológica.** PMI/PMBOK: enunciado **causa → evento → efecto**;
   RBS (categorías del plan); matriz probabilidad × impacto con **umbrales del
   plan** (medio desde 6, alto desde 15 por omisión); puntaje = probabilidad ×
@@ -1808,19 +1842,42 @@ Estimating»; la RP 118R-21 cubre rangos + Monte Carlo de riesgos inherentes) y
     `SAMPLE_LINKED_ORDERS`), la **única fuente** del ejemplo de riesgos, y una
     prueba de humo verifica que `SAMPLE_LINKED_ORDERS` coincida con la OC-001
     de Costos.
+  - **Análisis integrado con el cronograma (AACE 40R-08 / 65R-11).** Un
+    evento con impacto en plazo y ubicado en actividades (ver «Riesgo de
+    plazo» en Risk_Register) produce, con el **mismo sorteo**, su costo directo
+    y su retraso; el efecto sobre el fin lo da el CPM real
+    (`ScheduleSim.duration`) y **cada día de extensión cuesta el «costo por día
+    de extensión del plazo»** (gastos generales, dirección, alquileres; campo
+    `budget.rangeAnalysis.timeCostPerDay` + `timeCostBasis`, vacío = el retraso
+    no se traduce a costo y se avisa). Tabla de contingencia en cuatro filas:
+    partidas · + eventos (costo directo) · + costo de la extensión del plazo ·
+    total; y tabla «Plazo con los riesgos» (P50–P90, reserva de plazo, fechas de
+    fin). **Los rangos de costo de los riesgos deben ser DIRECTOS**: lo que
+    depende del tiempo ya lo calcula la simulación (se avisa el doble conteo).
+    Los eventos tienen su **propio flujo aleatorio** (`simulateEvents`): su
+    resultado no depende de las partidas, de la correlación ni del costo por día,
+    se calcula una vez (el CPM es lo caro) y se reutiliza (`EventOutcomes`), y
+    Costos y el Registro de Riesgos obtienen **exactamente el mismo plazo**
+    (probado: smoke y e2e en Chrome real).
   - **Límites declarados** (también en pantalla y en el BOE): la simulación
     cubre la incertidumbre de los **rangos** y los **eventos** del Registro,
-    pero no es una simulación integrada de costo y cronograma, y el impacto
-    en plazo de los riesgos no se traduce a costo.
+    con su efecto en el plazo y su costo, pero no incluye la incertidumbre de las
+    duraciones (PERT).
   - **Ejemplo DISTRIB+ ampliado, mismo caso**: 5 partidas = las 5 fases de la
     EDT (1 Dirección 195.000 · 2 Ingeniería 355.000 · 3 Procura 2.950.000 ·
     4 Construcción 3.315.000 · 5 Pruebas 285.000 = **S/ 7.100.000**, el 100 %
     del costo base), con rangos y fundamento que expresan solo incertidumbre
-    del estimado. Con P70: solo partidas ≈ 4,5 %; **con los eventos del
-    Registro ≈ 9,1 % (≈ 649.000)**, frente al 12 % de la tabla didáctica
-    (corrige el «≈ 9,3 % (≈ 661.000)» anterior, que mezclaba riesgos dentro de
-    los rangos). Valor esperado neto de los eventos $ 277.000; contingencia
-    disponible tras el consumo de OC-001 $ 672.000.
+    del estimado. Con P70: solo partidas ≈ 4,5 % (321.876); + eventos del
+    Registro (costo directo) 317.911; + costo de la extensión del plazo
+    (1.500 por día × el retraso simulado) 54.356; **total ≈ 9,8 % (694.143)**,
+    frente al 12 % de la tabla didáctica (corrige el «≈ 9,3 % (≈ 661.000)»
+    anterior, que mezclaba riesgos dentro de los rangos). Plazo con los
+    riesgos: plan 273 d; **P80 325,1 d (reserva 52,1 d, fin 2027-10-04)**,
+    probabilidad de terminar tarde 91,7 %. El costo por día del ejemplo es
+    1.500 (Dirección y gastos generales ≈ 410.000, 5,8 % del costo base, sobre
+    273 d). Valor esperado neto de los eventos $ 277.000; contingencia
+    disponible tras el consumo de OC-001 $ 672.000 con la tabla por clase (la
+    de referencia) y 514.143 con el análisis de rangos.
 - **Una variación no es una orden de cambio** (auditoría metodológica
   PMI; lógica pura en `src/shared/cost-variance.ts`, inlineada en
   `cost.js`). El flujo enseñaba «rojo = orden de cambio obligatoria» y los

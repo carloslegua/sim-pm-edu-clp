@@ -279,6 +279,7 @@
 			type,
 			category: str(x.category),
 			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str).filter(Boolean) : [],
+			actIds: Array.isArray(x.actIds) ? x.actIds.map(str).filter(Boolean) : [],
 			owner: str(x.owner),
 			proximity: PROXIMITY.indexOf(str(x.proximity)) >= 0 ? str(x.proximity) : "",
 			identifiedOn: str(x.identifiedOn),
@@ -367,12 +368,95 @@
 			const n = daysBetween(r.reviewedOn, opts.today);
 			if (n !== null && n > p.reviewDays) F("R12", "info", "Sin revisar hace " + n + " días (el plan pide revisarlo cada " + p.reviewDays + ").");
 		}
+		const sf = opts.schedule, likelyDays = impactMean(r.timeImpact) !== null ? r.timeImpact.likely : null;
+		if (open && sf && sf.network && likelyDays !== null && likelyDays > 0) {
+			const d1 = (v) => v === null ? "—" : String(Math.round(v * 10) / 10);
+			if (!sf.mapped) F("R19", "info", "Tiene impacto en plazo cuantificado pero no se puede ubicar en el cronograma (" + sf.reason + "): sin las actividades que afecta no se sabe cuánto retrasaría el fin del proyecto ni entra al análisis de plazo.");
+			else if (r.type === "amenaza" && sf.delayLikely !== null) {
+				const impl = timeLevel(sf.delayLikely, p);
+				if (r.impTime !== null && impl !== null && Math.abs(impl - r.impTime) >= 2) F("R21", "aviso", "El nivel de impacto en plazo (" + r.impTime + ") no concuerda con el efecto real sobre el fin del proyecto: con el impacto más probable (" + d1(likelyDays) + " d) el fin se mueve " + d1(sf.delayLikely) + " d" + (sf.minFloat !== null && sf.minFloat > 0 ? " (la holgura de las actividades afectadas es " + d1(sf.minFloat) + " d)" : "") + ", que según las escalas del plan equivale al nivel " + impl + ".");
+				else if (Math.abs(sf.delayLikely) < 1e-6) F("R20", "info", "La holgura de las actividades afectadas (" + d1(sf.minFloat) + " d) absorbe el impacto más probable (" + d1(likelyDays) + " d): no movería el fin del proyecto" + (sf.delayHigh !== null && sf.delayHigh > 0 ? ", pero con el máximo sí lo retrasaría " + d1(sf.delayHigh) + " d." : "."));
+			}
+		}
 		if (r.status === "materializado" && r.actualCost === null && r.actualDelay === null) F("R13", "aviso", "Materializado sin registrar su impacto real (costo o plazo): es lo que alimenta el consumo de contingencia y las lecciones aprendidas.");
 		if (r.status === "materializado" && opts.linked) {
 			if (opts.linked.count > 0 && opts.linked.approved > 0 && r.actualCost !== null && Math.abs(r.actualCost - opts.linked.approved) > .5) F("R17", "aviso", "El costo real registrado (" + Math.round(r.actualCost) + ") no coincide con lo aprobado en las órdenes de cambio vinculadas en Costos (" + Math.round(opts.linked.approved) + ").");
 			if (opts.linked.count === 0 && r.actualCost !== null && r.actualCost > 0) F("R18", "info", "No hay una orden de cambio vinculada en Costos: si este impacto consumió contingencia o reserva, regístralo allí y vincúlalo a este riesgo.");
 		}
 		return out;
+	}
+	function riskEventsOf(risks, p, opts) {
+		const events = [], excluded = [], unmapped = [];
+		const NONE = {
+			low: null,
+			likely: null,
+			high: null
+		};
+		risks.filter(isOpen).forEach((r) => {
+			const why = (reason) => excluded.push({
+				code: r.code,
+				title: r.title,
+				reason
+			});
+			const resProb = probEffective(r.resProbPct, r.resProb, p), res = residualOf(r, p);
+			const resHasCost = impactMean(r.resCostImpact) !== null, resHasTime = impactMean(r.resTimeImpact) !== null;
+			const useRes = !!r.strategy && r.strategy !== "aceptar" && res.assessed && resProb !== null && (resHasCost || r.costImpact.likely === null && resHasTime);
+			let pr, cost, time, basis;
+			if (useRes) {
+				pr = resProb;
+				cost = resHasCost ? r.resCostImpact : NONE;
+				time = resHasTime ? r.resTimeImpact : r.timeImpact;
+				basis = "residual";
+			} else {
+				pr = probEffective(r.probPct, r.prob, p);
+				cost = r.costImpact;
+				time = r.timeImpact;
+				basis = r.strategy && r.strategy !== "aceptar" ? "inherente (residual sin cuantificar)" : "inherente";
+			}
+			if (pr === null || pr <= 0) return why("sin probabilidad");
+			const costBad = rangeProblems(cost, "").length > 0, timeBad = rangeProblems(time, "").length > 0;
+			if (costBad) return why("rango de costo incoherente");
+			const hasCost = cost.likely !== null, hasTime = time.likely !== null && !timeBad;
+			if (!hasCost && !hasTime) return why(timeBad ? "rango de plazo incoherente" : "sin impacto en costo ni en plazo cuantificado");
+			const c = hasCost ? cost : {
+				low: 0,
+				likely: 0,
+				high: 0
+			};
+			const low = c.low === null ? c.likely : c.low, high = c.high === null ? c.likely : c.high, likely = c.likely;
+			const ev = {
+				id: r.id,
+				name: r.code + " " + r.title,
+				code: r.code,
+				title: r.title,
+				type: r.type,
+				prob: Math.min(1, pr),
+				low,
+				likely,
+				high,
+				sign: r.type === "amenaza" ? 1 : -1,
+				basis
+			};
+			if (hasTime && time.likely > 0) {
+				const tl = time.likely;
+				const ids = opts && opts.targets ? opts.targets(r) : [];
+				if (ids.length) {
+					ev.days = {
+						low: time.low === null ? tl : time.low,
+						likely: tl,
+						high: time.high === null ? tl : time.high
+					};
+					ev.targets = ids;
+				} else unmapped.push(r.code);
+			}
+			events.push(ev);
+		});
+		return {
+			events,
+			excluded,
+			unmapped,
+			ev: events.reduce((s, e) => s + e.sign * e.prob * (e.low + e.likely + e.high) / 3, 0)
+		};
 	}
 	function buildMatrix(risks, type, which, p) {
 		const grid = [];
@@ -680,7 +764,7 @@
 			],
 			cause: "no se acuerdan las condiciones laborales con el sindicato",
 			event: "el sindicato paraliza la obra",
-			effect: "se detiene la ejecución y aumentan los costos indirectos",
+			effect: "se detiene la ejecución y hay costos de desmovilización y removilización de cuadrillas",
 			prob: 2,
 			impCost: 3,
 			impTime: 4,
@@ -933,6 +1017,1158 @@
 		fund: "Contingencia"
 	}];
 	//#endregion
+	//#region src/shared/schedule-sample.ts
+	var SAMPLE_START_DATE = "2026-07-06";
+	var PHASES = [
+		{
+			name: "Dirección de Proyecto",
+			packages: [
+				{
+					name: "Acta de constitución",
+					acts: [[
+						"Elaboración y aprobación del acta de constitución",
+						"doc",
+						1,
+						.25
+					]]
+				},
+				{
+					name: "Plan de gestión del proyecto",
+					acts: [[
+						"Plan para la dirección del proyecto (líneas base)",
+						"doc",
+						1,
+						.2
+					], [
+						"Planes subsidiarios de gestión",
+						"doc",
+						6,
+						.5
+					]]
+				},
+				{
+					name: "Informes de seguimiento y control",
+					acts: [[
+						"Elaboración de informes mensuales de avance",
+						"doc",
+						4,
+						.5
+					], [
+						"Reuniones de control y seguimiento del proyecto",
+						"reunión",
+						16,
+						2
+					]]
+				}
+			]
+		},
+		{
+			name: "Ingeniería y Diseño",
+			packages: [
+				{
+					name: "Estudio de suelos",
+					acts: [
+						[
+							"Calicatas exploratorias",
+							"und",
+							8,
+							2
+						],
+						[
+							"Ensayos de laboratorio de suelos",
+							"glb",
+							1,
+							.1
+						],
+						[
+							"Informe geotécnico",
+							"doc",
+							1,
+							.25
+						]
+					]
+				},
+				{
+					name: "Diseño estructural",
+					acts: [[
+						"Memoria de cálculo estructural",
+						"doc",
+						1,
+						.1
+					], [
+						"Planos estructurales",
+						"lám",
+						24,
+						2
+					]]
+				},
+				{
+					name: "Diseño eléctrico y sanitario",
+					acts: [[
+						"Memoria de cálculo eléctrico y sanitario",
+						"doc",
+						1,
+						.15
+					], [
+						"Planos eléctricos y sanitarios",
+						"lám",
+						18,
+						2
+					]]
+				},
+				{
+					name: "Permisos y licencias municipales",
+					acts: [[
+						"Trámite de licencia de edificación municipal",
+						"trámite",
+						1,
+						.05
+					], [
+						"Trámite de certificado ITSE",
+						"trámite",
+						1,
+						.1
+					]]
+				}
+			]
+		},
+		{
+			name: "Procura",
+			packages: [
+				{
+					name: "Estructuras metálicas prefabricadas",
+					acts: [[
+						"Fabricación de estructuras metálicas",
+						"ton",
+						260,
+						15,
+						2
+					], [
+						"Transporte y entrega de estructuras a obra",
+						"viaje",
+						12,
+						3
+					]]
+				},
+				{
+					name: "Materiales de construcción",
+					acts: [[
+						"Adquisición y suministro de cemento y agregados",
+						"ton",
+						800,
+						100
+					], [
+						"Adquisición y suministro de materiales varios de construcción",
+						"glb",
+						1,
+						.15
+					]]
+				},
+				{
+					name: "Equipos eléctricos e instalaciones",
+					acts: [[
+						"Adquisición de tableros y equipos eléctricos",
+						"und",
+						15,
+						3
+					], [
+						"Adquisición de equipos de instalaciones sanitarias",
+						"und",
+						10,
+						2
+					]]
+				}
+			]
+		},
+		{
+			name: "Construcción",
+			packages: [
+				{
+					name: "Movimiento de tierras",
+					acts: [
+						[
+							"Corte y excavación masiva",
+							"m³",
+							4800,
+							320,
+							2
+						],
+						[
+							"Relleno y compactación con material propio",
+							"m³",
+							2100,
+							250
+						],
+						[
+							"Eliminación de material excedente",
+							"m³",
+							2700,
+							300
+						],
+						[
+							"Nivelación y perfilado de plataforma",
+							"m²",
+							6500,
+							1200
+						]
+					]
+				},
+				{
+					name: "Cimentaciones",
+					acts: [
+						[
+							"Excavación de zanjas para zapatas",
+							"m³",
+							620,
+							60,
+							2
+						],
+						[
+							"Solado de concreto e=10 cm",
+							"m²",
+							480,
+							120
+						],
+						[
+							"Acero de refuerzo fy=4200 kg/cm²",
+							"kg",
+							38500,
+							2500,
+							2
+						],
+						[
+							"Concreto f'c=280 kg/cm² en zapatas",
+							"m³",
+							410,
+							45,
+							2
+						],
+						[
+							"Encofrado y desencofrado de cimentaciones",
+							"m²",
+							950,
+							90,
+							2
+						]
+					]
+				},
+				{
+					name: "Estructura y cobertura",
+					acts: [
+						[
+							"Montaje de columnas metálicas",
+							"und",
+							48,
+							6
+						],
+						[
+							"Montaje de vigas y tijerales",
+							"ton",
+							96,
+							8
+						],
+						[
+							"Instalación de cobertura TR-4",
+							"m²",
+							5200,
+							350,
+							2
+						]
+					]
+				},
+				{
+					name: "Acabados y cerramientos",
+					acts: [
+						[
+							"Tarrajeo de muros y cielorrasos",
+							"m²",
+							3200,
+							40,
+							2
+						],
+						[
+							"Pintura general de interiores y exteriores",
+							"m²",
+							3200,
+							80,
+							2
+						],
+						[
+							"Cerramiento perimétrico",
+							"m",
+							320,
+							20
+						]
+					]
+				},
+				{
+					name: "Instalaciones MEP",
+					acts: [[
+						"Instalación de tableros y circuitos eléctricos",
+						"pto",
+						980,
+						25,
+						2
+					], [
+						"Instalación de redes sanitarias",
+						"m",
+						450,
+						30
+					]]
+				}
+			]
+		},
+		{
+			name: "Pruebas y Puesta en Marcha",
+			packages: [
+				{
+					name: "Pruebas de instalaciones",
+					acts: [[
+						"Pruebas de tableros y circuitos eléctricos",
+						"pto",
+						120,
+						30
+					], [
+						"Pruebas hidráulicas de redes sanitarias",
+						"glb",
+						1,
+						.5
+					]]
+				},
+				{
+					name: "Capacitación al cliente",
+					acts: [[
+						"Capacitación operativa al personal del cliente",
+						"hora",
+						40,
+						5
+					], [
+						"Elaboración de manuales de operación y mantenimiento",
+						"doc",
+						2,
+						.5
+					]]
+				},
+				{
+					name: "Acta de entrega y cierre",
+					acts: [[
+						"Elaboración de dossier de calidad y planos as-built",
+						"doc",
+						1,
+						.1
+					], [
+						"Acta de entrega y cierre del proyecto",
+						"doc",
+						1,
+						.5
+					]]
+				}
+			]
+		}
+	];
+	var SAMPLE_LINK_PLAN = [
+		{
+			fc: "1.2",
+			fn: "Plan para la dirección del proyecto (líneas base)",
+			tc: "1.2",
+			tn: "Planes subsidiarios de gestión",
+			type: "FS"
+		},
+		{
+			fc: "1.3",
+			fn: "Elaboración de informes mensuales de avance",
+			tc: "1.3",
+			tn: "Reuniones de control y seguimiento del proyecto",
+			type: "FS"
+		},
+		{
+			fc: "2.1",
+			fn: "Calicatas exploratorias",
+			tc: "2.1",
+			tn: "Ensayos de laboratorio de suelos",
+			type: "FS"
+		},
+		{
+			fc: "2.1",
+			fn: "Ensayos de laboratorio de suelos",
+			tc: "2.1",
+			tn: "Informe geotécnico",
+			type: "FS"
+		},
+		{
+			fc: "2.2",
+			fn: "Memoria de cálculo estructural",
+			tc: "2.2",
+			tn: "Planos estructurales",
+			type: "FS"
+		},
+		{
+			fc: "2.3",
+			fn: "Memoria de cálculo eléctrico y sanitario",
+			tc: "2.3",
+			tn: "Planos eléctricos y sanitarios",
+			type: "FS"
+		},
+		{
+			fc: "2.4",
+			fn: "Trámite de licencia de edificación municipal",
+			tc: "2.4",
+			tn: "Trámite de certificado ITSE",
+			type: "FS"
+		},
+		{
+			fc: "3.1",
+			fn: "Fabricación de estructuras metálicas",
+			tc: "3.1",
+			tn: "Transporte y entrega de estructuras a obra",
+			type: "FS"
+		},
+		{
+			fc: "3.2",
+			fn: "Adquisición y suministro de cemento y agregados",
+			tc: "3.2",
+			tn: "Adquisición y suministro de materiales varios de construcción",
+			type: "FS"
+		},
+		{
+			fc: "3.3",
+			fn: "Adquisición de tableros y equipos eléctricos",
+			tc: "3.3",
+			tn: "Adquisición de equipos de instalaciones sanitarias",
+			type: "FS"
+		},
+		{
+			fc: "4.1",
+			fn: "Corte y excavación masiva",
+			tc: "4.1",
+			tn: "Relleno y compactación con material propio",
+			type: "FS"
+		},
+		{
+			fc: "4.1",
+			fn: "Relleno y compactación con material propio",
+			tc: "4.1",
+			tn: "Eliminación de material excedente",
+			type: "FS"
+		},
+		{
+			fc: "4.1",
+			fn: "Eliminación de material excedente",
+			tc: "4.1",
+			tn: "Nivelación y perfilado de plataforma",
+			type: "FS"
+		},
+		{
+			fc: "4.2",
+			fn: "Excavación de zanjas para zapatas",
+			tc: "4.2",
+			tn: "Solado de concreto e=10 cm",
+			type: "FS"
+		},
+		{
+			fc: "4.2",
+			fn: "Solado de concreto e=10 cm",
+			tc: "4.2",
+			tn: "Acero de refuerzo fy=4200 kg/cm²",
+			type: "FS"
+		},
+		{
+			fc: "4.2",
+			fn: "Acero de refuerzo fy=4200 kg/cm²",
+			tc: "4.2",
+			tn: "Concreto f'c=280 kg/cm² en zapatas",
+			type: "FS"
+		},
+		{
+			fc: "4.2",
+			fn: "Concreto f'c=280 kg/cm² en zapatas",
+			tc: "4.2",
+			tn: "Encofrado y desencofrado de cimentaciones",
+			type: "FS"
+		},
+		{
+			fc: "4.3",
+			fn: "Montaje de columnas metálicas",
+			tc: "4.3",
+			tn: "Montaje de vigas y tijerales",
+			type: "FS"
+		},
+		{
+			fc: "4.3",
+			fn: "Montaje de vigas y tijerales",
+			tc: "4.3",
+			tn: "Instalación de cobertura TR-4",
+			type: "FS"
+		},
+		{
+			fc: "4.4",
+			fn: "Tarrajeo de muros y cielorrasos",
+			tc: "4.4",
+			tn: "Pintura general de interiores y exteriores",
+			type: "FS"
+		},
+		{
+			fc: "4.4",
+			fn: "Pintura general de interiores y exteriores",
+			tc: "4.4",
+			tn: "Cerramiento perimétrico",
+			type: "FS"
+		},
+		{
+			fc: "4.5",
+			fn: "Instalación de tableros y circuitos eléctricos",
+			tc: "4.5",
+			tn: "Instalación de redes sanitarias",
+			type: "FS"
+		},
+		{
+			fc: "5.1",
+			fn: "Pruebas de tableros y circuitos eléctricos",
+			tc: "5.1",
+			tn: "Pruebas hidráulicas de redes sanitarias",
+			type: "FS"
+		},
+		{
+			fc: "5.2",
+			fn: "Capacitación operativa al personal del cliente",
+			tc: "5.2",
+			tn: "Elaboración de manuales de operación y mantenimiento",
+			type: "FS"
+		},
+		{
+			fc: "5.3",
+			fn: "Elaboración de dossier de calidad y planos as-built",
+			tc: "5.3",
+			tn: "Acta de entrega y cierre del proyecto",
+			type: "FS"
+		},
+		{
+			fc: "H1",
+			fn: "Inicio del Proyecto",
+			tc: "1.1",
+			tn: "Elaboración y aprobación del acta de constitución",
+			type: "FS"
+		},
+		{
+			fc: "5.3",
+			fn: "Acta de entrega y cierre del proyecto",
+			tc: "H3",
+			tn: "Cierre del Proyecto",
+			type: "FS"
+		},
+		{
+			fc: "1.1",
+			fn: "Elaboración y aprobación del acta de constitución",
+			tc: "1.2",
+			tn: "Plan para la dirección del proyecto (líneas base)",
+			type: "FS"
+		},
+		{
+			fc: "1.2",
+			fn: "Planes subsidiarios de gestión",
+			tc: "1.3",
+			tn: "Elaboración de informes mensuales de avance",
+			type: "FS"
+		},
+		{
+			fc: "1.2",
+			fn: "Planes subsidiarios de gestión",
+			tc: "2.1",
+			tn: "Calicatas exploratorias",
+			type: "FS"
+		},
+		{
+			fc: "2.1",
+			fn: "Informe geotécnico",
+			tc: "2.2",
+			tn: "Memoria de cálculo estructural",
+			type: "FS"
+		},
+		{
+			fc: "2.2",
+			fn: "Memoria de cálculo estructural",
+			tc: "2.3",
+			tn: "Memoria de cálculo eléctrico y sanitario",
+			type: "SS",
+			lag: 5,
+			lagUnit: "d"
+		},
+		{
+			fc: "2.2",
+			fn: "Planos estructurales",
+			tc: "2.4",
+			tn: "Trámite de licencia de edificación municipal",
+			type: "FS"
+		},
+		{
+			fc: "2.3",
+			fn: "Planos eléctricos y sanitarios",
+			tc: "2.4",
+			tn: "Trámite de licencia de edificación municipal",
+			type: "FS"
+		},
+		{
+			fc: "2.2",
+			fn: "Planos estructurales",
+			tc: "3.1",
+			tn: "Fabricación de estructuras metálicas",
+			type: "FS"
+		},
+		{
+			fc: "2.4",
+			fn: "Trámite de licencia de edificación municipal",
+			tc: "3.2",
+			tn: "Adquisición y suministro de cemento y agregados",
+			type: "SS",
+			lag: 10,
+			lagUnit: "d"
+		},
+		{
+			fc: "2.3",
+			fn: "Planos eléctricos y sanitarios",
+			tc: "3.3",
+			tn: "Adquisición de tableros y equipos eléctricos",
+			type: "FS"
+		},
+		{
+			fc: "2.4",
+			fn: "Trámite de certificado ITSE",
+			tc: "4.1",
+			tn: "Corte y excavación masiva",
+			type: "FS"
+		},
+		{
+			fc: "4.1",
+			fn: "Nivelación y perfilado de plataforma",
+			tc: "4.2",
+			tn: "Excavación de zanjas para zapatas",
+			type: "FS"
+		},
+		{
+			fc: "3.2",
+			fn: "Adquisición y suministro de materiales varios de construcción",
+			tc: "4.2",
+			tn: "Acero de refuerzo fy=4200 kg/cm²",
+			type: "FS"
+		},
+		{
+			fc: "4.2",
+			fn: "Encofrado y desencofrado de cimentaciones",
+			tc: "H2",
+			tn: "Fin de Cimentaciones",
+			type: "FS"
+		},
+		{
+			fc: "H2",
+			fn: "Fin de Cimentaciones",
+			tc: "4.3",
+			tn: "Montaje de columnas metálicas",
+			type: "FS"
+		},
+		{
+			fc: "3.1",
+			fn: "Transporte y entrega de estructuras a obra",
+			tc: "4.3",
+			tn: "Montaje de columnas metálicas",
+			type: "FS"
+		},
+		{
+			fc: "4.3",
+			fn: "Instalación de cobertura TR-4",
+			tc: "4.4",
+			tn: "Tarrajeo de muros y cielorrasos",
+			type: "FS"
+		},
+		{
+			fc: "4.3",
+			fn: "Montaje de vigas y tijerales",
+			tc: "4.5",
+			tn: "Instalación de tableros y circuitos eléctricos",
+			type: "SS",
+			lag: 8,
+			lagUnit: "d"
+		},
+		{
+			fc: "3.3",
+			fn: "Adquisición de equipos de instalaciones sanitarias",
+			tc: "4.5",
+			tn: "Instalación de redes sanitarias",
+			type: "FS"
+		},
+		{
+			fc: "4.4",
+			fn: "Cerramiento perimétrico",
+			tc: "5.1",
+			tn: "Pruebas de tableros y circuitos eléctricos",
+			type: "SS",
+			lag: 3,
+			lagUnit: "d"
+		},
+		{
+			fc: "4.5",
+			fn: "Instalación de redes sanitarias",
+			tc: "5.1",
+			tn: "Pruebas hidráulicas de redes sanitarias",
+			type: "FS"
+		},
+		{
+			fc: "5.1",
+			fn: "Pruebas hidráulicas de redes sanitarias",
+			tc: "5.2",
+			tn: "Capacitación operativa al personal del cliente",
+			type: "FS"
+		},
+		{
+			fc: "5.1",
+			fn: "Pruebas hidráulicas de redes sanitarias",
+			tc: "5.3",
+			tn: "Elaboración de dossier de calidad y planos as-built",
+			type: "FS"
+		},
+		{
+			fc: "5.2",
+			fn: "Elaboración de manuales de operación y mantenimiento",
+			tc: "5.3",
+			tn: "Elaboración de dossier de calidad y planos as-built",
+			type: "FS"
+		}
+	];
+	function sampleScheduleModules() {
+		const nodes = {};
+		const rootId = "w-0";
+		nodes[rootId] = {
+			id: rootId,
+			name: "Proyecto DISTRIB+ S.A. — Almacén Lurín",
+			children: []
+		};
+		const byLeaf = {}, idByCode = {};
+		let n = 0;
+		PHASES.forEach((ph, i) => {
+			const pid = "w-" + (i + 1);
+			nodes[pid] = {
+				id: pid,
+				name: ph.name,
+				children: []
+			};
+			nodes[rootId].children.push(pid);
+			ph.packages.forEach((pk, j) => {
+				const code = i + 1 + "." + (j + 1), lid = "w-" + code;
+				nodes[lid] = {
+					id: lid,
+					name: pk.name,
+					children: []
+				};
+				nodes[pid].children.push(lid);
+				idByCode[code] = {};
+				byLeaf[lid] = pk.acts.map(([name, unit, qty, perf, teams]) => {
+					const id = "a" + ++n;
+					idByCode[code][name] = id;
+					return {
+						id,
+						name,
+						unit,
+						qty,
+						perf,
+						teams: teams == null ? 1 : teams
+					};
+				});
+			});
+		});
+		const milestones = [
+			{
+				id: "m1",
+				code: "H1",
+				name: "Inicio del Proyecto",
+				leafId: null,
+				afterLeafId: null
+			},
+			{
+				id: "m2",
+				code: "H2",
+				name: "Fin de Cimentaciones",
+				leafId: "w-4.2"
+			},
+			{
+				id: "m3",
+				code: "H3",
+				name: "Cierre del Proyecto",
+				leafId: null,
+				afterLeafId: "w-5.3"
+			}
+		];
+		milestones.forEach((m) => {
+			idByCode[m.code] = { [m.name]: m.id };
+		});
+		const links = [];
+		SAMPLE_LINK_PLAN.forEach((e, k) => {
+			const from = (idByCode[e.fc] || {})[e.fn], to = (idByCode[e.tc] || {})[e.tn];
+			if (from && to) links.push({
+				id: "L" + (k + 1),
+				from,
+				to,
+				type: e.type,
+				lag: e.lag || 0,
+				lagUnit: e.lagUnit || "d",
+				source: "import"
+			});
+		});
+		return {
+			wbs: {
+				rootId,
+				idCounter: 100,
+				nodes
+			},
+			activities: {
+				byLeaf,
+				idCounter: n + 1,
+				milestones
+			},
+			schedule: { links }
+		};
+	}
+	//#endregion
+	//#region src/shared/range-estimating.ts
+	var PERCENTILES = [
+		5,
+		10,
+		20,
+		30,
+		40,
+		50,
+		60,
+		70,
+		80,
+		90,
+		95
+	];
+	var DEFAULT_SEED = 20260713;
+	var DEFAULT_CORRELATION = .3;
+	var num = (v) => Number(v);
+	var finite = (v) => typeof v === "number" ? isFinite(v) : typeof v === "string" && v.trim() !== "" && isFinite(Number(v));
+	function mulberry32(seed) {
+		let a = seed >>> 0;
+		return () => {
+			a = a + 1831565813 >>> 0;
+			let t = a;
+			t = Math.imul(t ^ t >>> 15, t | 1);
+			t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+			return ((t ^ t >>> 14) >>> 0) / 4294967296;
+		};
+	}
+	function normCdf(x) {
+		const s = x < 0 ? -1 : 1, z = Math.abs(x) / Math.SQRT2, t = 1 / (1 + .3275911 * z);
+		return .5 * (1 + s * (1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - .284496736) * t + .254829592) * t * Math.exp(-z * z)));
+	}
+	function triInv(u, a, m, b) {
+		if (b <= a) return m;
+		return u < (m - a) / (b - a) ? a + Math.sqrt(u * (b - a) * (m - a)) : b - Math.sqrt((1 - u) * (b - a) * (b - m));
+	}
+	function lineProblems(l) {
+		const p = [];
+		if (!finite(l.ml) || num(l.ml) <= 0) p.push("el costo más probable debe ser mayor que cero");
+		if (!finite(l.lowPct) || num(l.lowPct) > 0 || num(l.lowPct) < -100) p.push("el mínimo debe estar entre −100 % y 0 % del más probable");
+		if (!finite(l.highPct) || num(l.highPct) < 0) p.push("el máximo debe ser 0 % o más sobre el más probable");
+		return p;
+	}
+	function quantile(sorted, p) {
+		const pos = (sorted.length - 1) * p / 100, lo = Math.floor(pos), hi = Math.ceil(pos);
+		return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+	}
+	var daysOk = (d) => !!d && isFinite(d.low) && isFinite(d.likely) && isFinite(d.high) && d.low >= 0 && d.low <= d.likely && d.likely <= d.high;
+	function validEvents(events) {
+		return (events || []).filter((e) => e && isFinite(e.prob) && e.prob > 0 && e.prob <= 1 && isFinite(e.low) && isFinite(e.likely) && isFinite(e.high) && e.low >= 0 && e.low <= e.likely && e.likely <= e.high && (e.sign === 1 || e.sign === -1));
+	}
+	var normIterations = (v) => Math.max(1e3, Math.min(2e5, Math.floor(Number(v) || 1e4)));
+	var normSeed = (v) => typeof v === "number" && Number.isFinite(v) ? v : DEFAULT_SEED;
+	function simulateEvents(events, schedule, iterations, seed) {
+		const evs = validEvents(events), N = normIterations(iterations), S = normSeed(seed);
+		const sim = schedule && isFinite(schedule.base) ? schedule : null;
+		const direct = new Float64Array(N), ext = sim ? new Float64Array(N) : null, randE = mulberry32((S ^ 1540483477) >>> 0);
+		for (let i = 0; i < N; i++) {
+			let t = 0, delta = null;
+			for (let j = 0; j < evs.length; j++) {
+				const e = evs[j], occurs = randE() < e.prob, u = randE(), uT = randE();
+				if (!occurs) continue;
+				t += e.sign * triInv(u, e.low, e.likely, e.high);
+				if (sim && daysOk(e.days) && e.targets && e.targets.length) {
+					const d = e.sign * triInv(uT, e.days.low, e.days.likely, e.days.high);
+					delta = delta || {};
+					for (const id of e.targets) delta[id] = (delta[id] || 0) + d;
+				}
+			}
+			direct[i] = t;
+			if (sim && ext) {
+				let dur = sim.base;
+				if (delta) {
+					const r = sim.duration(delta);
+					if (r !== null) dur = r;
+				}
+				ext[i] = dur - sim.base;
+			}
+		}
+		return {
+			iterations: N,
+			seed: S,
+			n: evs.length,
+			direct,
+			ext,
+			base: sim ? sim.base : 0,
+			delayers: sim ? evs.filter((e) => daysOk(e.days) && e.targets && e.targets.length).length : 0
+		};
+	}
+	function simulateRange(lines, opts) {
+		const o = opts || {};
+		const iterations = normIterations(o.iterations), seed = normSeed(o.seed);
+		const rho = Math.max(0, Math.min(1, o.correlation === void 0 || !isFinite(o.correlation) ? DEFAULT_CORRELATION : o.correlation));
+		const valid = (lines || []).filter((l) => l && lineProblems(l).length === 0);
+		const evs = validEvents(o.events);
+		if (!valid.length && !evs.length) return null;
+		const sim = o.schedule && isFinite(o.schedule.base) ? o.schedule : null;
+		const costPerDay = sim ? Math.max(0, Number(sim.costPerDay) || 0) : 0;
+		const oc = o.outcomes, reuse = !!oc && oc.iterations === iterations && oc.seed === seed && oc.n === evs.length && (!sim || !!oc.ext);
+		const eo = evs.length ? reuse ? oc : simulateEvents(evs, sim, iterations, seed) : null;
+		const dir = eo ? eo.direct : null, ext = sim && eo ? eo.ext : null;
+		const a = valid.map((l) => num(l.ml) * (1 + num(l.lowPct) / 100));
+		const m = valid.map((l) => num(l.ml));
+		const b = valid.map((l) => num(l.ml) * (1 + num(l.highPct) / 100));
+		const ml = m.reduce((s, x) => s + x, 0);
+		const rand = mulberry32(seed);
+		let spare = null;
+		const normal = () => {
+			if (spare !== null) {
+				const s = spare;
+				spare = null;
+				return s;
+			}
+			let u = 0;
+			while (u === 0) u = rand();
+			const v = rand(), r = Math.sqrt(-2 * Math.log(u)), th = 2 * Math.PI * v;
+			spare = r * Math.sin(th);
+			return r * Math.cos(th);
+		};
+		const sr = Math.sqrt(rho), se = Math.sqrt(1 - rho);
+		const totals = new Float64Array(iterations), durs = sim ? new Float64Array(iterations) : null;
+		let sum = 0, sumSq = 0, sumDur = 0, nDelayed = 0, timeCostSum = 0;
+		for (let i = 0; i < iterations; i++) {
+			const zc = normal();
+			let t = 0;
+			for (let j = 0; j < valid.length; j++) {
+				if (b[j] <= a[j]) {
+					t += m[j];
+					continue;
+				}
+				t += triInv(normCdf(sr * zc + se * normal()), a[j], m[j], b[j]);
+			}
+			if (dir) t += dir[i];
+			if (sim && durs) {
+				const x = ext ? ext[i] : 0, dur = sim.base + x;
+				durs[i] = dur;
+				sumDur += dur;
+				if (x > 1e-9) nDelayed++;
+				const cost = x * costPerDay;
+				t += cost;
+				timeCostSum += cost;
+			}
+			totals[i] = t;
+			sum += t;
+			sumSq += t * t;
+		}
+		const mean = sum / iterations, sd = Math.sqrt(Math.max(0, sumSq / iterations - mean * mean));
+		const sorted = Float64Array.from(totals).sort();
+		const p = {};
+		PERCENTILES.forEach((q) => {
+			p[q] = quantile(sorted, q);
+		});
+		const curve = [];
+		for (let q = 1; q <= 99; q++) curve.push(quantile(sorted, q));
+		const eventsEV = evs.reduce((s, e) => s + e.sign * e.prob * (e.low + e.likely + e.high) / 3, 0);
+		let schedule = null;
+		if (sim && durs) {
+			const sd2 = Float64Array.from(durs).sort(), pd = {};
+			PERCENTILES.forEach((q) => {
+				pd[q] = quantile(sd2, q);
+			});
+			schedule = {
+				base: sim.base,
+				costPerDay,
+				p: pd,
+				mean: sumDur / iterations,
+				probDelay: nDelayed / iterations,
+				timeCostMean: timeCostSum / iterations,
+				events: eo ? eo.delayers : 0
+			};
+		}
+		return {
+			n: valid.length,
+			excluded: (lines || []).length - valid.length,
+			events: evs.length,
+			eventsEV,
+			iterations,
+			seed,
+			correlation: rho,
+			ml,
+			mean,
+			sd,
+			min: sorted[0],
+			max: sorted[iterations - 1],
+			p,
+			curve,
+			schedule
+		};
+	}
+	//#endregion
+	//#region src/shared/schedule-risk.ts
+	function makeEngine(net, cpm) {
+		if (!net || !net.nodes.some((n) => !n.isMilestone)) return null;
+		const nodes = net.nodes.map((n) => ({
+			id: n.id,
+			dur: n.dur
+		})), idx = {};
+		net.nodes.forEach((n, i) => {
+			idx[n.id] = i;
+		});
+		const run = () => cpm(nodes, net.links, net.calendar, {});
+		const r0 = run();
+		if (!r0.ok) return null;
+		const byId = {};
+		net.nodes.forEach((n) => {
+			byId[n.id] = n;
+		});
+		const cache = /* @__PURE__ */ new Map();
+		return {
+			net,
+			base: r0.projectDuration,
+			rows: r0.rows,
+			byId,
+			duration(delta) {
+				const ids = Object.keys(delta).filter((id) => idx[id] !== void 0 && delta[id] !== 0);
+				if (!ids.length) return r0.projectDuration;
+				const key = ids.sort().map((id) => id + ":" + Math.round(delta[id] * 1e3)).join("|");
+				if (cache.has(key)) return cache.get(key);
+				ids.forEach((id) => {
+					nodes[idx[id]].dur = Math.max(0, net.nodes[idx[id]].dur + delta[id]);
+				});
+				const r = run();
+				ids.forEach((id) => {
+					nodes[idx[id]].dur = net.nodes[idx[id]].dur;
+				});
+				const out = r.ok ? r.projectDuration : null;
+				if (cache.size < 5e3) cache.set(key, out);
+				return out;
+			}
+		};
+	}
+	var TF_EPS = 1e-6;
+	function resolveTargets(r, eng) {
+		const mk = (n) => {
+			const row = eng.rows[n.id];
+			return {
+				id: n.id,
+				code: n.code,
+				name: n.name,
+				tf: row ? row.tf : 0,
+				critical: !!row && row.tf <= TF_EPS
+			};
+		};
+		const acts = eng.net.nodes.filter((n) => !n.isMilestone);
+		if (r.actIds.length) {
+			const chosen = acts.filter((n) => r.actIds.indexOf(n.id) >= 0), have = new Set(chosen.map((n) => n.id));
+			const missing = r.actIds.filter((id) => !have.has(id));
+			if (chosen.length) return {
+				mode: "actividades",
+				targets: chosen.map(mk),
+				missing,
+				reason: ""
+			};
+			return {
+				...fromPackages(r, acts, eng, mk),
+				missing
+			};
+		}
+		return fromPackages(r, acts, eng, mk);
+	}
+	function fromPackages(r, acts, eng, mk) {
+		if (!r.wbsIds.length) return {
+			mode: "ninguno",
+			targets: [],
+			missing: [],
+			reason: "no indica paquetes de la EDT ni actividades"
+		};
+		const cand = acts.filter((n) => n.leafId !== null && r.wbsIds.indexOf(n.leafId) >= 0);
+		if (!cand.length) return {
+			mode: "ninguno",
+			targets: [],
+			missing: [],
+			reason: "sus paquetes de la EDT no tienen actividades en el cronograma"
+		};
+		let best = cand[0];
+		cand.forEach((n) => {
+			if ((eng.rows[n.id] ? eng.rows[n.id].tf : 0) < (eng.rows[best.id] ? eng.rows[best.id].tf : 0) - TF_EPS) best = n;
+		});
+		return {
+			mode: "paquete",
+			targets: [mk(best)],
+			missing: [],
+			reason: ""
+		};
+	}
+	var QUANTILES = 15;
+	function scheduleImpactOf(eng, res, range, prob, sign) {
+		const out = {
+			mode: res.mode,
+			targets: res.targets,
+			missing: res.missing,
+			reason: res.reason,
+			mapped: res.targets.length > 0,
+			base: eng.base,
+			delay: {
+				low: null,
+				likely: null,
+				high: null
+			},
+			minFloat: null,
+			evDays: null
+		};
+		if (!res.targets.length) return out;
+		out.minFloat = Math.min(...res.targets.map((t) => t.tf));
+		const delayFor = (days) => {
+			const d = {};
+			res.targets.forEach((t) => {
+				d[t.id] = sign * days;
+			});
+			const dur = eng.duration(d);
+			return dur === null ? null : dur - eng.base;
+		};
+		const pt = (v) => v === null ? null : delayFor(v);
+		out.delay = {
+			low: pt(range.low),
+			likely: pt(range.likely),
+			high: pt(range.high)
+		};
+		if (prob !== null && range.likely !== null) {
+			const lo = range.low === null ? range.likely : range.low, hi = range.high === null ? range.likely : range.high;
+			let s = 0, n = 0;
+			for (let i = 0; i < QUANTILES; i++) {
+				const v = delayFor(triInv((i + .5) / QUANTILES, lo, range.likely, hi));
+				if (v !== null) {
+					s += v;
+					n++;
+				}
+			}
+			if (n) out.evDays = prob * (s / n);
+		}
+		return out;
+	}
+	function delayPhrase(im) {
+		const d = im.delay.likely;
+		if (!im.mapped) return "no se puede ubicar en el cronograma (" + im.reason + ")";
+		if (d === null) return "sin impacto en plazo cuantificado";
+		const days = Math.round(Math.abs(d) * 10) / 10;
+		if (Math.abs(d) < 1e-6) return "la holgura de las actividades afectadas (" + fmtDays(im.minFloat) + ") absorbe el impacto más probable";
+		return (d > 0 ? "retrasa el fin del proyecto " : "adelanta el fin del proyecto ") + days + " d" + (im.targets.some((t) => t.critical) ? " (actividad crítica)" : "");
+	}
+	var fmtDays = (v) => v === null ? "—" : Math.round(v * 10) / 10 + " d";
+	//#endregion
 	//#region src/modules/risks/main.ts
 	var $ = (id) => document.getElementById(id);
 	function esc(s) {
@@ -1017,6 +2253,34 @@
 			costBase = SAMPLE_COST_BASE;
 			currency = "USD";
 		}
+		netDirty = true;
+	}
+	var net = null;
+	var eng = null;
+	var netDirty = true;
+	var schedCache = /* @__PURE__ */ new Map();
+	var simCache = null;
+	function getEng() {
+		if (!netDirty) return eng;
+		netDirty = false;
+		net = null;
+		eng = null;
+		schedCache.clear();
+		simCache = null;
+		const G = window.GPI;
+		if (!G || !G.util || !G.util.cpm || !G.util.scheduleNetwork) return null;
+		try {
+			if (connected) net = G.util.activeScheduleNetwork();
+			else {
+				const m = sampleScheduleModules();
+				net = G.util.scheduleNetwork(m.wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE);
+			}
+			eng = makeEngine(net, G.util.cpm);
+		} catch (e) {
+			net = null;
+			eng = null;
+		}
+		return eng;
 	}
 	var plan = normalizePlan(null);
 	var risks = [];
@@ -1090,11 +2354,47 @@
 			count: l.length
 		};
 	};
+	function impactFor(r, which) {
+		const e = getEng();
+		if (!e) return null;
+		const res = residualOf(r, plan), resOk = which === "residual" && !!r.strategy && r.strategy !== "aceptar" && res.assessed && impactMean(r.resTimeImpact) !== null;
+		if (which === "residual" && !resOk) return null;
+		const range = which === "residual" ? r.resTimeImpact : r.timeImpact;
+		const prob = which === "residual" ? probEffective(r.resProbPct, r.resProb, plan) : probEffective(r.probPct, r.prob, plan);
+		const key = r.id + "|" + which + "|" + JSON.stringify([
+			r.type,
+			r.wbsIds,
+			r.actIds,
+			range,
+			prob
+		]);
+		let im = schedCache.get(key);
+		if (!im) {
+			im = scheduleImpactOf(e, resolveTargets(r, e), range, prob, r.type === "amenaza" ? 1 : -1);
+			if (schedCache.size > 2e3) schedCache.clear();
+			schedCache.set(key, im);
+		}
+		return im;
+	}
+	function scheduleFacts(r) {
+		if (!getEng() || impactMean(r.timeImpact) === null || !((r.timeImpact.likely || 0) > 0)) return void 0;
+		const im = impactFor(r, "inherent");
+		if (!im) return void 0;
+		return {
+			network: true,
+			mapped: im.mapped,
+			reason: im.reason,
+			minFloat: im.minFloat,
+			delayLikely: im.delay.likely,
+			delayHigh: im.delay.high
+		};
+	}
 	var findingsOf = (r) => riskFindings(r, plan, {
 		today: todayISO(),
 		costBase,
 		leafIds: leaves.map((l) => l.id),
-		linked: r.status === "materializado" ? linkedSummary(r) : void 0
+		linked: r.status === "materializado" ? linkedSummary(r) : void 0,
+		schedule: scheduleFacts(r)
 	});
 	var statement = (r) => r.cause.trim() || r.event.trim() || r.effect.trim() ? "Debido a " + (r.cause.trim() || "…") + ", puede ocurrir que " + (r.event.trim() || "…") + ", lo que " + (r.type === "amenaza" ? "causaría " : "generaría ") + (r.effect.trim() || "…") + "." : "";
 	function render() {
@@ -1176,6 +2476,7 @@
     ${fld("Identificado el", inp(r, "identifiedOn", r.identifiedOn, "date"))}
     ${fld("Última revisión", `<div class="rv">${inp(r, "reviewedOn", r.reviewedOn, "date")}<button class="btn sm" data-act="reviewed" data-id="${esc(r.id)}" type="button">Revisado hoy</button></div>`, false, "El plan pide revisar cada " + plan.reviewDays + " días.")}
     ${fld("Paquetes de la EDT afectados", leafSel, true, leaves.length ? "Ctrl/⌘ + clic para elegir varios." : "Crea la EDT en WBS Builder para vincular paquetes.")}
+    ${actSelField(r)}
     ${fld("Causa", txt(r, "cause", r.cause, 2, "¿Qué condición o hecho origina el riesgo?"))}
     ${fld("Evento", txt(r, "event", r.event, 2, "¿Qué podría ocurrir?"))}
     ${fld("Efecto", txt(r, "effect", r.effect, 2, "¿Qué consecuencia tendría en los objetivos?"))}
@@ -1221,6 +2522,30 @@
     <div class="fd wide"><div class="calc" id="calc-${esc(r.id)}">${calcHtml(r)}</div></div>
   </div>`;
 	}
+	function actSelField(r) {
+		const e = getEng();
+		if (!e) return "";
+		const opts = e.net.nodes.filter((n) => !n.isMilestone && (!r.wbsIds.length || n.leafId !== null && r.wbsIds.indexOf(n.leafId) >= 0)).map((n) => {
+			const row = e.rows[n.id], tf = row ? row.tf : 0;
+			return `<option value="${esc(n.id)}" ${r.actIds.indexOf(n.id) >= 0 ? "selected" : ""}>${esc(n.code + " " + n.name)} · ${tf <= 1e-6 ? "crítica" : "holgura " + fmtDays(tf)}</option>`;
+		}).join("");
+		return fld("Actividades del cronograma afectadas (opcional)", `<select class="ri" multiple size="6" data-id="${esc(r.id)}" data-f="actIds">${opts}</select>`, true, "Sin elegir ninguna, el retraso se aplica UNA vez a la actividad de menor holgura de los paquetes elegidos. Si eliges actividades, se aplica a CADA una. Ctrl/⌘ + clic para elegir varias.");
+	}
+	function scheduleBlock(r) {
+		if (!(impactMean(r.timeImpact) !== null && (r.timeImpact.likely || 0) > 0)) return "";
+		const head = `<div class="cl" style="margin-top:10px">Efecto en el cronograma (CPM)</div>`;
+		const e = getEng(), im = impactFor(r, "inherent");
+		if (!e || !im) return head + `<div class="muted small">El proyecto aún no tiene actividades enlazadas: define la EDT, las actividades y sus enlaces (Cronograma/CPM) para ver cuánto retrasaría este riesgo el fin del proyecto.</div>`;
+		const opp = r.type === "oportunidad";
+		if (!im.mapped) return head + `<div class="muted small">No se puede ubicar en el cronograma: ${esc(im.reason)}. Elige los paquetes de la EDT (y, si quieres, las actividades) que afecta.</div>`;
+		const tg = im.targets.map((t) => `<b class="mono">${esc(t.code)}</b> ${esc(t.name)} — ${t.critical ? "<b>crítica</b> (holgura 0)" : "holgura " + fmtDays(t.tf)}`).join("<br>");
+		const how = im.mode === "actividades" ? "El retraso se aplica a <b>cada</b> actividad elegida:" : "Se aplica <b>una vez</b>, a la actividad de menor holgura de sus paquetes:";
+		const row = (lbl, days, eff) => `<tr><td>${lbl}</td><td class="num">${days === null ? "—" : fmtDays(days)}</td><td class="num"><b>${eff === null ? "—" : (opp && eff !== 0 ? "−" : "") + fmtDays(Math.abs(eff))}</b></td></tr>`;
+		const rg = r.timeImpact;
+		return head + `<div class="muted small">${how}<br>${tg}${im.missing.length ? `<br><span class="warn">${im.missing.length} actividad(es) elegida(s) ya no existen en el cronograma.</span>` : ""}</div>
+    <table class="an" style="margin-top:6px"><thead><tr><th class="l">Si ocurre con…</th><th>${opp ? "Adelanto del riesgo" : "Retraso del riesgo"}</th><th>${opp ? "Adelanta el fin del proyecto" : "Retrasa el fin del proyecto"}</th></tr></thead><tbody>${row("Mínimo", rg.low, im.delay.low)}${row("Más probable", rg.likely, im.delay.likely)}${row("Máximo", rg.high, im.delay.high)}</tbody></table>
+    <div class="muted small" style="margin-top:4px">${esc(delayPhrase(im).replace(/^./, (c) => c.toUpperCase()))}.${im.evDays !== null ? " Valor esperado sobre el fin del proyecto: <b>≈ " + Math.round(Math.abs(im.evDays) * 10) / 10 + " d</b>" + (opp ? " de adelanto" : "") + " (probabilidad × media del efecto)." : ""}</div>`;
+	}
 	function calcHtml(r) {
 		const sc = inherentScore(r), ev = inherentEV(r, plan), res = residualOf(r, plan), pr = probEffective(r.probPct, r.prob, plan);
 		const sg = r.type === "oportunidad" ? "ahorro" : "sobrecosto";
@@ -1230,7 +2555,7 @@
     <div><div class="cl">Valor esperado (${sg})</div><div class="cv mono">${money(ev.cost)}</div><div class="muted small">${ev.time !== null ? "≈ " + Math.round(ev.time * 10) / 10 + " días · " : ""}P × media de la triangular (mín + más prob. + máx) / 3</div></div>
     <div><div class="cl">Riesgo residual</div><div class="cv">${res.assessed && res.score !== null ? levelPill(res.score, r.type === "oportunidad") : `<span class="muted small">${r.strategy ? "Sin evaluar" : "—"}</span>`}</div><div class="muted small">${res.assessed && res.ev.cost !== null ? "EV residual " + money(res.ev.cost) : res.derived ? "= inherente (aceptar)" : ""}</div></div>
     <div><div class="cl">Niveles según valores cuantificados</div><div class="cv small">${implC !== null ? "Costo: nivel " + implC : "Costo: —"} · ${implT !== null ? "Plazo: nivel " + implT : "Plazo: —"}</div><div class="muted small">Contraste con lo declarado en el análisis cualitativo</div></div>
-  </div>${r.status === "materializado" ? linkedBlock(r) : ""}<div class="cl" style="margin-top:8px">Hallazgos de coherencia</div>${findingsHtml(findingsOf(r))}`;
+  </div>${scheduleBlock(r)}${r.status === "materializado" ? linkedBlock(r) : ""}<div class="cl" style="margin-top:8px">Hallazgos de coherencia</div>${findingsHtml(findingsOf(r))}`;
 	}
 	function linkedBlock(r) {
 		const l = linkedOrders(r);
@@ -1262,9 +2587,18 @@
 		let v = el.value;
 		if (t === "num") v = toNum(el.value);
 		else if (t === "level") v = toLevel(el.value);
-		if (f === "wbsIds") v = Array.from(el.selectedOptions).map((o) => o.value);
+		if (f === "wbsIds" || f === "actIds") v = Array.from(el.selectedOptions).map((o) => o.value);
 		if (k) rec[f][k] = v;
 		else rec[f] = v;
+		if (f === "wbsIds") {
+			const e = getEng();
+			if (e && r.wbsIds.length) r.actIds = r.actIds.filter((id) => {
+				const n = e.byId[id];
+				return !n || n.leafId !== null && r.wbsIds.indexOf(n.leafId) >= 0;
+			});
+			redrawDetail(r);
+			return;
+		}
 		if (f === "type") {
 			if (strategiesFor(r.type).indexOf(r.strategy) < 0) r.strategy = "";
 			redrawDetail(r);
@@ -1309,6 +2643,89 @@
     <div class="mx-pair"><div><h3 class="mxh">Amenazas</h3>${matrixHtml("amenaza")}</div><div><h3 class="mxh">Oportunidades</h3>${matrixHtml("oportunidad")}</div></div>
     <div class="mx-legend"><span class="lv lv-alto">ALTO ≥ ${plan.thresholdHigh}</span><span class="lv lv-medio">MEDIO ≥ ${plan.thresholdMedium}</span><span class="lv lv-bajo">BAJO &lt; ${plan.thresholdMedium}</span><span class="muted small">Materializados y cerrados no aparecen: dejaron de ser incertidumbre.</span></div>`;
 	}
+	function scheduleSim() {
+		const e = getEng();
+		if (!e) return null;
+		const ctx = riskEventsOf(risks, plan, { targets: (r) => resolveTargets(r, e).targets.map((t) => t.id) });
+		const key = JSON.stringify(ctx.events.map((x) => [
+			x.id,
+			x.prob,
+			x.sign,
+			x.low,
+			x.likely,
+			x.high,
+			x.days,
+			x.targets
+		])) + "|" + e.base;
+		if (simCache && simCache.key === key) return simCache;
+		const used = ctx.events.filter((x) => x.days && x.targets && x.targets.length).length;
+		const out = used ? simulateRange([], {
+			events: ctx.events,
+			schedule: {
+				base: e.base,
+				costPerDay: 0,
+				duration: (d) => e.duration(d)
+			}
+		}) : null;
+		simCache = {
+			key,
+			res: out ? out.schedule : null,
+			unmapped: ctx.unmapped,
+			used
+		};
+		return simCache;
+	}
+	function finishOf(days) {
+		const G = window.GPI;
+		if (!G || !net || !net.startDate) return "";
+		try {
+			return G.util.addWorkingDays(G.util.parseISO(net.startDate), Math.max(0, Math.ceil(days - 1e-9) - 1), net.calendar);
+		} catch (e) {
+			return "";
+		}
+	}
+	function scheduleAnalysisHtml() {
+		const head = `<h3 class="mxh">Riesgo de plazo — efecto en el fin del proyecto (CPM)</h3>`;
+		const e = getEng();
+		if (!e) return `<div class="card" style="margin-top:14px">${head}<div class="muted small">El proyecto aún no tiene actividades enlazadas en el cronograma. Cuando las tenga, aquí verás cuánto retrasa cada riesgo el fin del proyecto y la reserva de plazo que requiere la cartera (AACE 40R-08 / 65R-11).</div></div>`;
+		const rows = risks.filter((r) => isOpen(r) && impactMean(r.timeImpact) !== null && (r.timeImpact.likely || 0) > 0).map((r) => ({
+			r,
+			a: impactFor(r, "inherent"),
+			b: impactFor(r, "residual")
+		}));
+		rows.sort((x, y) => Math.abs(y.a.evDays || 0) - Math.abs(x.a.evDays || 0) || x.r.code.localeCompare(y.r.code));
+		const dd = (v) => v === null ? "—" : fmtDays(v);
+		const body = rows.length ? rows.map(({ r, a, b }) => {
+			const tg = a.mapped ? a.targets.map((t) => esc(t.code)).join(", ") + (a.mode === "paquete" ? " <span class=\"muted\">(menor holgura)</span>" : "") : `<span class="muted">sin ubicar</span>`;
+			const sg = r.type === "oportunidad" ? -1 : 1;
+			return `<tr><td class="mono">${esc(r.code)}</td><td>${esc(r.title)}</td><td>${tg}</td><td class="num">${a.mapped ? a.minFloat !== null && a.minFloat <= 1e-6 ? "crítica" : dd(a.minFloat) : "—"}</td><td class="num">${dd(r.timeImpact.likely)}</td><td class="num">${a.mapped ? dd(a.delay.likely === null ? null : sg * Math.abs(a.delay.likely)) + " / " + dd(a.delay.high === null ? null : sg * Math.abs(a.delay.high)) : "—"}</td><td class="num">${a.evDays === null ? "—" : dd(Math.round(a.evDays * 10) / 10)}</td><td class="num">${b && b.evDays !== null ? dd(Math.round(b.evDays * 10) / 10) : "—"}</td></tr>`;
+		}).join("") : `<tr><td colspan="8" class="muted">Ningún riesgo abierto tiene un impacto en plazo cuantificado (rango de días).</td></tr>`;
+		const totA = rows.reduce((s, x) => s + (x.a.evDays || 0), 0), totB = rows.reduce((s, x) => s + (x.b && x.b.evDays !== null ? x.b.evDays : x.a.evDays || 0), 0);
+		const sim = scheduleSim();
+		const base = e.base, fin0 = finishOf(base);
+		let simHtml;
+		if (sim && sim.res) {
+			const s = sim.res;
+			simHtml = `<table class="an"><thead><tr><th class="l">Confianza</th><th>Duración</th><th>Reserva de plazo</th><th class="l">Fin</th></tr></thead><tbody>
+      <tr><td>Plan (sin riesgos)</td><td class="num">${fmtDays(base)}</td><td class="num">—</td><td>${esc(fin0) || "—"}</td></tr>
+      ${[
+				50,
+				70,
+				80,
+				90
+			].map((q) => `<tr${q === 80 ? " class=\"tot\"" : ""}><td>P${q}</td><td class="num">${fmtDays(s.p[q])}</td><td class="num">${fmtDays(Math.max(0, s.p[q] - base))}</td><td>${esc(finishOf(s.p[q])) || "—"}</td></tr>`).join("")}</tbody></table>
+      <div class="muted small" style="margin-top:6px">${s.events} evento(s) simulados sobre la red · 10.000 iteraciones · semilla fija (reproducible) · probabilidad de terminar después de lo previsto: <b>${Math.round(s.probDelay * 1e3) / 10} %</b> · retraso medio ≈ ${fmtDays(Math.round((s.mean - base) * 10) / 10)}. La reserva de plazo es <b>P − plan</b>, nunca negativa.</div>`;
+		} else simHtml = `<div class="muted small">Sin eventos con impacto en plazo ubicado en el cronograma: no hay nada que simular.</div>`;
+		const warn = sim && sim.unmapped.length ? `<div class="msg" style="display:block;margin-top:8px"><b>⚠ Sin ubicar en el cronograma:</b> ${sim.unmapped.map(esc).join(", ")} tienen impacto en plazo pero no indican qué actividades afectan; su retraso no entra a la simulación. Elige sus paquetes o actividades.</div>` : "";
+		const hasEd = net && net.hasElapsedLags ? `<div class="note-box"><b>Desfases en días transcurridos:</b> la red tiene enlaces con desfase en días calendario («ed»); sin fecha de inicio real el cálculo los aproxima, así que el plazo base puede diferir del de Cronograma/CPM.</div>` : "";
+		return `<div class="card" style="margin-top:14px">${head}
+    <p class="muted small" style="margin:0 0 8px">Un retraso solo mueve el fin del proyecto si consume más que la <b>holgura</b> de la actividad afectada; una actividad de la ruta crítica lo traslada íntegro. Por eso el efecto no son «los días del riesgo»: se calcula volviendo a correr el CPM con la duración afectada (base ${fmtDays(base)}${fin0 ? ", fin " + esc(fin0) : ""}).</p>
+    <div class="an-grid"><div><table class="an"><thead><tr><th class="l">Cód.</th><th class="l">Riesgo</th><th class="l">Actividad</th><th>Holgura</th><th>Riesgo</th><th>Fin del proyecto (más prob. / máx.)</th><th>VE antes</th><th>VE residual</th></tr></thead><tbody>${body}
+      ${rows.length ? `<tr class="tot"><td colspan="6">Suma indicativa del valor esperado (amenazas − oportunidades)</td><td class="num">${dd(Math.round(totA * 10) / 10)}</td><td class="num">${dd(Math.round(totB * 10) / 10)}</td></tr>` : ""}</tbody></table>
+      <div class="muted small" style="margin-top:6px">VE = valor esperado en días sobre el fin del proyecto (probabilidad × media del efecto). La suma es indicativa: no es el retraso esperado del proyecto, que lo da la simulación.</div></div>
+      <div><h3 class="mxh" style="margin-top:0">Simulación de plazo (riesgo residual)</h3>${simHtml}${warn}</div></div>
+    <div class="note-box"><b>Qué cubre y qué no.</b> Solo eventos de riesgo abiertos (con la respuesta ya aplicada), sobre las duraciones determinísticas del cronograma: no incluye la incertidumbre de las duraciones (PERT). El <b>costo</b> de la extensión del plazo (gastos generales, dirección, alquileres) se calcula en <b>Costos</b>, con esta misma simulación. Por eso el rango de costo de un riesgo <b>no debe incluir</b> costos que dependen del tiempo: se contarían dos veces.</div>${hasEd}</div>`;
+	}
 	function renderAnalysis() {
 		const pf = portfolio(risks, plan), rk = rankRisks(risks, plan).slice(0, 8);
 		const all = [];
@@ -1347,7 +2764,7 @@
           <tr><td>Retraso esperado por amenazas</td><td class="num">≈ ${Math.round(pf.evThreatDays * 10) / 10} d</td></tr>
           <tr><td>Impacto real de riesgos materializados</td><td class="num">${money(pf.actualCost)}</td></tr>
         </tbody></table>
-        <div class="note-box"><b>Cómo leerlo (AACE).</b> Un valor esperado es una <b>media</b> (≈ P50): no es una contingencia por sí sola. La contingencia se determina sobre la exposición residual y a un nivel de confianza (percentil) elegido, y se suma a la incertidumbre del estimado. Esa integración con Costos está prevista; hoy este valor es una <b>referencia</b> para dimensionarla. Los riesgos sin cuantificar no suman: cuantifica primero los de impacto en costo ≥ 3.</div></div>
+        <div class="note-box"><b>Cómo leerlo (AACE).</b> Un valor esperado es una <b>media</b> (≈ P50): no es una contingencia por sí sola. La contingencia se determina sobre la exposición residual y a un nivel de confianza (percentil) elegido, y se suma a la incertidumbre del estimado: <b>Costos</b> ya toma estos riesgos como eventos de su simulación. Los riesgos sin cuantificar no suman: cuantifica primero los de impacto en costo ≥ 3.</div></div>
       <div class="card"><h3 class="mxh">Por categoría (RBS)</h3><table class="an"><thead><tr><th class="l">Categoría</th><th>Riesgos abiertos</th><th>EV neto</th></tr></thead><tbody>${cats}</tbody></table></div>
       <div class="card"><h3 class="mxh">Cobertura del registro (abiertos)</h3><table class="an"><tbody>
         <tr><td>Analizados (probabilidad e impacto)</td><td class="num">${cov(pf.coverage.analyzed, pf.coverage.openCount)}</td></tr>
@@ -1356,6 +2773,7 @@
         <tr><td>Con paquetes de la EDT</td><td class="num">${cov(pf.coverage.withWbs, pf.coverage.openCount)}</td></tr>
         <tr><td>Cuantificados en costo</td><td class="num">${cov(pf.coverage.quantified, pf.coverage.openCount)}</td></tr></tbody></table></div>
     </div>
+    ${scheduleAnalysisHtml()}
     <div class="card" style="margin-top:14px"><h3 class="mxh">Hallazgos de coherencia (${all.length})</h3>${all.length ? `<ul class="rk-finds all">${fl}</ul>${all.length > 40 ? `<div class="muted small">… y ${all.length - 40} más.</div>` : ""}` : `<div class="muted small">El registro no tiene hallazgos.</div>`}</div>`;
 	}
 	function planBandsHtml() {
@@ -1593,6 +3011,8 @@
 			"Prob_efectiva_pct",
 			"EV_Costo",
 			"EV_Dias",
+			"Actividades_Cronograma",
+			"Efecto_Fin_Proyecto_Dias",
 			"Estrategia",
 			"Respuesta",
 			"Disparador",
@@ -1611,6 +3031,7 @@
 		const lines = [head.join(",")];
 		risks.forEach((r) => {
 			const sc = inherentScore(r), ev = inherentEV(r, plan), res = residualOf(r, plan), pr = probEffective(r.probPct, r.prob, plan);
+			const im = impactMean(r.timeImpact) !== null ? impactFor(r, "inherent") : null;
 			lines.push([
 				r.code,
 				r.title,
@@ -1628,6 +3049,8 @@
 				pr === null ? "" : Math.round(pr * 100),
 				ev.cost === null ? "" : Math.round(ev.cost),
 				ev.time === null ? "" : Math.round(ev.time * 10) / 10,
+				im && im.mapped ? im.targets.map((t) => t.code).join(" ") : "",
+				im && im.mapped && im.delay.likely !== null ? Math.round(im.delay.likely * 10) / 10 : "",
 				r.strategy,
 				r.response,
 				r.trigger,
@@ -1803,7 +3226,14 @@
 		document.addEventListener("visibilitychange", () => {
 			if (document.hidden) push();
 		});
+		document.addEventListener("visibilitychange", () => {
+			if (!document.hidden) {
+				netDirty = true;
+				render();
+			}
+		});
 		window.GPI.onChange(() => {
+			netDirty = true;
 			const p = window.GPI.active();
 			if (!p || !p.meta) return;
 			if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {

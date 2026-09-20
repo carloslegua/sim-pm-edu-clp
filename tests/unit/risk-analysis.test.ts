@@ -191,7 +191,57 @@ describe("eventos para la contingencia (riskEventsOf) y vínculo con Costos", ()
       R({ id: "s", code: "R-03", prob: 3, impCost: 3 }), q({ id: "np", code: "R-04", prob: null }), q({ id: "bad", code: "R-05", costImpact: { low: 900, likely: 200, high: 400 } }), q({ id: "ok", code: "R-06" })];
     const { events, excluded } = riskEventsOf(set, P);
     expect(events.map((e) => e.code)).toEqual(["R-06"]);
-    expect(excluded.map((x) => [x.code, x.reason])).toEqual([["R-03", "sin impacto en costo cuantificado"], ["R-04", "sin probabilidad"], ["R-05", "rango de costo incoherente"]]);
+    expect(excluded.map((x) => [x.code, x.reason])).toEqual([["R-03", "sin impacto en costo ni en plazo cuantificado"], ["R-04", "sin probabilidad"], ["R-05", "rango de costo incoherente"]]);
+  });
+  // ---- plazo (AACE 65R-11): el evento lleva su impacto en días y las actividades que retrasa ----
+  const T = { low: 10, likely: 20, high: 35 };
+  const ubica = (ids: string[]) => ({ targets: () => ids });
+  it("plazo: un evento con días y actividades ubicadas los lleva (`days`, `targets`); sin ubicar entra por su costo y se lista en `unmapped`", () => {
+    const r = q({ timeImpact: T, wbsIds: ["w"] });
+    const a = riskEventsOf([r], P, ubica(["a1", "a2"]));
+    expect(a.events[0].days).toEqual(T); expect(a.events[0].targets).toEqual(["a1", "a2"]); expect(a.unmapped).toEqual([]);
+    const b = riskEventsOf([r], P, ubica([]));
+    expect(b.events[0].days).toBeUndefined(); expect(b.unmapped).toEqual(["R-01"]); expect(b.events).toHaveLength(1);
+    const c = riskEventsOf([r], P);                                                // sin cronograma: no se sabe dónde va
+    expect(c.unmapped).toEqual(["R-01"]);
+  });
+  it("plazo: un riesgo SOLO de plazo (sin costo cuantificado) entra a la simulación con costo directo 0; con un solo punto el rango es fijo", () => {
+    const r = R({ prob: 3, impTime: 3, timeImpact: { low: null, likely: 12, high: null } });
+    const { events, excluded } = riskEventsOf([r], P, ubica(["a1"]));
+    expect(excluded).toEqual([]);
+    expect(events[0]).toMatchObject({ low: 0, likely: 0, high: 0, days: { low: 12, likely: 12, high: 12 }, targets: ["a1"] });
+  });
+  it("plazo: con la respuesta cuantificada se usa el plazo RESIDUAL; si solo el costo lo está, el plazo sigue siendo el inherente", () => {
+    const base = { strategy: "mitigar", resProb: 2, resImpCost: 2, timeImpact: T, resTimeImpact: { low: 2, likely: 5, high: 10 }, resCostImpact: { low: 50, likely: 100, high: 200 } };
+    expect(riskEventsOf([q(base)], P, ubica(["a"])).events[0]).toMatchObject({ basis: "residual", days: { low: 2, likely: 5, high: 10 } });
+    expect(riskEventsOf([q({ ...base, resTimeImpact: { low: null, likely: null, high: null } })], P, ubica(["a"])).events[0]).toMatchObject({ basis: "residual", days: T });
+  });
+  it("plazo: una oportunidad lleva signo −1 también en sus días; un rango de plazo incoherente no se simula (avisa) pero no descarta el costo", () => {
+    const o = riskEventsOf([q({ type: "oportunidad", strategy: "aceptar", timeImpact: T })], P, ubica(["a"])).events[0];
+    expect(o.sign).toBe(-1); expect(o.days).toEqual(T);
+    const bad = riskEventsOf([q({ timeImpact: { low: 30, likely: 20, high: 10 } })], P, ubica(["a"]));
+    expect(bad.events[0].days).toBeUndefined();
+  });
+  it("actIds: se normaliza (basura descartada) y los datos guardados antes, sin el campo, se leen como «sin actividades»", () => {
+    expect(normalizeRisk({ actIds: ["a1", "", 7, null] }, "x").actIds).toEqual(["a1", "7", "null"].filter((s) => s !== "null"));
+    expect(normalizeRisk({ id: "y" }, "x").actIds).toEqual([]);
+    expect(normalizeRisk({ actIds: "no-array" }, "x").actIds).toEqual([]);
+  });
+  it("R19–R21: contrasta el nivel de plazo declarado con lo que el CPM dice del fin del proyecto", () => {
+    const r = R({ prob: 3, impTime: 4, timeImpact: T, wbsIds: ["w"] });
+    const c = (schedule: NonNullable<Parameters<typeof riskFindings>[2]>["schedule"], x: Risk = r) => riskFindings(x, P, { schedule }).map((f) => f.code);
+    const f = (o: Partial<NonNullable<Parameters<typeof riskFindings>[2]>["schedule"]>) => ({ network: true, mapped: true, reason: "", minFloat: 0, delayLikely: 20, delayHigh: 35, ...o }) as NonNullable<Parameters<typeof riskFindings>[2]>["schedule"];
+    expect(c(f({}))).not.toEqual(expect.arrayContaining(["R19", "R20", "R21"]));                         // crítica: 20 d → nivel 3 (declarado 4): coherente
+    expect(c(f({ mapped: false, reason: "no indica paquetes de la EDT ni actividades", delayLikely: null, delayHigh: null }))).toContain("R19");
+    expect(c(f({ network: false, mapped: false }))).not.toContain("R19");                                 // sin red no hay contra qué ubicarlo
+    expect(c(f({ minFloat: 78, delayLikely: 0, delayHigh: 0 }))).toContain("R21");                        // declara 4 y el fin no se mueve (nivel 1)
+    const bajo = R({ prob: 3, impTime: 2, timeImpact: T, wbsIds: ["w"] });
+    expect(c(f({ minFloat: 78, delayLikely: 0, delayHigh: 0 }), bajo)).toContain("R20");                 // nivel coherente con 0 d: solo se informa la absorción
+    expect(c(f({ minFloat: 78, delayLikely: 0, delayHigh: 0 }), bajo)).not.toContain("R21");
+    expect(riskFindings(bajo, P, { schedule: f({ minFloat: 0, delayLikely: 62, delayHigh: 62 }) }).map((x) => x.code)).toContain("R21");   // declara 2 y el fin se mueve 62 d (nivel 5)
+    expect(riskFindings(R({ prob: 3, impTime: 4, wbsIds: ["w"] }), P, { schedule: f({}) }).map((x) => x.code)).not.toContain("R19");         // sin días cuantificados no se evalúa
+    expect(riskFindings(R({ prob: 3, impTime: 4, timeImpact: T, status: "cerrado" }), P, { schedule: f({ mapped: false, delayLikely: null }) }).map((x) => x.code)).not.toContain("R19");   // cerrado: ya no
+    expect(riskFindings(r, P).map((x) => x.code)).not.toContain("R19");                                   // sin `schedule` no se evalúa nada
   });
   it("R17/R18: el costo real de un riesgo materializado se contrasta con las órdenes vinculadas en Costos (solo si se conoce Costos)", () => {
     const m = R({ status: "materializado", actualCost: 180000, wbsIds: ["w"], prob: 3, impCost: 3 });

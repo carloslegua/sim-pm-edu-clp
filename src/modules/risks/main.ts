@@ -20,12 +20,15 @@ import type * as GpiCore from "../../core/gpi-core";
 import type { EditSession, ProjectMeta } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
 import { SAMPLE_LINKED_ORDERS, SAMPLE_PLAN, buildSampleRisks } from "../../shared/risk-sample";
+import { SAMPLE_START_DATE, sampleScheduleModules } from "../../shared/schedule-sample";
+import { delayPhrase, fmtDays, makeEngine, resolveTargets, scheduleImpactOf, type Engine, type Network, type ScheduleImpact } from "../../shared/schedule-risk";
+import { simulateRange, type ScheduleResult } from "../../shared/range-estimating";
 import {
   IMPACT_LABELS, PROB_LABELS, PROXIMITY, PROXIMITY_LABEL, RISK_STATUSES, STATUS_LABEL, STRATEGY_HINT,
-  blankRisk, buildMatrix, costLevel, inherentEV, inherentScore, isOpen, levelOf, maxImpact, nextCode,
-  normalizePlan, normalizeRisk, portfolio, probEffective, rankRisks, residualOf, riskFindings, strategiesFor, timeLevel,
+  blankRisk, buildMatrix, costLevel, impactMean, inherentEV, inherentScore, isOpen, levelOf, maxImpact, nextCode,
+  normalizePlan, normalizeRisk, portfolio, probEffective, rankRisks, residualOf, riskEventsOf, riskFindings, strategiesFor, timeLevel,
   toLevel, toNum, validatePlan,
-  type Finding, type Risk, type RiskLevel, type RiskPlan, type RiskType
+  type Finding, type Risk, type RiskLevel, type RiskPlan, type RiskType, type ScheduleFacts
 } from "../../shared/risk-analysis";
 
 type GpiApi = typeof GpiCore.GPI;
@@ -70,6 +73,26 @@ function refreshContext(): void {
       const m = G.meta(); currency = (m && m.currency) || "USD";
     } catch (e) { /* noop */ }
   } else { leaves = SAMPLE_LEAVES; roles = SAMPLE_ROLES; costBase = SAMPLE_COST_BASE; currency = "USD"; }
+  netDirty = true;
+}
+
+// ---------- cronograma: la red de actividades y el CPM (AACE 40R-08 / 65R-11) ----------
+// Se arma perezosamente y se invalida cuando cambia el contexto o el proyecto (otro módulo editó actividades o enlaces).
+// Conectado: la red del proyecto; independiente: la red DISTRIB+ completa (43 actividades, 3 hitos, 51 enlaces).
+let net: Network | null = null, eng: Engine | null = null, netDirty = true;
+const schedCache = new Map<string, ScheduleImpact>();
+let simCache: { key: string; res: ScheduleResult | null; unmapped: string[]; used: number } | null = null;
+function getEng(): Engine | null {
+  if (!netDirty) return eng;
+  netDirty = false; net = null; eng = null; schedCache.clear(); simCache = null;
+  const G = window.GPI;
+  if (!G || !G.util || !G.util.cpm || !G.util.scheduleNetwork) return null;
+  try {
+    if (connected) net = G.util.activeScheduleNetwork();
+    else { const m = sampleScheduleModules(); net = G.util.scheduleNetwork(m.wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE); }
+    eng = makeEngine(net, G.util.cpm);
+  } catch (e) { net = null; eng = null; }
+  return eng;
 }
 
 // ---------- estado ----------
@@ -113,7 +136,26 @@ function linkedOrders(r: Risk): LinkedOrder[] {
   return all.filter((o) => o && o.riskId === r.id).map((o) => ({ id: String(o.id || ""), cost: Number(o.cost) || 0, status: String(o.status || ""), fund: String(o.fund || "") }));
 }
 const linkedSummary = (r: Risk): { approved: number; count: number } => { const l = linkedOrders(r); return { approved: l.filter((o) => o.status === "Aprobada").reduce((s, o) => s + o.cost, 0), count: l.length }; };
-const findingsOf = (r: Risk): Finding[] => riskFindings(r, plan, { today: todayISO(), costBase, leafIds: leaves.map((l) => l.id), linked: r.status === "materializado" ? linkedSummary(r) : undefined });
+// Efecto de un riesgo sobre el fin del proyecto: con el rango de plazo ANTES de la respuesta ("inherent") o el residual.
+// Se guarda en caché por lo que lo determina (tipo, ubicación, rango y probabilidad); se invalida con la red.
+function impactFor(r: Risk, which: "inherent" | "residual"): ScheduleImpact | null {
+  const e = getEng(); if (!e) return null;
+  const res = residualOf(r, plan), resOk = which === "residual" && !!r.strategy && r.strategy !== "aceptar" && res.assessed && impactMean(r.resTimeImpact) !== null;
+  if (which === "residual" && !resOk) return null;
+  const range = which === "residual" ? r.resTimeImpact : r.timeImpact;
+  const prob = which === "residual" ? probEffective(r.resProbPct, r.resProb, plan) : probEffective(r.probPct, r.prob, plan);
+  const key = r.id + "|" + which + "|" + JSON.stringify([r.type, r.wbsIds, r.actIds, range, prob]);
+  let im = schedCache.get(key);
+  if (!im) { im = scheduleImpactOf(e, resolveTargets(r, e), range, prob, r.type === "amenaza" ? 1 : -1); if (schedCache.size > 2000) schedCache.clear(); schedCache.set(key, im); }
+  return im;
+}
+// Lo que necesitan los hallazgos R19–R21; solo si el riesgo trae un impacto en plazo cuantificado y hay red.
+function scheduleFacts(r: Risk): ScheduleFacts | undefined {
+  if (!getEng() || impactMean(r.timeImpact) === null || !((r.timeImpact.likely || 0) > 0)) return undefined;
+  const im = impactFor(r, "inherent"); if (!im) return undefined;
+  return { network: true, mapped: im.mapped, reason: im.reason, minFloat: im.minFloat, delayLikely: im.delay.likely, delayHigh: im.delay.high };
+}
+const findingsOf = (r: Risk): Finding[] => riskFindings(r, plan, { today: todayISO(), costBase, leafIds: leaves.map((l) => l.id), linked: r.status === "materializado" ? linkedSummary(r) : undefined, schedule: scheduleFacts(r) });
 const statement = (r: Risk): string => (r.cause.trim() || r.event.trim() || r.effect.trim())
   ? "Debido a " + (r.cause.trim() || "…") + ", puede ocurrir que " + (r.event.trim() || "…") + ", lo que " + (r.type === "amenaza" ? "causaría " : "generaría ") + (r.effect.trim() || "…") + "." : "";
 
@@ -189,6 +231,7 @@ function detailHtml(r: Risk): string {
     ${fld("Identificado el", inp(r, "identifiedOn", r.identifiedOn, "date"))}
     ${fld("Última revisión", `<div class="rv">${inp(r, "reviewedOn", r.reviewedOn, "date")}<button class="btn sm" data-act="reviewed" data-id="${esc(r.id)}" type="button">Revisado hoy</button></div>`, false, "El plan pide revisar cada " + plan.reviewDays + " días.")}
     ${fld("Paquetes de la EDT afectados", leafSel, true, leaves.length ? "Ctrl/⌘ + clic para elegir varios." : "Crea la EDT en WBS Builder para vincular paquetes.")}
+    ${actSelField(r)}
     ${fld("Causa", txt(r, "cause", r.cause, 2, "¿Qué condición o hecho origina el riesgo?"))}
     ${fld("Evento", txt(r, "event", r.event, 2, "¿Qué podría ocurrir?"))}
     ${fld("Efecto", txt(r, "effect", r.effect, 2, "¿Qué consecuencia tendría en los objetivos?"))}
@@ -234,6 +277,31 @@ function detailHtml(r: Risk): string {
     <div class="fd wide"><div class="calc" id="calc-${esc(r.id)}">${calcHtml(r)}</div></div>
   </div>`;
 }
+// Actividades del cronograma que afecta (opcional): afina los paquetes. Solo si el proyecto tiene una red de actividades.
+function actSelField(r: Risk): string {
+  const e = getEng(); if (!e) return "";
+  const acts = e.net.nodes.filter((n) => !n.isMilestone && (!r.wbsIds.length || (n.leafId !== null && r.wbsIds.indexOf(n.leafId) >= 0)));
+  const opts = acts.map((n) => { const row = e.rows[n.id], tf = row ? row.tf : 0; return `<option value="${esc(n.id)}" ${r.actIds.indexOf(n.id) >= 0 ? "selected" : ""}>${esc(n.code + " " + n.name)} · ${tf <= 1e-6 ? "crítica" : "holgura " + fmtDays(tf)}</option>`; }).join("");
+  return fld("Actividades del cronograma afectadas (opcional)", `<select class="ri" multiple size="6" data-id="${esc(r.id)}" data-f="actIds">${opts}</select>`, true,
+    "Sin elegir ninguna, el retraso se aplica UNA vez a la actividad de menor holgura de los paquetes elegidos. Si eliges actividades, se aplica a CADA una. Ctrl/⌘ + clic para elegir varias.");
+}
+// Cuánto retrasaría (o adelantaría) este riesgo el fin del proyecto: el CPM se vuelve a correr con la duración afectada.
+function scheduleBlock(r: Risk): string {
+  const q = impactMean(r.timeImpact) !== null && (r.timeImpact.likely || 0) > 0;
+  if (!q) return "";
+  const head = `<div class="cl" style="margin-top:10px">Efecto en el cronograma (CPM)</div>`;
+  const e = getEng(), im = impactFor(r, "inherent");
+  if (!e || !im) return head + `<div class="muted small">El proyecto aún no tiene actividades enlazadas: define la EDT, las actividades y sus enlaces (Cronograma/CPM) para ver cuánto retrasaría este riesgo el fin del proyecto.</div>`;
+  const opp = r.type === "oportunidad";
+  if (!im.mapped) return head + `<div class="muted small">No se puede ubicar en el cronograma: ${esc(im.reason)}. Elige los paquetes de la EDT (y, si quieres, las actividades) que afecta.</div>`;
+  const tg = im.targets.map((t) => `<b class="mono">${esc(t.code)}</b> ${esc(t.name)} — ${t.critical ? "<b>crítica</b> (holgura 0)" : "holgura " + fmtDays(t.tf)}`).join("<br>");
+  const how = im.mode === "actividades" ? "El retraso se aplica a <b>cada</b> actividad elegida:" : "Se aplica <b>una vez</b>, a la actividad de menor holgura de sus paquetes:";
+  const row = (lbl: string, days: number | null, eff: number | null): string => `<tr><td>${lbl}</td><td class="num">${days === null ? "—" : fmtDays(days)}</td><td class="num"><b>${eff === null ? "—" : (opp && eff !== 0 ? "−" : "") + fmtDays(Math.abs(eff))}</b></td></tr>`;
+  const rg = r.timeImpact;
+  return head + `<div class="muted small">${how}<br>${tg}${im.missing.length ? `<br><span class="warn">${im.missing.length} actividad(es) elegida(s) ya no existen en el cronograma.</span>` : ""}</div>
+    <table class="an" style="margin-top:6px"><thead><tr><th class="l">Si ocurre con…</th><th>${opp ? "Adelanto del riesgo" : "Retraso del riesgo"}</th><th>${opp ? "Adelanta el fin del proyecto" : "Retrasa el fin del proyecto"}</th></tr></thead><tbody>${row("Mínimo", rg.low, im.delay.low)}${row("Más probable", rg.likely, im.delay.likely)}${row("Máximo", rg.high, im.delay.high)}</tbody></table>
+    <div class="muted small" style="margin-top:4px">${esc(delayPhrase(im).replace(/^./, (c) => c.toUpperCase()))}.${im.evDays !== null ? " Valor esperado sobre el fin del proyecto: <b>≈ " + (Math.round(Math.abs(im.evDays) * 10) / 10) + " d</b>" + (opp ? " de adelanto" : "") + " (probabilidad × media del efecto)." : ""}</div>`;
+}
 // Panel calculado (se refresca al editar, sin reconstruir el formulario).
 function calcHtml(r: Risk): string {
   const sc = inherentScore(r), ev = inherentEV(r, plan), res = residualOf(r, plan), pr = probEffective(r.probPct, r.prob, plan);
@@ -244,7 +312,7 @@ function calcHtml(r: Risk): string {
     <div><div class="cl">Valor esperado (${sg})</div><div class="cv mono">${money(ev.cost)}</div><div class="muted small">${ev.time !== null ? "≈ " + (Math.round(ev.time * 10) / 10) + " días · " : ""}P × media de la triangular (mín + más prob. + máx) / 3</div></div>
     <div><div class="cl">Riesgo residual</div><div class="cv">${res.assessed && res.score !== null ? levelPill(res.score, r.type === "oportunidad") : `<span class="muted small">${r.strategy ? "Sin evaluar" : "—"}</span>`}</div><div class="muted small">${res.assessed && res.ev.cost !== null ? "EV residual " + money(res.ev.cost) : res.derived ? "= inherente (aceptar)" : ""}</div></div>
     <div><div class="cl">Niveles según valores cuantificados</div><div class="cv small">${implC !== null ? "Costo: nivel " + implC : "Costo: —"} · ${implT !== null ? "Plazo: nivel " + implT : "Plazo: —"}</div><div class="muted small">Contraste con lo declarado en el análisis cualitativo</div></div>
-  </div>${r.status === "materializado" ? linkedBlock(r) : ""}<div class="cl" style="margin-top:8px">Hallazgos de coherencia</div>${findingsHtml(findingsOf(r))}`;
+  </div>${scheduleBlock(r)}${r.status === "materializado" ? linkedBlock(r) : ""}<div class="cl" style="margin-top:8px">Hallazgos de coherencia</div>${findingsHtml(findingsOf(r))}`;
 }
 // Lo que Costos tiene aprobado por este riesgo materializado: la traza riesgo → contingencia/reserva.
 function linkedBlock(r: Risk): string {
@@ -268,8 +336,13 @@ function onField(el: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement)
   const rec = r as unknown as Record<string, unknown>;
   let v: unknown = el.value;
   if (t === "num") v = toNum(el.value); else if (t === "level") v = toLevel(el.value);
-  if (f === "wbsIds") v = Array.from((el as HTMLSelectElement).selectedOptions).map((o) => o.value);
+  if (f === "wbsIds" || f === "actIds") v = Array.from((el as HTMLSelectElement).selectedOptions).map((o) => o.value);
   if (k) (rec[f] as Record<string, unknown>)[k] = v; else rec[f] = v;
+  if (f === "wbsIds") {   // al cambiar los paquetes, las actividades elegidas que ya no son de ellos se descartan y la lista se rearma
+    const e = getEng();
+    if (e && r.wbsIds.length) r.actIds = r.actIds.filter((id) => { const n = e.byId[id]; return !n || (n.leafId !== null && r.wbsIds.indexOf(n.leafId) >= 0); });
+    redrawDetail(r); return;
+  }
   if (f === "type") { if (strategiesFor(r.type).indexOf(r.strategy) < 0) r.strategy = ""; redrawDetail(r); return; }
   if (f === "status") { if (v === "materializado" && !r.materializedOn) r.materializedOn = todayISO(); redrawDetail(r); return; }
   if (f === "strategy") { redrawDetail(r); return; }
@@ -300,6 +373,57 @@ function renderMatrix(): string {
 }
 
 // ---------- vista 3: análisis ----------
+// Riesgo de PLAZO de la cartera: simulación de los eventos abiertos sobre la red (CPM real) y efecto de cada riesgo en el
+// fin del proyecto. Es la MISMA simulación que usa Costos (mismos eventos, semilla y flujo aleatorio de los eventos), así
+// que los plazos coinciden en ambas pantallas; Costos le suma el costo de cada día de extensión.
+function scheduleSim(): { res: ScheduleResult | null; unmapped: string[]; used: number } | null {
+  const e = getEng(); if (!e) return null;
+  const ctx = riskEventsOf(risks, plan, { targets: (r) => resolveTargets(r, e).targets.map((t) => t.id) });
+  const key = JSON.stringify(ctx.events.map((x) => [x.id, x.prob, x.sign, x.low, x.likely, x.high, x.days, x.targets])) + "|" + e.base;
+  if (simCache && simCache.key === key) return simCache;
+  const used = ctx.events.filter((x) => x.days && x.targets && x.targets.length).length;
+  const out = used ? simulateRange([], { events: ctx.events, schedule: { base: e.base, costPerDay: 0, duration: (d) => e.duration(d) } }) : null;
+  simCache = { key, res: out ? out.schedule : null, unmapped: ctx.unmapped, used };
+  return simCache;
+}
+function finishOf(days: number): string {
+  const G = window.GPI;
+  if (!G || !net || !net.startDate) return "";
+  try { return G.util.addWorkingDays(G.util.parseISO(net.startDate), Math.max(0, Math.ceil(days - 1e-9) - 1), net.calendar as { workDayIdx?: number[]; holidays?: string[] }); } catch (e) { return ""; }
+}
+function scheduleAnalysisHtml(): string {
+  const head = `<h3 class="mxh">Riesgo de plazo — efecto en el fin del proyecto (CPM)</h3>`;
+  const e = getEng();
+  if (!e) return `<div class="card" style="margin-top:14px">${head}<div class="muted small">El proyecto aún no tiene actividades enlazadas en el cronograma. Cuando las tenga, aquí verás cuánto retrasa cada riesgo el fin del proyecto y la reserva de plazo que requiere la cartera (AACE 40R-08 / 65R-11).</div></div>`;
+  const rows = risks.filter((r) => isOpen(r) && impactMean(r.timeImpact) !== null && (r.timeImpact.likely || 0) > 0).map((r) => ({ r, a: impactFor(r, "inherent") as ScheduleImpact, b: impactFor(r, "residual") }));
+  rows.sort((x, y) => Math.abs(y.a.evDays || 0) - Math.abs(x.a.evDays || 0) || x.r.code.localeCompare(y.r.code));
+  const dd = (v: number | null): string => (v === null ? "—" : fmtDays(v));
+  const body = rows.length ? rows.map(({ r, a, b }) => {
+    const tg = a.mapped ? a.targets.map((t) => esc(t.code)).join(", ") + (a.mode === "paquete" ? ' <span class="muted">(menor holgura)</span>' : "") : `<span class="muted">sin ubicar</span>`;
+    const sg = r.type === "oportunidad" ? -1 : 1;
+    return `<tr><td class="mono">${esc(r.code)}</td><td>${esc(r.title)}</td><td>${tg}</td><td class="num">${a.mapped ? (a.minFloat !== null && a.minFloat <= 1e-6 ? "crítica" : dd(a.minFloat)) : "—"}</td><td class="num">${dd(r.timeImpact.likely)}</td><td class="num">${a.mapped ? dd(a.delay.likely === null ? null : sg * Math.abs(a.delay.likely)) + " / " + dd(a.delay.high === null ? null : sg * Math.abs(a.delay.high)) : "—"}</td><td class="num">${a.evDays === null ? "—" : dd(Math.round(a.evDays * 10) / 10)}</td><td class="num">${b && b.evDays !== null ? dd(Math.round(b.evDays * 10) / 10) : "—"}</td></tr>`;
+  }).join("") : `<tr><td colspan="8" class="muted">Ningún riesgo abierto tiene un impacto en plazo cuantificado (rango de días).</td></tr>`;
+  const totA = rows.reduce((s, x) => s + (x.a.evDays || 0), 0), totB = rows.reduce((s, x) => s + (x.b && x.b.evDays !== null ? x.b.evDays : x.a.evDays || 0), 0);
+  const sim = scheduleSim();
+  const base = e.base, fin0 = finishOf(base);
+  let simHtml: string;
+  if (sim && sim.res) {
+    const s = sim.res, pr = [50, 70, 80, 90];
+    simHtml = `<table class="an"><thead><tr><th class="l">Confianza</th><th>Duración</th><th>Reserva de plazo</th><th class="l">Fin</th></tr></thead><tbody>
+      <tr><td>Plan (sin riesgos)</td><td class="num">${fmtDays(base)}</td><td class="num">—</td><td>${esc(fin0) || "—"}</td></tr>
+      ${pr.map((q) => `<tr${q === 80 ? ' class="tot"' : ""}><td>P${q}</td><td class="num">${fmtDays(s.p[q])}</td><td class="num">${fmtDays(Math.max(0, s.p[q] - base))}</td><td>${esc(finishOf(s.p[q])) || "—"}</td></tr>`).join("")}</tbody></table>
+      <div class="muted small" style="margin-top:6px">${s.events} evento(s) simulados sobre la red · 10.000 iteraciones · semilla fija (reproducible) · probabilidad de terminar después de lo previsto: <b>${Math.round(s.probDelay * 1000) / 10} %</b> · retraso medio ≈ ${fmtDays(Math.round((s.mean - base) * 10) / 10)}. La reserva de plazo es <b>P − plan</b>, nunca negativa.</div>`;
+  } else simHtml = `<div class="muted small">Sin eventos con impacto en plazo ubicado en el cronograma: no hay nada que simular.</div>`;
+  const warn = sim && sim.unmapped.length ? `<div class="msg" style="display:block;margin-top:8px"><b>⚠ Sin ubicar en el cronograma:</b> ${sim.unmapped.map(esc).join(", ")} tienen impacto en plazo pero no indican qué actividades afectan; su retraso no entra a la simulación. Elige sus paquetes o actividades.</div>` : "";
+  const hasEd = net && net.hasElapsedLags ? `<div class="note-box"><b>Desfases en días transcurridos:</b> la red tiene enlaces con desfase en días calendario («ed»); sin fecha de inicio real el cálculo los aproxima, así que el plazo base puede diferir del de Cronograma/CPM.</div>` : "";
+  return `<div class="card" style="margin-top:14px">${head}
+    <p class="muted small" style="margin:0 0 8px">Un retraso solo mueve el fin del proyecto si consume más que la <b>holgura</b> de la actividad afectada; una actividad de la ruta crítica lo traslada íntegro. Por eso el efecto no son «los días del riesgo»: se calcula volviendo a correr el CPM con la duración afectada (base ${fmtDays(base)}${fin0 ? ", fin " + esc(fin0) : ""}).</p>
+    <div class="an-grid"><div><table class="an"><thead><tr><th class="l">Cód.</th><th class="l">Riesgo</th><th class="l">Actividad</th><th>Holgura</th><th>Riesgo</th><th>Fin del proyecto (más prob. / máx.)</th><th>VE antes</th><th>VE residual</th></tr></thead><tbody>${body}
+      ${rows.length ? `<tr class="tot"><td colspan="6">Suma indicativa del valor esperado (amenazas − oportunidades)</td><td class="num">${dd(Math.round(totA * 10) / 10)}</td><td class="num">${dd(Math.round(totB * 10) / 10)}</td></tr>` : ""}</tbody></table>
+      <div class="muted small" style="margin-top:6px">VE = valor esperado en días sobre el fin del proyecto (probabilidad × media del efecto). La suma es indicativa: no es el retraso esperado del proyecto, que lo da la simulación.</div></div>
+      <div><h3 class="mxh" style="margin-top:0">Simulación de plazo (riesgo residual)</h3>${simHtml}${warn}</div></div>
+    <div class="note-box"><b>Qué cubre y qué no.</b> Solo eventos de riesgo abiertos (con la respuesta ya aplicada), sobre las duraciones determinísticas del cronograma: no incluye la incertidumbre de las duraciones (PERT). El <b>costo</b> de la extensión del plazo (gastos generales, dirección, alquileres) se calcula en <b>Costos</b>, con esta misma simulación. Por eso el rango de costo de un riesgo <b>no debe incluir</b> costos que dependen del tiempo: se contarían dos veces.</div>${hasEd}</div>`;
+}
 function renderAnalysis(): string {
   const pf = portfolio(risks, plan), rk = rankRisks(risks, plan).slice(0, 8);
   const all: Array<{ r: Risk; f: Finding }> = [];
@@ -328,7 +452,7 @@ function renderAnalysis(): string {
           <tr><td>Retraso esperado por amenazas</td><td class="num">≈ ${Math.round(pf.evThreatDays * 10) / 10} d</td></tr>
           <tr><td>Impacto real de riesgos materializados</td><td class="num">${money(pf.actualCost)}</td></tr>
         </tbody></table>
-        <div class="note-box"><b>Cómo leerlo (AACE).</b> Un valor esperado es una <b>media</b> (≈ P50): no es una contingencia por sí sola. La contingencia se determina sobre la exposición residual y a un nivel de confianza (percentil) elegido, y se suma a la incertidumbre del estimado. Esa integración con Costos está prevista; hoy este valor es una <b>referencia</b> para dimensionarla. Los riesgos sin cuantificar no suman: cuantifica primero los de impacto en costo ≥ 3.</div></div>
+        <div class="note-box"><b>Cómo leerlo (AACE).</b> Un valor esperado es una <b>media</b> (≈ P50): no es una contingencia por sí sola. La contingencia se determina sobre la exposición residual y a un nivel de confianza (percentil) elegido, y se suma a la incertidumbre del estimado: <b>Costos</b> ya toma estos riesgos como eventos de su simulación. Los riesgos sin cuantificar no suman: cuantifica primero los de impacto en costo ≥ 3.</div></div>
       <div class="card"><h3 class="mxh">Por categoría (RBS)</h3><table class="an"><thead><tr><th class="l">Categoría</th><th>Riesgos abiertos</th><th>EV neto</th></tr></thead><tbody>${cats}</tbody></table></div>
       <div class="card"><h3 class="mxh">Cobertura del registro (abiertos)</h3><table class="an"><tbody>
         <tr><td>Analizados (probabilidad e impacto)</td><td class="num">${cov(pf.coverage.analyzed, pf.coverage.openCount)}</td></tr>
@@ -337,6 +461,7 @@ function renderAnalysis(): string {
         <tr><td>Con paquetes de la EDT</td><td class="num">${cov(pf.coverage.withWbs, pf.coverage.openCount)}</td></tr>
         <tr><td>Cuantificados en costo</td><td class="num">${cov(pf.coverage.quantified, pf.coverage.openCount)}</td></tr></tbody></table></div>
     </div>
+    ${scheduleAnalysisHtml()}
     <div class="card" style="margin-top:14px"><h3 class="mxh">Hallazgos de coherencia (${all.length})</h3>${all.length ? `<ul class="rk-finds all">${fl}</ul>${all.length > 40 ? `<div class="muted small">… y ${all.length - 40} más.</div>` : ""}` : `<div class="muted small">El registro no tiene hallazgos.</div>`}</div>`;
 }
 
@@ -464,13 +589,15 @@ function showConfirm(message: string, title?: string): Promise<boolean> { return
 // ---------- exportación ----------
 function exportCsv(): void {
   const head = ["Codigo", "Titulo", "Tipo", "Categoria", "Propietario", "Estado", "Proximidad", "Probabilidad", "Impacto_Costo", "Impacto_Plazo", "Impacto_Alcance", "Puntaje", "Nivel",
-    "Prob_efectiva_pct", "EV_Costo", "EV_Dias", "Estrategia", "Respuesta", "Disparador", "Resp_Respuesta", "Puntaje_Residual", "Nivel_Residual", "EV_Costo_Residual", "Paquetes_EDT", "Causa", "Evento", "Efecto", "Costo_Real", "Retraso_Real_Dias"];
+    "Prob_efectiva_pct", "EV_Costo", "EV_Dias", "Actividades_Cronograma", "Efecto_Fin_Proyecto_Dias", "Estrategia", "Respuesta", "Disparador", "Resp_Respuesta", "Puntaje_Residual", "Nivel_Residual", "EV_Costo_Residual", "Paquetes_EDT", "Causa", "Evento", "Efecto", "Costo_Real", "Retraso_Real_Dias"];
   const q = (v: unknown) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
   const lines = [head.join(",")];
   risks.forEach((r) => {
     const sc = inherentScore(r), ev = inherentEV(r, plan), res = residualOf(r, plan), pr = probEffective(r.probPct, r.prob, plan);
+    const im = impactMean(r.timeImpact) !== null ? impactFor(r, "inherent") : null;
     lines.push([r.code, r.title, r.type, r.category, r.owner, STATUS_LABEL[r.status], r.proximity, r.prob, r.impCost, r.impTime, r.impScope, sc, levelOf(sc, plan),
-      pr === null ? "" : Math.round(pr * 100), ev.cost === null ? "" : Math.round(ev.cost), ev.time === null ? "" : Math.round(ev.time * 10) / 10, r.strategy, r.response, r.trigger, r.responseOwner,
+      pr === null ? "" : Math.round(pr * 100), ev.cost === null ? "" : Math.round(ev.cost), ev.time === null ? "" : Math.round(ev.time * 10) / 10,
+      im && im.mapped ? im.targets.map((t) => t.code).join(" ") : "", im && im.mapped && im.delay.likely !== null ? Math.round(im.delay.likely * 10) / 10 : "", r.strategy, r.response, r.trigger, r.responseOwner,
       res.assessed ? res.score : "", res.assessed ? levelOf(res.score, plan) : "", res.assessed && res.ev.cost !== null ? Math.round(res.ev.cost) : "", r.wbsIds.map(leafCode).join(" "), r.cause, r.event, r.effect, r.actualCost, r.actualDelay].map(q).join(","));
   });
   const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
@@ -578,7 +705,11 @@ refreshContext(); loadSample(); wireToolbar(); refreshRoles(); render();
   if (proj) pull();
   window.addEventListener("beforeunload", push);
   document.addEventListener("visibilitychange", () => { if (document.hidden) push(); });
+  // El cronograma lo editan otros módulos (actividades, enlaces, calendario): la red se vuelve a armar al próximo uso
+  // y al volver a esta pestaña se redibuja, para que el efecto en el plazo no muestre datos viejos.
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { netDirty = true; render(); } });
   window.GPI.onChange(() => {
+    netDirty = true;
     const p = window.GPI!.active(); if (!p || !p.meta) return;
     if (loadedProjectId != null && window.GPI!.activeId() !== loadedProjectId) { if (document.hidden) { pull(); return; } markProjectStale(); return; }
     if (p.meta.name && document.activeElement !== titleEl) titleEl.value = p.meta.name;

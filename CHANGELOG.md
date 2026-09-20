@@ -11,6 +11,24 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Registro de riesgos ↔ Cronograma (tercera entrega, AACE 40R-08 / 65R-11 +
+  PMBOK)** — el impacto en plazo de un riesgo ya se traduce al **fin del
+  proyecto**: se vuelve a correr el CPM con la duración afectada (una actividad
+  crítica traslada el retraso íntegro, una con holgura lo absorbe). Cada riesgo
+  se ubica por paquetes de la EDT y, opcionalmente, por actividades (`actIds`,
+  campo nuevo opcional); sin ubicar se dice. Hallazgos R19–R21 (sin ubicar, absorbido
+  por la holgura, nivel de plazo que no concuerda con el efecto real). El Registro
+  muestra por riesgo su efecto en el fin y, en Análisis, la **simulación de
+  plazo** (P50–P90, reserva de plazo, fechas de fin). **Costos** integra el
+  mismo sorteo: el retraso se costea con un nuevo «costo por día de extensión del
+  plazo» (`rangeAnalysis.timeCostPerDay`), con tabla de plazo y aviso de doble
+  conteo (los rangos de costo de los riesgos deben ser directos). Los eventos
+  tienen flujo aleatorio propio y se simulan una vez (Costos y Riesgos dan el
+  mismo plazo). Nuevo: `GPI.util.scheduleNetwork/activeScheduleNetwork`,
+  `src/shared/schedule-risk.ts`, `src/shared/schedule-sample.ts` (red DISTRIB+
+  completa con prueba de oro 273 d / 34 críticos). Pruebas: unitarias (motor,
+  ubicación, efecto, simulación integrada contra valores analíticos), smoke de Riesgos
+  (24) y Costos (38), y e2e en Chrome real. Ver ARCHITECTURE.md.
 - **Registro de riesgos ↔ Costos (segunda entrega, AACE 40R-08 + PMBOK)** —
   (1) Los riesgos abiertos del Registro entran a la simulación de contingencia
   de Costos como **eventos discretos** (probabilidad × impacto triangular;
@@ -146,6 +164,13 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Panel de Control: el indicador «Cronograma / CPM» daba una duración
+  equivocada con hitos** — `GPI.util.scheduleStats()` armaba la red solo con las
+  actividades: los enlaces hacia/desde un hito se perdían. Con el ejemplo
+  DISTRIB+ completo el Panel mostraba **195 d / 22 críticas / fin 2027-04-02**
+  mientras Cronograma/CPM da **273 d / 34 / 2027-07-21** (hallado al contrastar
+  la red nueva en Chrome real). Ahora usa la misma red (`scheduleNetwork`); fijado
+  en el e2e `risk-schedule-integration.spec.ts`.
 - **Costos: una variación fuera de umbral ya no se equipara con una orden
   de cambio (auditoría metodológica PMI)** — el flujo enseñaba «rojo =
   orden de cambio obligatoria» y los umbrales de CPI/CV se rotulaban

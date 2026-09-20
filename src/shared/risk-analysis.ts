@@ -14,7 +14,10 @@
 //    y método del VALOR ESPERADO de la RP 44R-08: EV = probabilidad × impacto esperado, con el
 //    impacto dado por un RANGO de tres puntos (mínimo / más probable / máximo; media de la
 //    triangular). La contingencia se determina sobre la exposición que QUEDA tras la respuesta.
-// (Los números de RP se citan de memoria: confirmarlos contra la lista vigente de AACE.)
+// (Números de RP verificados contra AACE en sept. 2026: 10S-90 terminología, 40R-08 contingencia, 44R-08 valor
+// esperado; la 41R-08 se retituló en 2021 «Understanding Estimate Ranging».)
+//  · Riesgo de PLAZO (AACE 40R-08 / 65R-11): el impacto en plazo de un riesgo se traduce al fin del proyecto con el CPM
+//    (ver schedule-risk.ts); aquí solo viven los hallazgos que contrastan el nivel declarado con ese efecto.
 
 import type { RiskEventInput } from "./range-estimating";
 
@@ -45,7 +48,9 @@ export interface Range3 { low: number | null; likely: number | null; high: numbe
 export interface Risk {
   id: string; code: string; title: string;
   cause: string; event: string; effect: string;             // enunciado causa–evento–efecto
-  type: RiskType; category: string; wbsIds: string[]; owner: string;
+  type: RiskType; category: string; wbsIds: string[];
+  actIds: string[];                                         // actividades del cronograma que afecta (opcional; afina a wbsIds)
+  owner: string;
   proximity: string; identifiedOn: string; reviewedOn: string; status: RiskStatus;
   // análisis ANTES de la respuesta
   prob: number | null; impCost: number | null; impTime: number | null; impScope: number | null;
@@ -196,7 +201,8 @@ export function normalizeRisk(o: unknown, fallbackId: string): Risk {
   const id = str(x.id) || fallbackId;
   return {
     id, code: str(x.code) || id, title: str(x.title), cause: str(x.cause), event: str(x.event), effect: str(x.effect),
-    type, category: str(x.category), wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str).filter(Boolean) : [], owner: str(x.owner),
+    type, category: str(x.category), wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str).filter(Boolean) : [],
+    actIds: Array.isArray(x.actIds) ? x.actIds.map(str).filter(Boolean) : [], owner: str(x.owner),
     proximity: PROXIMITY.indexOf(str(x.proximity)) >= 0 ? str(x.proximity) : "", identifiedOn: str(x.identifiedOn), reviewedOn: str(x.reviewedOn), status,
     prob: toLevel(x.prob), impCost: toLevel(x.impCost), impTime: toLevel(x.impTime), impScope: toLevel(x.impScope),
     probPct: toNum(x.probPct), costImpact: range(x.costImpact), timeImpact: range(x.timeImpact),
@@ -217,7 +223,10 @@ export type Severity = "riesgo" | "aviso" | "info";
 export interface Finding { code: string; severity: Severity; text: string; }
 // `linked`: lo que Costos tiene registrado para este riesgo (órdenes de cambio vinculadas) -- solo lo pasa
 // quien puede leer el módulo de costos; sin él no se evalúan R17/R18.
-export interface FindingOpts { today?: string; costBase?: number; leafIds?: string[]; linked?: { approved: number; count: number }; }
+// `schedule`: el efecto del riesgo en el cronograma (lo calcula quien puede correr el CPM; ver schedule-risk.ts). Sin él
+// no se evalúan R19–R21. `network` = hay una red de actividades contra la cual ubicar el riesgo.
+export interface ScheduleFacts { network: boolean; mapped: boolean; reason: string; minFloat: number | null; delayLikely: number | null; delayHigh: number | null; }
+export interface FindingOpts { today?: string; costBase?: number; leafIds?: string[]; linked?: { approved: number; count: number }; schedule?: ScheduleFacts; }
 function daysBetween(a: string, b: string): number | null {
   const x = Date.parse(a + "T12:00:00Z"), y = Date.parse(b + "T12:00:00Z");
   return isFinite(x) && isFinite(y) ? Math.round((y - x) / 86400000) : null;
@@ -258,6 +267,18 @@ export function riskFindings(r: Risk, p: RiskPlan, o?: FindingOpts): Finding[] {
   if (open && !r.wbsIds.length) F("R9", "info", "No indica los paquetes de la EDT que afectaría.");
   if (opts.leafIds && r.wbsIds.some((id) => opts.leafIds!.indexOf(id) < 0)) F("R9", "info", "Referencia paquetes que ya no existen en la EDT.");
   if (open && opts.today && r.reviewedOn) { const n = daysBetween(r.reviewedOn, opts.today); if (n !== null && n > p.reviewDays) F("R12", "info", "Sin revisar hace " + n + " días (el plan pide revisarlo cada " + p.reviewDays + ")."); }
+  const sf = opts.schedule, likelyDays = impactMean(r.timeImpact) !== null ? r.timeImpact.likely : null;
+  if (open && sf && sf.network && likelyDays !== null && likelyDays > 0) {
+    const d1 = (v: number | null): string => (v === null ? "—" : String(Math.round(v * 10) / 10));
+    if (!sf.mapped) F("R19", "info", "Tiene impacto en plazo cuantificado pero no se puede ubicar en el cronograma (" + sf.reason + "): sin las actividades que afecta no se sabe cuánto retrasaría el fin del proyecto ni entra al análisis de plazo.");
+    else if (r.type === "amenaza" && sf.delayLikely !== null) {
+      const impl = timeLevel(sf.delayLikely, p);
+      if (r.impTime !== null && impl !== null && Math.abs(impl - r.impTime) >= 2)
+        F("R21", "aviso", "El nivel de impacto en plazo (" + r.impTime + ") no concuerda con el efecto real sobre el fin del proyecto: con el impacto más probable (" + d1(likelyDays) + " d) el fin se mueve " + d1(sf.delayLikely) + " d" + (sf.minFloat !== null && sf.minFloat > 0 ? " (la holgura de las actividades afectadas es " + d1(sf.minFloat) + " d)" : "") + ", que según las escalas del plan equivale al nivel " + impl + ".");
+      else if (Math.abs(sf.delayLikely) < 1e-6)
+        F("R20", "info", "La holgura de las actividades afectadas (" + d1(sf.minFloat) + " d) absorbe el impacto más probable (" + d1(likelyDays) + " d): no movería el fin del proyecto" + (sf.delayHigh !== null && sf.delayHigh > 0 ? ", pero con el máximo sí lo retrasaría " + d1(sf.delayHigh) + " d." : "."));
+    }
+  }
   if (r.status === "materializado" && r.actualCost === null && r.actualDelay === null) F("R13", "aviso", "Materializado sin registrar su impacto real (costo o plazo): es lo que alimenta el consumo de contingencia y las lecciones aprendidas.");
   if (r.status === "materializado" && opts.linked) {
     if (opts.linked.count > 0 && opts.linked.approved > 0 && r.actualCost !== null && Math.abs(r.actualCost - opts.linked.approved) > 0.5)
@@ -275,26 +296,42 @@ export const toRiskRef = (r: Risk): RiskRef => ({ id: r.id, code: r.code, title:
 
 export interface RiskEvent extends RiskEventInput { code: string; title: string; type: RiskType; basis: string; }
 export interface ExcludedRisk { code: string; title: string; reason: string; }
-// Eventos que entran a la simulación de la contingencia: los riesgos ABIERTOS con probabilidad e impacto en costo
-// cuantificados. La contingencia cubre lo que QUEDA tras la respuesta, así que se usa el riesgo RESIDUAL cuando está
-// cuantificado (o la aceptación activa, cuyo residual es el inherente); si la respuesta no tiene residual
+// Eventos que entran a la simulación de la contingencia: los riesgos ABIERTOS con probabilidad y con impacto en costo
+// y/o en plazo cuantificados. La contingencia cubre lo que QUEDA tras la respuesta, así que se usa el riesgo RESIDUAL
+// cuando está cuantificado (o la aceptación activa, cuyo residual es el inherente); si la respuesta no tiene residual
 // cuantificado se usa el inherente (más conservador) y se rotula. Los materializados ya son un costo real (no
 // incertidumbre) y los cerrados no ocurrieron: no entran. Los que no se pueden cuantificar se listan con su motivo.
-export function riskEventsOf(risks: Risk[], p: RiskPlan): { events: RiskEvent[]; excluded: ExcludedRisk[]; ev: number } {
-  const events: RiskEvent[] = [], excluded: ExcludedRisk[] = [];
+// Plazo (AACE 65R-11): si trae impacto en días y `opts.targets` ubica al riesgo en el cronograma (ids de las actividades
+// que retrasa), el evento lleva `days` y `targets` y la simulación calcula su efecto en el fin del proyecto y su costo.
+// `unmapped` lista los que tienen días pero no se pudieron ubicar: su costo directo entra, su retraso no.
+export function riskEventsOf(risks: Risk[], p: RiskPlan, opts?: { targets?: (r: Risk) => string[] }): { events: RiskEvent[]; excluded: ExcludedRisk[]; unmapped: string[]; ev: number } {
+  const events: RiskEvent[] = [], excluded: ExcludedRisk[] = [], unmapped: string[] = [];
+  const NONE: Range3 = { low: null, likely: null, high: null };
   risks.filter(isOpen).forEach((r) => {
     const why = (reason: string) => excluded.push({ code: r.code, title: r.title, reason });
-    let pr: number | null, range: Range3, basis: string;
-    const resProb = probEffective(r.resProbPct, r.resProb, p), resQuant = residualOf(r, p).assessed && resProb !== null && impactMean(r.resCostImpact) !== null;
-    if (r.strategy && r.strategy !== "aceptar" && resQuant) { pr = resProb; range = r.resCostImpact; basis = "residual"; }
-    else { pr = probEffective(r.probPct, r.prob, p); range = r.costImpact; basis = r.strategy && r.strategy !== "aceptar" ? "inherente (residual sin cuantificar)" : "inherente"; }
+    const resProb = probEffective(r.resProbPct, r.resProb, p), res = residualOf(r, p);
+    const resHasCost = impactMean(r.resCostImpact) !== null, resHasTime = impactMean(r.resTimeImpact) !== null;
+    const useRes = !!r.strategy && r.strategy !== "aceptar" && res.assessed && resProb !== null && (resHasCost || (r.costImpact.likely === null && resHasTime));
+    let pr: number | null, cost: Range3, time: Range3, basis: string;
+    if (useRes) { pr = resProb; cost = resHasCost ? r.resCostImpact : NONE; time = resHasTime ? r.resTimeImpact : r.timeImpact; basis = "residual"; }
+    else { pr = probEffective(r.probPct, r.prob, p); cost = r.costImpact; time = r.timeImpact; basis = r.strategy && r.strategy !== "aceptar" ? "inherente (residual sin cuantificar)" : "inherente"; }
     if (pr === null || pr <= 0) return why("sin probabilidad");
-    if (rangeProblems(range, "").length) return why("rango de costo incoherente");
-    if (range.likely === null) return why("sin impacto en costo cuantificado");
-    const low = range.low === null ? range.likely : range.low, high = range.high === null ? range.likely : range.high;
-    events.push({ id: r.id, name: r.code + " " + r.title, code: r.code, title: r.title, type: r.type, prob: Math.min(1, pr), low, likely: range.likely, high, sign: r.type === "amenaza" ? 1 : -1, basis });
+    const costBad = rangeProblems(cost, "").length > 0, timeBad = rangeProblems(time, "").length > 0;
+    if (costBad) return why("rango de costo incoherente");
+    const hasCost = cost.likely !== null, hasTime = time.likely !== null && !timeBad;
+    if (!hasCost && !hasTime) return why(timeBad ? "rango de plazo incoherente" : "sin impacto en costo ni en plazo cuantificado");
+    const c = hasCost ? cost : { low: 0, likely: 0, high: 0 } as { low: number; likely: number; high: number };
+    const low = c.low === null ? (c.likely as number) : c.low, high = c.high === null ? (c.likely as number) : c.high, likely = (c.likely as number);
+    const ev: RiskEvent = { id: r.id, name: r.code + " " + r.title, code: r.code, title: r.title, type: r.type, prob: Math.min(1, pr), low, likely, high, sign: r.type === "amenaza" ? 1 : -1, basis };
+    if (hasTime && (time.likely as number) > 0) {
+      const tl = time.likely as number;
+      const ids = opts && opts.targets ? opts.targets(r) : [];
+      if (ids.length) { ev.days = { low: time.low === null ? tl : time.low, likely: tl, high: time.high === null ? tl : time.high }; ev.targets = ids; }
+      else unmapped.push(r.code);
+    }
+    events.push(ev);
   });
-  return { events, excluded, ev: events.reduce((s, e) => s + e.sign * e.prob * (e.low + e.likely + e.high) / 3, 0) };
+  return { events, excluded, unmapped, ev: events.reduce((s, e) => s + e.sign * e.prob * (e.low + e.likely + e.high) / 3, 0) };
 }
 
 // ---- matriz probabilidad × impacto ----

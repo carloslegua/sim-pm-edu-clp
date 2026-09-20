@@ -361,9 +361,11 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(doc.getElementById("rangeCard")!.style.display).toBe("block");
     expect(doc.querySelectorAll("#rngBody tr").length).toBe(5);                      // las 5 fases de DISTRIB+
     expect(doc.getElementById("rngFoot")!.textContent).toMatch(/Cubren el 100\.0 % del costo base/);
-    // cobertura completa, todo fundamentado, ρ = 30 %: el único aviso es el propio de incluir los eventos (doble conteo)
+    // cobertura completa, todo fundamentado, ρ = 30 %: los únicos avisos son los propios de incluir los eventos
+    // (doble conteo con los rangos, doble conteo de costos que dependen del tiempo, costo de las respuestas)
     expect(doc.getElementById("rngWarn")!.textContent).toMatch(/Doble conteo/);
-    expect(doc.getElementById("rngWarn")!.querySelectorAll("li").length).toBeLessThanOrEqual(2);
+    expect(doc.getElementById("rngWarn")!.textContent).toMatch(/Costo del plazo: el rango de costo de cada riesgo debe incluir solo costos DIRECTOS/);
+    expect(doc.getElementById("rngWarn")!.querySelectorAll("li").length).toBeLessThanOrEqual(3);
 
     const base = 7100000, cont = dinero(doc.getElementById("kCont")!.textContent);
     const p50 = dinero(filaP(doc, 50).children[1].textContent), p70 = dinero(filaP(doc, 70).children[1].textContent), p90 = dinero(filaP(doc, 90).children[1].textContent);
@@ -576,11 +578,13 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(panel.querySelectorAll("table")[0].querySelector("tfoot")!.textContent).toMatch(/\$ 277,000/);     // valor esperado neto = exposición residual del registro
 
     const filas = Array.from(panel.querySelectorAll("table")[1].querySelectorAll("tbody tr")).map((r) => dinero(r.children[1].textContent));
-    const [soloPartidas, aporte, total] = filas;
+    expect(filas.length).toBe(4);                                                                            // partidas · eventos (costo directo) · costo del plazo · total
+    const [soloPartidas, aporte, costoPlazo, total] = filas;
     expect(total).toBe(dinero(doc.getElementById("kCont")!.textContent));                                     // el total ES la contingencia del presupuesto
-    expect(soloPartidas + aporte).toBeCloseTo(total, -1);
+    expect(soloPartidas + aporte + costoPlazo).toBeCloseTo(total, -1);
+    expect(costoPlazo).toBeGreaterThan(0);                                                                    // el retraso de los riesgos cuesta (1.500 por día de extensión)
     expect(soloPartidas / 7100000).toBeGreaterThan(0.035); expect(soloPartidas / 7100000).toBeLessThan(0.055);   // ≈ 4,5 %: solo la incertidumbre del estimado
-    expect(total / soloPartidas).toBeGreaterThan(1.8);                                                        // con los eventos la contingencia se duplica (≈ 9 %)
+    expect(total / soloPartidas).toBeGreaterThan(1.8);                                                        // con los eventos la contingencia se duplica (≈ 9-10 %)
 
     eventos(dom, doc, false);                                                                                 // sin eventos: vuelve a solo las partidas
     expect(dinero(doc.getElementById("kCont")!.textContent)).toBeCloseTo(soloPartidas, -1);
@@ -594,6 +598,89 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     const t = doc.getElementById("coDrawdown")!.textContent!;
     expect(t).toMatch(/contingencia disponible \(\$ 672,000\) supera el valor esperado neto de la exposición residual de los riesgos abiertos \(\$ 277,000, 9 evento\(s\)\)/);
     expect(t).toMatch(/Es una media \(≈ P50\)/);
+  });
+
+  // ---- Tercera entrega: el retraso de los riesgos (CPM real) y su costo ----
+  const tablaPlazo = (doc: Document) => Array.from(doc.querySelectorAll("#rngEvents table")).find((t) => /Reserva de plazo/.test(t.textContent!)) as HTMLElement;
+  const p80 = (t: string) => { const m = t.replace(/\s+/g, " ").match(/P80\s*(\d+(?:\.\d+)?) d\s*(\d+(?:\.\d+)?) d\s*(\d{4}-\d{2}-\d{2})/); return m ? { dur: Number(m[1]), reserva: Number(m[2]), fin: m[3] } : null; };
+  const filasCont = (doc: Document) => Array.from(doc.querySelectorAll("#rngEvents table")[1].querySelectorAll("tbody tr")).map((r) => dinero(r.children[1].textContent));
+
+  it("(plazo) los riesgos retrasan el proyecto según el CPM real: plazo con confianza P50–P90, reserva de plazo y fechas de fin", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    fijar(dom, doc, "contMethod", "rangos_mc");
+    const panel = doc.getElementById("rngEvents")!, t = panel.textContent!.replace(/\s+/g, " ");
+    expect(t).toMatch(/Plazo con los riesgos \(CPM real · reserva de plazo\)/);
+    expect(t).toMatch(/Plan \(sin riesgos\)\s*273 d\s*—\s*2027-07-21/);
+    const r = p80(tablaPlazo(doc).textContent!)!;
+    expect(r.dur).toBeGreaterThan(273); expect(r.reserva).toBeCloseTo(r.dur - 273, 0); expect(r.fin > "2027-07-21").toBe(true);
+    expect(t).toMatch(/6 evento\(s\) retrasan actividades del cronograma/);          // R-01, R-05, R-06, R-07, R-08, R-09
+    expect(t).toMatch(/a \$ 1,500 por día/);
+    // cada evento con plazo muestra su efecto en el fin del proyecto (todos en la ruta crítica: días del riesgo = días del proyecto)
+    const filasEv = Array.from(panel.querySelectorAll("table")[0].querySelectorAll("tbody tr"));
+    expect(filasEv.find((x) => x.textContent!.includes("R-01"))!.textContent).toMatch(/20 d → 20 d/);
+    expect(filasEv.find((x) => x.textContent!.includes("R-02"))!.textContent).toMatch(/—/);   // solo costo: sin plazo
+  });
+
+  it("(plazo) sin costo por día el retraso no cuesta: la contingencia baja al aporte directo y se avisa", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    fijar(dom, doc, "contMethod", "rangos_mc");
+    const conCosto = dinero(doc.getElementById("kCont")!.textContent);
+    fijar(dom, doc, "rngTimeCost", "");
+    const sin = dinero(doc.getElementById("kCont")!.textContent);
+    expect(sin).toBeLessThan(conCosto);
+    expect(filasCont(doc).length).toBe(3);                                             // sin la fila del costo del plazo
+    expect(doc.getElementById("rngWarn")!.textContent).toMatch(/no hay un costo por día de extensión del plazo/);
+    expect(doc.getElementById("rngWarn")!.textContent).not.toMatch(/Costo del plazo:/);
+    expect(doc.getElementById("rngEvents")!.textContent).toMatch(/Plazo con los riesgos/);   // el plazo se simula igual
+    fijar(dom, doc, "rngTimeCost", "3000");                                            // el doble de costo por día: el costo del plazo crece claramente
+    const c3 = filasCont(doc); fijar(dom, doc, "rngTimeCost", "1500"); const c15 = filasCont(doc);
+    expect(c3[2] / c15[2]).toBeGreaterThan(1.7); expect(c3[2] / c15[2]).toBeLessThan(2.5);   // ≈ 2× (el P70 de una suma no es exactamente lineal)
+  });
+
+  it("(plazo) el costo por día y su fundamento se guardan con el análisis", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    fijar(dom, doc, "contMethod", "rangos_mc");
+    fijar(dom, doc, "rngTimeCost", "2000"); fijar(dom, doc, "rngTimeBasis", "Gastos generales de obra");
+    const j = JSON.parse(doc.getElementById("jsonView")!.textContent!);
+    expect(j.budget.rangeAnalysis.timeCostPerDay).toBe(2000);
+    expect(j.budget.rangeAnalysis.timeCostBasis).toBe("Gastos generales de obra");
+    expect(j.budget.rangeAnalysis.results.schedBase).toBe(273);
+    expect(j.budget.rangeAnalysis.results.schedP80).toBeGreaterThan(273);
+    expect(j.budget.rangeAnalysis.results.timeCostMean).toBeGreaterThan(0);
+  });
+
+  it("(plazo) es LA MISMA simulación que la del Registro de Riesgos: el mismo P80, la misma reserva y la misma fecha de fin", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    fijar(dom, doc, "contMethod", "rangos_mc");
+    const enCostos = p80(tablaPlazo(doc).textContent!)!;
+    const riesgos = await JSDOM.fromURL(base + "Risk_Register.html", { runScripts: "dangerously", resources: "usable" });
+    await new Promise((r) => setTimeout(r, 600));
+    (riesgos.window.document.querySelector('[data-view="analisis"]') as HTMLElement).click();
+    const enRiesgos = p80(riesgos.window.document.getElementById("mainArea")!.textContent!)!;
+    expect(enRiesgos).toBeTruthy();
+    expect(enCostos).toEqual(enRiesgos);
+  });
+
+  it("(plazo) proyecto conectado: usa SU red; la actividad crítica traslada el retraso, la que tiene holgura lo absorbe, y el que no se ubica se avisa", async () => {
+    const wbs = { rootId: "r", idCounter: 9, nodes: { r: { id: "r", name: "P", children: ["f1"] }, f1: { id: "f1", name: "Fase", children: ["w1", "w2", "w3"] }, w1: { id: "w1", name: "Uno", children: [] }, w2: { id: "w2", name: "Dos", children: [] }, w3: { id: "w3", name: "Tres", children: [] } } };
+    const activities = { idCounter: 4, byLeaf: { w1: [{ id: "a1", name: "Excavar", unit: "m", qty: 10, perf: 1, teams: 1 }], w2: [{ id: "a2", name: "Rellenar", unit: "m", qty: 5, perf: 1, teams: 1 }], w3: [{ id: "a3", name: "Limpiar", unit: "m", qty: 2, perf: 1, teams: 1 }] } };
+    const schedule = { linkCounter: 3, import: null, baseline: null, links: [{ id: "L1", from: "a1", to: "a2", type: "FS", lag: 0, lagUnit: "d" }, { id: "L2", from: "a1", to: "a3", type: "FS", lag: 0, lagUnit: "d" }] };
+    const r = (id: string, code: string, wbsIds: string[], days: number) => ({ id, code, title: "Riesgo " + code, type: "amenaza", status: "monitoreo", probPct: 100, wbsIds, timeImpact: { low: days, likely: days, high: days } });
+    const cost = costoConRangos([]).cost as Record<string, any>;
+    cost.budget.rangeAnalysis.timeCostPerDay = 1000;
+    const seed = seedConectado({ wbs, activities, schedule, risks: { plan: {}, idCounter: 4, risks: [r("k1", "R-01", ["w2"], 10), r("k2", "R-02", ["w3"], 2), r("k3", "R-03", [], 5)] }, cost });
+    (seed.projects.p1.meta as Record<string, unknown>).startDate = "2026-07-06";
+    const dom = await (async () => { const d = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seed)); } }); await new Promise((x) => setTimeout(x, 800)); return d; })();
+    const doc = dom.window.document, t = doc.getElementById("rngEvents")!.textContent!.replace(/\s+/g, " ");
+    expect(t).toMatch(/Plan \(sin riesgos\)\s*15 d/);                                  // 10 + 5 días de la red del proyecto, no los 273 del ejemplo
+    expect(t).toMatch(/P50\s*25 d\s*10 d/);                                            // el evento de w2 (crítica) ocurre siempre y suma 10 d; el de w3 (holgura 3 d) se absorbe
+    const filas = filasCont(doc);
+    expect(filas[1]).toBe(0);                                                          // sin costo directo
+    expect(filas[2]).toBe(10000);                                                      // 10 d × 1.000 por día, exacto (el retraso es determinista)
+    const ev = Array.from(doc.querySelectorAll("#rngEvents table")[0].querySelectorAll("tbody tr"));
+    expect(ev.find((x) => x.textContent!.includes("R-01"))!.textContent).toMatch(/10 d → 10 d/);
+    expect(ev.find((x) => x.textContent!.includes("R-02"))!.textContent).toMatch(/2 d → 0 d/);
+    expect(doc.getElementById("rngWarn")!.textContent).toMatch(/1 riesgo\(s\) con impacto en plazo no están ubicados en el cronograma \(R-03\)/);
   });
 
   it("(2) OC-001 del ejemplo está vinculada a R-03 y la traza muestra lo consumido por ese riesgo frente a lo previsto", async () => {

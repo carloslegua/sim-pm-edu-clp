@@ -18,7 +18,7 @@
 import type {
   GpiDb, GpiProject, ProjectMeta, ProjectModules,
   WbsModule, ObsModule, ObsNode, RaciModule,
-  ActivitiesModule, ActivityItem, CostEstimateModule, PertModule,
+  ActivitiesModule, ActivityItem, MilestoneItem, CostEstimateModule, PertModule,
   ScheduleModule, ScheduleLink, ScheduleLinkType, ScheduleLagUnit,
   RequirementsModule, RequirementItem, ScopeStatementModule, ScopeDeliverable,
   CharterModule, CharterRequirement, CostModule, RisksModule,
@@ -2407,19 +2407,24 @@ export interface ScheduleStats {
 
 // Resumen del cronograma del proyecto activo para tableros (Panel):
 // duración, n.º de actividades críticas y de enlaces. Usa la duración
-// determinística (Met/Rend) vía pertStats, igual que el módulo por defecto.
+// determinística (Met/Rend) y la MISMA red que Cronograma/CPM (scheduleNetwork):
+// los hitos son nodos de duración 0 y los enlaces que pasan por ellos cuentan.
+// Antes la red se armaba solo con las actividades: los enlaces hacia/desde un hito
+// se perdían y, con el ejemplo DISTRIB+ completo, el Panel daba 195 d y 22 críticas
+// donde Cronograma/CPM da 273 d y 34 (verificado en Chrome real).
 export function scheduleStats(): ScheduleStats {
-  let sched: ScheduleModule | null = null, m: ProjectMeta | null = null, nodes: CpmNode[] = [];
+  let sched: ScheduleModule | null = null, m: ProjectMeta | null = null, net: ScheduleNetwork | null = null;
   try { sched = getModule("schedule") as ScheduleModule | null; } catch (e) { /* noop */ }
   const links = (sched && Array.isArray(sched.links)) ? sched.links : [];
-  try {
-    const ps = pertStats(getModule("pert") as PertModule | null, getModule("activities") as ActivitiesModule | null, getModule("wbs") as WbsModule | null);
-    nodes = (ps.rows || []).map((r) => ({ id: r.id, dur: r.dur || 0 }));
-  } catch (e2) { /* noop */ }
   try { m = meta(); } catch (e3) { /* noop */ }
-  const result = cpm(nodes, links, projectCalendar(), { startDate: m ? m.startDate : undefined });
+  try {
+    net = scheduleNetwork(getModule("wbs") as WbsModule | null, getModule("activities") as ActivitiesModule | null, getModule("pert") as PertModule | null,
+      sched, getModule("schedulePlan") as SchedulePlanModule | null, m ? m.startDate : "");
+  } catch (e2) { /* noop */ }
+  const nodes: CpmNode[] = net ? net.nodes.map((n) => ({ id: n.id, dur: n.dur })) : [];
+  const result = cpm(nodes, net ? net.links : [], net ? net.calendar : projectCalendar(), { startDate: m ? m.startDate : undefined });
   return {
-    hasSlice: !!sched, links: links.length, activities: nodes.length, ok: result.ok,
+    hasSlice: !!sched, links: links.length, activities: net ? net.nodes.filter((n) => !n.isMilestone).length : 0, ok: result.ok,
     projectDuration: result.ok ? result.projectDuration : null,
     criticalCount: result.ok ? result.criticalIds.length : 0,
     finishDate: result.ok ? result.projectFinishDate : ""
@@ -2470,6 +2475,65 @@ export function kpi(v: unknown, u: string | null | undefined, l: string): string
 
 export const ui = { esc, kpi };
 
+// ---------------------------------------------------------------
+// Red de precedencias del proyecto (nodos + enlaces + calendario) para quien necesita
+// CORRER el CPM sobre ella sin ser el módulo de Cronograma -- el Registro de riesgos y
+// Costos (análisis de riesgo de plazo, AACE 40R-08 / 65R-11). Replica el criterio de
+// Cronograma/CPM (fullRowsSnapshot + scheduleNodes): actividades en el orden de la EDT,
+// hitos (duración 0) atados a un paquete o sueltos en su posición, duración determinística
+// Dur = Met/(#Eq×R) y solo los enlaces cuyos dos extremos existen. Las actividades sin
+// metrado/rendimiento quedan con duración 0 y `hasDur:false` (se avisa, no se inventa).
+// Trabaja sobre los módulos que se le pasan (como pertStats): el modo independiente de los
+// módulos que la usan le pasa el ejemplo DISTRIB+, el conectado, los datos del proyecto.
+// ---------------------------------------------------------------
+export interface NetworkNode { id: string; code: string; name: string; leafId: string | null; dur: number; hasDur: boolean; isMilestone: boolean; }
+export interface ScheduleNetwork {
+  nodes: NetworkNode[]; links: ScheduleLink[]; calendar: ProjectCalendar; startDate: string;
+  hasElapsedLags: boolean;   // hay desfases en días transcurridos ("ed"): sin fecha de inicio el CPM los aproxima
+}
+export function scheduleNetwork(
+  wbs?: WbsModule | null, act?: ActivitiesModule | null, pert?: PertModule | null, sched?: { links?: ScheduleLink[] } | null,
+  sp?: SchedulePlanModule | null, startDate?: string | null
+): ScheduleNetwork {
+  const a = act || ({} as Partial<ActivitiesModule>), byLeaf = a.byLeaf || {}, milestones = a.milestones || [];
+  const dur: Record<string, number | null> = {};
+  try { pertStats(pert, act, wbs).rows.forEach((r) => { dur[r.id] = r.dur; }); } catch (e) { /* noop */ }
+  const nodes: NetworkNode[] = [];
+  const leaves = wbsLeaves(wbs);
+  const known: Record<string, boolean> = {}; leaves.forEach((l) => { known[l.id] = true; });
+  // Igual que placeLooseMilestones() de los módulos: un hito suelto va al principio (afterLeafId vacío), después
+  // de un paquete existente, o -si el paquete ya no existe- al final como huérfano en vez de perderse.
+  const loose = milestones.filter((m) => !m.leafId), start: MilestoneItem[] = [], orphan: MilestoneItem[] = [], after: Record<string, MilestoneItem[]> = {};
+  loose.forEach((m) => { if (!m.afterLeafId) start.push(m); else if (known[m.afterLeafId]) (after[m.afterLeafId] = after[m.afterLeafId] || []).push(m); else orphan.push(m); });
+  const pushMs = (m: MilestoneItem, leafId: string | null): void => { nodes.push({ id: m.id, code: m.code, name: m.name, leafId, dur: 0, hasDur: true, isMilestone: true }); };
+  start.forEach((m) => pushMs(m, null));
+  leaves.forEach((l) => {
+    (byLeaf[l.id] || []).forEach((av, i) => {
+      const d = dur[av.id];
+      nodes.push({ id: av.id, code: l.code + "." + (i + 1), name: av.name || "", leafId: l.id, dur: d == null ? 0 : d, hasDur: d != null, isMilestone: false });
+    });
+    milestones.filter((m) => m.leafId === l.id).forEach((m) => pushMs(m, l.id));
+    (after[l.id] || []).forEach((m) => pushMs(m, null));
+  });
+  orphan.forEach((m) => pushMs(m, null));
+  const inNet: Record<string, boolean> = {}; nodes.forEach((n) => { inNet[n.id] = true; });
+  const links = ((sched && Array.isArray(sched.links)) ? sched.links : []).filter((l) => inNet[l.from] && inNet[l.to] && l.from !== l.to);
+  return {
+    nodes, links, calendar: projectCalendar(sp), startDate: startDate || "",
+    hasElapsedLags: links.some((l) => (l.lagUnit || "d") === "ed" && Number(l.lag) !== 0)
+  };
+}
+// La red del proyecto ACTIVO (lee los módulos del proyecto); null si no hay proyecto o no tiene actividades.
+export function activeScheduleNetwork(): ScheduleNetwork | null {
+  try {
+    if (!avail() || !active()) return null;
+    const m = meta();
+    const net = scheduleNetwork(getModule("wbs") as WbsModule | null, getModule("activities") as ActivitiesModule | null, getModule("pert") as PertModule | null,
+      getModule("schedule") as ScheduleModule | null, getModule("schedulePlan") as SchedulePlanModule | null, m ? m.startDate : "");
+    return net.nodes.some((n) => !n.isMilestone) ? net : null;
+  } catch (e) { return null; }
+}
+
 // =================================================================
 // Ensamblado de GPI.util y GPI, y adjunto a window para consumo desde
 // los 13 módulos HTML como script clásico (no como módulo ES).
@@ -2483,7 +2547,7 @@ export const util = {
   costSummary, riskPortfolio, pad2, charterRans, requirementsAudit, reqByWbsLeaf,
   scopeDeliverables, wbsDelIds, scopeAudit, traceMatrix,
   parsePredecessorCell, buildScheduleLinks, scheduleValidate,
-  projectCalendar, cpm, parseISO, addWorkingDays, scheduleStats
+  projectCalendar, cpm, parseISO, addWorkingDays, scheduleStats, scheduleNetwork, activeScheduleNetwork
 };
 
 // Objeto agregado, exportado por conveniencia (p. ej. `import { GPI } from

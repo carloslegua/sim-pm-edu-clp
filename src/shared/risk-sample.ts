@@ -4,6 +4,11 @@
 //   · R-03 «Suelo» está MATERIALIZADO con el costo real de la orden OC-001 de Costos (180.000).
 //   · Los paquetes de la EDT se dan por Código EDT (`wbs`); cada módulo los resuelve contra su propia EDT.
 //   · Los rangos de las partidas de Costos NO incluyen estos riesgos discretos (evita el doble conteo, AACE 40R-08).
+//   · El costo de cada riesgo es DIRECTO: lo que depende del tiempo (gastos generales, dirección, alquileres) lo calcula
+//     Costos como días de extensión × costo por día, con el efecto real del riesgo sobre el fin del proyecto (CPM).
+//   · Los riesgos se ubican en el cronograma por paquete de la EDT (`wbs`); todos los que traen impacto en plazo caen
+//     en actividades de la ruta crítica de la red DISTRIB+ (ver shared/schedule-sample.ts), así que trasladan su retraso
+//     íntegro al fin del proyecto.
 import { normalizePlan, normalizeRisk, type Risk } from "./risk-analysis";
 
 export interface SampleRisk extends Partial<Risk> { wbs: string[]; }
@@ -34,7 +39,7 @@ export const SAMPLE_RISKS: SampleRisk[] = [
     strategy: "mitigar", response: "Cobertura cambiaria (forward) para el 30 % en moneda extranjera al cerrar los contratos de procura.", trigger: "Variación del tipo de cambio mayor al 3 % respecto de la fecha base", responseOwner: "Director de Proyecto", responseCost: 12000,
     resProb: 2, resImpCost: 2, resImpTime: 1, resImpScope: 1, resCostImpact: { low: 60000, likely: 120000, high: 240000 } },
   { code: "R-05", title: "Paro del sindicato de construcción civil", type: "amenaza", category: "Externo", owner: "Asesoría Legal", proximity: "media", status: "con_respuesta", wbs: ["4.1", "4.2", "4.3"],
-    cause: "no se acuerdan las condiciones laborales con el sindicato", event: "el sindicato paraliza la obra", effect: "se detiene la ejecución y aumentan los costos indirectos",
+    cause: "no se acuerdan las condiciones laborales con el sindicato", event: "el sindicato paraliza la obra", effect: "se detiene la ejecución y hay costos de desmovilización y removilización de cuadrillas",
     prob: 2, impCost: 3, impTime: 4, impScope: 1, costImpact: { low: 100000, likely: 200000, high: 400000 }, timeImpact: { low: 15, likely: 30, high: 60 },
     strategy: "evitar", response: "Acuerdo laboral previo al inicio de obra: jornadas, seguridad y contratación local.", trigger: "Rechazo del sindicato a la propuesta de acuerdo", responseOwner: "Asesoría Legal",
     resProb: 1, resImpCost: 3, resImpTime: 4, resImpScope: 1, resCostImpact: { low: 100000, likely: 200000, high: 400000 }, resTimeImpact: { low: 15, likely: 30, high: 60 } },
