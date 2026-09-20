@@ -11,6 +11,15 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Costos — la clase del estimado se contrasta con la madurez de la definición y su
+  rango de exactitud se aplica al presupuesto (auditoría metodológica AACE 17R-97 /
+  56R-08)** — la clase se elegía a mano y su rango era solo un texto. Con un proyecto
+  conectado se estima (de forma orientativa) la **madurez de la definición** con los datos de la
+  suite (acta, alcance, requisitos, EDT, actividades, precios unitarios, cronograma) y se avisa
+  cuando la clase declarada es más madura que la que los datos respaldan. El **rango de exactitud
+  típico se aplica al estimado con contingencia** (mínimo y máximo, junto al P10–P90 simulado)
+  y aparece en el BOE. Nuevo `src/shared/estimate-class.ts`; `estimate-class.test.ts` (6) y 3 smoke.
+  Pendiente de confirmar contra las RP de AACE (de pago): los porcentajes de madurez por clase.
 - **Cronograma/CPM — salud de la red y línea base del cronograma (auditoría
   metodológica PMI / AACE)** — el CPM servía para planificar, no para controlar.
   Nueva pestaña «Salud y línea base»: (1) **salud de la red** con verificaciones tipo

@@ -165,6 +165,48 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(toast(doc)).toMatch(/ya forma parte de la línea base LB-1/);
   });
 
+  // ---- Clase del estimado: madurez de la definición y rango de exactitud aplicado al presupuesto (AACE 17R-97 / 56R-08) ----
+  it("el rango de exactitud de la clase se APLICA al presupuesto: mínimo y máximo sobre el estimado con contingencia, y se recalcula al cambiar de clase", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    const t = () => doc.getElementById("accBox")!.textContent!.replace(/\s+/g, " ");
+    // clase 3 (−15 % / +30 %) sobre 7.100.000 + 852.000 (12 % de la tabla por clase) = 7.952.000
+    expect(t()).toMatch(/clase 3 \(-15 % \/ \+30 %, típico\)/);
+    expect(t()).toMatch(/\$ 7,952,000/); expect(t()).toMatch(/\$ 6,759,200/); expect(t()).toMatch(/\$ 10,337,600/);
+    expect(t()).toMatch(/presupone la contingencia ya aplicada/);
+    (doc.querySelector('#classbar button[data-c="5"]') as HTMLElement).click();
+    expect(t()).toMatch(/clase 5 \(-30 % \/ \+50 %/);
+    // la contingencia de la clase 5 cambia el estimado: el rango se calcula sobre ESE estimado (−30 % / +50 %)
+    const estTxt = (t().match(/\(\$ ([\d,]+) = costo base/) as RegExpMatchArray)[1], lim = t().match(/va de \$ ([\d,]+) a \$ ([\d,]+)/) as RegExpMatchArray;
+    const est = dinero(estTxt), mn = dinero(lim[1]), mx = dinero(lim[2]);
+    expect(est).toBeGreaterThan(7952000);
+    expect(mn).toBeCloseTo(est * 0.7, -1); expect(mx).toBeCloseTo(est * 1.5, -1);
+  });
+
+  it("sin proyecto conectado la clase no se puede contrastar con datos: se explica en vez de inventar una madurez", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    expect(doc.getElementById("clsMaturity")!.textContent).toMatch(/resulta de la madurez de la definición del proyecto/);
+    expect(doc.getElementById("clsMaturity")!.querySelector("table")).toBeNull();
+  });
+
+  it("proyecto conectado: estima la madurez de la definición con los datos de la suite y AVISA si la clase declarada no se sostiene", async () => {
+    const wbs = { rootId: "r", idCounter: 9, nodes: { r: { id: "r", name: "P", children: ["f1"] }, f1: { id: "f1", name: "Fase", children: ["w1", "w2"] }, w1: { id: "w1", name: "Uno", children: [] }, w2: { id: "w2", name: "Dos", children: [] } } };
+    const activities = { idCounter: 3, byLeaf: { w1: [{ id: "a1", name: "Excavar", unit: "m", qty: 10, perf: 1, teams: 1 }], w2: [{ id: "a2", name: "Rellenar", unit: "m", qty: 5, perf: 1, teams: 1 }] } };
+    const costEstimate = { byActivity: { a1: 100, a2: 200 } };
+    const schedule = { linkCounter: 2, import: null, baseline: null, links: [{ id: "L1", from: "a1", to: "a2", type: "FS", lag: 0, lagUnit: "d" }] };
+    const dom = await abrirConectado({ wbs, activities, costEstimate, schedule, cost: { budget: { baseCost: 2000, contingency: { method: "clase_tabla", percentile: "P70" } }, estimate: { class: 1 }, changeOrders: [] } });
+    const doc = dom.window.document, box = () => doc.getElementById("clsMaturity")!.textContent!.replace(/\s+/g, " ");
+    // EDT (5) + actividades 100 % (15) + precios 100 % (30) + cronograma 100 % (10) = 60 %: acta, alcance y requisitos vacíos
+    expect(box()).toMatch(/Precios unitarios cargados.*100 %.*30.*30\.0/);
+    expect(box()).toMatch(/Acta de constitución.*0 %/);
+    expect(box()).toMatch(/Madurez estimada.*clase sugerida 2.*60\.0 %/);
+    expect(box()).toMatch(/La clase 1 supone una madurez de definición de 65–100 %; con los datos del proyecto se estima ≈ 60 %, que corresponde a la clase 2/);
+    expect(doc.querySelector("#clsMaturity .note")!.getAttribute("style")).toMatch(/#fdecef/);        // aviso resaltado
+    (doc.querySelector('#classbar button[data-c="2"]') as HTMLElement).click();
+    expect(box()).toMatch(/La clase 2 es coherente con la madurez estimada/);
+    (doc.querySelector('#classbar button[data-c="4"]') as HTMLElement).click();
+    expect(box()).toMatch(/permitirían la clase 2/);
+  });
+
   // ---- Política de reservas (plan de riesgos): quién libera la contingencia según el monto, y alerta de agotamiento ----
   const registrarOrden = (dom: any, doc: Document, cost: string, kind = "imprevisto", fund = "Contingencia") => {
     (doc.getElementById("coDesc") as HTMLInputElement).value = "Orden de prueba";

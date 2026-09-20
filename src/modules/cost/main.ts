@@ -37,6 +37,7 @@ import {
   type ExcludedRisk, type Risk, type RiskEvent, type RiskPlan
 } from "../../shared/risk-analysis";
 import { SAMPLE_PLAN as SAMPLE_RISK_PLAN, buildSampleRisks } from "../../shared/risk-sample";
+import { accuracyRange, classAdvisory, definitionMaturity, type EstimateClass, type MaturityInput } from "../../shared/estimate-class";
 import { SAMPLE_START_DATE, sampleScheduleModules } from "../../shared/schedule-sample";
 import { fmtDays, makeEngine, resolveTargets, type Engine, type Network } from "../../shared/schedule-risk";
 import {
@@ -176,6 +177,60 @@ function renderClass(): void {
   const c = CLASSES[state.curClass];
   $("classDesc").innerHTML = `<b>Clase ${state.curClass}.</b> ${c.desc}`;
   $("cMat").textContent = c.mat; $("cUse").textContent = c.use; $("cMeth").textContent = c.meth; $("cRange").textContent = c.range;
+  renderMaturity();
+}
+
+/* ---------- Madurez de la definición y clase del estimado (AACE 17R-97 / 56R-08) ---------- */
+// La clase RESULTA de la madurez de la definición del proyecto: se estima con lo que la suite conoce (orientativo) y se
+// contrasta con la clase declarada. Solo con un proyecto conectado: en modo independiente no hay datos que evaluar.
+function maturityInputs(): MaturityInput | null {
+  if (!gpiOn()) return null;
+  const G = GPI as GpiApi;
+  try {
+    const ch = G.getModule("charter"), sc = G.getModule("scopeStatement"), rq = G.getModule("requirements"), wbs = G.getModule("wbs"), act = G.getModule("activities"), est = G.getModule("costEstimate");
+    const leaves = G.util.wbsLeaves(wbs).length, ra = rq ? G.util.requirementsAudit(rq, ch, wbs) : null;
+    const rows = G.util.costEstimateRows(est, act, wbs);
+    getEng();
+    const acts = net ? net.nodes.filter((n) => !n.isMilestone) : [], linked = new Set<string>();
+    if (net) net.links.forEach((l) => { linked.add(l.from); linked.add(l.to); });
+    return {
+      charter: ch ? G.util.charterAudit(ch).pct / 100 : 0,
+      scope: sc ? G.util.scopeAudit(sc, rq, ch, wbs).decompPct / 100 : 0,
+      requirements: ra && ra.total ? (ra.baselineFrozen ? 0.5 : 0) + ra.tracePct / 100 * 0.5 : 0,
+      wbs: leaves ? 1 : 0,
+      activities: leaves ? G.util.activitiesStats(act, wbs).pct / 100 : 0,
+      pricing: rows.length ? rows.filter((r) => r.subtotal != null && r.subtotal > 0).length / rows.length : 0,
+      schedule: acts.length ? acts.filter((n) => linked.has(n.id)).length / acts.length : 0
+    };
+  } catch (e) { return null; }
+}
+function renderMaturity(): void {
+  const box = document.getElementById("clsMaturity"); if (!box) return;
+  const inp = maturityInputs();
+  if (!inp) { box.innerHTML = `<div class="note">La clase de un estimado <b>resulta de la madurez de la definición del proyecto</b> (AACE 17R-97). Con un proyecto conectado se estima esa madurez con los datos de la suite (acta, alcance, requisitos, EDT, actividades, precios y cronograma) y se contrasta con la clase que elijas.</div>`; return; }
+  const m = definitionMaturity(inp), adv = classAdvisory(state.curClass as EstimateClass, m.pct);
+  const rows = m.items.map((i) => `<tr><td>${esc(i.label)}<div class="muted" style="font-size:11px">${esc(i.hint)}</div></td><td class="num">${Math.round(i.value * 100)} %</td><td class="num">${i.weight}</td><td class="num">${(Math.round(i.points * 10) / 10).toFixed(1)}</td></tr>`).join("");
+  box.innerHTML = `<div class="eyebrow" style="margin:0 0 6px">Madurez de la definición, estimada con los datos del proyecto</div>
+    <div style="overflow-x:auto"><table class="rng-res"><thead><tr><th>Elemento de la definición</th><th class="num">Avance</th><th class="num">Peso</th><th class="num">Aporta</th></tr></thead><tbody>${rows}
+      <tr class="rng-selrow"><td><b>Madurez estimada</b> → clase sugerida <b>${m.class}</b></td><td></td><td class="num">100</td><td class="num"><b>${(Math.round(m.pct * 10) / 10).toFixed(1)} %</b></td></tr></tbody></table></div>
+    <div class="note" style="margin-top:8px;${adv.level === "aviso" ? "border-color:#dc3546;background:#fdecef" : ""}">${adv.level === "aviso" ? "<b>⚠</b> " : ""}${esc(adv.text)}</div>
+    <div class="muted" style="font-size:11.5px;margin-top:6px">Es una estimación <b>orientativa</b> con pesos didácticos: la clase real depende de entregables de definición (ingeniería, especificaciones, cotizaciones firmes) que la suite solo ve en parte. Sirve para avisar cuando la clase declarada no se sostiene, no para decidirla.</div>`;
+}
+// Filas del BOE: madurez estimada y rango de exactitud aplicado al estimado con contingencia.
+function classDocRows(c: EstimateClassDef): string {
+  const inp = maturityInputs(), b = state._budget;
+  const mat = inp ? (() => { const m = definitionMaturity(inp); return `<tr><td>Madurez estimada de la definición</td><td>≈ ${Math.round(m.pct)} % (clase sugerida ${m.class}); ${esc(classAdvisory(state.curClass as EstimateClass, m.pct).text)}</td></tr>`; })() : "";
+  const acc = b && b.base > 0 ? (() => { const r = accuracyRange(b.base + b.cont, c.lo, c.hi); return `<tr><td>Rango de exactitud aplicado</td><td>Sobre el estimado con contingencia (${fmt(b.base + b.cont)}): mínimo ${fmt(r.min)} · máximo ${fmt(r.max)} (${sgn(c.lo)} % / ${sgn(c.hi)} %, típico de la clase; presupone contingencia aplicada)</td></tr>`; })() : "";
+  return mat + acc;
+}
+// Rango de exactitud esperado, aplicado al presupuesto (antes solo se mostraba el texto «−15 % / +30 %»).
+function renderAccuracy(base: number, cont: number, res: RangeResult | null): void {
+  const box = document.getElementById("accBox"); if (!box) return;
+  if (!(base > 0)) { box.style.display = "none"; return; }
+  const c = CLASSES[state.curClass], est = base + cont, r = accuracyRange(est, c.lo, c.hi);
+  const sim = res ? ` El análisis por rangos simula un costo total de <b>${fmt(res.p[10])}</b> (P10) a <b>${fmt(res.p[90])}</b> (P90).` : "";
+  box.style.display = "block";
+  box.innerHTML = `<b>Rango de exactitud esperado — clase ${state.curClass} (${sgn(c.lo)} % / +${c.hi} %, típico).</b> Sobre el estimado con contingencia (<b>${fmt(est)}</b> = costo base + contingencia) el costo final esperado va de <b>${fmt(r.min)}</b> a <b>${fmt(r.max)}</b>.${sim} El rango es un valor típico de la clase: depende del proyecto y presupone la contingencia ya aplicada (AACE 56R-08); el análisis de riesgo lo afina.`;
 }
 
 /* ---------- Helpers ---------- */
@@ -510,6 +565,7 @@ function recalcCont(): void {
   $("kContP").textContent = base ? ((cont / base) * 100).toFixed(1) + "%" : "—";
   $("kEscP").textContent = base ? ((escT / base) * 100).toFixed(1) + "%" : "—";
   state._budget = { base, cont, esc: escT, bac, mgmt, total };
+  renderAccuracy(base, cont, calc.res);
   renderCO(); // los saldos de las órdenes dependen del presupuesto recién calculado (y renderCO ya llama buildJSON)
 }
 
@@ -779,6 +835,7 @@ function buildDoc(): void {
         <tr><td>Metodología</td><td>${esc(c.meth)}</td></tr>
         <tr><td>Uso previsto</td><td>${esc(c.use)}</td></tr>
         <tr><td>Rango de exactitud típico</td><td>${esc(c.range)}</td></tr>
+        ${classDocRows(c)}
       </table>
     </section>
 

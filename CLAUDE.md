@@ -126,6 +126,8 @@ src/shared/range-estimating.ts   → (se inlinea en cost.js) contingencia por ra
                                     riesgo discretos (Bernoulli × triangular) del Registro
 src/shared/risk-sample.ts        → (se inlinea en risks.js y cost.js) ÚNICA fuente del ejemplo
                                     DISTRIB+ de riesgos (plan, 10 riesgos, órdenes vinculadas)
+src/shared/estimate-class.ts     → (se inlinea en cost.js) madurez de la definición → clase del estimado sugerida,
+                                    aviso contra la clase declarada, rango de exactitud aplicado
 src/shared/reserve-policy.ts     → (se inlinea en risks.js, cost.js y gpi-core.js) política de reservas del plan de
                                     riesgos: niveles de autoridad por monto, alerta de agotamiento
 src/shared/schedule-control.ts   → (se inlinea en cronograma-cpm.js y gpi-core.js) salud de la red (DCMA), línea

@@ -1269,6 +1269,25 @@ consumo de contingencia por riesgo, hallazgos R17/R18); ver la sección de
 `Cost-management.html`. El ejemplo vive en `src/shared/risk-sample.ts`,
 compartido por Riesgos y Costos. Tercera (entregada): **riesgo de plazo** con
 el CPM real (ver abajo).
+- **Clase del estimado y rango de exactitud aplicado (auditoría metodológica AACE
+  17R-97 / 56R-08; lógica pura en `src/shared/estimate-class.ts`).** La clase se
+  elegía a mano y su rango no se aplicaba al presupuesto. En AACE la clase **resulta
+  de la madurez de la definición del proyecto** y el rango de exactitud presupone
+  contingencia aplicada (y depende del proyecto: el análisis de riesgo lo determina).
+  Ahora, con un proyecto conectado, la pestaña Base de estimación **estima la
+  madurez** con lo que la suite conoce (acta 15 · alcance descompuesto 15 · requisitos
+  trazados y con línea base 10 · EDT 5 · actividades 15 · precios unitarios 30 ·
+  cronograma integrado 10 = 100; una red solo «de abajo hacia arriba» llega a 60 %, clase
+  2) y la **contrasta con la clase declarada**: avisa cuando la clase elegida es más
+  madura que la que respaldan los datos (rango de exactitud sin respaldo). Es
+  **orientativo** (pesos didácticos; la clase real depende de entregables que la suite ve
+  en parte) y en modo independiente no se inventa una madurez: se explica. El rango
+  típico de la clase se **aplica al estimado con contingencia** (mínimo y máximo, junto
+  al P10–P90 simulado si hay análisis por rangos) y aparece en el BOE. **Pendiente de
+  verificar**: los porcentajes de madurez por clase (0–2/1–15/10–40/30–75/65–100 %,
+  17R-97 genérica) coinciden con los que la suite ya traía, pero los PDF de AACE son de
+  pago y no se contrastaron en línea (la 18R-97 de proceso usa 30–70 y 50–100); y los
+  rangos típicos son un valor único dentro de rangos publicados más amplios por clase.
 - **Política de reservas (PMBOK: contingencia dentro de la línea base, reserva de
   gestión fuera; niveles de autoridad y monitoreo del consumo).** Antes era solo
   texto libre. Ahora `plan.reserves` (`src/shared/reserve-policy.ts`, campo nuevo

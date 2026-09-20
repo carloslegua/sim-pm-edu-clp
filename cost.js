@@ -1070,6 +1070,103 @@
 		}, "rk" + (i + 1)));
 	}
 	//#endregion
+	//#region src/shared/estimate-class.ts
+	var CLASS_MATURITY = {
+		5: [0, 2],
+		4: [1, 15],
+		3: [10, 40],
+		2: [30, 75],
+		1: [65, 100]
+	};
+	var MATURITY_ITEMS = [
+		{
+			key: "charter",
+			label: "Acta de constitución",
+			weight: 15,
+			hint: "objetivos, restricciones y criterios de éxito definidos"
+		},
+		{
+			key: "scope",
+			label: "Alcance descompuesto",
+			weight: 15,
+			hint: "los entregables del enunciado del alcance están en la EDT"
+		},
+		{
+			key: "requirements",
+			label: "Requisitos trazados y con línea base",
+			weight: 10,
+			hint: "cada requisito con origen, paquete y criterio de aceptación; línea base congelada"
+		},
+		{
+			key: "wbs",
+			label: "EDT con paquetes de trabajo",
+			weight: 5,
+			hint: "el alcance está estructurado hasta paquetes"
+		},
+		{
+			key: "activities",
+			label: "Actividades definidas",
+			weight: 15,
+			hint: "cada paquete descompuesto en actividades con metrado y rendimiento"
+		},
+		{
+			key: "pricing",
+			label: "Precios unitarios cargados",
+			weight: 30,
+			hint: "estimado por metrado × precio unitario (no un estimado global)"
+		},
+		{
+			key: "schedule",
+			label: "Cronograma integrado",
+			weight: 10,
+			hint: "las actividades están enlazadas en una red (base del cronograma del estimado)"
+		}
+	];
+	var clamp01 = (v) => isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
+	function definitionMaturity(inp) {
+		const items = MATURITY_ITEMS.map((m) => {
+			const value = clamp01(inp[m.key]);
+			return {
+				key: m.key,
+				label: m.label,
+				hint: m.hint,
+				weight: m.weight,
+				value,
+				points: value * m.weight
+			};
+		});
+		const pct = items.reduce((s, i) => s + i.points, 0);
+		return {
+			pct,
+			items,
+			class: classForMaturity(pct)
+		};
+	}
+	function classForMaturity(pct) {
+		return pct >= CLASS_MATURITY[1][0] ? 1 : pct >= CLASS_MATURITY[2][0] ? 2 : pct >= CLASS_MATURITY[3][0] ? 3 : pct >= CLASS_MATURITY[4][0] ? 4 : 5;
+	}
+	function classAdvisory(chosen, pct) {
+		const inferred = classForMaturity(pct), [lo, hi] = CLASS_MATURITY[chosen], p = Math.round(pct);
+		if (chosen < inferred) return {
+			level: "aviso",
+			text: "La clase " + chosen + " supone una madurez de definición de " + lo + "–" + hi + " %; con los datos del proyecto se estima ≈ " + p + " %, que corresponde a la clase " + inferred + ". Declarar una clase más madura estrecha el rango de exactitud sin respaldo: completa la definición (actividades, precios, cronograma) o baja la clase."
+		};
+		if (chosen > inferred) return {
+			level: "info",
+			text: "Los datos del proyecto (≈ " + p + " % de madurez) permitirían la clase " + inferred + ": si el estimado ya tiene esa definición, puedes subirla; si no, la clase " + chosen + " es prudente."
+		};
+		return {
+			level: "ok",
+			text: "La clase " + chosen + " es coherente con la madurez estimada de la definición (≈ " + p + " %, rango de la clase " + lo + "–" + hi + " %)."
+		};
+	}
+	function accuracyRange(estimate, lowPct, highPct) {
+		return {
+			min: estimate * (1 + lowPct / 100),
+			max: estimate * (1 + highPct / 100)
+		};
+	}
+	//#endregion
 	//#region src/shared/schedule-sample.ts
 	var SAMPLE_START_DATE = "2026-07-06";
 	var PHASES = [
@@ -2356,6 +2453,70 @@
 		$("cUse").textContent = c.use;
 		$("cMeth").textContent = c.meth;
 		$("cRange").textContent = c.range;
+		renderMaturity();
+	}
+	function maturityInputs() {
+		if (!gpiOn()) return null;
+		const G = GPI;
+		try {
+			const ch = G.getModule("charter"), sc = G.getModule("scopeStatement"), rq = G.getModule("requirements"), wbs = G.getModule("wbs"), act = G.getModule("activities"), est = G.getModule("costEstimate");
+			const leaves = G.util.wbsLeaves(wbs).length, ra = rq ? G.util.requirementsAudit(rq, ch, wbs) : null;
+			const rows = G.util.costEstimateRows(est, act, wbs);
+			getEng();
+			const acts = net ? net.nodes.filter((n) => !n.isMilestone) : [], linked = /* @__PURE__ */ new Set();
+			if (net) net.links.forEach((l) => {
+				linked.add(l.from);
+				linked.add(l.to);
+			});
+			return {
+				charter: ch ? G.util.charterAudit(ch).pct / 100 : 0,
+				scope: sc ? G.util.scopeAudit(sc, rq, ch, wbs).decompPct / 100 : 0,
+				requirements: ra && ra.total ? (ra.baselineFrozen ? .5 : 0) + ra.tracePct / 100 * .5 : 0,
+				wbs: leaves ? 1 : 0,
+				activities: leaves ? G.util.activitiesStats(act, wbs).pct / 100 : 0,
+				pricing: rows.length ? rows.filter((r) => r.subtotal != null && r.subtotal > 0).length / rows.length : 0,
+				schedule: acts.length ? acts.filter((n) => linked.has(n.id)).length / acts.length : 0
+			};
+		} catch (e) {
+			return null;
+		}
+	}
+	function renderMaturity() {
+		const box = document.getElementById("clsMaturity");
+		if (!box) return;
+		const inp = maturityInputs();
+		if (!inp) {
+			box.innerHTML = `<div class="note">La clase de un estimado <b>resulta de la madurez de la definición del proyecto</b> (AACE 17R-97). Con un proyecto conectado se estima esa madurez con los datos de la suite (acta, alcance, requisitos, EDT, actividades, precios y cronograma) y se contrasta con la clase que elijas.</div>`;
+			return;
+		}
+		const m = definitionMaturity(inp), adv = classAdvisory(state.curClass, m.pct);
+		box.innerHTML = `<div class="eyebrow" style="margin:0 0 6px">Madurez de la definición, estimada con los datos del proyecto</div>
+    <div style="overflow-x:auto"><table class="rng-res"><thead><tr><th>Elemento de la definición</th><th class="num">Avance</th><th class="num">Peso</th><th class="num">Aporta</th></tr></thead><tbody>${m.items.map((i) => `<tr><td>${esc(i.label)}<div class="muted" style="font-size:11px">${esc(i.hint)}</div></td><td class="num">${Math.round(i.value * 100)} %</td><td class="num">${i.weight}</td><td class="num">${(Math.round(i.points * 10) / 10).toFixed(1)}</td></tr>`).join("")}
+      <tr class="rng-selrow"><td><b>Madurez estimada</b> → clase sugerida <b>${m.class}</b></td><td></td><td class="num">100</td><td class="num"><b>${(Math.round(m.pct * 10) / 10).toFixed(1)} %</b></td></tr></tbody></table></div>
+    <div class="note" style="margin-top:8px;${adv.level === "aviso" ? "border-color:#dc3546;background:#fdecef" : ""}">${adv.level === "aviso" ? "<b>⚠</b> " : ""}${esc(adv.text)}</div>
+    <div class="muted" style="font-size:11.5px;margin-top:6px">Es una estimación <b>orientativa</b> con pesos didácticos: la clase real depende de entregables de definición (ingeniería, especificaciones, cotizaciones firmes) que la suite solo ve en parte. Sirve para avisar cuando la clase declarada no se sostiene, no para decidirla.</div>`;
+	}
+	function classDocRows(c) {
+		const inp = maturityInputs(), b = state._budget;
+		return (inp ? (() => {
+			const m = definitionMaturity(inp);
+			return `<tr><td>Madurez estimada de la definición</td><td>≈ ${Math.round(m.pct)} % (clase sugerida ${m.class}); ${esc(classAdvisory(state.curClass, m.pct).text)}</td></tr>`;
+		})() : "") + (b && b.base > 0 ? (() => {
+			const r = accuracyRange(b.base + b.cont, c.lo, c.hi);
+			return `<tr><td>Rango de exactitud aplicado</td><td>Sobre el estimado con contingencia (${fmt(b.base + b.cont)}): mínimo ${fmt(r.min)} · máximo ${fmt(r.max)} (${sgn(c.lo)} % / ${sgn(c.hi)} %, típico de la clase; presupone contingencia aplicada)</td></tr>`;
+		})() : "");
+	}
+	function renderAccuracy(base, cont, res) {
+		const box = document.getElementById("accBox");
+		if (!box) return;
+		if (!(base > 0)) {
+			box.style.display = "none";
+			return;
+		}
+		const c = CLASSES[state.curClass], est = base + cont, r = accuracyRange(est, c.lo, c.hi);
+		const sim = res ? ` El análisis por rangos simula un costo total de <b>${fmt(res.p[10])}</b> (P10) a <b>${fmt(res.p[90])}</b> (P90).` : "";
+		box.style.display = "block";
+		box.innerHTML = `<b>Rango de exactitud esperado — clase ${state.curClass} (${sgn(c.lo)} % / +${c.hi} %, típico).</b> Sobre el estimado con contingencia (<b>${fmt(est)}</b> = costo base + contingencia) el costo final esperado va de <b>${fmt(r.min)}</b> a <b>${fmt(r.max)}</b>.${sim} El rango es un valor típico de la clase: depende del proyecto y presupone la contingencia ya aplicada (AACE 56R-08); el análisis de riesgo lo afina.`;
 	}
 	var sym = () => CUR[$("cur").value] || "S/";
 	function fmt(n) {
@@ -2921,6 +3082,7 @@
 			mgmt,
 			total
 		};
+		renderAccuracy(base, cont, calc.res);
 		renderCO();
 	}
 	function coBudget() {
@@ -3222,6 +3384,7 @@
         <tr><td>Metodología</td><td>${esc(c.meth)}</td></tr>
         <tr><td>Uso previsto</td><td>${esc(c.use)}</td></tr>
         <tr><td>Rango de exactitud típico</td><td>${esc(c.range)}</td></tr>
+        ${classDocRows(c)}
       </table>
     </section>
 
