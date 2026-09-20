@@ -7,9 +7,10 @@
 // INCORPORAR la orden de forma explícita.
 import { describe, expect, it } from "vitest";
 import {
-  analyzeChangeOrders, orderEffect, planBaselining, validateApproval,
+  analyzeChangeOrders, contingencyByRisk, orderEffect, planBaselining, validateApproval,
   FUND_CONT, FUND_EXTRA, FUND_MGMT, type CoBaselineEntry, type CoOrder
 } from "../../src/shared/change-orders";
+import type { RiskRef } from "../../src/shared/risk-analysis";
 import { costSummary } from "../../src/core/gpi-core";
 import type { CostModule } from "../../src/core/types";
 
@@ -65,6 +66,63 @@ describe("validateApproval -- una naturaleza no fuerza una fuente de fondos", ()
     const o = ok({ kind: "riesgo", fund: FUND_CONT, cost: 100000, status: "Aprobada" });
     expect(validateApproval(o, [o], B)).toEqual([]);
   });
+});
+
+describe("riesgo materializado = un riesgo del REGISTRO (auditoría: el registro es la prueba)", () => {
+  const RR: RiskRef[] = [
+    { id: "rk3", code: "R-03", title: "Suelo", type: "amenaza", status: "materializado" },
+    { id: "rk4", code: "R-04", title: "Tipo de cambio", type: "amenaza", status: "monitoreo" },
+    { id: "rk10", code: "R-10", title: "Descuento", type: "oportunidad", status: "materializado" }
+  ];
+  const ord = (o: Partial<CoOrder> = {}): CoOrder => ok({ kind: "riesgo", fund: FUND_CONT, cost: 10000, ...o });
+  it("sin vínculo no se aprueba, y el mensaje explica la alternativa correcta (trabajo imprevisto)", () => {
+    const o = ord();
+    expect(validateApproval(o, [o], B, RR).join("|")).toMatch(/vincula la orden con el riesgo del Registro de Riesgos.*trabajo imprevisto dentro del alcance/);
+  });
+  it("con un riesgo materializado del registro se aprueba", () => {
+    const o = ord({ riskId: "rk3", riskCode: "R-03" });
+    expect(validateApproval(o, [o], B, RR)).toEqual([]);
+  });
+  it("un riesgo que aún NO se materializó no basta: hay que marcarlo Materializado en el registro", () => {
+    const o = ord({ riskId: "rk4", riskCode: "R-04" });
+    expect(validateApproval(o, [o], B, RR).join("|")).toMatch(/R-04 figura como «monitoreo».*márcalo como Materializado/);
+  });
+  it("una oportunidad no genera una orden por riesgo materializado; un riesgo eliminado del registro se detecta", () => {
+    expect(validateApproval(ord({ riskId: "rk10" }), [], B, RR).join("|")).toMatch(/R-10 es una oportunidad/);
+    expect(validateApproval(ord({ riskId: "zz", riskCode: "R-99" }), [], B, RR).join("|")).toMatch(/R-99\) no existe en el Registro de Riesgos/);
+  });
+  it("el vínculo solo se exige a los «riesgo materializado»; sin registro a mano (undefined) no se comprueba", () => {
+    const imp = ok({ kind: "imprevisto", fund: FUND_CONT });
+    expect(validateApproval(imp, [imp], B, RR)).toEqual([]);
+    const sinVinculo = ord();
+    expect(validateApproval(sinVinculo, [sinVinculo], B)).toEqual([]);              // compatibilidad: quien no pasa el registro
+    expect(validateApproval(sinVinculo, [sinVinculo], B, [])).not.toEqual([]);      // registro vacío ≠ sin registro: no hay ningún riesgo que vincular
+  });
+});
+
+describe("contingencyByRisk -- la traza contingencia → riesgo", () => {
+  const RR = [{ id: "rk3", code: "R-03", title: "Suelo", type: "amenaza" as const, status: "materializado" as const, plannedMax: 350000 }];
+  it("agrupa por riesgo lo aprobado con contingencia, lo aprobado con otras fuentes y lo pendiente", () => {
+    const d = contingencyByRisk([
+      ok({ id: "OC-1", riskId: "rk3", status: "Aprobada", fund: FUND_CONT, cost: 180000 }),
+      ok({ id: "OC-2", riskId: "rk3", status: "Aprobada", fund: FUND_MGMT, cost: 40000 }),
+      ok({ id: "OC-3", riskId: "rk3", status: "Pendiente", fund: FUND_CONT, cost: 5000 }),
+      ok({ id: "OC-4", riskId: "rk3", status: "Rechazada", fund: FUND_CONT, cost: 9999 }),
+      ok({ id: "OC-5", status: "Aprobada", fund: FUND_CONT, cost: 777 })          // sin riesgo: no entra
+    ], RR);
+    expect(d).toHaveLength(1);
+    expect(d[0]).toMatchObject({ code: "R-03", contingency: 180000, other: 40000, pending: 5000, orphan: false, plannedMax: 350000, over: false });
+    expect(d[0].orderIds).toEqual(["OC-1", "OC-2", "OC-3", "OC-4"]);
+  });
+  it("marca cuando lo aprobado supera el impacto máximo que el análisis había previsto", () => {
+    const d = contingencyByRisk([ok({ id: "OC-1", riskId: "rk3", status: "Aprobada", fund: FUND_CONT, cost: 400000 })], RR);
+    expect(d[0].over).toBe(true);
+  });
+  it("un riesgo que ya no está en el registro queda como huérfano, con el código guardado en la orden", () => {
+    const d = contingencyByRisk([ok({ id: "OC-1", riskId: "zz", riskCode: "R-77", status: "Aprobada", fund: FUND_CONT, cost: 1 })], RR);
+    expect(d[0]).toMatchObject({ code: "R-77", orphan: true, over: false, plannedMax: null });
+  });
+  it("sin órdenes vinculadas no hay filas", () => expect(contingencyByRisk([ok({ status: "Aprobada" })], RR)).toEqual([]));
 });
 
 describe("analyzeChangeOrders -- aprobar reserva fondos; la línea base no cambia hasta incorporar", () => {

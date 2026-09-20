@@ -122,7 +122,10 @@ src/shared/cost-variance.ts      → (se inlinea en cost.js) clasificación de v
 src/shared/risk-analysis.ts      → (se inlinea en risks.js y gpi-core.js) registro de riesgos: escalas,
                                     puntaje, valor esperado (AACE), residual, hallazgos, matriz
 src/shared/range-estimating.ts   → (se inlinea en cost.js) contingencia por rangos + Monte Carlo
-                                    (AACE 41R-08), determinista (semilla fija)
+                                    (AACE 41R-08), determinista (semilla fija); admite eventos de
+                                    riesgo discretos (Bernoulli × triangular) del Registro
+src/shared/risk-sample.ts        → (se inlinea en risks.js y cost.js) ÚNICA fuente del ejemplo
+                                    DISTRIB+ de riesgos (plan, 10 riesgos, órdenes vinculadas)
 src/shared/stakeholder-engagement.ts → (se inlinea en stakeholder-studio.js) matriz de compromiso
                                     de interesados: brecha, prioridad, hallazgos
 src/shared/write-session.ts      → (se inlinea en cada IIFE) guardado con sesión de

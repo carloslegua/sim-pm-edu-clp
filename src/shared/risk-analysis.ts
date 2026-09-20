@@ -16,6 +16,8 @@
 //    triangular). La contingencia se determina sobre la exposición que QUEDA tras la respuesta.
 // (Los números de RP se citan de memoria: confirmarlos contra la lista vigente de AACE.)
 
+import type { RiskEventInput } from "./range-estimating";
+
 export type RiskType = "amenaza" | "oportunidad";
 export type RiskStatus = "identificado" | "analizado" | "con_respuesta" | "monitoreo" | "materializado" | "cerrado";
 export const RISK_STATUSES: RiskStatus[] = ["identificado", "analizado", "con_respuesta", "monitoreo", "materializado", "cerrado"];
@@ -213,7 +215,9 @@ export const isOpen = (r: Risk): boolean => r.status !== "materializado" && r.st
 // ---- hallazgos de coherencia (orientan la revisión; no impiden guardar) ----
 export type Severity = "riesgo" | "aviso" | "info";
 export interface Finding { code: string; severity: Severity; text: string; }
-export interface FindingOpts { today?: string; costBase?: number; leafIds?: string[]; }
+// `linked`: lo que Costos tiene registrado para este riesgo (órdenes de cambio vinculadas) -- solo lo pasa
+// quien puede leer el módulo de costos; sin él no se evalúan R17/R18.
+export interface FindingOpts { today?: string; costBase?: number; leafIds?: string[]; linked?: { approved: number; count: number }; }
 function daysBetween(a: string, b: string): number | null {
   const x = Date.parse(a + "T12:00:00Z"), y = Date.parse(b + "T12:00:00Z");
   return isFinite(x) && isFinite(y) ? Math.round((y - x) / 86400000) : null;
@@ -255,7 +259,42 @@ export function riskFindings(r: Risk, p: RiskPlan, o?: FindingOpts): Finding[] {
   if (opts.leafIds && r.wbsIds.some((id) => opts.leafIds!.indexOf(id) < 0)) F("R9", "info", "Referencia paquetes que ya no existen en la EDT.");
   if (open && opts.today && r.reviewedOn) { const n = daysBetween(r.reviewedOn, opts.today); if (n !== null && n > p.reviewDays) F("R12", "info", "Sin revisar hace " + n + " días (el plan pide revisarlo cada " + p.reviewDays + ")."); }
   if (r.status === "materializado" && r.actualCost === null && r.actualDelay === null) F("R13", "aviso", "Materializado sin registrar su impacto real (costo o plazo): es lo que alimenta el consumo de contingencia y las lecciones aprendidas.");
+  if (r.status === "materializado" && opts.linked) {
+    if (opts.linked.count > 0 && opts.linked.approved > 0 && r.actualCost !== null && Math.abs(r.actualCost - opts.linked.approved) > 0.5)
+      F("R17", "aviso", "El costo real registrado (" + Math.round(r.actualCost) + ") no coincide con lo aprobado en las órdenes de cambio vinculadas en Costos (" + Math.round(opts.linked.approved) + ").");
+    if (opts.linked.count === 0 && r.actualCost !== null && r.actualCost > 0)
+      F("R18", "info", "No hay una orden de cambio vinculada en Costos: si este impacto consumió contingencia o reserva, regístralo allí y vincúlalo a este riesgo.");
+  }
   return out;
+}
+
+// ---- puente con la contingencia (AACE 40R-08) y con Costos ----
+// Referencia mínima de un riesgo para quien lo vincula (órdenes de cambio de Costos).
+export interface RiskRef { id: string; code: string; title: string; type: RiskType; status: RiskStatus; }
+export const toRiskRef = (r: Risk): RiskRef => ({ id: r.id, code: r.code, title: r.title, type: r.type, status: r.status });
+
+export interface RiskEvent extends RiskEventInput { code: string; title: string; type: RiskType; basis: string; }
+export interface ExcludedRisk { code: string; title: string; reason: string; }
+// Eventos que entran a la simulación de la contingencia: los riesgos ABIERTOS con probabilidad e impacto en costo
+// cuantificados. La contingencia cubre lo que QUEDA tras la respuesta, así que se usa el riesgo RESIDUAL cuando está
+// cuantificado (o la aceptación activa, cuyo residual es el inherente); si la respuesta no tiene residual
+// cuantificado se usa el inherente (más conservador) y se rotula. Los materializados ya son un costo real (no
+// incertidumbre) y los cerrados no ocurrieron: no entran. Los que no se pueden cuantificar se listan con su motivo.
+export function riskEventsOf(risks: Risk[], p: RiskPlan): { events: RiskEvent[]; excluded: ExcludedRisk[]; ev: number } {
+  const events: RiskEvent[] = [], excluded: ExcludedRisk[] = [];
+  risks.filter(isOpen).forEach((r) => {
+    const why = (reason: string) => excluded.push({ code: r.code, title: r.title, reason });
+    let pr: number | null, range: Range3, basis: string;
+    const resProb = probEffective(r.resProbPct, r.resProb, p), resQuant = residualOf(r, p).assessed && resProb !== null && impactMean(r.resCostImpact) !== null;
+    if (r.strategy && r.strategy !== "aceptar" && resQuant) { pr = resProb; range = r.resCostImpact; basis = "residual"; }
+    else { pr = probEffective(r.probPct, r.prob, p); range = r.costImpact; basis = r.strategy && r.strategy !== "aceptar" ? "inherente (residual sin cuantificar)" : "inherente"; }
+    if (pr === null || pr <= 0) return why("sin probabilidad");
+    if (rangeProblems(range, "").length) return why("rango de costo incoherente");
+    if (range.likely === null) return why("sin impacto en costo cuantificado");
+    const low = range.low === null ? range.likely : range.low, high = range.high === null ? range.likely : range.high;
+    events.push({ id: r.id, name: r.code + " " + r.title, code: r.code, title: r.title, type: r.type, prob: Math.min(1, pr), low, likely: range.likely, high, sign: r.type === "amenaza" ? 1 : -1, basis });
+  });
+  return { events, excluded, ev: events.reduce((s, e) => s + e.sign * e.prob * (e.low + e.likely + e.high) / 3, 0) };
 }
 
 // ---- matriz probabilidad × impacto ----

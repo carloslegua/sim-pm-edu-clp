@@ -15,14 +15,23 @@
 //    todas las partidas como independientes y SUBESTIMA la dispersión del total (los errores
 //    de estimación suelen ir en la misma dirección); ρ = 1 las mueve juntas.
 //  · Semilla fija: el mismo análisis da siempre el mismo resultado (reproducible y auditable).
-//  · Cubre la incertidumbre de los RANGOS del estimado. Los eventos de riesgo discretos
-//    (registro de riesgos) no están incluidos: se sumarán cuando exista ese módulo.
+//  · Cubre la incertidumbre de los RANGOS del estimado y, si se pasan `events`, también los
+//    eventos de riesgo DISCRETOS del registro de riesgos (AACE 40R-08: la contingencia reúne
+//    incertidumbre y riesgo). Cada evento es Bernoulli(prob) × triangular, independiente. Para
+//    no contar dos veces, los rangos de las partidas NO deben incluir esos eventos.
 
 export interface RangeLine { id: string; name: string; ml: number; lowPct: number; highPct: number; basis?: string; }
-export interface RangeOptions { iterations?: number; seed?: number; correlation?: number; }
+// Evento de riesgo DISCRETO (registro de riesgos): ocurre con probabilidad `prob` (0..1) y, si ocurre, su
+// impacto en costo es triangular (low ≤ likely ≤ high, valores POSITIVOS). `sign` = +1 amenaza (suma al costo),
+// −1 oportunidad (lo reduce). Se simula como Bernoulli × triangular, independiente de las partidas y entre sí.
+// La estimación base NO incluye estos eventos: por eso no hay «costo más probable» que restar (AACE 40R-08).
+export interface RiskEventInput { id: string; name: string; prob: number; low: number; likely: number; high: number; sign: 1 | -1; }
+export interface RangeOptions { iterations?: number; seed?: number; correlation?: number; events?: RiskEventInput[]; }
 export interface RangeResult {
   n: number;                        // partidas válidas simuladas
   excluded: number;                 // partidas inválidas que quedaron fuera
+  events: number;                   // eventos de riesgo simulados
+  eventsEV: number;                 // valor esperado neto de los eventos (Σ signo × prob × media de la triangular)
   iterations: number; seed: number; correlation: number;
   ml: number;                       // Σ costo más probable = estimado base del análisis
   mean: number; sd: number; min: number; max: number;
@@ -78,7 +87,8 @@ export function simulateRange(lines: RangeLine[] | null | undefined, opts?: Rang
   const seed = Number.isFinite(o.seed) ? (o.seed as number) : DEFAULT_SEED;
   const rho = Math.max(0, Math.min(1, o.correlation === undefined || !isFinite(o.correlation) ? DEFAULT_CORRELATION : o.correlation));
   const valid = (lines || []).filter((l) => l && lineProblems(l).length === 0);
-  if (!valid.length) return null;
+  const evs = (o.events || []).filter((e) => e && isFinite(e.prob) && e.prob > 0 && e.prob <= 1 && isFinite(e.low) && isFinite(e.likely) && isFinite(e.high) && e.low >= 0 && e.low <= e.likely && e.likely <= e.high && (e.sign === 1 || e.sign === -1));
+  if (!valid.length && !evs.length) return null;
   const a = valid.map((l) => num(l.ml) * (1 + num(l.lowPct) / 100));
   const m = valid.map((l) => num(l.ml));
   const b = valid.map((l) => num(l.ml) * (1 + num(l.highPct) / 100));
@@ -102,6 +112,12 @@ export function simulateRange(lines: RangeLine[] | null | undefined, opts?: Rang
       if (b[j] <= a[j]) { t += m[j]; continue; }                       // sin incertidumbre: constante
       t += triInv(normCdf(sr * zc + se * normal()), a[j], m[j], b[j]);
     }
+    // Eventos de riesgo: SIEMPRE se consumen los dos números aleatorios (ocurrencia e impacto) aunque el evento no
+    // ocurra, para que la secuencia de las partidas no dependa de qué eventos se incluyan.
+    for (let j = 0; j < evs.length; j++) {
+      const occurs = rand() < evs[j].prob, u = rand();
+      if (occurs) t += evs[j].sign * triInv(u, evs[j].low, evs[j].likely, evs[j].high);
+    }
     totals[i] = t; sum += t; sumSq += t * t;
   }
   const mean = sum / iterations, sd = Math.sqrt(Math.max(0, sumSq / iterations - mean * mean));
@@ -110,7 +126,8 @@ export function simulateRange(lines: RangeLine[] | null | undefined, opts?: Rang
   PERCENTILES.forEach((q) => { p[q] = quantile(sorted, q); });
   const curve: number[] = [];
   for (let q = 1; q <= 99; q++) curve.push(quantile(sorted, q));
-  return { n: valid.length, excluded: (lines || []).length - valid.length, iterations, seed, correlation: rho, ml, mean, sd, min: sorted[0], max: sorted[iterations - 1], p, curve };
+  const eventsEV = evs.reduce((s, e) => s + e.sign * e.prob * (e.low + e.likely + e.high) / 3, 0);
+  return { n: valid.length, excluded: (lines || []).length - valid.length, events: evs.length, eventsEV, iterations, seed, correlation: rho, ml, mean, sd, min: sorted[0], max: sorted[iterations - 1], p, curve };
 }
 
 // Contingencia = percentil de decisión − estimado base (Σ más probable). Nunca negativa: si el
@@ -134,9 +151,11 @@ export function rangeAdvisories(
   const noBasis = ls.filter((l) => !String(l.basis || "").trim()).length;
   if (noBasis) out.push(noBasis + " de " + ls.length + " partida(s) sin fundamento del rango: cada rango debe justificarse en el Basis of Estimate.");
   const flat = ls.filter((l) => !lineProblems(l).length && num(l.lowPct) === 0 && num(l.highPct) === 0).length;
-  if (flat === res.n) out.push("Ninguna partida tiene incertidumbre (mín = más probable = máx): la contingencia resulta 0.");
+  if (flat === res.n && res.events === 0) out.push("Ninguna partida tiene incertidumbre (mín = más probable = máx): la contingencia resulta 0.");
   else if (flat) out.push(flat + " partida(s) sin incertidumbre (rango 0 %): se tratan como costo fijo.");
   if (res.correlation === 0) out.push("Correlación 0 %: las partidas se tratan como independientes y la dispersión del total se SUBESTIMA (los errores de estimación suelen ir en la misma dirección).");
+  // La exactitud de una clase describe TODA la incertidumbre del estimado (partidas + riesgos): se compara contra el total
+  // simulado. Sin los eventos de riesgo el rango puede quedar estrecho simplemente porque falta esa parte.
   if (classRange && res.ml > 0) {
     const simHi = (res.p[90] - res.ml) / res.ml * 100;
     if (classRange.hi > 0 && simHi < classRange.hi * 0.4) out.push("El P90 queda a +" + simHi.toFixed(1) + " % del estimado base, mucho más estrecho que el rango típico de la clase (+" + classRange.hi + " %): revisa si los rangos por partida o la correlación son demasiado optimistas.");

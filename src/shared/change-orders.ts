@@ -33,9 +33,14 @@ export const CO_KIND_HINT: Record<CoKind, string> = {
   alcance: "Trabajo nuevo o distinto del alcance aprobado (p. ej. una ampliación pedida por el cliente): modifica el alcance y la línea base. No se financia con contingencia; la fuente sale de evaluar el cambio: reserva de gestión (si el sponsor la autoriza) o financiamiento adicional."
 };
 
+import type { RiskRef } from "./risk-analysis";
+
 export interface CoOrder {
   id?: string; kind?: string; fund?: string; status?: string; cost?: number | string;
   approver?: string; sponsorAuth?: boolean; approvedOn?: string; baselined?: string | null;
+  // Vínculo con el Registro de Riesgos (solo tiene sentido si kind = "riesgo"): id del riesgo y su código (foto,
+  // para mostrarlo aunque el registro no esté a mano).
+  riskId?: string; riskCode?: string;
   [key: string]: unknown;
 }
 export interface CoBudget { cont: number; mgmt: number; bac: number; }
@@ -90,9 +95,23 @@ export function orderEffect(o: CoOrder): CoEffect {
   return { dBac: a, dContingency: 0, dMgmt: -a, dTotal: 0 };                          // transferencia de reserva de gestión a la línea base
 }
 
-// Problemas que impiden APROBAR la orden (lista vacía = puede aprobarse).
-export function validateApproval(o: CoOrder, orders: CoOrder[], budget?: Partial<CoBudget> | null): string[] {
+// Un «riesgo materializado» solo lo es si el evento ESTABA en el registro de riesgos y ocurrió: el registro es la
+// prueba. Si no lo estaba, era trabajo imprevisto. Devuelve los problemas del vínculo (vacío = válido).
+export function riskLinkProblems(o: CoOrder, risks: RiskRef[]): string[] {
+  const nada = "si el evento no estaba en el Registro de Riesgos no es un riesgo materializado: clasifícalo como trabajo imprevisto dentro del alcance";
+  if (!o.riskId) return ["vincula la orden con el riesgo del Registro de Riesgos que se materializó (" + nada + ")"];
+  const r = risks.find((x) => x.id === o.riskId);
+  if (!r) return ["el riesgo vinculado" + (o.riskCode ? " (" + o.riskCode + ")" : "") + " no existe en el Registro de Riesgos (" + nada + ")"];
+  if (r.type !== "amenaza") return [r.code + " es una oportunidad: no genera una orden por riesgo materializado"];
+  if (r.status !== "materializado") return ["el riesgo " + r.code + " figura como «" + r.status.replace("_", " ") + "» en el Registro de Riesgos: márcalo como Materializado (con su fecha e impacto real) antes de aprobar la orden"];
+  return [];
+}
+
+// Problemas que impiden APROBAR la orden (lista vacía = puede aprobarse). `risks` = referencias del Registro de
+// Riesgos; si no se pasa (undefined) no se comprueba el vínculo (compatibilidad con quien no lo tiene a mano).
+export function validateApproval(o: CoOrder, orders: CoOrder[], budget?: Partial<CoBudget> | null, risks?: RiskRef[] | null): string[] {
   const p: string[] = [], f = fundOf(o), a = num(o.cost);
+  if (o.kind === "riesgo" && Array.isArray(risks)) riskLinkProblems(o, risks).forEach((x) => p.push(x));
   const an = analyzeChangeOrders((orders || []).filter((x) => x !== o), budget); // saldos SIN esta orden
   if (o.kind !== "riesgo" && o.kind !== "imprevisto" && o.kind !== "alcance") p.push("clasifica la orden: riesgo materializado, trabajo imprevisto dentro del alcance o cambio de alcance");
   if (!a) p.push("el Δ costo debe ser distinto de cero");
@@ -102,6 +121,27 @@ export function validateApproval(o: CoOrder, orders: CoOrder[], budget?: Partial
   if (f === "cont" && a > an.contingencyAvailable + 1e-9) p.push("excede la contingencia disponible (" + Math.round(an.contingencyAvailable) + ")");
   if (f === "mgmt" && a > an.mgmtAvailable + 1e-9) p.push("excede la reserva de gestión disponible (" + Math.round(an.mgmtAvailable) + ")");
   return p;
+}
+
+// Consumo por riesgo: qué se aprobó (y qué está pendiente) en órdenes vinculadas a cada riesgo del registro, y si eso
+// supera el impacto máximo que el análisis del riesgo había previsto. Es la traza «contingencia → riesgo».
+export interface RiskDrawdown {
+  riskId: string; code: string; title: string; orphan: boolean;
+  contingency: number; other: number; pending: number; orderIds: string[];
+  plannedMax: number | null; over: boolean;
+}
+export function contingencyByRisk(orders: CoOrder[] | null | undefined, risks?: Array<RiskRef & { plannedMax?: number | null }> | null): RiskDrawdown[] {
+  const by: Record<string, RiskDrawdown> = {};
+  (orders || []).forEach((o) => {
+    if (!o || !o.riskId) return;
+    const ref = (risks || []).find((r) => r.id === o.riskId);
+    const d = by[o.riskId] = by[o.riskId] || { riskId: o.riskId, code: ref ? ref.code : (o.riskCode || "?"), title: ref ? ref.title : "(riesgo eliminado del registro)", orphan: !ref, contingency: 0, other: 0, pending: 0, orderIds: [], plannedMax: ref && ref.plannedMax != null ? ref.plannedMax : null, over: false };
+    d.orderIds.push(String(o.id || ""));
+    const a = num(o.cost);
+    if (o.status === "Aprobada") { if (fundOf(o) === "cont") d.contingency += a; else d.other += a; }
+    else if (o.status === "Pendiente") d.pending += a;
+  });
+  return Object.keys(by).map((k) => { const d = by[k]; d.over = d.plannedMax !== null && d.contingency + d.other > d.plannedMax + 1e-9; return d; }).sort((a, b) => a.code.localeCompare(b.code));
 }
 
 // Incorporar a la línea base: solo órdenes APROBADAS que usan reserva de gestión o fondos

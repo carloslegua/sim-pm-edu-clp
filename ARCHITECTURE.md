@@ -1230,8 +1230,12 @@ edición con `pushWithSession`, todo texto interpolado escapado, blanco si el
 proyecto no tiene riesgos). Toda la lógica es **pura** y vive en
 `src/shared/risk-analysis.ts` (inlineada en `risks.js`; el núcleo la usa para
 `GPI.util.riskPortfolio()`, el indicador del Panel). Primera entrega:
-registro + matriz + análisis + plan. Segunda (pendiente): enlace con la
-contingencia de Costos y con las órdenes de cambio.
+registro + matriz + análisis + plan. Segunda (entregada): enlace con la
+contingencia de Costos (los riesgos abiertos entran a la simulación como
+eventos, `riskEventsOf`) y con las órdenes de cambio (vínculo orden ↔ riesgo,
+consumo de contingencia por riesgo, hallazgos R17/R18); ver la sección de
+`Cost-management.html`. El ejemplo vive en `src/shared/risk-sample.ts`,
+compartido por Riesgos y Costos.
 - **Base metodológica.** PMI/PMBOK: enunciado **causa → evento → efecto**;
   RBS (categorías del plan); matriz probabilidad × impacto con **umbrales del
   plan** (medio desde 6, alto desde 15 por omisión); puntaje = probabilidad ×
@@ -1260,7 +1264,8 @@ contingencia de Costos y con las órdenes de cambio.
   aceptación activa; R6 estrategia que no corresponde al tipo; R7 residual
   mayor que inherente (solo amenazas: en una oportunidad es lo deseado); R8
   respuesta sin residual evaluado; R9 sin paquetes de la EDT o con
-  referencias huérfanas; R10 impacto en costo ≥ 3 sin cuantificar; R11 nivel
+  referencias huérfanas; R17/R18 (materializado: costo real ≠ órdenes de
+  cambio vinculadas / sin orden vinculada); R10 impacto en costo ≥ 3 sin cuantificar; R11 nivel
   declarado que discrepa ≥ 2 niveles del valor cuantificado (contraste
   cualitativo ↔ cuantitativo según las escalas del plan); R12 revisión
   vencida; R13 materializado sin impacto real; R14 respuesta sin responsable;
@@ -1762,15 +1767,56 @@ contingencia de Costos y con las órdenes de cambio.
     volver a traer se conservan el rango y el fundamento ya trabajados y las
     partidas escritas a mano no se tocan. Un proyecto real arranca sin
     partidas (regla de oro).
-  - **Límites declarados** (también en pantalla y en el BOE): cubre la
-    incertidumbre de los **rangos** del estimado; los **eventos de riesgo
-    discretos** no están incluidos hasta que exista el módulo de Riesgos, y
-    la simulación no es integrada de costo y cronograma.
+  - **Eventos de riesgo del Registro (AACE 40R-08: contingencia = incertidumbre
+    + eventos de riesgo)**. Los riesgos abiertos del módulo Riesgos entran a la
+    misma simulación como **eventos discretos**: cada iteración, un evento
+    ocurre con su probabilidad y, si ocurre, suma un impacto triangular
+    (mín/más probable/máx del impacto en costo); una **oportunidad resta**
+    (signo −1). Se simula la exposición **residual** (con la respuesta
+    aplicada) cuando está evaluada. Lógica pura en
+    `riskEventsOf()` (`risk-analysis.ts`) + `RangeOptions.events`
+    (`range-estimating.ts`); el módulo Costos solo la conecta. Un riesgo sin
+    impacto en costo cuantificado queda **excluido con motivo visible** (no se
+    inventa un número). La casilla «Incluir los riesgos del registro» se
+    persiste (`rangeAnalysis.includeRisks`). Paneles: los eventos incluidos,
+    los excluidos y el **valor esperado neto** (amenazas − oportunidades). Se
+    avisa el **doble conteo**: si un rango de partida ya incorpora un riesgo
+    que también está en el Registro, se cuenta dos veces. Por eso los rangos
+    del ejemplo expresan **solo** incertidumbre del estimado y los riesgos
+    discretos entran como eventos. La comparación con el rango típico de la
+    clase usa la incertidumbre **total** (partidas + eventos).
+  - **Órdenes de cambio ↔ riesgo (trazabilidad y validación)**.
+    `changeOrders[].riskId/riskCode` (opcionales) vinculan una orden con el
+    riesgo del Registro que la originó. **«Riesgo materializado» exige un
+    riesgo del registro en estado *Materializado*** (`riskLinkProblems`, dentro
+    de `validateApproval`, que ahora recibe los riesgos): si el evento no
+    estaba registrado, no fue un riesgo identificado sino **trabajo
+    imprevisto** y se clasifica como tal (reserva de gestión). Las órdenes ya
+    aprobadas antes de esta regla siguen aprobadas y muestran «⚠ sin riesgo
+    vinculado» (compatibilidad, regla #3). Tabla **«Consumo de contingencia
+    por riesgo»** (`contingencyByRisk`): por cada riesgo, lo aprobado con cargo
+    a contingencia frente a su exposición residual esperada; el saldo alimenta
+    la contingencia disponible. En el Registro, un riesgo materializado
+    muestra sus órdenes vinculadas (solo lectura, leídas de `cost`) y los
+    hallazgos **R17** (costo real ≠ lo aprobado en las órdenes) y **R18** (sin
+    orden vinculada). Sin proyecto conectado, ambos módulos usan
+    `src/shared/risk-sample.ts` (`SAMPLE_PLAN`, `SAMPLE_RISKS`,
+    `SAMPLE_LINKED_ORDERS`), la **única fuente** del ejemplo de riesgos, y una
+    prueba de humo verifica que `SAMPLE_LINKED_ORDERS` coincida con la OC-001
+    de Costos.
+  - **Límites declarados** (también en pantalla y en el BOE): la simulación
+    cubre la incertidumbre de los **rangos** y los **eventos** del Registro,
+    pero no es una simulación integrada de costo y cronograma, y el impacto
+    en plazo de los riesgos no se traduce a costo.
   - **Ejemplo DISTRIB+ ampliado, mismo caso**: 5 partidas = las 5 fases de la
     EDT (1 Dirección 195.000 · 2 Ingeniería 355.000 · 3 Procura 2.950.000 ·
     4 Construcción 3.315.000 · 5 Pruebas 285.000 = **S/ 7.100.000**, el 100 %
-    del costo base), con rangos y fundamento; con P70 la contingencia sale ≈
-    9,3 % (≈ 661.000), frente al 12 % de la tabla didáctica.
+    del costo base), con rangos y fundamento que expresan solo incertidumbre
+    del estimado. Con P70: solo partidas ≈ 4,5 %; **con los eventos del
+    Registro ≈ 9,1 % (≈ 649.000)**, frente al 12 % de la tabla didáctica
+    (corrige el «≈ 9,3 % (≈ 661.000)» anterior, que mezclaba riesgos dentro de
+    los rangos). Valor esperado neto de los eventos $ 277.000; contingencia
+    disponible tras el consumo de OC-001 $ 672.000.
 - **Una variación no es una orden de cambio** (auditoría metodológica
   PMI; lógica pura en `src/shared/cost-variance.ts`, inlineada en
   `cost.js`). El flujo enseñaba «rojo = orden de cambio obligatoria» y los

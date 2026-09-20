@@ -11,6 +11,23 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Registro de riesgos ↔ Costos (segunda entrega, AACE 40R-08 + PMBOK)** —
+  (1) Los riesgos abiertos del Registro entran a la simulación de contingencia
+  de Costos como **eventos discretos** (probabilidad × impacto triangular;
+  oportunidades restan; exposición residual), con paneles de incluidos /
+  excluidos (sin impacto en costo cuantificado) / valor esperado neto y aviso
+  de doble conteo con los rangos de partida. (2) Cada **orden de cambio** puede
+  vincularse al riesgo que la originó (`riskId/riskCode`, opcionales) y una
+  tabla muestra el **consumo de contingencia por riesgo**; en el Registro, un
+  riesgo materializado lista sus órdenes vinculadas y avisa (R17/R18) si su
+  costo real no coincide con lo aprobado. (3) La naturaleza «Riesgo
+  materializado» **exige un riesgo del registro en estado Materializado**; si
+  no estaba registrado se clasifica como trabajo imprevisto. Las órdenes ya
+  aprobadas siguen aprobadas (marcadas «sin riesgo vinculado»). Nuevo
+  `src/shared/risk-sample.ts` como única fuente del ejemplo compartido.
+  Pruebas: unitarias de rangos con eventos, `riskEventsOf`, `contingencyByRisk`
+  y validación de vínculo; smoke de Costos (32) y Riesgos (17), incluida la
+  coherencia del ejemplo compartido. Ver ARCHITECTURE.md.
 - **Cronograma/CPM — nuevo botón "⇩ Cargar ejemplo en el proyecto"** — el
   usuario reportó que, tras cargar el ejemplo DISTRIB+ real en WBS
   Builder + Definir las Actividades (18 paquetes, 43 actividades), la

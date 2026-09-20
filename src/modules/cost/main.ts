@@ -33,7 +33,12 @@ import {
   type RangeLine, type RangeResult
 } from "../../shared/range-estimating";
 import {
-  analyzeChangeOrders, orderEffect, planBaselining, validateApproval,
+  STATUS_LABEL, normalizePlan as normalizeRiskPlan, normalizeRisk, riskEventsOf, toRiskRef,
+  type ExcludedRisk, type Risk, type RiskEvent, type RiskPlan
+} from "../../shared/risk-analysis";
+import { SAMPLE_PLAN as SAMPLE_RISK_PLAN, buildSampleRisks } from "../../shared/risk-sample";
+import {
+  analyzeChangeOrders, contingencyByRisk, orderEffect, planBaselining, validateApproval,
   CO_KIND_HINT, CO_KIND_LABEL, FUND_CONT, FUND_EXTRA,
   type CoAnalysis, type CoBaselineEntry, type CoKind
 } from "../../shared/change-orders";
@@ -72,6 +77,7 @@ function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&
 interface ChangeOrder {
   id: string; desc: string; cause: string; cost: number; fund: string; status: string;
   kind?: string; approver?: string; sponsorAuth?: boolean; approvedOn?: string; baselined?: string | null;
+  riskId?: string; riskCode?: string;   // vínculo con el Registro de Riesgos (kind = "riesgo")
   [key: string]: unknown; // compatible con CoOrder (shared/change-orders.ts)
 }
 
@@ -82,20 +88,22 @@ interface ChangeOrder {
    (contingencia), una ampliación del cliente (cambio de alcance, fondos adicionales)
    y trabajo imprevisto dentro del alcance (reserva de gestión, con sponsor). */
 const SAMPLE_CO: ChangeOrder[] = [
-  { id: "OC-001", desc: "Refuerzo de cimentación por hallazgo geotécnico", cause: "R-03 Suelo", cost: 180000, fund: "Contingencia", status: "Aprobada", kind: "riesgo", approver: "CCB", sponsorAuth: false, approvedOn: "2026-08-03" },
+  { id: "OC-001", desc: "Refuerzo de cimentación por hallazgo geotécnico", cause: "R-03 Suelo", cost: 180000, fund: "Contingencia", status: "Aprobada", kind: "riesgo", approver: "CCB", sponsorAuth: false, approvedOn: "2026-08-03", riskId: "rk3", riskCode: "R-03" },
   { id: "OC-002", desc: "Ampliación de sala eléctrica solicitada por cliente", cause: "Cambio alcance", cost: 240000, fund: "Financiamiento adicional", status: "Pendiente", kind: "alcance", approver: "", sponsorAuth: false },
   { id: "OC-003", desc: "Demolición de losa existente no identificada en el levantamiento", cause: "No identificado en el RBS", cost: 90000, fund: "Reserva de gestión", status: "Pendiente", kind: "imprevisto", approver: "", sponsorAuth: false }
 ];
 
 /* Partidas del análisis de rangos del caso de ejemplo: SOLO en modo independiente (igual que las
    órdenes de cambio). Son las 5 fases de la EDT de DISTRIB+ y suman exactamente el costo base
-   (S/ 7.100.000), de modo que el análisis por rangos cubre el 100 % del estimado. */
+   (S/ 7.100.000), de modo que el análisis por rangos cubre el 100 % del estimado. Sus rangos expresan
+   SOLO la incertidumbre del estimado (metrados, precios unitarios): los riesgos discretos del caso
+   (R-01…R-10 del Registro de Riesgos) entran aparte como eventos, para no contarlos dos veces. */
 const SAMPLE_RANGES: RangeLine[] = [
-  { id: "m-1", name: "1 Dirección de Proyecto", ml: 195000, lowPct: -5, highPct: 15, basis: "Costo de personal propio; crece si el proyecto se alarga." },
-  { id: "m-2", name: "2 Ingeniería y Diseño", ml: 355000, lowPct: -10, highPct: 25, basis: "Diseño estructural al 80 %; el estudio de suelos (2.1) puede modificar la cimentación." },
-  { id: "m-3", name: "3 Procura", ml: 2950000, lowPct: -5, highPct: 20, basis: "Cotizaciones vigentes de los Proveedores A/B/C; exposición al precio del acero y al tipo de cambio." },
-  { id: "m-4", name: "4 Construcción", ml: 3315000, lowPct: -10, highPct: 35, basis: "Rendimientos de cuadrilla estimados; incertidumbre geotécnica en movimiento de tierras y cimentaciones." },
-  { id: "m-5", name: "5 Pruebas y Puesta en Marcha", ml: 285000, lowPct: -5, highPct: 20, basis: "Depende de reprocesos tras las pruebas de instalaciones." }
+  { id: "m-1", name: "1 Dirección de Proyecto", ml: 195000, lowPct: -3, highPct: 10, basis: "Costo de personal propio a tarifas vigentes; variación por dedicación." },
+  { id: "m-2", name: "2 Ingeniería y Diseño", ml: 355000, lowPct: -5, highPct: 15, basis: "Diseño estructural al 80 %; incertidumbre de los metrados finales de diseño." },
+  { id: "m-3", name: "3 Procura", ml: 2950000, lowPct: -4, highPct: 10, basis: "Cotizaciones vigentes de los Proveedores A/B/C: variación de cantidades y de precios unitarios dentro de la vigencia de la oferta (la volatilidad del acero y del tipo de cambio son eventos del registro: R-02, R-04)." },
+  { id: "m-4", name: "4 Construcción", ml: 3315000, lowPct: -6, highPct: 18, basis: "Metrados y precios unitarios de subcontratos aún por cerrar (los rendimientos, el suelo, el paro y los vecinos son eventos del registro: R-09, R-03, R-05, R-07)." },
+  { id: "m-5", name: "5 Pruebas y Puesta en Marcha", ml: 285000, lowPct: -3, highPct: 10, basis: "Alcance de las pruebas de instalaciones por confirmar con QA/QC." }
 ];
 
 interface BudgetComputed { base: number; cont: number; esc: number; bac: number; mgmt: number; total: number; }
@@ -188,11 +196,34 @@ const pctNum = (): number => parseInt(($("contPct") as HTMLSelectElement).value.
 function corrValue(): number { const v = parseFloat(($("corrPct") as HTMLInputElement).value); return isFinite(v) ? Math.max(0, Math.min(100, v)) / 100 : DEFAULT_CORRELATION; }
 // La simulación es determinista (semilla fija): se memoriza por partidas + correlación para no repetirla en cada tecla.
 const simCache: Record<string, RangeResult | null> = {};
-function simulate(rho: number): RangeResult | null {
-  const key = JSON.stringify([state.ranges.map((l) => [l.ml, l.lowPct, l.highPct]), rho]);
+// ---- contexto de RIESGOS: el registro del proyecto (conectado) o el caso de ejemplo (independiente) ----
+// Costos LEE el Registro de Riesgos, nunca lo escribe: los eventos abiertos y cuantificados entran a la simulación
+// de la contingencia, y las órdenes por «riesgo materializado» se vinculan a un riesgo de ese registro.
+interface RiskCtx { source: "registro" | "ejemplo" | "sin registro"; risks: Risk[]; plan: RiskPlan; }
+function riskCtx(): RiskCtx {
+  if (gpiOn()) {
+    try {
+      const m = (GPI as GpiApi).getModule("risks");
+      if (m && Array.isArray(m.risks)) return { source: "registro", risks: m.risks.map((o, i) => normalizeRisk(o, "rk" + (i + 1))), plan: normalizeRiskPlan(m.plan) };
+    } catch (e) { /* noop */ }
+    return { source: "sin registro", risks: [], plan: normalizeRiskPlan(null) };
+  }
+  return { source: "ejemplo", risks: buildSampleRisks((c) => "w-" + c), plan: SAMPLE_RISK_PLAN };
+}
+const riskRefs = (ctx: RiskCtx) => ctx.risks.map((r) => ({ ...toRiskRef(r), plannedMax: r.costImpact.high !== null ? r.costImpact.high : r.costImpact.likely }));
+function includeRisksOn(): boolean { const c = document.getElementById("rngRisks") as HTMLInputElement | null; return !c || c.checked; }
+interface EventsCtx { source: RiskCtx["source"]; events: RiskEvent[]; excluded: ExcludedRisk[]; ev: number; responseCost: number; open: number; }
+function eventsCtx(): EventsCtx {
+  const c = riskCtx(), e = riskEventsOf(c.risks, c.plan);
+  const open = c.risks.filter((r) => r.status !== "materializado" && r.status !== "cerrado");
+  return { source: c.source, events: e.events, excluded: e.excluded, ev: e.ev, responseCost: open.reduce((s, r) => s + (r.responseCost || 0), 0), open: open.length };
+}
+function simulate(rho: number, withEvents: boolean = includeRisksOn()): RangeResult | null {
+  const events = withEvents ? eventsCtx().events : [];
+  const key = JSON.stringify([state.ranges.map((l) => [l.ml, l.lowPct, l.highPct]), rho, events.map((e) => [e.id, e.prob, e.low, e.likely, e.high, e.sign])]);
   if (!(key in simCache)) {
-    if (Object.keys(simCache).length > 16) Object.keys(simCache).forEach((k) => { delete simCache[k]; });
-    simCache[key] = simulateRange(state.ranges, { correlation: rho, iterations: DEFAULT_ITERATIONS, seed: DEFAULT_SEED });
+    if (Object.keys(simCache).length > 24) Object.keys(simCache).forEach((k) => { delete simCache[k]; });
+    simCache[key] = simulateRange(state.ranges, { correlation: rho, iterations: DEFAULT_ITERATIONS, seed: DEFAULT_SEED, events });
   }
   return simCache[key];
 }
@@ -207,7 +238,7 @@ function contingencyCalc(base: number): ContCalc {
     const res = simulate(corrValue());
     if (!res) return { cont: 0, method: m, res: null, note: "Aún no hay partidas válidas: la contingencia es <b>0</b> hasta definirlas (o traerlas del estimado)." };
     const c = contingencyAt(res, pctNum());
-    return { cont: c.amount, method: m, res, note: "Contingencia = <b>P" + pctNum() + "</b> de la simulación − estimado base (Σ costo más probable)" + (c.covered ? ": el estimado base ya supera ese percentil, no hace falta reserva." : ".") };
+    return { cont: c.amount, method: m, res, note: "Contingencia = <b>P" + pctNum() + "</b> de la simulación (" + (res.events ? "partidas + <b>" + res.events + " evento(s) de riesgo</b>" : "partidas") + ") − estimado base (Σ costo más probable)" + (c.covered ? ": el estimado base ya supera ese percentil, no hace falta reserva." : ".") };
   }
   const rate = contingencyRate();
   return { cont: base * rate, method: m, res: null, note: "Clase <b>" + state.curClass + "</b> · <b>" + ($("contPct") as HTMLSelectElement).value + "</b> → <b>" + (rate * 100).toFixed(1) + " %</b> del estimado base. Es una <b>referencia didáctica</b> (no proviene de una norma de AACE): a menor madurez del diseño, mayor contingencia para el mismo nivel de confianza. Para determinar la contingencia de un estimado usa la <b>estimación por rangos + simulación Monte Carlo</b>." };
@@ -246,6 +277,33 @@ function curveSvg(res: RangeResult, p: number): string {
     <rect id="rngHit" x="${l}" y="${t}" width="${W - l - r}" height="${H - t - b}" fill="transparent"/>
   </svg>`;
 }
+// Avisos propios de incluir los eventos del registro de riesgos.
+function eventAdvisories(): string[] {
+  if (!includeRisksOn()) return [];
+  const ec = eventsCtx(), out: string[] = [];
+  if (ec.source === "sin registro") out.push("Este proyecto no tiene Registro de Riesgos: la contingencia solo cubre la incertidumbre del estimado. Registra los riesgos para incluir los eventos discretos.");
+  if (ec.events.length) out.push("Doble conteo: los rangos de las partidas deben expresar solo la incertidumbre del estimado (metrados, precios). Si ya incluyen los eventos del registro (p. ej. precio del acero, suelo, paros), esos riesgos se cuentan dos veces.");
+  if (ec.excluded.length) out.push(ec.excluded.length + " riesgo(s) abierto(s) no se pueden cuantificar y no suman a la contingencia: " + ec.excluded.slice(0, 4).map((x) => x.code + " (" + x.reason + ")").join(", ") + (ec.excluded.length > 4 ? "…" : "") + ".");
+  if (ec.responseCost > 0) out.push("El costo de las respuestas planificadas (" + fmt(ec.responseCost) + ") debe estar dentro del estimado base o de la línea base, no en la contingencia.");
+  return out;
+}
+// Panel de eventos: qué riesgos entran a la simulación, con qué base (residual / inherente) y cuánto aportan a la contingencia.
+function renderEvents(res: RangeResult | null, p: number): void {
+  const box = $("rngEvents"), on = includeRisksOn();
+  if (!on) { box.innerHTML = `<div class="muted small">Los eventos de riesgo NO se incluyen: la contingencia cubre solo la incertidumbre de las partidas.</div>`; return; }
+  const ec = eventsCtx();
+  const src = ec.source === "registro" ? "Registro de Riesgos del proyecto" : ec.source === "ejemplo" ? "caso de ejemplo DISTRIB+ (modo independiente)" : "sin Registro de Riesgos";
+  if (!ec.events.length) { box.innerHTML = `<div class="muted small"><b>Fuente:</b> ${esc(src)}. ${ec.source === "sin registro" ? "" : "No hay riesgos abiertos con probabilidad e impacto en costo cuantificados."}</div>`; return; }
+  const only = simulate(corrValue(), false), cA = only ? contingencyAt(only, p).amount : 0, cB = res ? contingencyAt(res, p).amount : 0;
+  const rows = ec.events.slice(0, 14).map((e) => `<tr><td class="mono">${esc(e.code)}</td><td>${esc(e.title)}</td><td>${e.type === "amenaza" ? "Amenaza" : "Oportunidad"}</td><td class="num">${Math.round(e.prob * 100)} %</td><td class="num">${fmt(e.low)} / ${fmt(e.likely)} / ${fmt(e.high)}</td><td class="muted">${esc(e.basis)}</td><td class="num">${e.sign < 0 ? "−" : ""}${fmt(e.prob * (e.low + e.likely + e.high) / 3)}</td></tr>`).join("");
+  box.innerHTML = `<div class="muted small" style="margin-bottom:6px"><b>Fuente:</b> ${esc(src)} · ${ec.open} riesgo(s) abierto(s): <b>${ec.events.length}</b> entran a la simulación${ec.excluded.length ? ", " + ec.excluded.length + " sin cuantificar" : ""}. La contingencia cubre la exposición que <b>queda tras la respuesta</b> (residual).</div>
+    <div style="overflow-x:auto"><table class="rng-res"><thead><tr><th>Cód.</th><th>Riesgo</th><th>Tipo</th><th class="num">Prob.</th><th class="num">Mín / Más prob. / Máx</th><th>Base</th><th class="num">Valor esperado</th></tr></thead><tbody>${rows}</tbody>
+      <tfoot><tr style="font-weight:700"><td colspan="6">Valor esperado neto de los eventos${ec.events.length > 14 ? " (incluye los " + (ec.events.length - 14) + " no mostrados)" : ""}</td><td class="num">${fmt(ec.ev)}</td></tr></tfoot></table></div>
+    <table class="rng-res" style="margin-top:10px;max-width:520px"><thead><tr><th>Contingencia P${p}</th><th class="num">Monto</th></tr></thead><tbody>
+      <tr><td>Solo incertidumbre de las partidas</td><td class="num">${fmt(cA)}</td></tr>
+      <tr><td>+ aporte de los eventos de riesgo</td><td class="num">${fmt(cB - cA)}</td></tr>
+      <tr class="rng-selrow"><td>Contingencia total (partidas + eventos)</td><td class="num">${fmt(cB)}</td></tr></tbody></table>`;
+}
 function renderRange(calc: ContCalc, base: number): void {
   const res = calc.res, p = pctNum(), cls = CLASSES[state.curClass];
   const lineIn = (i: number, f: string, v: unknown, w: string, type = "text", extra = ""): string =>
@@ -265,7 +323,8 @@ function renderRange(calc: ContCalc, base: number): void {
   const sumMl = state.ranges.reduce((s, l) => s + (lineProblems(l).length ? 0 : Number(l.ml)), 0);
   $("rngFoot").innerHTML = `<tr style="font-weight:700"><td>Σ partidas</td><td class="num">${fmt(sumMl)}</td><td colspan="6" class="muted" style="font-weight:500;font-size:11.5px">${base ? "Cubren el " + (sumMl / base * 100).toFixed(1) + " % del costo base " + fmt(base) : "Define el costo base"}</td></tr>`;
 
-  const warn = rangeAdvisories(state.ranges, res, base, { lo: cls.lo, hi: cls.hi });
+  const warn = rangeAdvisories(state.ranges, res, base, { lo: cls.lo, hi: cls.hi }).concat(eventAdvisories());
+  renderEvents(res, p);
   $("rngWarn").innerHTML = warn.length ? "<b>Revisa:</b><ul>" + warn.map((w) => `<li>${esc(w)}</li>`).join("") + "</ul>" : "";
   $("rngWarn").style.display = warn.length ? "block" : "none";
 
@@ -397,16 +456,29 @@ function effectText(r: ChangeOrder): string {
   if (r.fund === FUND_EXTRA) return "BAC " + sg(e.dBac) + " al incorporar · total " + sg(e.dTotal);
   return "BAC " + sg(e.dBac) + " al incorporar · reserva de gestión " + sg(e.dMgmt) + " · total sin cambio";
 }
+// Opciones de «riesgo vinculado»: las AMENAZAS del registro con su estado (una orden por riesgo materializado
+// solo se aprueba cuando el registro lo marca Materializado).
+function riskOptions(ctx: RiskCtx, selectedId?: string, selectedCode?: string): string {
+  const th = ctx.risks.filter((r) => r.type === "amenaza");
+  const opts = th.map((r) => `<option value="${escA(r.id)}" ${r.id === selectedId ? "selected" : ""}>${esc(r.code + " · " + (r.title || "sin título").slice(0, 44) + " (" + STATUS_LABEL[r.status] + ")")}</option>`).join("");
+  const orphan = selectedId && !th.some((r) => r.id === selectedId) ? `<option value="${escA(selectedId)}" selected>${esc((selectedCode || "?") + " (no está en el registro)")}</option>` : "";
+  return `<option value="">— Vincular riesgo —</option>${opts}${orphan}`;
+}
 function renderCO(): void {
   const tb = $("coBody"); tb.innerHTML = "";
+  const ctx = riskCtx(), refs = riskRefs(ctx);
   state.co.forEach((r, i) => {
     const locked = r.status !== "Pendiente";               // aprobada/rechazada: los datos de aprobación no se editan
     const usesReserve = r.fund !== FUND_CONT;              // reserva de gestión o fondos adicionales: requiere sponsor
+    const linked = r.riskId ? ctx.risks.find((x) => x.id === r.riskId) : undefined;
+    const riskCell = r.kind !== "riesgo" ? "" : !locked
+      ? `<select class="mono" style="padding:3px 5px;max-width:190px;margin-top:5px;font-size:11px" data-i="${i}" data-f="riskId" onchange="coEdit(this)" aria-label="Riesgo vinculado a la orden ${escA(r.id)}">${riskOptions(ctx, r.riskId, r.riskCode)}</select>`
+      : `<div class="${r.riskId ? "muted" : "bad-txt"}" style="font-size:11px;margin-top:4px">${r.riskId ? "↳ " + esc(linked ? linked.code + " · " + linked.title : (r.riskCode || "?") + " (no está en el registro)") : "⚠ sin riesgo vinculado"}</div>`;
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="mono">${esc(r.id)}</td>
       <td>${esc(r.desc)}</td>
-      <td><span class="pill ${r.kind ? "ok" : "bad"}" title="${escA(r.kind ? (CO_KIND_HINT as Record<string, string>)[r.kind] : "Clasifica la orden antes de aprobarla")}">${esc(kindLabel(r.kind))}</span></td>
+      <td><span class="pill ${r.kind ? "ok" : "bad"}" title="${escA(r.kind ? (CO_KIND_HINT as Record<string, string>)[r.kind] : "Clasifica la orden antes de aprobarla")}">${esc(kindLabel(r.kind))}</span>${riskCell}</td>
       <td class="muted">${esc(r.cause)}</td>
       <td class="num">${fmt2(+r.cost)}</td>
       <td><span class="pill ${r.fund === FUND_CONT ? "ok" : "warn"}">${esc(r.fund)}</span></td>
@@ -437,18 +509,35 @@ function renderCO(): void {
   $("blBody").innerHTML = state.baselines.length
     ? state.baselines.map((v) => `<tr><td class="mono">${esc(v.version)}</td><td>${esc(v.date)}</td><td>${esc(v.orderIds.join(", "))}</td><td class="num">${fmt2(v.bacBefore)}</td><td class="num">${fmt2(v.bacAfter)}</td><td>${esc(v.approver || "—")}</td></tr>`).join("")
     : `<tr><td class="muted" colspan="6">Sin cambios de línea base: el BAC vigente es el inicial.</td></tr>`;
+  renderDrawdown(refs, an.contingencyAvailable);
   buildJSON();
 }
-// Muestra la guía de la naturaleza elegida al registrar la solicitud.
+// La traza contingencia → riesgo, y la contingencia disponible frente a la exposición residual de los riesgos abiertos.
+function renderDrawdown(refs: ReturnType<typeof riskRefs>, available: number): void {
+  const dd = contingencyByRisk(state.co, refs), ec = eventsCtx();
+  const rows = dd.length ? dd.map((d) => `<tr><td class="mono">${esc(d.code)}</td><td>${esc(d.title)}</td><td class="num">${fmt2(d.contingency)}</td><td class="num">${fmt2(d.other)}</td><td class="num">${fmt2(d.pending)}</td><td class="num">${d.plannedMax === null ? "—" : fmt2(d.plannedMax)}</td><td>${d.orphan ? `<span class="pill bad">Riesgo eliminado</span>` : d.over ? `<span class="pill bad" title="Lo aprobado supera el impacto máximo que el análisis del riesgo había previsto">Supera lo previsto</span>` : `<span class="pill ok">Dentro de lo previsto</span>`}</td></tr>`).join("")
+    : `<tr><td class="muted" colspan="7">Ninguna orden está vinculada a un riesgo del registro.</td></tr>`;
+  const expo = ec.source === "sin registro" ? "Este proyecto no tiene Registro de Riesgos: no hay exposición residual que contrastar con la contingencia."
+    : ec.events.length ? `La contingencia disponible (<b>${fmt(available)}</b>) ${available >= ec.ev ? "supera" : "<b>NO alcanza</b>"} el valor esperado neto de la exposición residual de los riesgos abiertos (<b>${fmt(ec.ev)}</b>, ${ec.events.length} evento(s)). Es una media (≈ P50): una contingencia a un percentil de decisión debe superarla con holgura.`
+      : "No hay riesgos abiertos con impacto en costo cuantificado en el registro.";
+  $("coDrawdown").innerHTML = `<div style="overflow-x:auto"><table><thead><tr><th>Riesgo</th><th>Descripción</th><th class="num">Aprobado con contingencia</th><th class="num">Aprobado con otras fuentes</th><th class="num">Pendiente</th><th class="num">Impacto máx. previsto</th><th>Estado</th></tr></thead><tbody>${rows}</tbody></table></div><div class="note" style="margin-top:10px">${expo}</div>`;
+}
+// Muestra la guía de la naturaleza elegida al registrar la solicitud, y el selector de riesgo si es un «riesgo materializado».
 function coKindHint(): void {
   const k = ($("coKind") as HTMLSelectElement).value as CoKind | "";
   $("coKindHint").textContent = k ? CO_KIND_HINT[k] : "Clasifica el cambio: la naturaleza no decide por sí sola la fuente de fondos.";
+  const wrap = $("coRiskWrap"); wrap.style.display = k === "riesgo" ? "block" : "none";
+  if (k === "riesgo") {
+    const ctx = riskCtx(), n = ctx.risks.filter((r) => r.type === "amenaza").length;
+    $("coRisk").innerHTML = riskOptions(ctx);
+    $("coRiskHint").textContent = n ? "Un riesgo materializado es uno que ya ESTABA en el registro y ocurrió. La orden solo se aprueba cuando el registro lo marca como Materializado." : "El proyecto no tiene riesgos registrados. Si el evento no estaba en el Registro de Riesgos, no es un riesgo materializado: clasifícalo como trabajo imprevisto dentro del alcance.";
+  }
 }
 function coStatus(sel: HTMLSelectElement): void {
   const r = state.co[+(sel.dataset.i as string)];
   if (r.baselined) { showToast(r.id + " ya está incorporada a la línea base " + r.baselined + ": su estado no se puede cambiar."); renderCO(); return; }
   if (sel.value === "Aprobada") {
-    const problems = validateApproval(r, state.co, coBudget());
+    const problems = validateApproval(r, state.co, coBudget(), riskRefs(riskCtx()));
     if (problems.length) { showToast("No se puede aprobar " + r.id + ": " + problems.join("; ") + "."); renderCO(); return; }
     r.approvedOn = todayISO();
   } else { delete r.approvedOn; }
@@ -456,10 +545,17 @@ function coStatus(sel: HTMLSelectElement): void {
   r.status = sel.value; renderCO(); save();
 }
 // Datos de aprobación (quién aprueba, autorización del sponsor): solo con la orden Pendiente.
-function coEdit(el: HTMLInputElement): void {
+function coEdit(el: HTMLInputElement | HTMLSelectElement): void {
   const r = state.co[+(el.dataset.i as string)]; if (!r || r.status !== "Pendiente") return;
   userEdited = true;
-  if (el.dataset.f === "approver") r.approver = el.value.trim(); else if (el.dataset.f === "sponsorAuth") r.sponsorAuth = el.checked;
+  const f = el.dataset.f;
+  if (f === "approver") r.approver = el.value.trim();
+  else if (f === "sponsorAuth") r.sponsorAuth = (el as HTMLInputElement).checked;
+  else if (f === "riskId") {   // vínculo con el Registro de Riesgos (guarda el id y una foto del código)
+    const ref = riskCtx().risks.find((x) => x.id === el.value);
+    if (el.value) { r.riskId = el.value; r.riskCode = ref ? ref.code : r.riskCode; } else { delete r.riskId; delete r.riskCode; }
+    renderCO();
+  }
   save();
 }
 // Incorporar a la línea base: acción EXPLÍCITA (aprobar no la toca) que deja una versión LB-n.
@@ -480,7 +576,7 @@ function addCO(): void {
   if (!kindSel.value) { kindSel.focus(); kindSel.style.borderColor = "#dc3546"; showToast("Clasifica el cambio: riesgo materializado, trabajo imprevisto dentro del alcance o cambio de alcance."); return; }
   kindSel.style.borderColor = "";
   const n = state.co.length + 1;
-  state.co.push({
+  const order: ChangeOrder = {
     id: "OC-" + String(n).padStart(3, "0"),
     desc,
     cause: ($("coCause") as HTMLInputElement).value.trim() || "—",
@@ -488,7 +584,12 @@ function addCO(): void {
     fund: ($("coFund") as HTMLSelectElement).value,
     status: "Pendiente",
     kind: kindSel.value, approver: "", sponsorAuth: false
-  });
+  };
+  if (kindSel.value === "riesgo") {
+    const rid = ($("coRisk") as HTMLSelectElement).value, ref = riskCtx().risks.find((x) => x.id === rid);
+    if (rid) { order.riskId = rid; order.riskCode = ref ? ref.code : undefined; } else showToast("Orden registrada sin riesgo vinculado: no podrá aprobarse hasta vincularla con un riesgo del registro.");
+  }
+  state.co.push(order);
   descInput.value = ""; ($("coCause") as HTMLInputElement).value = ""; ($("coCost") as HTMLInputElement).value = ""; kindSel.value = ""; coKindHint();
   renderCO(); save(); flash(); descInput.focus();
 }
@@ -503,7 +604,7 @@ function delCO(i: number): void {
 function boeCORows(): string {
   if (!state.co.length) return `<tr><td class="muted" colspan="7">Sin órdenes de cambio registradas</td></tr>`;
   return state.co.map((r) => `<tr>
-    <td class="mono">${esc(r.id)}</td><td>${esc(r.desc)}</td><td>${esc(kindLabel(r.kind))}</td><td>${esc(r.cause)}</td>
+    <td class="mono">${esc(r.id)}</td><td>${esc(r.desc)}</td><td>${esc(kindLabel(r.kind))}${r.riskCode ? " · " + esc(r.riskCode) : ""}</td><td>${esc(r.cause)}</td>
     <td style="text-align:right" class="mono">${fmt2(+r.cost)}</td><td>${esc(r.fund)}</td>
     <td>${esc(r.status)}${r.status === "Aprobada" ? " · " + esc(r.approver || "—") + (r.sponsorAuth ? " (sponsor)" : "") : ""}${r.baselined ? " · " + esc(r.baselined) : ""}</td></tr>`).join("");
 }
@@ -514,8 +615,12 @@ function rangeDocHtml(): string {
   const lines = state.ranges.length
     ? state.ranges.map((l) => `<tr><td>${esc(l.name)}</td><td style="text-align:right" class="mono">${fmt(Number(l.ml))}</td><td style="text-align:right" class="mono">${sgn(Number(l.lowPct))} % / ${sgn(Number(l.highPct))} %</td><td>${esc(l.basis || "— (sin fundamento)")}</td></tr>`).join("")
     : `<tr><td colspan="4" class="muted">Sin partidas definidas</td></tr>`;
-  return `<p style="font-size:12.5px;margin:10px 0 4px"><b>Base de la contingencia — estimación por rangos y simulación Monte Carlo (AACE RP 41R-08).</b> ${res
-    ? `Distribución triangular por partida; correlación entre partidas ${Math.round(res.correlation * 100)} %; ${res.iterations.toLocaleString("es-PE")} iteraciones (semilla ${res.seed}, reproducible). Estimado base Σ más probable ${fmt(res.ml)}; P50 ${fmt(res.p[50])}, P${p} ${fmt(res.p[p])}. Contingencia = P${p} − estimado base = <b>${fmt(contingencyAt(res, p).amount)}</b>. Cubre la incertidumbre de los rangos del estimado; los eventos de riesgo discretos no están incluidos.`
+  const ec = includeRisksOn() ? eventsCtx() : null;
+  const evTxt = ec && ec.events.length
+    ? `Incluye <b>${ec.events.length} evento(s) de riesgo</b> del ${ec.source === "registro" ? "Registro de Riesgos del proyecto" : "caso de ejemplo"} (${esc(ec.events.slice(0, 6).map((e) => e.code).join(", "))}${ec.events.length > 6 ? "…" : ""}), con su riesgo <b>residual</b> cuando está cuantificado; valor esperado neto ${fmt(ec.ev)}.`
+    : "No incluye eventos de riesgo discretos (ninguno cuantificado en el registro, o se excluyeron).";
+  return `<p style="font-size:12.5px;margin:10px 0 4px"><b>Base de la contingencia — estimación por rangos y simulación Monte Carlo (AACE RP 41R-08 y 40R-08).</b> ${res
+    ? `Distribución triangular por partida; correlación entre partidas ${Math.round(res.correlation * 100)} %; ${res.iterations.toLocaleString("es-PE")} iteraciones (semilla ${res.seed}, reproducible). Estimado base Σ más probable ${fmt(res.ml)}; P50 ${fmt(res.p[50])}, P${p} ${fmt(res.p[p])}. Contingencia = P${p} − estimado base = <b>${fmt(contingencyAt(res, p).amount)}</b>. Cubre la incertidumbre de los rangos del estimado. ${evTxt}`
     : "Aún no hay partidas válidas."}</p>
     <table class="dt"><thead><tr><td style="font-weight:700;color:var(--muted)">Partida</td><td style="font-weight:700;color:var(--muted);text-align:right">Más probable</td><td style="font-weight:700;color:var(--muted);text-align:right">Mín / Máx</td><td style="font-weight:700;color:var(--muted)">Fundamento del rango</td></tr></thead><tbody>${lines}</tbody></table>`;
 }
@@ -645,7 +750,7 @@ function collect(): Record<string, unknown> {
         rate: state._budget && state._budget.base ? state._budget.cont / state._budget.base : 0,
         manualPct: +($("manualPct") as HTMLInputElement).value || 0, manualBasis: ($("manualBasis") as HTMLTextAreaElement).value
       },
-      rangeAnalysis: { lines: state.ranges, correlation: corrValue(), iterations: DEFAULT_ITERATIONS, seed: DEFAULT_SEED, results: rangeSummary() },
+      rangeAnalysis: { lines: state.ranges, correlation: corrValue(), iterations: DEFAULT_ITERATIONS, seed: DEFAULT_SEED, includeRisks: includeRisksOn(), results: rangeSummary() },
       mgmtReservePct: +($("mgmtPct") as HTMLInputElement).value, escalation: {
         inflation: +($("inflRate") as HTMLInputElement).value, years: +($("inflYears") as HTMLInputElement).value,
         fxShare: +($("fxShare") as HTMLInputElement).value, fxMode: ($("fxMode") as HTMLSelectElement).value, fxBand: +($("fxBand") as HTMLInputElement).value
@@ -658,7 +763,7 @@ function collect(): Record<string, unknown> {
 // Resumen guardado del análisis de rangos (la simulación es determinista: se puede recalcular igual).
 function rangeSummary(): Record<string, number> | null {
   const r = simulate(corrValue());
-  return r ? { ml: r.ml, mean: r.mean, sd: r.sd, p10: r.p[10], p50: r.p[50], p70: r.p[70], p80: r.p[80], p90: r.p[90] } : null;
+  return r ? { ml: r.ml, mean: r.mean, sd: r.sd, p10: r.p[10], p50: r.p[50], p70: r.p[70], p80: r.p[80], p90: r.p[90], events: r.events, eventsEV: r.eventsEV } : null;
 }
 function buildJSON(): void { $("jsonView").textContent = JSON.stringify(collect(), null, 2); }
 
@@ -836,6 +941,8 @@ function applyData(d: any): void {
       state.ranges = ra.lines.map((l: Record<string, unknown>, i: number): RangeLine => ({ id: String(l.id || "m-" + i), name: String(l.name || ""), ml: Number(l.ml), lowPct: Number(l.lowPct), highPct: Number(l.highPct), basis: String(l.basis || "") }));
     }
     if (ra.correlation != null && isFinite(Number(ra.correlation))) ($("corrPct") as HTMLInputElement).value = String(Math.round(Number(ra.correlation) * 100));
+    // Proyectos guardados antes de incluir los eventos de riesgo no traen el campo: se leen como «incluidos» (el valor por omisión).
+    if (ra.includeRisks === false) ($("rngRisks") as HTMLInputElement).checked = false;
   }
   if (d.changeOrders) state.co = d.changeOrders;
   if (Array.isArray(d.baselineLog)) state.baselines = d.baselineLog; // .json antiguos: sin versiones de línea base
@@ -901,6 +1008,10 @@ function init(reload: boolean): void {
         const el = document.querySelector("#gpiBadge b"); const m = (GPI as GpiApi).meta();
         if (el && m && m.name) el.textContent = m.name;
       } catch (e) { /* noop */ }
+      // El Registro de Riesgos puede haber cambiado en otra pestaña: la contingencia, los vínculos y la traza lo leen de ahí.
+      // Solo se recalcula (no se guarda): no es una edición de esta pestaña. Se omite si hay un campo del formulario en edición.
+      const ae = document.activeElement;
+      if (!(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))) recalcCont();
     });
   }
   if (reload) { (document.querySelector('[data-p="p1"]') as HTMLElement).click(); }

@@ -4,8 +4,8 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_PLAN, blankRisk, buildMatrix, costLevel, impactMean, inherentEV, inherentScore, levelOf, nextCode, normalizePlan,
-  normalizeRisk, portfolio, probEffective, rangeProblems, rankRisks, residualOf, riskFindings, riskScore, strategiesFor,
-  timeLevel, toLevel, toNum, validatePlan, type Risk
+  normalizeRisk, portfolio, probEffective, rangeProblems, rankRisks, residualOf, riskEventsOf, riskFindings, riskScore, strategiesFor,
+  timeLevel, toLevel, toNum, toRiskRef, validatePlan, type Risk
 } from "../../src/shared/risk-analysis";
 import { riskPortfolio } from "../../src/core/gpi-core";
 
@@ -161,6 +161,49 @@ describe("hallazgos de coherencia", () => {
     expect(codes(R({ status: "materializado", actualCost: 180000 }))).not.toContain("R13");
     expect(codes(R({ status: "materializado", actualDelay: 5 }))).not.toContain("R13");
   });
+});
+
+describe("eventos para la contingencia (riskEventsOf) y vínculo con Costos", () => {
+  const q = (o: Partial<Risk>): Risk => R({ prob: 3, impCost: 3, costImpact: { low: 100, likely: 200, high: 400 }, ...o });
+  it("usa el RESIDUAL cuando la respuesta lo tiene cuantificado (la contingencia cubre lo que queda), y lo rotula", () => {
+    const r = q({ strategy: "mitigar", resProb: 2, resImpCost: 2, resCostImpact: { low: 50, likely: 100, high: 200 } });
+    const { events, excluded, ev } = riskEventsOf([r], P);
+    expect(excluded).toEqual([]);
+    expect(events[0]).toMatchObject({ prob: 0.3, low: 50, likely: 100, high: 200, sign: 1, basis: "residual", code: "R-01" });
+    expect(ev).toBeCloseTo(0.3 * (50 + 100 + 200) / 3, 9);
+  });
+  it("aceptar activa = el residual ES el inherente; sin residual cuantificado se usa el inherente (conservador) y se rotula", () => {
+    expect(riskEventsOf([q({ strategy: "aceptar" })], P).events[0]).toMatchObject({ prob: 0.5, likely: 200, basis: "inherente" });
+    expect(riskEventsOf([q({ strategy: "mitigar", resProb: 2, resImpCost: 2 })], P).events[0]).toMatchObject({ prob: 0.5, likely: 200, basis: "inherente (residual sin cuantificar)" });
+    expect(riskEventsOf([q({})], P).events[0].basis).toBe("inherente");
+  });
+  it("la probabilidad cuantificada manda sobre la del nivel; con solo el más probable el impacto es fijo", () => {
+    const e = riskEventsOf([q({ probPct: 25, costImpact: { low: null, likely: 300, high: null } })], P).events[0];
+    expect(e).toMatchObject({ prob: 0.25, low: 300, likely: 300, high: 300 });
+  });
+  it("las oportunidades restan (signo −1) y el valor esperado es neto", () => {
+    const { events, ev } = riskEventsOf([q({ id: "a", code: "R-01" }), q({ id: "b", code: "R-02", type: "oportunidad", strategy: "aceptar" })], P);
+    expect(events.map((x) => x.sign)).toEqual([1, -1]);
+    expect(ev).toBeCloseTo(0, 9);                                                 // mismas cifras, signos opuestos
+  });
+  it("materializados y cerrados NO entran; los no cuantificables se listan con su motivo", () => {
+    const set = [q({ id: "m", code: "R-01", status: "materializado" }), q({ id: "c", code: "R-02", status: "cerrado" }),
+      R({ id: "s", code: "R-03", prob: 3, impCost: 3 }), q({ id: "np", code: "R-04", prob: null }), q({ id: "bad", code: "R-05", costImpact: { low: 900, likely: 200, high: 400 } }), q({ id: "ok", code: "R-06" })];
+    const { events, excluded } = riskEventsOf(set, P);
+    expect(events.map((e) => e.code)).toEqual(["R-06"]);
+    expect(excluded.map((x) => [x.code, x.reason])).toEqual([["R-03", "sin impacto en costo cuantificado"], ["R-04", "sin probabilidad"], ["R-05", "rango de costo incoherente"]]);
+  });
+  it("R17/R18: el costo real de un riesgo materializado se contrasta con las órdenes vinculadas en Costos (solo si se conoce Costos)", () => {
+    const m = R({ status: "materializado", actualCost: 180000, wbsIds: ["w"], prob: 3, impCost: 3 });
+    const c = (linked?: { approved: number; count: number }) => riskFindings(m, P, { linked }).map((f) => f.code);
+    expect(c({ approved: 180000, count: 1 })).not.toEqual(expect.arrayContaining(["R17", "R18"]));
+    expect(c({ approved: 150000, count: 1 })).toContain("R17");
+    expect(c({ approved: 0, count: 1 })).not.toContain("R17");                  // solo pendientes: aún no hay nada aprobado que contrastar
+    expect(c({ approved: 0, count: 0 })).toContain("R18");
+    expect(c(undefined)).not.toEqual(expect.arrayContaining(["R17", "R18"]));   // sin Costos a mano no se evalúa
+    expect(riskFindings(R({ status: "materializado", actualCost: null, actualDelay: 5 }), P, { linked: { approved: 0, count: 0 } }).map((f) => f.code)).not.toContain("R18");
+  });
+  it("toRiskRef conserva lo que necesita quien vincula", () => expect(toRiskRef(R({ id: "z", code: "R-09", title: "T", status: "monitoreo" }))).toEqual({ id: "z", code: "R-09", title: "T", type: "amenaza", status: "monitoreo" }));
 });
 
 describe("riskPortfolio del núcleo (indicador del Panel)", () => {

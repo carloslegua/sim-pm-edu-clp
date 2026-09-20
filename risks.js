@@ -368,6 +368,10 @@
 			if (n !== null && n > p.reviewDays) F("R12", "info", "Sin revisar hace " + n + " días (el plan pide revisarlo cada " + p.reviewDays + ").");
 		}
 		if (r.status === "materializado" && r.actualCost === null && r.actualDelay === null) F("R13", "aviso", "Materializado sin registrar su impacto real (costo o plazo): es lo que alimenta el consumo de contingencia y las lecciones aprendidas.");
+		if (r.status === "materializado" && opts.linked) {
+			if (opts.linked.count > 0 && opts.linked.approved > 0 && r.actualCost !== null && Math.abs(r.actualCost - opts.linked.approved) > .5) F("R17", "aviso", "El costo real registrado (" + Math.round(r.actualCost) + ") no coincide con lo aprobado en las órdenes de cambio vinculadas en Costos (" + Math.round(opts.linked.approved) + ").");
+			if (opts.linked.count === 0 && r.actualCost !== null && r.actualCost > 0) F("R18", "info", "No hay una orden de cambio vinculada en Costos: si este impacto consumió contingencia o reserva, regístralo allí y vincúlalo a este riesgo.");
+		}
 		return out;
 	}
 	function buildMatrix(risks, type, which, p) {
@@ -503,105 +507,7 @@
 		return "R-" + String(max + 1).padStart(2, "0");
 	}
 	//#endregion
-	//#region src/modules/risks/main.ts
-	var $ = (id) => document.getElementById(id);
-	function esc(s) {
-		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
-			"&": "&amp;",
-			"<": "&lt;",
-			">": "&gt;",
-			"\"": "&quot;",
-			"'": "&#39;"
-		})[c]);
-	}
-	var todayISO = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-	function setStatus(msg) {
-		$("statusLeft").textContent = msg;
-	}
-	var CUR = {
-		USD: "$",
-		PEN: "S/",
-		EUR: "€"
-	};
-	var connected = false;
-	var currency = "USD";
-	var costBase = 0;
-	var leaves = [];
-	var roles = [];
-	var sym = () => CUR[currency] || "$";
-	var money = (n) => n == null || !isFinite(n) ? "—" : sym() + " " + Math.round(n).toLocaleString("es-PE");
-	var SAMPLE_LEAVES = [
-		["1.1", "Acta de constitución"],
-		["1.2", "Plan de gestión del proyecto"],
-		["1.3", "Informes de seguimiento y control"],
-		["2.1", "Estudio de suelos"],
-		["2.2", "Diseño estructural"],
-		["2.3", "Diseño eléctrico y sanitario"],
-		["2.4", "Permisos y licencias municipales"],
-		["3.1", "Estructuras metálicas prefabricadas"],
-		["3.2", "Materiales de construcción"],
-		["3.3", "Equipos eléctricos e instalaciones"],
-		["4.1", "Movimiento de tierras"],
-		["4.2", "Cimentaciones"],
-		["4.3", "Estructura y cobertura"],
-		["4.4", "Acabados y cerramientos"],
-		["4.5", "Instalaciones MEP"],
-		["5.1", "Pruebas de instalaciones"],
-		["5.2", "Capacitación al cliente"],
-		["5.3", "Acta de entrega y cierre"]
-	].map(([code, name]) => ({
-		id: "w-" + code,
-		code,
-		name
-	}));
-	var SAMPLE_ROLES = [
-		"Sponsor (Gerencia General)",
-		"Director de Proyecto",
-		"Jefe de Ingeniería",
-		"Jefe de Logística",
-		"Residente de Obra",
-		"Control de Calidad / QA-QC",
-		"Asesoría Legal"
-	];
-	var SAMPLE_COST_BASE = 71e5;
-	function refreshContext() {
-		const G = window.GPI;
-		connected = !!(G && G.available() && G.active());
-		if (connected && G) try {
-			const wbs = G.getModule("wbs");
-			leaves = G.util.wbsLeaves(wbs).map((l) => ({
-				id: l.id,
-				code: l.code,
-				name: l.name
-			}));
-			const obs = G.getModule("obs");
-			roles = Array.from(new Set(G.util.obsNodes(obs).map((n) => (n.role || G.util.obsLabel(n) || "").trim()).filter(Boolean)));
-			const cost = G.getModule("cost");
-			costBase = Number(cost && cost.budget && (cost.budget.baseCost || cost.budget.computed && cost.budget.computed.base)) || 0;
-			const m = G.meta();
-			currency = m && m.currency || "USD";
-		} catch (e) {}
-		else {
-			leaves = SAMPLE_LEAVES;
-			roles = SAMPLE_ROLES;
-			costBase = SAMPLE_COST_BASE;
-			currency = "USD";
-		}
-	}
-	var plan = normalizePlan(null);
-	var risks = [];
-	var idCounter = 1;
-	var selectedId = null;
-	var view = "registro";
-	var matrixWhich = "inherent";
-	var sortByScore = false;
-	var expanded = /* @__PURE__ */ new Set();
-	var newId = () => "rk" + idCounter++;
-	var byId = (id) => risks.find((r) => r.id === id);
-	var leafCode = (id) => {
-		const l = leaves.find((x) => x.id === id);
-		return l ? l.code : id;
-	};
+	//#region src/shared/risk-sample.ts
 	var SAMPLE_PLAN = normalizePlan({
 		methodology: "Identificación por talleres de expertos y revisión de lecciones aprendidas; análisis cualitativo con la matriz probabilidad × impacto del plan; cuantificación del valor esperado con rangos de tres puntos para los riesgos de costo ≥ 3; respuesta por estrategia; revisión mensual en la reunión de control.",
 		reservePolicy: "La contingencia cubre la incertidumbre del estimado (análisis de rangos de Costos) y la exposición residual de los riesgos abiertos. La reserva de gestión (fuera de la línea base) solo se usa con autorización del sponsor.",
@@ -1010,18 +916,126 @@
 			}
 		}
 	];
+	function buildSampleRisks(resolveWbs) {
+		return SAMPLE_RISKS.map((s, i) => normalizeRisk({
+			...s,
+			id: "rk" + (i + 1),
+			identifiedOn: "2026-07-06",
+			wbsIds: s.wbs.map(resolveWbs).filter(Boolean)
+		}, "rk" + (i + 1)));
+	}
+	var SAMPLE_LINKED_ORDERS = [{
+		id: "OC-001",
+		riskId: "rk3",
+		riskCode: "R-03",
+		cost: 18e4,
+		status: "Aprobada",
+		fund: "Contingencia"
+	}];
+	//#endregion
+	//#region src/modules/risks/main.ts
+	var $ = (id) => document.getElementById(id);
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+			"&": "&amp;",
+			"<": "&lt;",
+			">": "&gt;",
+			"\"": "&quot;",
+			"'": "&#39;"
+		})[c]);
+	}
+	var todayISO = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+	function setStatus(msg) {
+		$("statusLeft").textContent = msg;
+	}
+	var CUR = {
+		USD: "$",
+		PEN: "S/",
+		EUR: "€"
+	};
+	var connected = false;
+	var currency = "USD";
+	var costBase = 0;
+	var leaves = [];
+	var roles = [];
+	var sym = () => CUR[currency] || "$";
+	var money = (n) => n == null || !isFinite(n) ? "—" : sym() + " " + Math.round(n).toLocaleString("es-PE");
+	var SAMPLE_LEAVES = [
+		["1.1", "Acta de constitución"],
+		["1.2", "Plan de gestión del proyecto"],
+		["1.3", "Informes de seguimiento y control"],
+		["2.1", "Estudio de suelos"],
+		["2.2", "Diseño estructural"],
+		["2.3", "Diseño eléctrico y sanitario"],
+		["2.4", "Permisos y licencias municipales"],
+		["3.1", "Estructuras metálicas prefabricadas"],
+		["3.2", "Materiales de construcción"],
+		["3.3", "Equipos eléctricos e instalaciones"],
+		["4.1", "Movimiento de tierras"],
+		["4.2", "Cimentaciones"],
+		["4.3", "Estructura y cobertura"],
+		["4.4", "Acabados y cerramientos"],
+		["4.5", "Instalaciones MEP"],
+		["5.1", "Pruebas de instalaciones"],
+		["5.2", "Capacitación al cliente"],
+		["5.3", "Acta de entrega y cierre"]
+	].map(([code, name]) => ({
+		id: "w-" + code,
+		code,
+		name
+	}));
+	var SAMPLE_ROLES = [
+		"Sponsor (Gerencia General)",
+		"Director de Proyecto",
+		"Jefe de Ingeniería",
+		"Jefe de Logística",
+		"Residente de Obra",
+		"Control de Calidad / QA-QC",
+		"Asesoría Legal"
+	];
+	var SAMPLE_COST_BASE = 71e5;
+	function refreshContext() {
+		const G = window.GPI;
+		connected = !!(G && G.available() && G.active());
+		if (connected && G) try {
+			const wbs = G.getModule("wbs");
+			leaves = G.util.wbsLeaves(wbs).map((l) => ({
+				id: l.id,
+				code: l.code,
+				name: l.name
+			}));
+			const obs = G.getModule("obs");
+			roles = Array.from(new Set(G.util.obsNodes(obs).map((n) => (n.role || G.util.obsLabel(n) || "").trim()).filter(Boolean)));
+			const cost = G.getModule("cost");
+			costBase = Number(cost && cost.budget && (cost.budget.baseCost || cost.budget.computed && cost.budget.computed.base)) || 0;
+			const m = G.meta();
+			currency = m && m.currency || "USD";
+		} catch (e) {}
+		else {
+			leaves = SAMPLE_LEAVES;
+			roles = SAMPLE_ROLES;
+			costBase = SAMPLE_COST_BASE;
+			currency = "USD";
+		}
+	}
+	var plan = normalizePlan(null);
+	var risks = [];
+	var idCounter = 1;
+	var selectedId = null;
+	var view = "registro";
+	var matrixWhich = "inherent";
+	var sortByScore = false;
+	var expanded = /* @__PURE__ */ new Set();
+	var newId = () => "rk" + idCounter++;
+	var byId = (id) => risks.find((r) => r.id === id);
+	var leafCode = (id) => {
+		const l = leaves.find((x) => x.id === id);
+		return l ? l.code : id;
+	};
 	function sampleRisks() {
-		return SAMPLE_RISKS.map((s, i) => {
-			const ids = s.wbs.map((c) => {
-				const l = leaves.find((x) => x.code === c);
-				return l ? l.id : "";
-			}).filter(Boolean);
-			return normalizeRisk({
-				...s,
-				id: "rk" + (i + 1),
-				identifiedOn: "2026-07-06",
-				wbsIds: ids
-			}, "rk" + (i + 1));
+		return buildSampleRisks((c) => {
+			const l = leaves.find((x) => x.code === c);
+			return l ? l.id : "";
 		});
 	}
 	function loadSample() {
@@ -1055,10 +1069,32 @@
 	function findingsHtml(fs) {
 		return fs.length ? `<ul class="rk-finds">${fs.map((f) => `<li><span class="sv ${f.severity}">${sevText[f.severity]}</span>${esc(f.text)}</li>`).join("")}</ul>` : `<div class="muted small">Sin hallazgos de coherencia.</div>`;
 	}
+	function linkedOrders(r) {
+		let all = [];
+		if (connected && window.GPI) try {
+			const c = window.GPI.getModule("cost");
+			all = c && Array.isArray(c.changeOrders) ? c.changeOrders : [];
+		} catch (e) {}
+		else all = SAMPLE_LINKED_ORDERS;
+		return all.filter((o) => o && o.riskId === r.id).map((o) => ({
+			id: String(o.id || ""),
+			cost: Number(o.cost) || 0,
+			status: String(o.status || ""),
+			fund: String(o.fund || "")
+		}));
+	}
+	var linkedSummary = (r) => {
+		const l = linkedOrders(r);
+		return {
+			approved: l.filter((o) => o.status === "Aprobada").reduce((s, o) => s + o.cost, 0),
+			count: l.length
+		};
+	};
 	var findingsOf = (r) => riskFindings(r, plan, {
 		today: todayISO(),
 		costBase,
-		leafIds: leaves.map((l) => l.id)
+		leafIds: leaves.map((l) => l.id),
+		linked: r.status === "materializado" ? linkedSummary(r) : void 0
 	});
 	var statement = (r) => r.cause.trim() || r.event.trim() || r.effect.trim() ? "Debido a " + (r.cause.trim() || "…") + ", puede ocurrir que " + (r.event.trim() || "…") + ", lo que " + (r.type === "amenaza" ? "causaría " : "generaría ") + (r.effect.trim() || "…") + "." : "";
 	function render() {
@@ -1194,7 +1230,11 @@
     <div><div class="cl">Valor esperado (${sg})</div><div class="cv mono">${money(ev.cost)}</div><div class="muted small">${ev.time !== null ? "≈ " + Math.round(ev.time * 10) / 10 + " días · " : ""}P × media de la triangular (mín + más prob. + máx) / 3</div></div>
     <div><div class="cl">Riesgo residual</div><div class="cv">${res.assessed && res.score !== null ? levelPill(res.score, r.type === "oportunidad") : `<span class="muted small">${r.strategy ? "Sin evaluar" : "—"}</span>`}</div><div class="muted small">${res.assessed && res.ev.cost !== null ? "EV residual " + money(res.ev.cost) : res.derived ? "= inherente (aceptar)" : ""}</div></div>
     <div><div class="cl">Niveles según valores cuantificados</div><div class="cv small">${implC !== null ? "Costo: nivel " + implC : "Costo: —"} · ${implT !== null ? "Plazo: nivel " + implT : "Plazo: —"}</div><div class="muted small">Contraste con lo declarado en el análisis cualitativo</div></div>
-  </div><div class="cl" style="margin-top:8px">Hallazgos de coherencia</div>${findingsHtml(findingsOf(r))}`;
+  </div>${r.status === "materializado" ? linkedBlock(r) : ""}<div class="cl" style="margin-top:8px">Hallazgos de coherencia</div>${findingsHtml(findingsOf(r))}`;
+	}
+	function linkedBlock(r) {
+		const l = linkedOrders(r);
+		return `<div class="cl" style="margin-top:10px">Órdenes de cambio vinculadas (Costos)</div><table class="an"><thead><tr><th class="l">Orden</th><th class="l">Estado</th><th class="l">Fondeo</th><th>Monto</th></tr></thead><tbody>${l.length ? l.map((o) => `<tr><td class="mono">${esc(o.id)}</td><td>${esc(o.status)}</td><td>${esc(o.fund)}</td><td class="num">${money(o.cost)}</td></tr>`).join("") : `<tr><td colspan="4" class="muted">Sin órdenes de cambio vinculadas en Costos.</td></tr>`}</tbody></table>`;
 	}
 	var rowEl = (id) => Array.from(document.querySelectorAll("tr.rk-row")).find((el) => el.dataset.id === id) || null;
 	function refreshRisk(r) {

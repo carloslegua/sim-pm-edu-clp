@@ -72,7 +72,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
   const kpi = (doc: Document, n: number) => doc.querySelectorAll("#coKpis .val")[n].textContent;
   const toast = (doc: Document) => doc.getElementById("gpiToast")?.textContent || "";
   function setStatus(dom: any, doc: Document, id: string, value: string) {
-    const sel = rowOf(doc, id).querySelector("select") as HTMLSelectElement;
+    const sel = rowOf(doc, id).querySelector("select[data-i]:not([data-f])") as HTMLSelectElement;   // el de ESTADO (una orden por riesgo tiene además el de riesgo vinculado)
     sel.value = value; change(dom, sel);
   }
   function setApproval(dom: any, doc: Document, id: string, approver: string, sponsor: boolean) {
@@ -336,6 +336,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
   const fijar = (dom: any, doc: Document, id: string, v: string, ev = "change") => { const el = doc.getElementById(id) as HTMLInputElement | HTMLSelectElement; el.value = v; el.dispatchEvent(new dom.window.Event(ev, { bubbles: true })); };
   const filaRango = (doc: Document, i: number) => doc.querySelectorAll("#rngBody tr")[i] as HTMLElement;
   const celdaRng = (doc: Document, i: number, f: string) => filaRango(doc, i).querySelector(`input[data-f="${f}"]`) as HTMLInputElement;
+  const eventos = (dom: any, doc: Document, on: boolean) => { const c = doc.getElementById("rngRisks") as HTMLInputElement; c.checked = on; c.dispatchEvent(new dom.window.Event("change", { bubbles: true })); };
   const filaP = (doc: Document, q: number) => Array.from(doc.querySelectorAll("#rngResults table")[0].querySelectorAll("tbody tr")).find((r) => r.querySelector("td")!.textContent!.startsWith("P" + q)) as HTMLElement;
 
   it("REPRO (auditoría AACE): el selector ya NO ofrece «Simulación Monte Carlo» como rótulo de una tabla; cada método es lo que dice ser", async () => {
@@ -360,7 +361,9 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(doc.getElementById("rangeCard")!.style.display).toBe("block");
     expect(doc.querySelectorAll("#rngBody tr").length).toBe(5);                      // las 5 fases de DISTRIB+
     expect(doc.getElementById("rngFoot")!.textContent).toMatch(/Cubren el 100\.0 % del costo base/);
-    expect(doc.getElementById("rngWarn")!.style.display).toBe("none");               // cobertura completa, todo fundamentado, ρ = 30 %
+    // cobertura completa, todo fundamentado, ρ = 30 %: el único aviso es el propio de incluir los eventos (doble conteo)
+    expect(doc.getElementById("rngWarn")!.textContent).toMatch(/Doble conteo/);
+    expect(doc.getElementById("rngWarn")!.querySelectorAll("li").length).toBeLessThanOrEqual(2);
 
     const base = 7100000, cont = dinero(doc.getElementById("kCont")!.textContent);
     const p50 = dinero(filaP(doc, 50).children[1].textContent), p70 = dinero(filaP(doc, 70).children[1].textContent), p90 = dinero(filaP(doc, 90).children[1].textContent);
@@ -368,7 +371,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(cont).toBeGreaterThan(0);
     expect(p50).toBeLessThan(p70); expect(p70).toBeLessThan(p90);
     expect(dinero(doc.getElementById("kBAC")!.textContent)).toBeCloseTo(base + cont + dinero(doc.getElementById("kEsc")!.textContent), -1);   // BAC = base + contingencia + escalación
-    expect(cont / base).toBeGreaterThan(0.05); expect(cont / base).toBeLessThan(0.2);                                                          // ≈ 9 %: un resultado del análisis, no el 12 % de la tabla
+    expect(cont / base).toBeGreaterThan(0.07); expect(cont / base).toBeLessThan(0.12);                                                         // ≈ 9 % (partidas + eventos): un resultado del análisis, no el 12 % de la tabla
     expect(doc.getElementById("rngSvg")!.querySelectorAll("path").length).toBe(1);   // curva S
     expect(doc.getElementById("rngResults")!.textContent).toMatch(/10,000 iteraciones · correlación 30 % · semilla 20260713/);
 
@@ -419,10 +422,14 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(celdaRng(doc, 5, "lowPct").value).toBe("-15"); expect(celdaRng(doc, 5, "highPct").value).toBe("30");   // clase 3
     expect(doc.getElementById("rngWarn")!.textContent).toMatch(/1 de 6 partida\(s\) sin fundamento/);
     expect(doc.getElementById("rngWarn")!.textContent).toMatch(/suman 7,200,000 \(101\.4 % del costo base/);
+    eventos(dom, doc, false);                                                        // sin eventos: solo las partidas
     for (let i = 0; i < 6; i++) (doc.querySelector('#rngBody button[onclick^="delRange"]') as HTMLElement).click();
     expect(doc.querySelectorAll("#rngBody tr")[0].textContent).toMatch(/Sin partidas/);
     expect(dinero(doc.getElementById("kCont")!.textContent)).toBe(0);
     expect(doc.getElementById("contPctHint")!.textContent).toMatch(/la contingencia es 0 hasta definirlas/);
+    // con los eventos incluidos, aun sin partidas la exposición de los riesgos abiertos se contempla (estimado base 0 en el análisis)
+    eventos(dom, doc, true);
+    expect(dinero(doc.getElementById("kCont")!.textContent)).toBeGreaterThan(0);
   });
 
   it("método manual: % del estimado base con fundamento; oculta el percentil", async () => {
@@ -532,6 +539,181 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(celdaRng(doc, 0, "basis").value).toBe(XSS);
   });
 
+  // ---- Segunda entrega del registro de riesgos: contingencia con eventos, órdenes vinculadas a riesgos ----
+  const seedConectado = (modules: Record<string, unknown>) => ({
+    version: 1, activeId: "p1",
+    projects: { p1: { schema: "gpi.project/v1", meta: { id: "p1", name: "Proyecto Costos", course: "GPI", currency: "USD", createdAt: 1, updatedAt: 1 }, modules } }
+  });
+  const abrirConectado = async (modules: Record<string, unknown>) => {
+    const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seedConectado(modules))); } });
+    await new Promise((r) => setTimeout(r, 800));
+    return dom;
+  };
+  const riesgo = (o: Record<string, unknown>) => ({ id: "x", code: "R-00", title: "Riesgo", type: "amenaza", status: "identificado", prob: 3, impCost: 3, ...o });
+  const registro = { plan: {}, risks: [
+    riesgo({ id: "a", code: "R-01", title: "Suelo", status: "materializado", costImpact: { low: 100000, likely: 180000, high: 300000 }, actualCost: 180000 }),
+    riesgo({ id: "b", code: "R-02", title: "Acero", status: "con_respuesta", impCost: 4, strategy: "mitigar", costImpact: { low: 100000, likely: 250000, high: 500000 }, resProb: 1, resImpCost: 4, resCostImpact: { low: 100000, likely: 250000, high: 500000 } })
+  ] };
+  const costoConRangos = (changeOrders: unknown[]) => ({ cost: {
+    meta: { module: "cost_management_plan", version: 2 }, estimate: { class: 3 },
+    budget: { baseCost: 1000000, mgmtReservePct: 5, contingency: { method: "rangos_mc", percentile: "P70" }, rangeAnalysis: { lines: [{ id: "m1", name: "Todo", ml: 1000000, lowPct: -5, highPct: 10, basis: "x" }], correlation: 0.3 } },
+    changeOrders
+  } });
+  const ordenRiesgo = (o: Record<string, unknown> = {}) => ({ id: "OC-001", desc: "Refuerzo", cause: "R-01", cost: 20000, fund: "Contingencia", status: "Pendiente", kind: "riesgo", approver: "CCB", sponsorAuth: false, ...o });
+  const selRiesgo = (doc: Document, id: string) => rowOf(doc, id).querySelector('select[data-f="riskId"]') as HTMLSelectElement | null;
+
+  it("(1) los eventos del Registro de Riesgos entran a la simulación: contingencia = incertidumbre de las partidas + aporte de los eventos, y se puede desactivar", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    fijar(dom, doc, "contMethod", "rangos_mc");
+    const panel = doc.getElementById("rngEvents")!;
+    expect(panel.textContent).toMatch(/caso de ejemplo DISTRIB\+/);
+    expect(panel.textContent).toMatch(/9 riesgo\(s\) abierto\(s\): 9 entran a la simulación/);
+    const filasEv = Array.from(panel.querySelectorAll("table")[0].querySelectorAll("tbody tr"));
+    expect(filasEv.length).toBe(9);
+    expect(filasEv.find((r) => r.textContent!.includes("R-01"))!.textContent).toMatch(/residual/);            // con respuesta evaluada: se usa el residual
+    expect(filasEv.find((r) => r.textContent!.includes("R-09"))!.textContent).toMatch(/inherente/);           // aceptación activa: el residual ES el inherente
+    expect(filasEv.find((r) => r.textContent!.includes("R-10"))!.textContent).toMatch(/Oportunidad.*−\$/);    // la oportunidad resta
+    expect(panel.querySelectorAll("table")[0].querySelector("tfoot")!.textContent).toMatch(/\$ 277,000/);     // valor esperado neto = exposición residual del registro
+
+    const filas = Array.from(panel.querySelectorAll("table")[1].querySelectorAll("tbody tr")).map((r) => dinero(r.children[1].textContent));
+    const [soloPartidas, aporte, total] = filas;
+    expect(total).toBe(dinero(doc.getElementById("kCont")!.textContent));                                     // el total ES la contingencia del presupuesto
+    expect(soloPartidas + aporte).toBeCloseTo(total, -1);
+    expect(soloPartidas / 7100000).toBeGreaterThan(0.035); expect(soloPartidas / 7100000).toBeLessThan(0.055);   // ≈ 4,5 %: solo la incertidumbre del estimado
+    expect(total / soloPartidas).toBeGreaterThan(1.8);                                                        // con los eventos la contingencia se duplica (≈ 9 %)
+
+    eventos(dom, doc, false);                                                                                 // sin eventos: vuelve a solo las partidas
+    expect(dinero(doc.getElementById("kCont")!.textContent)).toBeCloseTo(soloPartidas, -1);
+    expect(doc.getElementById("rngEvents")!.textContent).toMatch(/NO se incluyen/);
+    expect(doc.getElementById("rngWarn")!.textContent).not.toMatch(/Doble conteo/);                           // sin eventos no hay aviso de doble conteo
+    expect(doc.getElementById("rngWarn")!.textContent).toMatch(/mucho más estrecho que el rango típico de la clase/);   // y el rango total queda estrecho: faltan los riesgos
+  });
+
+  it("(1) la exposición de los riesgos ABIERTOS se compara con la contingencia disponible (una media, no un percentil)", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    const t = doc.getElementById("coDrawdown")!.textContent!;
+    expect(t).toMatch(/contingencia disponible \(\$ 672,000\) supera el valor esperado neto de la exposición residual de los riesgos abiertos \(\$ 277,000, 9 evento\(s\)\)/);
+    expect(t).toMatch(/Es una media \(≈ P50\)/);
+  });
+
+  it("(2) OC-001 del ejemplo está vinculada a R-03 y la traza muestra lo consumido por ese riesgo frente a lo previsto", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    expect(rowOf(doc, "OC-001").textContent).toMatch(/↳ R-03 · Suelo con menor capacidad portante/);
+    const fila = Array.from(doc.querySelectorAll("#coDrawdown tbody tr")).find((r) => r.textContent!.includes("R-03")) as HTMLElement;
+    expect(fila.children[2].textContent).toBe("$ 180,000.00");                     // aprobado con contingencia
+    expect(fila.children[5].textContent).toBe("$ 350,000.00");                      // impacto máximo previsto en el análisis del riesgo
+    expect(fila.textContent).toMatch(/Dentro de lo previsto/);
+    expect(dinero(doc.getElementById("coKpis")!.textContent!.match(/Contingencia disponible\s*\$ ([\d,]+)/)![1])).toBe(672000);
+  });
+
+  it("(3) un «riesgo materializado» exige un riesgo del registro: sin vínculo o con un riesgo que aún no ocurrió NO se aprueba; con R-03 (Materializado) sí", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    fijar(dom, doc, "coKind", "riesgo");
+    expect(doc.getElementById("coRiskWrap")!.style.display).toBe("block");
+    expect(doc.querySelectorAll("#coRisk option").length).toBe(10);                // «— Vincular —» + las 9 amenazas (R-10 es una oportunidad)
+    expect(doc.getElementById("coRiskHint")!.textContent).toMatch(/solo se aprueba cuando el registro lo marca como Materializado/);
+    fijar(dom, doc, "coDesc", "Refuerzo de muro"); fijar(dom, doc, "coCost", "5000");
+    (doc.querySelector('button[onclick="addCO()"]') as HTMLElement).click();       // sin elegir riesgo
+    expect(toast(doc)).toMatch(/sin riesgo vinculado/);
+    expect(rowOf(doc, "OC-004").textContent).toMatch(/Riesgo materializado/);
+    setApproval(dom, doc, "OC-004", "CCB", false);
+    setStatus(dom, doc, "OC-004", "Aprobada");
+    expect((rowOf(doc, "OC-004").querySelector("select[data-i]:not([data-f])") as HTMLSelectElement).value).toBe("Pendiente");
+    expect(toast(doc)).toMatch(/vincula la orden con el riesgo del Registro de Riesgos.*trabajo imprevisto dentro del alcance/);
+
+    poner(selRiesgo(doc, "OC-004")!, "rk4");                                       // R-04 (tipo de cambio): en monitoreo, todavía no ocurrió
+    setStatus(dom, doc, "OC-004", "Aprobada");
+    expect(toast(doc)).toMatch(/R-04 figura como «monitoreo».*márcalo como Materializado/);
+
+    poner(selRiesgo(doc, "OC-004")!, "rk3");                                       // R-03 (suelo): materializado
+    setStatus(dom, doc, "OC-004", "Aprobada");
+    expect((rowOf(doc, "OC-004").querySelector("select[data-i]:not([data-f])") as HTMLSelectElement).value).toBe("Aprobada");
+    expect(rowOf(doc, "OC-004").textContent).toMatch(/↳ R-03/);
+    const traza = Array.from(doc.querySelectorAll("#coDrawdown tbody tr")).find((r) => r.textContent!.includes("R-03")) as HTMLElement;
+    expect(traza.children[2].textContent).toBe("$ 185,000.00");                    // OC-001 (180.000) + OC-004 (5.000) contra el mismo riesgo
+    function poner(el: HTMLSelectElement, v: string) { el.value = v; el.dispatchEvent(new dom.window.Event("change", { bubbles: true })); }
+  });
+
+  it("el ejemplo COMPARTIDO no se desalinea: la orden vinculada que ve el Registro de Riesgos es la OC-001 de Costos (mismo id, riesgo, monto y fondeo)", async () => {
+    const { SAMPLE_LINKED_ORDERS } = await import("../../src/shared/risk-sample");
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    const o = SAMPLE_LINKED_ORDERS[0], fila = rowOf(doc, o.id);
+    expect(fila).toBeTruthy();
+    expect(dinero(fila.children[4].textContent)).toBe(o.cost);
+    expect(fila.textContent).toContain(o.fund);
+    expect(fila.textContent).toContain("↳ " + o.riskCode);
+    expect(fila.textContent).toMatch(/Aprobada/);
+  });
+
+  it("(3) el vínculo solo se exige a los «riesgo materializado»: el trabajo imprevisto y el cambio de alcance se aprueban sin riesgo", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    setApproval(dom, doc, "OC-002", "Sponsor", true);
+    setStatus(dom, doc, "OC-002", "Aprobada");                                     // cambio de alcance
+    expect((rowOf(doc, "OC-002").querySelector("select[data-i]:not([data-f])") as HTMLSelectElement).value).toBe("Aprobada");
+    expect(rowOf(doc, "OC-002").querySelector('select[data-f="riskId"]')).toBeNull();   // ni siquiera ofrece el selector
+  });
+
+  it("conectado con un Registro de Riesgos REAL: sus eventos abiertos y cuantificados entran (residual), y los vínculos salen de ese registro", async () => {
+    const dom = await abrirConectado({ risks: registro, ...costoConRangos([ordenRiesgo()]) }), doc = dom.window.document;
+    expect(doc.getElementById("rangeCard")!.style.display).toBe("block");
+    const panel = doc.getElementById("rngEvents")!;
+    expect(panel.textContent).toMatch(/Registro de Riesgos del proyecto/);
+    expect(panel.textContent).toMatch(/1 riesgo\(s\) abierto\(s\): 1 entran a la simulación/);     // R-01 está materializado: no es incertidumbre
+    expect(panel.textContent).toMatch(/R-02.*residual/);
+    expect(panel.querySelector("tfoot")!.textContent).toMatch(/\$ 28,333/);                          // 10 % × (100.000 + 250.000 + 500.000)/3
+    // el vínculo: la orden legacy no tiene riesgo → no se aprueba; R-02 (con respuesta) tampoco; R-01 (materializado) sí
+    const sel = selRiesgo(doc, "OC-001")!;
+    expect(Array.from(sel.options).map((o) => o.textContent)).toEqual(["— Vincular riesgo —", "R-01 · Suelo (Materializado)", "R-02 · Acero (Con respuesta)"]);
+    setStatus(dom, doc, "OC-001", "Aprobada");
+    expect(toast(doc)).toMatch(/vincula la orden con el riesgo/);
+    sel.value = "b"; sel.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    setStatus(dom, doc, "OC-001", "Aprobada");
+    expect(toast(doc)).toMatch(/R-02 figura como «con respuesta»/);
+    (selRiesgo(doc, "OC-001") as HTMLSelectElement).value = "a"; selRiesgo(doc, "OC-001")!.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    setStatus(dom, doc, "OC-001", "Aprobada");
+    expect((rowOf(doc, "OC-001").querySelector("select[data-i]:not([data-f])") as HTMLSelectElement).value).toBe("Aprobada");
+    const guardado = (dom.window as any).GPI.getModule("cost").changeOrders[0];
+    expect(guardado).toMatchObject({ status: "Aprobada", riskId: "a", riskCode: "R-01" });         // persiste el vínculo con su foto del código
+  });
+
+  it("conectado SIN Registro de Riesgos: la contingencia lo dice, y una orden por «riesgo materializado» no se aprueba (si no estaba registrado, es trabajo imprevisto)", async () => {
+    const dom = await abrirConectado(costoConRangos([ordenRiesgo()])), doc = dom.window.document;
+    expect(doc.getElementById("rngWarn")!.textContent).toMatch(/no tiene Registro de Riesgos: la contingencia solo cubre la incertidumbre del estimado/);
+    expect(doc.getElementById("rngEvents")!.textContent).toMatch(/sin Registro de Riesgos/);
+    expect(doc.getElementById("coDrawdown")!.textContent).toMatch(/no tiene Registro de Riesgos: no hay exposición residual/);
+    setStatus(dom, doc, "OC-001", "Aprobada");
+    expect(toast(doc)).toMatch(/vincula la orden con el riesgo.*si el evento no estaba en el Registro de Riesgos no es un riesgo materializado/);
+    fijar(dom, doc, "coKind", "riesgo");
+    expect(doc.getElementById("coRiskHint")!.textContent).toMatch(/no tiene riesgos registrados.*trabajo imprevisto dentro del alcance/);
+  });
+
+  it("compatibilidad: una orden por riesgo YA aprobada antes del vínculo sigue aprobada (con aviso «sin riesgo vinculado»); y includeRisks se guarda y se recupera", async () => {
+    const dom = await abrirConectado({ risks: registro, ...costoConRangos([ordenRiesgo({ status: "Aprobada", approvedOn: "2026-08-03" })]) }), doc = dom.window.document, win = dom.window as any;
+    expect(rowOf(doc, "OC-001").textContent).toMatch(/Aprobada/);
+    expect(rowOf(doc, "OC-001").textContent).toMatch(/⚠ sin riesgo vinculado/);
+    expect(doc.getElementById("coTotal")!.textContent).toBe("$ 20,000.00");            // los totales no cambian
+    expect((doc.getElementById("rngRisks") as HTMLInputElement).checked).toBe(true);   // por omisión (el proyecto guardado no traía el campo)
+    eventos(dom, doc, false);
+    expect(win.GPI.getModule("cost").budget.rangeAnalysis.includeRisks).toBe(false);
+    expect(win.GPI.getModule("cost").budget.rangeAnalysis.results.events).toBe(0);
+    const dom2 = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", dom.window.localStorage.getItem("gpi_db")); } });
+    await new Promise((r) => setTimeout(r, 800));
+    expect((dom2.window.document.getElementById("rngRisks") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("SEGURIDAD: título, código y vínculo de un riesgo importado con marcado HTML no inyectan código en las órdenes ni en el panel de eventos", async () => {
+    const XSS = '"><img src=x onerror="window.__xssFired=true">';
+    const dom = await abrirConectado({
+      risks: { risks: [riesgo({ id: XSS, code: XSS, title: XSS, status: "materializado", costImpact: { low: 1, likely: 2, high: 3 } }), riesgo({ id: "z", code: XSS, title: XSS, status: "monitoreo", costImpact: { low: 1, likely: 2, high: 3 } })] },
+      ...costoConRangos([ordenRiesgo({ riskId: XSS, riskCode: XSS })])
+    });
+    const doc = dom.window.document;
+    await new Promise((r) => setTimeout(r, 100));
+    expect((dom.window as any).__xssFired).toBeUndefined();
+    expect(doc.querySelectorAll("#coBody img, #rngEvents img, #coDrawdown img").length).toBe(0);
+    expect(doc.querySelector("#coBody [onerror]")).toBeNull();
+  });
+
   it("el documento BOE recoge la base de la contingencia: método, correlación, semilla, partidas y su fundamento", async () => {
     const dom = await abrirStandalone(), doc = dom.window.document;
     fijar(dom, doc, "contMethod", "rangos_mc");
@@ -540,8 +722,10 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(txt).toMatch(/Estimación por rangos \+ simulación Monte Carlo \(AACE 41R-08\), P70/);
     expect(txt).toMatch(/correlación entre partidas 30 %; 10,000 iteraciones \(semilla 20260713, reproducible\)/);
     expect(txt).toMatch(/Contingencia = P70 − estimado base/);
-    expect(txt).toMatch(/4 Construcción.*-10 % \/ \+35 %.*Rendimientos de cuadrilla estimados/);
-    expect(txt).toMatch(/los eventos de riesgo discretos no están incluidos/);
+    expect(txt).toMatch(/4 Construcción.*-6 % \/ \+18 %.*Metrados y precios unitarios de subcontratos/);
+    expect(txt).toMatch(/Incluye 9 evento\(s\) de riesgo del caso de ejemplo \(R-01, R-02, R-04, R-05, R-06, R-07…\).*residual/);
+    eventos(dom, doc, false); (dom.window as any).buildDoc();
+    expect(doc.getElementById("doc")!.textContent).toMatch(/No incluye eventos de riesgo discretos/);
     fijar(dom, doc, "contMethod", "clase_tabla");
     (dom.window as any).buildDoc();
     expect(doc.getElementById("doc")!.textContent).toMatch(/Referencia didáctica por clase y percentil: no proviene de una norma de AACE/);

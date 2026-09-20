@@ -90,6 +90,58 @@ describe("simulateRange -- contra resultados analíticos", () => {
   });
 });
 
+describe("eventos de riesgo discretos en la simulación (AACE 40R-08: incertidumbre + riesgo)", () => {
+  const E = (id: string, prob: number, low: number, likely: number, high: number, sign: 1 | -1 = 1) => ({ id, name: id, prob, low, likely, high, sign });
+  it("un evento solo: media y desviación de la mezcla Bernoulli × triangular (analítico)", () => {
+    const r = simulateRange([], { iterations: 60000, events: [E("e", 0.3, 100, 200, 400)] })!;
+    const m = triMean(100, 200, 400), ex2 = triVar(100, 200, 400) + m * m;
+    cerca(r.mean, 0.3 * m, 0.02);
+    cerca(r.sd, Math.sqrt(0.3 * ex2 - (0.3 * m) ** 2), 0.03);
+    expect(r.eventsEV).toBeCloseTo(0.3 * m, 9);
+    expect(r.events).toBe(1); expect(r.n).toBe(0); expect(r.ml).toBe(0);
+  });
+  it("sumar eventos desplaza la media exactamente su valor esperado y NO cambia el estimado base", () => {
+    const ls = [L("a", 1000, -10, 30), L("b", 2000, -5, 20)];
+    const ev = [E("e1", 0.5, 100, 200, 400), E("e2", 0.2, 500, 800, 1500)];
+    const sin = simulateRange(ls, { iterations: 40000 })!, con = simulateRange(ls, { iterations: 40000, events: ev })!;
+    cerca(con.mean - sin.mean, con.eventsEV, 0.05);
+    expect(con.ml).toBe(sin.ml);
+    expect(contingencyAt(con, 80).amount).toBeGreaterThan(contingencyAt(sin, 80).amount);   // más exposición = más contingencia al mismo percentil
+    expect(con.sd).toBeGreaterThan(sin.sd);
+  });
+  it("una oportunidad (signo −1) reduce la media y el valor esperado neto", () => {
+    const r = simulateRange([L("a", 1000, 0, 0)], { iterations: 40000, events: [E("o", 0.5, 100, 200, 400, -1)] })!;
+    expect(r.eventsEV).toBeLessThan(0);
+    cerca(r.mean, 1000 + r.eventsEV, 0.01);
+    expect(r.min).toBeLessThan(1000);
+  });
+  it("con eventos y sin partidas hay resultado (estimado base 0); sin nada, no", () => {
+    expect(simulateRange([], { events: [E("e", 0.5, 1, 2, 3)] })).not.toBeNull();
+    expect(simulateRange([], { events: [] })).toBeNull();
+    expect(simulateRange([], {})).toBeNull();
+  });
+  it("los eventos inválidos se ignoran: probabilidad 0 o > 1, orden mín ≤ más probable ≤ máx roto, negativos", () => {
+    const r = simulateRange([L("a", 100, 0, 0)], { events: [E("p0", 0, 1, 2, 3), E("p2", 1.5, 1, 2, 3), E("ord", 0.5, 5, 2, 9), E("neg", 0.5, -1, 2, 3), E("ok", 0.5, 1, 2, 3)] })!;
+    expect(r.events).toBe(1);
+  });
+  it("sigue siendo reproducible con eventos (misma semilla = mismo resultado)", () => {
+    const ls = [L("a", 500, -10, 40)], ev = [E("e", 0.4, 10, 50, 120)];
+    expect(simulateRange(ls, { seed: 3, events: ev })!.p[80]).toBe(simulateRange(ls, { seed: 3, events: ev })!.p[80]);
+  });
+  it("sin eventos el resultado es idéntico al de antes (los eventos no alteran la secuencia de las partidas cuando no hay)", () => {
+    const ls = [L("a", 100, -10, 40), L("b", 300, -15, 25)];
+    expect(simulateRange(ls, { seed: 1, events: [] })!.p[80]).toBe(simulateRange(ls, { seed: 1 })!.p[80]);
+  });
+  it("el aviso ‘sin incertidumbre’ no se dispara si hay eventos; la comparación con el rango de la clase usa el TOTAL (partidas + eventos)", () => {
+    const ls = [L("a", 500, 0, 0, "x")];
+    const chico = simulateRange(ls, { events: [E("e", 0.5, 10, 20, 40)] })!;
+    expect(rangeAdvisories(ls, chico, 500, { lo: -30, hi: 50 }).join("|")).not.toMatch(/Ninguna partida tiene incertidumbre/);
+    expect(rangeAdvisories(ls, chico, 500, { lo: -30, hi: 50 }).join("|")).toMatch(/mucho más estrecho que el rango típico de la clase/);   // el total sigue siendo estrecho
+    const grande = simulateRange(ls, { events: [E("e", 0.9, 150, 250, 400)] })!;                                                             // eventos que sí ensanchan el total (P90 ≈ +80 %)
+    expect(rangeAdvisories(ls, grande, 500, { lo: -30, hi: 50 }).join("|")).not.toMatch(/mucho más estrecho/);
+  });
+});
+
 describe("validación y avisos", () => {
   it("lineProblems: costo > 0, mínimo entre −100 % y 0, máximo ≥ 0", () => {
     expect(lineProblems(L("a", 100, -10, 20))).toEqual([]);

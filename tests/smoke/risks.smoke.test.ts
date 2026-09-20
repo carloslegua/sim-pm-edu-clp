@@ -218,6 +218,43 @@ describe("Risk_Register.html (Registro de riesgos)", () => {
     expect(rep).toMatch(/neta \$ 688,167/);
   });
 
+  // ---- Segunda entrega: lo que Costos tiene aprobado por cada riesgo materializado (solo lectura) ----
+  it("un riesgo materializado muestra las órdenes de cambio de Costos vinculadas, y avisa si su costo real no coincide con lo aprobado (R17)", async () => {
+    const dom = await abrir(), doc = dom.window.document;
+    fila(doc, "R-03").click();
+    const t = doc.getElementById("det-rk3")!.textContent!;
+    expect(t).toMatch(/Órdenes de cambio vinculadas \(Costos\)/);
+    expect(t).toMatch(/OC-001\s*Aprobada\s*Contingencia\s*\$ 180,000/);
+    expect(t).toMatch(/Sin hallazgos de coherencia/);                          // 180.000 real = 180.000 aprobado
+    poner(dom, campo(doc, "actualCost"), "150000");
+    expect(doc.getElementById("calc-rk3")!.textContent).toMatch(/no coincide con lo aprobado en las órdenes de cambio vinculadas en Costos \(180000\)/);
+    expect(Array.from(doc.querySelectorAll("#sidebar .stat .v"))[2].textContent).toBe("1");   // ahora hay un riesgo con hallazgos
+  });
+
+  it("conectado: lee las órdenes del módulo de Costos del proyecto; sin ninguna vinculada avisa (R18) y con una que difiere avisa (R17)", async () => {
+    const mat = { id: "m1", code: "R-03", title: "Suelo", cause: "el suelo es malo", event: "se refuerza la cimentación", effect: "sube el costo", type: "amenaza", status: "materializado", prob: 3, impCost: 3, owner: "PM", wbsIds: [], actualCost: 90000, costImpact: { low: 50000, likely: 90000, high: 150000 } };
+    const sinOrden = await abrir(proyecto({ risks: { risks: [mat] }, cost: { changeOrders: [] } }));
+    fila(sinOrden.window.document, "R-03").click();
+    expect(sinOrden.window.document.getElementById("calc-m1")!.textContent).toMatch(/No hay una orden de cambio vinculada en Costos/);
+    const orden = (o: Record<string, unknown>) => ({ id: "OC-007", riskId: "m1", riskCode: "R-03", cost: 100000, status: "Aprobada", fund: "Contingencia", ...o });
+    const difiere = await abrir(proyecto({ risks: { risks: [mat] }, cost: { changeOrders: [orden({}), orden({ id: "OC-008", riskId: "otro", cost: 1 })] } }));
+    const d = difiere.window.document; fila(d, "R-03").click();
+    expect(d.getElementById("det-m1")!.textContent).toMatch(/OC-007/);
+    expect(d.getElementById("det-m1")!.textContent).not.toMatch(/OC-008/);        // solo las de ESTE riesgo
+    expect(d.getElementById("calc-m1")!.textContent).toMatch(/no coincide con lo aprobado.*\(100000\)/);
+    const igual = await abrir(proyecto({ risks: { risks: [mat] }, cost: { changeOrders: [orden({ cost: 90000 })] } }));
+    fila(igual.window.document, "R-03").click();
+    expect(igual.window.document.getElementById("calc-m1")!.textContent).toMatch(/Sin hallazgos de coherencia/);
+  });
+
+  it("un riesgo que NO está materializado no evalúa el vínculo con Costos (no hay nada que contrastar todavía)", async () => {
+    const abierto = { id: "m2", code: "R-04", title: "Cambio", cause: "el cliente cambia", event: "pide otro alcance", effect: "sube el costo", type: "amenaza", status: "monitoreo", prob: 2, impCost: 2, owner: "PM", wbsIds: ["w"] };
+    const dom = await abrir(proyecto({ risks: { risks: [abierto] }, cost: { changeOrders: [] } }));
+    fila(dom.window.document, "R-04").click();
+    expect(dom.window.document.getElementById("det-m2")!.textContent).not.toMatch(/Órdenes de cambio vinculadas/);
+    expect(dom.window.document.getElementById("calc-m2")!.textContent).not.toMatch(/orden de cambio vinculada/);
+  });
+
   it("el Panel de Control ya lista el módulo y su indicador (riesgos abiertos y altos)", async () => {
     const seed = proyecto({ risks: { risks: [
       { id: "a", code: "R-01", title: "x", prob: 5, impCost: 5, status: "identificado" }, { id: "b", code: "R-02", title: "y", prob: 1, impCost: 1 }, { id: "c", code: "R-03", title: "z", prob: 5, impCost: 5, status: "cerrado" }] } });

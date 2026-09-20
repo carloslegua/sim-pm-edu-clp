@@ -5,9 +5,9 @@
 		amber: 1,
 		red: 2
 	};
-	var isNum = (v) => typeof v === "number" && isFinite(v);
+	var isNum$1 = (v) => typeof v === "number" && isFinite(v);
 	function levelOf(value, warn, esc) {
-		if (!isNum(value)) return null;
+		if (!isNum$1(value)) return null;
 		return value <= esc ? "red" : value <= warn ? "amber" : "green";
 	}
 	function validateThresholds(t) {
@@ -17,7 +17,7 @@
 			t.cpiEsc,
 			t.cvWarn,
 			t.cvEsc
-		].every(isNum)) {
+		].every(isNum$1)) {
 			p.push("todos los umbrales deben ser números");
 			return p;
 		}
@@ -112,7 +112,8 @@
 		const seed = Number.isFinite(o.seed) ? o.seed : DEFAULT_SEED;
 		const rho = Math.max(0, Math.min(1, o.correlation === void 0 || !isFinite(o.correlation) ? DEFAULT_CORRELATION : o.correlation));
 		const valid = (lines || []).filter((l) => l && lineProblems(l).length === 0);
-		if (!valid.length) return null;
+		const evs = (o.events || []).filter((e) => e && isFinite(e.prob) && e.prob > 0 && e.prob <= 1 && isFinite(e.low) && isFinite(e.likely) && isFinite(e.high) && e.low >= 0 && e.low <= e.likely && e.likely <= e.high && (e.sign === 1 || e.sign === -1));
+		if (!valid.length && !evs.length) return null;
 		const a = valid.map((l) => num$1(l.ml) * (1 + num$1(l.lowPct) / 100));
 		const m = valid.map((l) => num$1(l.ml));
 		const b = valid.map((l) => num$1(l.ml) * (1 + num$1(l.highPct) / 100));
@@ -144,6 +145,10 @@
 				}
 				t += triInv(normCdf(sr * zc + se * normal()), a[j], m[j], b[j]);
 			}
+			for (let j = 0; j < evs.length; j++) {
+				const occurs = rand() < evs[j].prob, u = rand();
+				if (occurs) t += evs[j].sign * triInv(u, evs[j].low, evs[j].likely, evs[j].high);
+			}
 			totals[i] = t;
 			sum += t;
 			sumSq += t * t;
@@ -156,9 +161,12 @@
 		});
 		const curve = [];
 		for (let q = 1; q <= 99; q++) curve.push(quantile(sorted, q));
+		const eventsEV = evs.reduce((s, e) => s + e.sign * e.prob * (e.low + e.likely + e.high) / 3, 0);
 		return {
 			n: valid.length,
 			excluded: (lines || []).length - valid.length,
+			events: evs.length,
+			eventsEV,
 			iterations,
 			seed,
 			correlation: rho,
@@ -192,7 +200,7 @@
 		const noBasis = ls.filter((l) => !String(l.basis || "").trim()).length;
 		if (noBasis) out.push(noBasis + " de " + ls.length + " partida(s) sin fundamento del rango: cada rango debe justificarse en el Basis of Estimate.");
 		const flat = ls.filter((l) => !lineProblems(l).length && num$1(l.lowPct) === 0 && num$1(l.highPct) === 0).length;
-		if (flat === res.n) out.push("Ninguna partida tiene incertidumbre (mín = más probable = máx): la contingencia resulta 0.");
+		if (flat === res.n && res.events === 0) out.push("Ninguna partida tiene incertidumbre (mín = más probable = máx): la contingencia resulta 0.");
 		else if (flat) out.push(flat + " partida(s) sin incertidumbre (rango 0 %): se tratan como costo fijo.");
 		if (res.correlation === 0) out.push("Correlación 0 %: las partidas se tratan como independientes y la dispersión del total se SUBESTIMA (los errores de estimación suelen ir en la misma dirección).");
 		if (classRange && res.ml > 0) {
@@ -200,6 +208,688 @@
 			if (classRange.hi > 0 && simHi < classRange.hi * .4) out.push("El P90 queda a +" + simHi.toFixed(1) + " % del estimado base, mucho más estrecho que el rango típico de la clase (+" + classRange.hi + " %): revisa si los rangos por partida o la correlación son demasiado optimistas.");
 		}
 		return out;
+	}
+	//#endregion
+	//#region src/shared/risk-analysis.ts
+	var RISK_STATUSES = [
+		"identificado",
+		"analizado",
+		"con_respuesta",
+		"monitoreo",
+		"materializado",
+		"cerrado"
+	];
+	var STATUS_LABEL = {
+		identificado: "Identificado",
+		analizado: "Analizado",
+		con_respuesta: "Con respuesta",
+		monitoreo: "En monitoreo",
+		materializado: "Materializado",
+		cerrado: "Cerrado"
+	};
+	var PROXIMITY = [
+		"inmediata",
+		"corta",
+		"media",
+		"larga"
+	];
+	var DEFAULT_PLAN = {
+		probPct: [
+			10,
+			30,
+			50,
+			70,
+			90
+		],
+		costBandsPct: [
+			1,
+			3,
+			5,
+			10
+		],
+		timeBandsDays: [
+			5,
+			15,
+			30,
+			60
+		],
+		scopeDescriptors: [
+			"Cambio apenas perceptible",
+			"Áreas menores del alcance afectadas",
+			"Áreas importantes del alcance afectadas",
+			"Reducción inaceptable para el patrocinador",
+			"El entregable final es inservible"
+		],
+		thresholdMedium: 6,
+		thresholdHigh: 15,
+		reviewDays: 30,
+		categories: [
+			"Técnico",
+			"Externo",
+			"Organizacional",
+			"Gestión del proyecto"
+		],
+		methodology: "",
+		reservePolicy: "",
+		roles: ""
+	};
+	var isNum = (v) => typeof v === "number" && isFinite(v);
+	function toNum(v) {
+		if (v === null || v === void 0 || v === "") return null;
+		const n = typeof v === "string" ? Number(v.trim().replace(/\s/g, "")) : v;
+		return isNum(n) ? n : null;
+	}
+	function toLevel(v) {
+		const n = toNum(v);
+		return n !== null && Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
+	}
+	var str = (v) => v === null || v === void 0 ? "" : String(v);
+	var arrNum = (v, def) => Array.isArray(v) && v.length === def.length && v.every((x) => toNum(x) !== null) ? v.map((x) => toNum(x)) : def.slice();
+	function normalizePlan(p) {
+		const o = p && typeof p === "object" ? p : {};
+		const cats = Array.isArray(o.categories) ? o.categories.map(str).map((s) => s.trim()).filter(Boolean) : [];
+		return {
+			probPct: arrNum(o.probPct, DEFAULT_PLAN.probPct),
+			costBandsPct: arrNum(o.costBandsPct, DEFAULT_PLAN.costBandsPct),
+			timeBandsDays: arrNum(o.timeBandsDays, DEFAULT_PLAN.timeBandsDays),
+			scopeDescriptors: Array.isArray(o.scopeDescriptors) && o.scopeDescriptors.length === 5 ? o.scopeDescriptors.map(str) : DEFAULT_PLAN.scopeDescriptors.slice(),
+			thresholdMedium: toNum(o.thresholdMedium) ?? DEFAULT_PLAN.thresholdMedium,
+			thresholdHigh: toNum(o.thresholdHigh) ?? DEFAULT_PLAN.thresholdHigh,
+			reviewDays: toNum(o.reviewDays) ?? DEFAULT_PLAN.reviewDays,
+			categories: cats.length ? cats : DEFAULT_PLAN.categories.slice(),
+			methodology: str(o.methodology),
+			reservePolicy: str(o.reservePolicy),
+			roles: str(o.roles)
+		};
+	}
+	function maxImpact(c, t, s) {
+		const v = [
+			c,
+			t,
+			s
+		].filter((x) => x !== null);
+		return v.length ? Math.max(...v) : null;
+	}
+	function riskScore(prob, c, t, s) {
+		const i = maxImpact(c, t, s);
+		return prob !== null && i !== null ? prob * i : null;
+	}
+	var inherentScore = (r) => riskScore(r.prob, r.impCost, r.impTime, r.impScope);
+	function rangeProblems(rg, label) {
+		const out = [];
+		if ([
+			rg.low,
+			rg.likely,
+			rg.high
+		].some((x) => x !== null && x < 0)) out.push(label + ": los valores no pueden ser negativos (se registra la magnitud)");
+		if (rg.low !== null && rg.likely !== null && rg.low > rg.likely) out.push(label + ": el mínimo supera al más probable");
+		if (rg.likely !== null && rg.high !== null && rg.likely > rg.high) out.push(label + ": el más probable supera al máximo");
+		if (rg.low !== null && rg.high !== null && rg.low > rg.high) out.push(label + ": el mínimo supera al máximo");
+		return out;
+	}
+	function impactMean(rg) {
+		if (rangeProblems(rg, "").length) return null;
+		if (rg.low !== null && rg.likely !== null && rg.high !== null) return (rg.low + rg.likely + rg.high) / 3;
+		return rg.likely;
+	}
+	function probEffective(pct, level, p) {
+		if (pct !== null && pct >= 0 && pct <= 100) return pct / 100;
+		return level !== null ? p.probPct[level - 1] / 100 : null;
+	}
+	function ev(pct, level, cost, time, p) {
+		const pr = probEffective(pct, level, p), c = impactMean(cost), t = impactMean(time);
+		return {
+			cost: pr !== null && c !== null ? pr * c : null,
+			time: pr !== null && t !== null ? pr * t : null
+		};
+	}
+	var inherentEV = (r, p) => ev(r.probPct, r.prob, r.costImpact, r.timeImpact, p);
+	function residualOf(r, p) {
+		if (r.strategy === "aceptar") return {
+			assessed: r.prob !== null,
+			derived: true,
+			prob: r.prob,
+			impCost: r.impCost,
+			impTime: r.impTime,
+			impScope: r.impScope,
+			ev: inherentEV(r, p),
+			score: inherentScore(r)
+		};
+		const has = r.resProb !== null || r.resImpCost !== null || r.resImpTime !== null || r.resImpScope !== null;
+		const prob = r.resProb;
+		return {
+			assessed: has && prob !== null,
+			derived: false,
+			prob,
+			impCost: r.resImpCost,
+			impTime: r.resImpTime,
+			impScope: r.resImpScope,
+			ev: ev(r.resProbPct, r.resProb, r.resCostImpact, r.resTimeImpact, p),
+			score: riskScore(prob, r.resImpCost, r.resImpTime, r.resImpScope)
+		};
+	}
+	function range(o) {
+		const x = o && typeof o === "object" ? o : {};
+		return {
+			low: toNum(x.low),
+			likely: toNum(x.likely),
+			high: toNum(x.high)
+		};
+	}
+	function normalizeRisk(o, fallbackId) {
+		const x = o && typeof o === "object" ? o : {};
+		const type = x.type === "oportunidad" ? "oportunidad" : "amenaza";
+		const status = RISK_STATUSES.indexOf(x.status) >= 0 ? x.status : "identificado";
+		const id = str(x.id) || fallbackId;
+		return {
+			id,
+			code: str(x.code) || id,
+			title: str(x.title),
+			cause: str(x.cause),
+			event: str(x.event),
+			effect: str(x.effect),
+			type,
+			category: str(x.category),
+			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str).filter(Boolean) : [],
+			owner: str(x.owner),
+			proximity: PROXIMITY.indexOf(str(x.proximity)) >= 0 ? str(x.proximity) : "",
+			identifiedOn: str(x.identifiedOn),
+			reviewedOn: str(x.reviewedOn),
+			status,
+			prob: toLevel(x.prob),
+			impCost: toLevel(x.impCost),
+			impTime: toLevel(x.impTime),
+			impScope: toLevel(x.impScope),
+			probPct: toNum(x.probPct),
+			costImpact: range(x.costImpact),
+			timeImpact: range(x.timeImpact),
+			strategy: str(x.strategy),
+			response: str(x.response),
+			trigger: str(x.trigger),
+			responseOwner: str(x.responseOwner),
+			responseCost: toNum(x.responseCost),
+			secondary: str(x.secondary),
+			resProb: toLevel(x.resProb),
+			resImpCost: toLevel(x.resImpCost),
+			resImpTime: toLevel(x.resImpTime),
+			resImpScope: toLevel(x.resImpScope),
+			resProbPct: toNum(x.resProbPct),
+			resCostImpact: range(x.resCostImpact),
+			resTimeImpact: range(x.resTimeImpact),
+			materializedOn: str(x.materializedOn),
+			actualCost: toNum(x.actualCost),
+			actualDelay: toNum(x.actualDelay),
+			notes: str(x.notes)
+		};
+	}
+	var isOpen = (r) => r.status !== "materializado" && r.status !== "cerrado";
+	var toRiskRef = (r) => ({
+		id: r.id,
+		code: r.code,
+		title: r.title,
+		type: r.type,
+		status: r.status
+	});
+	function riskEventsOf(risks, p) {
+		const events = [], excluded = [];
+		risks.filter(isOpen).forEach((r) => {
+			const why = (reason) => excluded.push({
+				code: r.code,
+				title: r.title,
+				reason
+			});
+			let pr, range, basis;
+			const resProb = probEffective(r.resProbPct, r.resProb, p), resQuant = residualOf(r, p).assessed && resProb !== null && impactMean(r.resCostImpact) !== null;
+			if (r.strategy && r.strategy !== "aceptar" && resQuant) {
+				pr = resProb;
+				range = r.resCostImpact;
+				basis = "residual";
+			} else {
+				pr = probEffective(r.probPct, r.prob, p);
+				range = r.costImpact;
+				basis = r.strategy && r.strategy !== "aceptar" ? "inherente (residual sin cuantificar)" : "inherente";
+			}
+			if (pr === null || pr <= 0) return why("sin probabilidad");
+			if (rangeProblems(range, "").length) return why("rango de costo incoherente");
+			if (range.likely === null) return why("sin impacto en costo cuantificado");
+			const low = range.low === null ? range.likely : range.low, high = range.high === null ? range.likely : range.high;
+			events.push({
+				id: r.id,
+				name: r.code + " " + r.title,
+				code: r.code,
+				title: r.title,
+				type: r.type,
+				prob: Math.min(1, pr),
+				low,
+				likely: range.likely,
+				high,
+				sign: r.type === "amenaza" ? 1 : -1,
+				basis
+			});
+		});
+		return {
+			events,
+			excluded,
+			ev: events.reduce((s, e) => s + e.sign * e.prob * (e.low + e.likely + e.high) / 3, 0)
+		};
+	}
+	//#endregion
+	//#region src/shared/risk-sample.ts
+	var SAMPLE_PLAN = normalizePlan({
+		methodology: "Identificación por talleres de expertos y revisión de lecciones aprendidas; análisis cualitativo con la matriz probabilidad × impacto del plan; cuantificación del valor esperado con rangos de tres puntos para los riesgos de costo ≥ 3; respuesta por estrategia; revisión mensual en la reunión de control.",
+		reservePolicy: "La contingencia cubre la incertidumbre del estimado (análisis de rangos de Costos) y la exposición residual de los riesgos abiertos. La reserva de gestión (fuera de la línea base) solo se usa con autorización del sponsor.",
+		roles: "Director de Proyecto: dueño del proceso y del registro. Propietario del riesgo: vigila el disparador y ejecuta la respuesta. Sponsor: autoriza el uso de la reserva de gestión. CCB: aprueba los cambios a la línea base."
+	});
+	var SAMPLE_RISKS = [
+		{
+			code: "R-01",
+			title: "Retraso en la licencia municipal",
+			type: "amenaza",
+			category: "Externo",
+			owner: "Asesoría Legal",
+			proximity: "corta",
+			status: "con_respuesta",
+			wbs: ["2.4"],
+			cause: "la Municipalidad de Lurín observa el expediente de licencia de edificación",
+			event: "se retrasa la emisión de la licencia",
+			effect: "se posterga el inicio de obra y se extiende el cronograma",
+			prob: 4,
+			impCost: 2,
+			impTime: 4,
+			impScope: 1,
+			costImpact: {
+				low: 2e4,
+				likely: 45e3,
+				high: 8e4
+			},
+			timeImpact: {
+				low: 10,
+				likely: 20,
+				high: 35
+			},
+			strategy: "mitigar",
+			response: "Reuniones técnicas previas al ingreso del expediente y seguimiento semanal del trámite (ver compromiso de la Municipalidad en Stakeholder Studio).",
+			trigger: "Observaciones al expediente en la primera revisión",
+			responseOwner: "Asesoría Legal",
+			responseCost: 6e3,
+			resProb: 2,
+			resImpCost: 2,
+			resImpTime: 3,
+			resImpScope: 1,
+			resCostImpact: {
+				low: 2e4,
+				likely: 45e3,
+				high: 8e4
+			},
+			resTimeImpact: {
+				low: 10,
+				likely: 20,
+				high: 35
+			}
+		},
+		{
+			code: "R-02",
+			title: "Alza del precio del acero estructural",
+			type: "amenaza",
+			category: "Externo",
+			owner: "Jefe de Logística",
+			proximity: "media",
+			status: "con_respuesta",
+			wbs: ["3.1"],
+			cause: "la volatilidad del precio internacional del acero",
+			event: "el Proveedor A revisa al alza el precio antes de cerrar el contrato",
+			effect: "aumenta el costo de procura de las estructuras metálicas",
+			prob: 3,
+			impCost: 4,
+			impTime: 1,
+			impScope: 1,
+			costImpact: {
+				low: 1e5,
+				likely: 25e4,
+				high: 5e5
+			},
+			strategy: "transferir",
+			response: "Contrato a precio fijo con vigencia de la oferta de 60 días.",
+			trigger: "Oferta del Proveedor A próxima a vencer sin contrato firmado",
+			responseOwner: "Jefe de Logística",
+			resProb: 1,
+			resImpCost: 4,
+			resImpTime: 1,
+			resImpScope: 1,
+			resCostImpact: {
+				low: 1e5,
+				likely: 25e4,
+				high: 5e5
+			}
+		},
+		{
+			code: "R-03",
+			title: "Suelo con menor capacidad portante que la esperada",
+			type: "amenaza",
+			category: "Técnico",
+			owner: "Jefe de Ingeniería",
+			proximity: "inmediata",
+			status: "materializado",
+			wbs: ["2.1", "4.2"],
+			cause: "el estudio de suelos detecta estratos de baja capacidad portante",
+			event: "se debe reforzar la cimentación",
+			effect: "aumenta el costo y se extiende la ejecución de cimentaciones",
+			prob: 3,
+			impCost: 3,
+			impTime: 3,
+			impScope: 1,
+			costImpact: {
+				low: 9e4,
+				likely: 18e4,
+				high: 35e4
+			},
+			timeImpact: {
+				low: 5,
+				likely: 10,
+				high: 20
+			},
+			strategy: "mitigar",
+			response: "Estudio de suelos ampliado y refuerzo de cimentación (orden de cambio OC-001, financiada con contingencia).",
+			trigger: "Resultados del estudio de suelos (2.1)",
+			responseOwner: "Jefe de Ingeniería",
+			materializedOn: "2026-08-03",
+			actualCost: 18e4,
+			actualDelay: 8
+		},
+		{
+			code: "R-04",
+			title: "Fluctuación del tipo de cambio",
+			type: "amenaza",
+			category: "Externo",
+			owner: "Director de Proyecto",
+			proximity: "media",
+			status: "monitoreo",
+			wbs: ["3.1", "3.3"],
+			cause: "el 30 % del costo está denominado en moneda extranjera (estructuras y equipos importados)",
+			event: "el tipo de cambio sube por encima de la banda prevista",
+			effect: "aumenta el costo en moneda local de la procura",
+			prob: 3,
+			impCost: 3,
+			impTime: 1,
+			impScope: 1,
+			costImpact: {
+				low: 15e4,
+				likely: 3e5,
+				high: 6e5
+			},
+			strategy: "mitigar",
+			response: "Cobertura cambiaria (forward) para el 30 % en moneda extranjera al cerrar los contratos de procura.",
+			trigger: "Variación del tipo de cambio mayor al 3 % respecto de la fecha base",
+			responseOwner: "Director de Proyecto",
+			responseCost: 12e3,
+			resProb: 2,
+			resImpCost: 2,
+			resImpTime: 1,
+			resImpScope: 1,
+			resCostImpact: {
+				low: 6e4,
+				likely: 12e4,
+				high: 24e4
+			}
+		},
+		{
+			code: "R-05",
+			title: "Paro del sindicato de construcción civil",
+			type: "amenaza",
+			category: "Externo",
+			owner: "Asesoría Legal",
+			proximity: "media",
+			status: "con_respuesta",
+			wbs: [
+				"4.1",
+				"4.2",
+				"4.3"
+			],
+			cause: "no se acuerdan las condiciones laborales con el sindicato",
+			event: "el sindicato paraliza la obra",
+			effect: "se detiene la ejecución y aumentan los costos indirectos",
+			prob: 2,
+			impCost: 3,
+			impTime: 4,
+			impScope: 1,
+			costImpact: {
+				low: 1e5,
+				likely: 2e5,
+				high: 4e5
+			},
+			timeImpact: {
+				low: 15,
+				likely: 30,
+				high: 60
+			},
+			strategy: "evitar",
+			response: "Acuerdo laboral previo al inicio de obra: jornadas, seguridad y contratación local.",
+			trigger: "Rechazo del sindicato a la propuesta de acuerdo",
+			responseOwner: "Asesoría Legal",
+			resProb: 1,
+			resImpCost: 3,
+			resImpTime: 4,
+			resImpScope: 1,
+			resCostImpact: {
+				low: 1e5,
+				likely: 2e5,
+				high: 4e5
+			},
+			resTimeImpact: {
+				low: 15,
+				likely: 30,
+				high: 60
+			}
+		},
+		{
+			code: "R-06",
+			title: "Accidente grave en obra",
+			type: "amenaza",
+			category: "Técnico",
+			owner: "Residente de Obra",
+			proximity: "larga",
+			status: "con_respuesta",
+			wbs: ["4.1", "4.3"],
+			cause: "trabajos en altura y con maquinaria pesada en simultáneo",
+			event: "ocurre un accidente grave",
+			effect: "se paraliza el frente de trabajo y hay sanciones de SUNAFIL",
+			prob: 2,
+			impCost: 3,
+			impTime: 4,
+			impScope: 3,
+			costImpact: {
+				low: 8e4,
+				likely: 15e4,
+				high: 4e5
+			},
+			timeImpact: {
+				low: 10,
+				likely: 25,
+				high: 60
+			},
+			strategy: "mitigar",
+			response: "Plan de SST, inducción obligatoria y supervisión diaria; auditoría previa de cumplimiento.",
+			trigger: "Incidente sin lesión (casi accidente) reportado",
+			responseOwner: "Residente de Obra",
+			resProb: 1,
+			resImpCost: 3,
+			resImpTime: 4,
+			resImpScope: 3,
+			resCostImpact: {
+				low: 8e4,
+				likely: 15e4,
+				high: 4e5
+			},
+			resTimeImpact: {
+				low: 10,
+				likely: 25,
+				high: 60
+			}
+		},
+		{
+			code: "R-07",
+			title: "Oposición vecinal y restricciones de tráfico",
+			type: "amenaza",
+			category: "Externo",
+			owner: "Residente de Obra",
+			proximity: "corta",
+			status: "con_respuesta",
+			wbs: ["4.1"],
+			cause: "la Junta de vecinos de Lurín percibe impactos de ruido y tránsito de camiones",
+			event: "los vecinos reclaman y las autoridades restringen los horarios de trabajo",
+			effect: "se reducen las horas productivas del movimiento de tierras",
+			prob: 3,
+			impCost: 2,
+			impTime: 3,
+			impScope: 1,
+			costImpact: {
+				low: 2e4,
+				likely: 5e4,
+				high: 12e4
+			},
+			timeImpact: {
+				low: 5,
+				likely: 10,
+				high: 25
+			},
+			strategy: "mitigar",
+			response: "Mesas de diálogo mensuales, canal de reclamos y plan de manejo de tráfico comunicado antes del inicio.",
+			trigger: "Primer reclamo formal de los vecinos",
+			responseOwner: "Residente de Obra",
+			resProb: 2,
+			resImpCost: 2,
+			resImpTime: 2,
+			resImpScope: 1,
+			resCostImpact: {
+				low: 1e4,
+				likely: 25e3,
+				high: 6e4
+			},
+			resTimeImpact: {
+				low: 2,
+				likely: 5,
+				high: 12
+			}
+		},
+		{
+			code: "R-08",
+			title: "Retraso en la fabricación de estructuras metálicas",
+			type: "amenaza",
+			category: "Externo",
+			owner: "Jefe de Logística",
+			proximity: "media",
+			status: "con_respuesta",
+			wbs: ["3.1", "4.3"],
+			cause: "la fábrica del Proveedor A acumula pedidos",
+			event: "las estructuras se entregan tarde",
+			effect: "se retrasa el montaje de la estructura y cobertura",
+			prob: 3,
+			impCost: 2,
+			impTime: 4,
+			impScope: 1,
+			costImpact: {
+				low: 3e4,
+				likely: 6e4,
+				high: 15e4
+			},
+			timeImpact: {
+				low: 15,
+				likely: 25,
+				high: 45
+			},
+			strategy: "mitigar",
+			response: "Inspección en fábrica cada dos semanas e hitos de fabricación pagados contra avance.",
+			trigger: "Avance de fabricación menor al 90 % del programado",
+			responseOwner: "Jefe de Logística",
+			resProb: 2,
+			resImpCost: 2,
+			resImpTime: 3,
+			resImpScope: 1,
+			resCostImpact: {
+				low: 3e4,
+				likely: 6e4,
+				high: 15e4
+			},
+			resTimeImpact: {
+				low: 10,
+				likely: 15,
+				high: 30
+			}
+		},
+		{
+			code: "R-09",
+			title: "Rendimientos de cuadrilla menores a los estimados",
+			type: "amenaza",
+			category: "Gestión del proyecto",
+			owner: "Residente de Obra",
+			proximity: "media",
+			status: "monitoreo",
+			wbs: ["4.3", "4.4"],
+			cause: "las duraciones se estimaron con rendimientos teóricos de cuadrilla",
+			event: "el rendimiento real resulta menor",
+			effect: "aumentan la duración y el costo de mano de obra",
+			prob: 4,
+			impCost: 3,
+			impTime: 3,
+			impScope: 1,
+			costImpact: {
+				low: 1e5,
+				likely: 22e4,
+				high: 45e4
+			},
+			timeImpact: {
+				low: 10,
+				likely: 20,
+				high: 30
+			},
+			strategy: "aceptar",
+			response: "Aceptación activa: se cubre con la contingencia del estimado y se mide el rendimiento real cada semana.",
+			trigger: "Rendimiento real menor al 85 % del estimado durante dos semanas seguidas",
+			responseOwner: "Residente de Obra"
+		},
+		{
+			code: "R-10",
+			title: "Descuento por volumen al consolidar compras",
+			type: "oportunidad",
+			category: "Gestión del proyecto",
+			owner: "Jefe de Logística",
+			proximity: "corta",
+			status: "con_respuesta",
+			wbs: ["3.2", "3.3"],
+			cause: "las compras de materiales y de equipos eléctricos se concentran en el mismo periodo",
+			event: "se consolida el pedido con un mismo proveedor",
+			effect: "se obtiene un descuento por volumen",
+			prob: 3,
+			impCost: 3,
+			impTime: 1,
+			impScope: 1,
+			costImpact: {
+				low: 4e4,
+				likely: 9e4,
+				high: 15e4
+			},
+			strategy: "mejorar",
+			response: "Solicitar cotización consolidada a los Proveedores B y C.",
+			trigger: "Cotizaciones recibidas para 3.2 y 3.3",
+			responseOwner: "Jefe de Logística",
+			resProb: 4,
+			resImpCost: 3,
+			resImpTime: 1,
+			resImpScope: 1,
+			resCostImpact: {
+				low: 4e4,
+				likely: 9e4,
+				high: 15e4
+			}
+		}
+	];
+	function buildSampleRisks(resolveWbs) {
+		return SAMPLE_RISKS.map((s, i) => normalizeRisk({
+			...s,
+			id: "rk" + (i + 1),
+			identifiedOn: "2026-07-06",
+			wbsIds: s.wbs.map(resolveWbs).filter(Boolean)
+		}, "rk" + (i + 1)));
 	}
 	//#endregion
 	//#region src/shared/change-orders.ts
@@ -271,8 +961,17 @@
 			dTotal: 0
 		};
 	}
-	function validateApproval(o, orders, budget) {
+	function riskLinkProblems(o, risks) {
+		if (!o.riskId) return ["vincula la orden con el riesgo del Registro de Riesgos que se materializó (si el evento no estaba en el Registro de Riesgos no es un riesgo materializado: clasifícalo como trabajo imprevisto dentro del alcance)"];
+		const r = risks.find((x) => x.id === o.riskId);
+		if (!r) return ["el riesgo vinculado" + (o.riskCode ? " (" + o.riskCode + ")" : "") + " no existe en el Registro de Riesgos (si el evento no estaba en el Registro de Riesgos no es un riesgo materializado: clasifícalo como trabajo imprevisto dentro del alcance)"];
+		if (r.type !== "amenaza") return [r.code + " es una oportunidad: no genera una orden por riesgo materializado"];
+		if (r.status !== "materializado") return ["el riesgo " + r.code + " figura como «" + r.status.replace("_", " ") + "» en el Registro de Riesgos: márcalo como Materializado (con su fecha e impacto real) antes de aprobar la orden"];
+		return [];
+	}
+	function validateApproval(o, orders, budget, risks) {
 		const p = [], f = fundOf(o), a = num(o.cost);
+		if (o.kind === "riesgo" && Array.isArray(risks)) riskLinkProblems(o, risks).forEach((x) => p.push(x));
 		const an = analyzeChangeOrders((orders || []).filter((x) => x !== o), budget);
 		if (o.kind !== "riesgo" && o.kind !== "imprevisto" && o.kind !== "alcance") p.push("clasifica la orden: riesgo materializado, trabajo imprevisto dentro del alcance o cambio de alcance");
 		if (!a) p.push("el Δ costo debe ser distinto de cero");
@@ -282,6 +981,36 @@
 		if (f === "cont" && a > an.contingencyAvailable + 1e-9) p.push("excede la contingencia disponible (" + Math.round(an.contingencyAvailable) + ")");
 		if (f === "mgmt" && a > an.mgmtAvailable + 1e-9) p.push("excede la reserva de gestión disponible (" + Math.round(an.mgmtAvailable) + ")");
 		return p;
+	}
+	function contingencyByRisk(orders, risks) {
+		const by = {};
+		(orders || []).forEach((o) => {
+			if (!o || !o.riskId) return;
+			const ref = (risks || []).find((r) => r.id === o.riskId);
+			const d = by[o.riskId] = by[o.riskId] || {
+				riskId: o.riskId,
+				code: ref ? ref.code : o.riskCode || "?",
+				title: ref ? ref.title : "(riesgo eliminado del registro)",
+				orphan: !ref,
+				contingency: 0,
+				other: 0,
+				pending: 0,
+				orderIds: [],
+				plannedMax: ref && ref.plannedMax != null ? ref.plannedMax : null,
+				over: false
+			};
+			d.orderIds.push(String(o.id || ""));
+			const a = num(o.cost);
+			if (o.status === "Aprobada") {
+				if (fundOf(o) === "cont") d.contingency += a;
+				else d.other += a;
+			} else if (o.status === "Pendiente") d.pending += a;
+		});
+		return Object.keys(by).map((k) => {
+			const d = by[k];
+			d.over = d.plannedMax !== null && d.contingency + d.other > d.plannedMax + 1e-9;
+			return d;
+		}).sort((a, b) => a.code.localeCompare(b.code));
 	}
 	function planBaselining(o, orders, budget, log, date) {
 		if (o.status !== "Aprobada") return {
@@ -390,7 +1119,9 @@
 			kind: "riesgo",
 			approver: "CCB",
 			sponsorAuth: false,
-			approvedOn: "2026-08-03"
+			approvedOn: "2026-08-03",
+			riskId: "rk3",
+			riskCode: "R-03"
 		},
 		{
 			id: "OC-002",
@@ -420,41 +1151,41 @@
 			id: "m-1",
 			name: "1 Dirección de Proyecto",
 			ml: 195e3,
-			lowPct: -5,
-			highPct: 15,
-			basis: "Costo de personal propio; crece si el proyecto se alarga."
+			lowPct: -3,
+			highPct: 10,
+			basis: "Costo de personal propio a tarifas vigentes; variación por dedicación."
 		},
 		{
 			id: "m-2",
 			name: "2 Ingeniería y Diseño",
 			ml: 355e3,
-			lowPct: -10,
-			highPct: 25,
-			basis: "Diseño estructural al 80 %; el estudio de suelos (2.1) puede modificar la cimentación."
+			lowPct: -5,
+			highPct: 15,
+			basis: "Diseño estructural al 80 %; incertidumbre de los metrados finales de diseño."
 		},
 		{
 			id: "m-3",
 			name: "3 Procura",
 			ml: 295e4,
-			lowPct: -5,
-			highPct: 20,
-			basis: "Cotizaciones vigentes de los Proveedores A/B/C; exposición al precio del acero y al tipo de cambio."
+			lowPct: -4,
+			highPct: 10,
+			basis: "Cotizaciones vigentes de los Proveedores A/B/C: variación de cantidades y de precios unitarios dentro de la vigencia de la oferta (la volatilidad del acero y del tipo de cambio son eventos del registro: R-02, R-04)."
 		},
 		{
 			id: "m-4",
 			name: "4 Construcción",
 			ml: 3315e3,
-			lowPct: -10,
-			highPct: 35,
-			basis: "Rendimientos de cuadrilla estimados; incertidumbre geotécnica en movimiento de tierras y cimentaciones."
+			lowPct: -6,
+			highPct: 18,
+			basis: "Metrados y precios unitarios de subcontratos aún por cerrar (los rendimientos, el suelo, el paro y los vecinos son eventos del registro: R-09, R-03, R-05, R-07)."
 		},
 		{
 			id: "m-5",
 			name: "5 Pruebas y Puesta en Marcha",
 			ml: 285e3,
-			lowPct: -5,
-			highPct: 20,
-			basis: "Depende de reprocesos tras las pruebas de instalaciones."
+			lowPct: -3,
+			highPct: 10,
+			basis: "Alcance de las pruebas de instalaciones por confirmar con QA/QC."
 		}
 	];
 	var state = {
@@ -562,20 +1293,75 @@
 		return isFinite(v) ? Math.max(0, Math.min(100, v)) / 100 : DEFAULT_CORRELATION;
 	}
 	var simCache = {};
-	function simulate(rho) {
-		const key = JSON.stringify([state.ranges.map((l) => [
-			l.ml,
-			l.lowPct,
-			l.highPct
-		]), rho]);
+	function riskCtx() {
+		if (gpiOn()) {
+			try {
+				const m = GPI.getModule("risks");
+				if (m && Array.isArray(m.risks)) return {
+					source: "registro",
+					risks: m.risks.map((o, i) => normalizeRisk(o, "rk" + (i + 1))),
+					plan: normalizePlan(m.plan)
+				};
+			} catch (e) {}
+			return {
+				source: "sin registro",
+				risks: [],
+				plan: normalizePlan(null)
+			};
+		}
+		return {
+			source: "ejemplo",
+			risks: buildSampleRisks((c) => "w-" + c),
+			plan: SAMPLE_PLAN
+		};
+	}
+	var riskRefs = (ctx) => ctx.risks.map((r) => ({
+		...toRiskRef(r),
+		plannedMax: r.costImpact.high !== null ? r.costImpact.high : r.costImpact.likely
+	}));
+	function includeRisksOn() {
+		const c = document.getElementById("rngRisks");
+		return !c || c.checked;
+	}
+	function eventsCtx() {
+		const c = riskCtx(), e = riskEventsOf(c.risks, c.plan);
+		const open = c.risks.filter((r) => r.status !== "materializado" && r.status !== "cerrado");
+		return {
+			source: c.source,
+			events: e.events,
+			excluded: e.excluded,
+			ev: e.ev,
+			responseCost: open.reduce((s, r) => s + (r.responseCost || 0), 0),
+			open: open.length
+		};
+	}
+	function simulate(rho, withEvents = includeRisksOn()) {
+		const events = withEvents ? eventsCtx().events : [];
+		const key = JSON.stringify([
+			state.ranges.map((l) => [
+				l.ml,
+				l.lowPct,
+				l.highPct
+			]),
+			rho,
+			events.map((e) => [
+				e.id,
+				e.prob,
+				e.low,
+				e.likely,
+				e.high,
+				e.sign
+			])
+		]);
 		if (!(key in simCache)) {
-			if (Object.keys(simCache).length > 16) Object.keys(simCache).forEach((k) => {
+			if (Object.keys(simCache).length > 24) Object.keys(simCache).forEach((k) => {
 				delete simCache[k];
 			});
 			simCache[key] = simulateRange(state.ranges, {
 				correlation: rho,
 				iterations: DEFAULT_ITERATIONS,
-				seed: DEFAULT_SEED
+				seed: DEFAULT_SEED,
+				events
 			});
 		}
 		return simCache[key];
@@ -604,7 +1390,7 @@
 				cont: c.amount,
 				method: m,
 				res,
-				note: "Contingencia = <b>P" + pctNum() + "</b> de la simulación − estimado base (Σ costo más probable)" + (c.covered ? ": el estimado base ya supera ese percentil, no hace falta reserva." : ".")
+				note: "Contingencia = <b>P" + pctNum() + "</b> de la simulación (" + (res.events ? "partidas + <b>" + res.events + " evento(s) de riesgo</b>" : "partidas") + ") − estimado base (Σ costo más probable)" + (c.covered ? ": el estimado base ya supera ese percentil, no hace falta reserva." : ".")
 			};
 		}
 		const rate = contingencyRate();
@@ -659,6 +1445,37 @@
     <rect id="rngHit" x="${l}" y="${t}" width="486" height="186" fill="transparent"/>
   </svg>`;
 	}
+	function eventAdvisories() {
+		if (!includeRisksOn()) return [];
+		const ec = eventsCtx(), out = [];
+		if (ec.source === "sin registro") out.push("Este proyecto no tiene Registro de Riesgos: la contingencia solo cubre la incertidumbre del estimado. Registra los riesgos para incluir los eventos discretos.");
+		if (ec.events.length) out.push("Doble conteo: los rangos de las partidas deben expresar solo la incertidumbre del estimado (metrados, precios). Si ya incluyen los eventos del registro (p. ej. precio del acero, suelo, paros), esos riesgos se cuentan dos veces.");
+		if (ec.excluded.length) out.push(ec.excluded.length + " riesgo(s) abierto(s) no se pueden cuantificar y no suman a la contingencia: " + ec.excluded.slice(0, 4).map((x) => x.code + " (" + x.reason + ")").join(", ") + (ec.excluded.length > 4 ? "…" : "") + ".");
+		if (ec.responseCost > 0) out.push("El costo de las respuestas planificadas (" + fmt(ec.responseCost) + ") debe estar dentro del estimado base o de la línea base, no en la contingencia.");
+		return out;
+	}
+	function renderEvents(res, p) {
+		const box = $("rngEvents");
+		if (!includeRisksOn()) {
+			box.innerHTML = `<div class="muted small">Los eventos de riesgo NO se incluyen: la contingencia cubre solo la incertidumbre de las partidas.</div>`;
+			return;
+		}
+		const ec = eventsCtx();
+		const src = ec.source === "registro" ? "Registro de Riesgos del proyecto" : ec.source === "ejemplo" ? "caso de ejemplo DISTRIB+ (modo independiente)" : "sin Registro de Riesgos";
+		if (!ec.events.length) {
+			box.innerHTML = `<div class="muted small"><b>Fuente:</b> ${esc(src)}. ${ec.source === "sin registro" ? "" : "No hay riesgos abiertos con probabilidad e impacto en costo cuantificados."}</div>`;
+			return;
+		}
+		const only = simulate(corrValue(), false), cA = only ? contingencyAt(only, p).amount : 0, cB = res ? contingencyAt(res, p).amount : 0;
+		const rows = ec.events.slice(0, 14).map((e) => `<tr><td class="mono">${esc(e.code)}</td><td>${esc(e.title)}</td><td>${e.type === "amenaza" ? "Amenaza" : "Oportunidad"}</td><td class="num">${Math.round(e.prob * 100)} %</td><td class="num">${fmt(e.low)} / ${fmt(e.likely)} / ${fmt(e.high)}</td><td class="muted">${esc(e.basis)}</td><td class="num">${e.sign < 0 ? "−" : ""}${fmt(e.prob * (e.low + e.likely + e.high) / 3)}</td></tr>`).join("");
+		box.innerHTML = `<div class="muted small" style="margin-bottom:6px"><b>Fuente:</b> ${esc(src)} · ${ec.open} riesgo(s) abierto(s): <b>${ec.events.length}</b> entran a la simulación${ec.excluded.length ? ", " + ec.excluded.length + " sin cuantificar" : ""}. La contingencia cubre la exposición que <b>queda tras la respuesta</b> (residual).</div>
+    <div style="overflow-x:auto"><table class="rng-res"><thead><tr><th>Cód.</th><th>Riesgo</th><th>Tipo</th><th class="num">Prob.</th><th class="num">Mín / Más prob. / Máx</th><th>Base</th><th class="num">Valor esperado</th></tr></thead><tbody>${rows}</tbody>
+      <tfoot><tr style="font-weight:700"><td colspan="6">Valor esperado neto de los eventos${ec.events.length > 14 ? " (incluye los " + (ec.events.length - 14) + " no mostrados)" : ""}</td><td class="num">${fmt(ec.ev)}</td></tr></tfoot></table></div>
+    <table class="rng-res" style="margin-top:10px;max-width:520px"><thead><tr><th>Contingencia P${p}</th><th class="num">Monto</th></tr></thead><tbody>
+      <tr><td>Solo incertidumbre de las partidas</td><td class="num">${fmt(cA)}</td></tr>
+      <tr><td>+ aporte de los eventos de riesgo</td><td class="num">${fmt(cB - cA)}</td></tr>
+      <tr class="rng-selrow"><td>Contingencia total (partidas + eventos)</td><td class="num">${fmt(cB)}</td></tr></tbody></table>`;
+	}
 	function renderRange(calc, base) {
 		const res = calc.res, p = pctNum(), cls = CLASSES[state.curClass];
 		const lineIn = (i, f, v, w, type = "text", extra = "") => `<input ${type === "number" ? "type=\"number\" step=\"0.1\"" : ""} class="rng-in" style="width:${w}" value="${escA(v)}" data-i="${i}" data-f="${f}" onchange="rangeEdit(this)" ${extra}>`;
@@ -679,7 +1496,8 @@
 		const warn = rangeAdvisories(state.ranges, res, base, {
 			lo: cls.lo,
 			hi: cls.hi
-		});
+		}).concat(eventAdvisories());
+		renderEvents(res, p);
 		$("rngWarn").innerHTML = warn.length ? "<b>Revisa:</b><ul>" + warn.map((w) => `<li>${esc(w)}</li>`).join("") + "</ul>" : "";
 		$("rngWarn").style.display = warn.length ? "block" : "none";
 		if (!res) {
@@ -925,17 +1743,24 @@
 		if (r.fund === "Financiamiento adicional") return "BAC " + sg(e.dBac) + " al incorporar · total " + sg(e.dTotal);
 		return "BAC " + sg(e.dBac) + " al incorporar · reserva de gestión " + sg(e.dMgmt) + " · total sin cambio";
 	}
+	function riskOptions(ctx, selectedId, selectedCode) {
+		const th = ctx.risks.filter((r) => r.type === "amenaza");
+		return `<option value="">— Vincular riesgo —</option>${th.map((r) => `<option value="${escA(r.id)}" ${r.id === selectedId ? "selected" : ""}>${esc(r.code + " · " + (r.title || "sin título").slice(0, 44) + " (" + STATUS_LABEL[r.status] + ")")}</option>`).join("")}${selectedId && !th.some((r) => r.id === selectedId) ? `<option value="${escA(selectedId)}" selected>${esc((selectedCode || "?") + " (no está en el registro)")}</option>` : ""}`;
+	}
 	function renderCO() {
 		const tb = $("coBody");
 		tb.innerHTML = "";
+		const ctx = riskCtx(), refs = riskRefs(ctx);
 		state.co.forEach((r, i) => {
 			const locked = r.status !== "Pendiente";
 			const usesReserve = r.fund !== FUND_CONT;
+			const linked = r.riskId ? ctx.risks.find((x) => x.id === r.riskId) : void 0;
+			const riskCell = r.kind !== "riesgo" ? "" : !locked ? `<select class="mono" style="padding:3px 5px;max-width:190px;margin-top:5px;font-size:11px" data-i="${i}" data-f="riskId" onchange="coEdit(this)" aria-label="Riesgo vinculado a la orden ${escA(r.id)}">${riskOptions(ctx, r.riskId, r.riskCode)}</select>` : `<div class="${r.riskId ? "muted" : "bad-txt"}" style="font-size:11px;margin-top:4px">${r.riskId ? "↳ " + esc(linked ? linked.code + " · " + linked.title : (r.riskCode || "?") + " (no está en el registro)") : "⚠ sin riesgo vinculado"}</div>`;
 			const tr = document.createElement("tr");
 			tr.innerHTML = `
       <td class="mono">${esc(r.id)}</td>
       <td>${esc(r.desc)}</td>
-      <td><span class="pill ${r.kind ? "ok" : "bad"}" title="${escA(r.kind ? CO_KIND_HINT[r.kind] : "Clasifica la orden antes de aprobarla")}">${esc(kindLabel(r.kind))}</span></td>
+      <td><span class="pill ${r.kind ? "ok" : "bad"}" title="${escA(r.kind ? CO_KIND_HINT[r.kind] : "Clasifica la orden antes de aprobarla")}">${esc(kindLabel(r.kind))}</span>${riskCell}</td>
       <td class="muted">${esc(r.cause)}</td>
       <td class="num">${fmt2(+r.cost)}</td>
       <td><span class="pill ${r.fund === "Contingencia" ? "ok" : "warn"}">${esc(r.fund)}</span></td>
@@ -962,11 +1787,25 @@
 		const kp = (lab, val, cap) => `<div class="kpi"><div class="lab">${lab}</div><div class="val ${val < 0 ? "neg" : "neu"}">${fmt(val)}</div><div class="cap">${cap}</div></div>`;
 		$("coKpis").innerHTML = kp("BAC vigente", an.bacCurrent, an.bacCurrent === an.bacInitial ? "línea base inicial" : "inicial " + fmt(an.bacInitial) + " + incorporado") + kp("Pendiente de incorporar", an.pendingBaseline, "aprobado, aún fuera de la línea base") + kp("Contingencia disponible", an.contingencyAvailable, "dentro de la línea base") + kp("Reserva de gestión disponible", an.mgmtAvailable, "fuera de la línea base · sponsor");
 		$("blBody").innerHTML = state.baselines.length ? state.baselines.map((v) => `<tr><td class="mono">${esc(v.version)}</td><td>${esc(v.date)}</td><td>${esc(v.orderIds.join(", "))}</td><td class="num">${fmt2(v.bacBefore)}</td><td class="num">${fmt2(v.bacAfter)}</td><td>${esc(v.approver || "—")}</td></tr>`).join("") : `<tr><td class="muted" colspan="6">Sin cambios de línea base: el BAC vigente es el inicial.</td></tr>`;
+		renderDrawdown(refs, an.contingencyAvailable);
 		buildJSON();
+	}
+	function renderDrawdown(refs, available) {
+		const dd = contingencyByRisk(state.co, refs), ec = eventsCtx();
+		const rows = dd.length ? dd.map((d) => `<tr><td class="mono">${esc(d.code)}</td><td>${esc(d.title)}</td><td class="num">${fmt2(d.contingency)}</td><td class="num">${fmt2(d.other)}</td><td class="num">${fmt2(d.pending)}</td><td class="num">${d.plannedMax === null ? "—" : fmt2(d.plannedMax)}</td><td>${d.orphan ? `<span class="pill bad">Riesgo eliminado</span>` : d.over ? `<span class="pill bad" title="Lo aprobado supera el impacto máximo que el análisis del riesgo había previsto">Supera lo previsto</span>` : `<span class="pill ok">Dentro de lo previsto</span>`}</td></tr>`).join("") : `<tr><td class="muted" colspan="7">Ninguna orden está vinculada a un riesgo del registro.</td></tr>`;
+		const expo = ec.source === "sin registro" ? "Este proyecto no tiene Registro de Riesgos: no hay exposición residual que contrastar con la contingencia." : ec.events.length ? `La contingencia disponible (<b>${fmt(available)}</b>) ${available >= ec.ev ? "supera" : "<b>NO alcanza</b>"} el valor esperado neto de la exposición residual de los riesgos abiertos (<b>${fmt(ec.ev)}</b>, ${ec.events.length} evento(s)). Es una media (≈ P50): una contingencia a un percentil de decisión debe superarla con holgura.` : "No hay riesgos abiertos con impacto en costo cuantificado en el registro.";
+		$("coDrawdown").innerHTML = `<div style="overflow-x:auto"><table><thead><tr><th>Riesgo</th><th>Descripción</th><th class="num">Aprobado con contingencia</th><th class="num">Aprobado con otras fuentes</th><th class="num">Pendiente</th><th class="num">Impacto máx. previsto</th><th>Estado</th></tr></thead><tbody>${rows}</tbody></table></div><div class="note" style="margin-top:10px">${expo}</div>`;
 	}
 	function coKindHint() {
 		const k = $("coKind").value;
 		$("coKindHint").textContent = k ? CO_KIND_HINT[k] : "Clasifica el cambio: la naturaleza no decide por sí sola la fuente de fondos.";
+		const wrap = $("coRiskWrap");
+		wrap.style.display = k === "riesgo" ? "block" : "none";
+		if (k === "riesgo") {
+			const ctx = riskCtx(), n = ctx.risks.filter((r) => r.type === "amenaza").length;
+			$("coRisk").innerHTML = riskOptions(ctx);
+			$("coRiskHint").textContent = n ? "Un riesgo materializado es uno que ya ESTABA en el registro y ocurrió. La orden solo se aprueba cuando el registro lo marca como Materializado." : "El proyecto no tiene riesgos registrados. Si el evento no estaba en el Registro de Riesgos, no es un riesgo materializado: clasifícalo como trabajo imprevisto dentro del alcance.";
+		}
 	}
 	function coStatus(sel) {
 		const r = state.co[+sel.dataset.i];
@@ -976,7 +1815,7 @@
 			return;
 		}
 		if (sel.value === "Aprobada") {
-			const problems = validateApproval(r, state.co, coBudget());
+			const problems = validateApproval(r, state.co, coBudget(), riskRefs(riskCtx()));
 			if (problems.length) {
 				showToast("No se puede aprobar " + r.id + ": " + problems.join("; ") + ".");
 				renderCO();
@@ -993,8 +1832,20 @@
 		const r = state.co[+el.dataset.i];
 		if (!r || r.status !== "Pendiente") return;
 		userEdited = true;
-		if (el.dataset.f === "approver") r.approver = el.value.trim();
-		else if (el.dataset.f === "sponsorAuth") r.sponsorAuth = el.checked;
+		const f = el.dataset.f;
+		if (f === "approver") r.approver = el.value.trim();
+		else if (f === "sponsorAuth") r.sponsorAuth = el.checked;
+		else if (f === "riskId") {
+			const ref = riskCtx().risks.find((x) => x.id === el.value);
+			if (el.value) {
+				r.riskId = el.value;
+				r.riskCode = ref ? ref.code : r.riskCode;
+			} else {
+				delete r.riskId;
+				delete r.riskCode;
+			}
+			renderCO();
+		}
 		save();
 	}
 	function coBaseline(i) {
@@ -1030,7 +1881,7 @@
 		}
 		kindSel.style.borderColor = "";
 		const n = state.co.length + 1;
-		state.co.push({
+		const order = {
 			id: "OC-" + String(n).padStart(3, "0"),
 			desc,
 			cause: $("coCause").value.trim() || "—",
@@ -1040,7 +1891,15 @@
 			kind: kindSel.value,
 			approver: "",
 			sponsorAuth: false
-		});
+		};
+		if (kindSel.value === "riesgo") {
+			const rid = $("coRisk").value, ref = riskCtx().risks.find((x) => x.id === rid);
+			if (rid) {
+				order.riskId = rid;
+				order.riskCode = ref ? ref.code : void 0;
+			} else showToast("Orden registrada sin riesgo vinculado: no podrá aprobarse hasta vincularla con un riesgo del registro.");
+		}
+		state.co.push(order);
 		descInput.value = "";
 		$("coCause").value = "";
 		$("coCost").value = "";
@@ -1069,7 +1928,7 @@
 	function boeCORows() {
 		if (!state.co.length) return `<tr><td class="muted" colspan="7">Sin órdenes de cambio registradas</td></tr>`;
 		return state.co.map((r) => `<tr>
-    <td class="mono">${esc(r.id)}</td><td>${esc(r.desc)}</td><td>${esc(kindLabel(r.kind))}</td><td>${esc(r.cause)}</td>
+    <td class="mono">${esc(r.id)}</td><td>${esc(r.desc)}</td><td>${esc(kindLabel(r.kind))}${r.riskCode ? " · " + esc(r.riskCode) : ""}</td><td>${esc(r.cause)}</td>
     <td style="text-align:right" class="mono">${fmt2(+r.cost)}</td><td>${esc(r.fund)}</td>
     <td>${esc(r.status)}${r.status === "Aprobada" ? " · " + esc(r.approver || "—") + (r.sponsorAuth ? " (sponsor)" : "") : ""}${r.baselined ? " · " + esc(r.baselined) : ""}</td></tr>`).join("");
 	}
@@ -1077,7 +1936,9 @@
 		if (contMethod() !== "rangos_mc") return "";
 		const res = simulate(corrValue()), p = pctNum();
 		const lines = state.ranges.length ? state.ranges.map((l) => `<tr><td>${esc(l.name)}</td><td style="text-align:right" class="mono">${fmt(Number(l.ml))}</td><td style="text-align:right" class="mono">${sgn(Number(l.lowPct))} % / ${sgn(Number(l.highPct))} %</td><td>${esc(l.basis || "— (sin fundamento)")}</td></tr>`).join("") : `<tr><td colspan="4" class="muted">Sin partidas definidas</td></tr>`;
-		return `<p style="font-size:12.5px;margin:10px 0 4px"><b>Base de la contingencia — estimación por rangos y simulación Monte Carlo (AACE RP 41R-08).</b> ${res ? `Distribución triangular por partida; correlación entre partidas ${Math.round(res.correlation * 100)} %; ${res.iterations.toLocaleString("es-PE")} iteraciones (semilla ${res.seed}, reproducible). Estimado base Σ más probable ${fmt(res.ml)}; P50 ${fmt(res.p[50])}, P${p} ${fmt(res.p[p])}. Contingencia = P${p} − estimado base = <b>${fmt(contingencyAt(res, p).amount)}</b>. Cubre la incertidumbre de los rangos del estimado; los eventos de riesgo discretos no están incluidos.` : "Aún no hay partidas válidas."}</p>
+		const ec = includeRisksOn() ? eventsCtx() : null;
+		const evTxt = ec && ec.events.length ? `Incluye <b>${ec.events.length} evento(s) de riesgo</b> del ${ec.source === "registro" ? "Registro de Riesgos del proyecto" : "caso de ejemplo"} (${esc(ec.events.slice(0, 6).map((e) => e.code).join(", "))}${ec.events.length > 6 ? "…" : ""}), con su riesgo <b>residual</b> cuando está cuantificado; valor esperado neto ${fmt(ec.ev)}.` : "No incluye eventos de riesgo discretos (ninguno cuantificado en el registro, o se excluyeron).";
+		return `<p style="font-size:12.5px;margin:10px 0 4px"><b>Base de la contingencia — estimación por rangos y simulación Monte Carlo (AACE RP 41R-08 y 40R-08).</b> ${res ? `Distribución triangular por partida; correlación entre partidas ${Math.round(res.correlation * 100)} %; ${res.iterations.toLocaleString("es-PE")} iteraciones (semilla ${res.seed}, reproducible). Estimado base Σ más probable ${fmt(res.ml)}; P50 ${fmt(res.p[50])}, P${p} ${fmt(res.p[p])}. Contingencia = P${p} − estimado base = <b>${fmt(contingencyAt(res, p).amount)}</b>. Cubre la incertidumbre de los rangos del estimado. ${evTxt}` : "Aún no hay partidas válidas."}</p>
     <table class="dt"><thead><tr><td style="font-weight:700;color:var(--muted)">Partida</td><td style="font-weight:700;color:var(--muted);text-align:right">Más probable</td><td style="font-weight:700;color:var(--muted);text-align:right">Mín / Máx</td><td style="font-weight:700;color:var(--muted)">Fundamento del rango</td></tr></thead><tbody>${lines}</tbody></table>`;
 	}
 	function buildDoc() {
@@ -1225,6 +2086,7 @@
 					correlation: corrValue(),
 					iterations: DEFAULT_ITERATIONS,
 					seed: DEFAULT_SEED,
+					includeRisks: includeRisksOn(),
 					results: rangeSummary()
 				},
 				mgmtReservePct: +$("mgmtPct").value,
@@ -1252,7 +2114,9 @@
 			p50: r.p[50],
 			p70: r.p[70],
 			p80: r.p[80],
-			p90: r.p[90]
+			p90: r.p[90],
+			events: r.events,
+			eventsEV: r.eventsEV
 		} : null;
 	}
 	function buildJSON() {
@@ -1510,6 +2374,7 @@
 				basis: String(l.basis || "")
 			}));
 			if (ra.correlation != null && isFinite(Number(ra.correlation))) $("corrPct").value = String(Math.round(Number(ra.correlation) * 100));
+			if (ra.includeRisks === false) $("rngRisks").checked = false;
 		}
 		if (d.changeOrders) state.co = d.changeOrders;
 		if (Array.isArray(d.baselineLog)) state.baselines = d.baselineLog;
@@ -1593,6 +2458,8 @@
 					const m = GPI.meta();
 					if (el && m && m.name) el.textContent = m.name;
 				} catch (e) {}
+				const ae = document.activeElement;
+				if (!(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))) recalcCont();
 			});
 		}
 		if (reload) document.querySelector("[data-p=\"p1\"]").click();

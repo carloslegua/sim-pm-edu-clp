@@ -133,6 +133,10 @@
   .footer{color:var(--muted);font-size:12px;text-align:center;padding:30px 0}
 
   /* Change order entry form */
+  .bad-txt{color:var(--bad)}
+  .rng-events{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fbfdfe;margin-top:4px}
+  .rng-chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer}
+  .rng-chk input{margin-top:3px}
   .rng-form{grid-template-columns:1.4fr 1fr .6fr .6fr 1.6fr auto; margin-top:12px}
   .rng-in{font-family:var(--mono);font-size:12px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);box-sizing:border-box}
   tr.rng-bad td{background:var(--bad-bg)}
@@ -432,9 +436,13 @@
           <label><span>Fundamento</span><input id="rngBasis" placeholder="¿Por qué este rango?"></label>
           <div class="co-add"><button class="btn primary" style="width:100%" onclick="addRange()">+ Agregar</button></div>
         </div>
-        <div class="note" id="rngWarn" style="display:none;margin-bottom:12px"></div>
+        <div class="rng-events">
+          <label class="rng-chk"><input type="checkbox" id="rngRisks" checked onchange="onContMethod()"> <b>Incluir los eventos de riesgo del Registro de Riesgos</b> <span class="muted">(AACE 40R-08: la contingencia reúne la incertidumbre del estimado y los riesgos discretos)</span></label>
+          <div id="rngEvents" style="margin-top:10px"></div>
+        </div>
+        <div class="note" id="rngWarn" style="display:none;margin:12px 0"></div>
         <div id="rngResults"></div>
-        <div class="note" style="margin-top:12px"><b>Qué cubre y qué no.</b> El análisis cubre la <b>incertidumbre de los rangos del estimado</b> (distribución triangular por partida). Los <b>eventos de riesgo discretos</b> (registro de riesgos) no están incluidos: se sumarán a la contingencia cuando exista el módulo de Riesgos. La <b>correlación</b> importa: con 0 % las partidas se tratan como independientes y la dispersión del total se subestima. La simulación usa una <b>semilla fija</b>: el mismo análisis da siempre el mismo resultado.</div>
+        <div class="note" style="margin-top:12px"><b>Qué cubre y qué no.</b> El análisis cubre la <b>incertidumbre de los rangos del estimado</b> (distribución triangular por partida) y, si lo activas, los <b>eventos de riesgo discretos</b> del Registro de Riesgos: cada evento ocurre con su probabilidad <b>residual</b> (tras la respuesta) y un impacto triangular, de forma independiente. Los <b>rangos de las partidas no deben incluir esos eventos</b> (doble conteo). La <b>correlación</b> importa: con 0 % las partidas se tratan como independientes y la dispersión del total se subestima; entre eventos no hay correlación. La simulación usa una <b>semilla fija</b>: el mismo análisis da siempre el mismo resultado. Sigue sin ser un análisis integrado con el cronograma.</div>
       </div>
     </div>
 
@@ -513,6 +521,10 @@
           <div class="co-add"><button class="btn primary" style="width:100%" onclick="addCO()">+ Agregar</button></div>
         </div>
         <div class="note" id="coKindHint" style="margin:-6px 0 14px">Clasifica el cambio: la naturaleza no decide por sí sola la fuente de fondos.</div>
+        <div id="coRiskWrap" style="display:none;margin:-6px 0 14px">
+          <label class="f"><span>Riesgo del registro que se materializó</span><select id="coRisk" class="mono"></select></label>
+          <div class="hint" id="coRiskHint" style="margin-top:-6px"></div>
+        </div>
         <div class="kpis" id="coKpis" style="margin-bottom:14px"></div>
         <div style="overflow-x:auto">
           <table id="coTable">
@@ -523,6 +535,11 @@
         </div>
         <div class="note" style="margin-top:12px">Tres ejes que <b>no se deducen unos de otros</b>: la <b>naturaleza</b> del cambio (riesgo materializado, trabajo imprevisto dentro del alcance o cambio de alcance), su <b>financiación</b> (<b>contingencia</b>, dentro de la línea base; <b>reserva de gestión</b>, fuera de ella y autorizada por el sponsor; o <b>financiamiento adicional</b>) y su <b>aprobación</b>. Un cambio de alcance no exige reserva de gestión ni se financia con contingencia: la fuente sale de evaluar el cambio. Solo las órdenes <b>Aprobadas</b> comprometen fondos, y solo al <b>incorporarlas</b> cambia el BAC.</div>
       </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="card-h"><div><div class="eyebrow">Registro de Riesgos ↔ contingencia</div><h3>Consumo por riesgo y exposición residual</h3><div class="sub">Qué se aprobó por cada riesgo materializado (contingencia y otras fuentes), si supera el impacto que el análisis había previsto, y cómo se compara la contingencia disponible con la exposición residual de los riesgos abiertos.</div></div></div>
+      <div class="card-b" id="coDrawdown"></div>
     </div>
 
     <div class="card" style="margin-top:18px">
