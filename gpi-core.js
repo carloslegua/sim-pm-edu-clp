@@ -329,23 +329,31 @@ var GPI = (function(exports) {
 	}
 	function commitState(session, hasData, data, patch) {
 		const name = session.module;
-		const d = db(), p = d.projects[session.projectId];
-		if (!p) return {
-			status: "rejected",
-			rev: null,
-			reason: "no-active"
+		const gate = () => {
+			const g = db();
+			if (!g.projects[session.projectId]) return {
+				status: "rejected",
+				rev: null,
+				reason: "no-active"
+			};
+			if (g.activeId !== session.projectId) return {
+				status: "rejected",
+				rev: null,
+				reason: "project-changed"
+			};
+			return null;
 		};
-		if (d.activeId !== session.projectId) return {
-			status: "rejected",
-			rev: null,
-			reason: "project-changed"
-		};
+		const closed = gate();
+		if (closed) return closed;
 		let settled = false;
 		if (session.pending && (!pendingUnsaved || flushPending())) {
 			confirmPending(session);
 			settled = true;
 		}
 		const pend = session.pending;
+		const stale = gate();
+		if (stale) return stale;
+		const d = db(), p = d.projects[session.projectId];
 		const mods = isPlainObject(p.modules) ? p.modules : {};
 		const conflicts = [];
 		let writeMod = false, json = "";

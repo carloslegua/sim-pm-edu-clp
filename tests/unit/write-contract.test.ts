@@ -179,6 +179,54 @@ describe("segunda revisión externa: pendiente != confirmado, y guardado atómic
     expect(getModule("charter")).toEqual({ v: 3 });
   });
 
+  // Tercera revisión externa (P1): commitState() leía la base ANTES de recuperar lo
+  // pendiente. La recuperación (save -> reconcileWithDisk) escribe una copia
+  // CONCILIADA con lo que otra pestaña cambió mientras tanto, pero la escritura de
+  // la edición nueva reutilizaba la copia anterior y la sobrescribía: la operación
+  // decía "saved" y el Costos de la otra pestaña volvía a su valor viejo.
+  function otraPestana(fn: (db: { projects: Record<string, { modules: Record<string, unknown>; revs?: Record<string, number> }> }) => void) {
+    const raw = JSON.parse(localStorage.getItem(KEY) as string);
+    fn(raw);
+    localStorage.setItem(KEY, JSON.stringify(raw)); // escritura directa: lo que haría otra pestaña
+  }
+
+  it("REPRO (P1): recuperar lo pendiente y guardar una edición nueva en el MISMO reintento no pisa lo que otra pestaña cambió", () => {
+    const id = createProject({ name: "A" });
+    writeModule("cost", { bac: 100 });
+    const s = openSession("charter")!;
+    const spy = bloquearCuota();
+    expect(saveModule("charter", { description: "primera" }, s).status).toBe("pending");
+    spy.mockRestore();                                   // el almacenamiento vuelve...
+
+    otraPestana((raw) => {                               // ...pero B ya había cambiado Costos de 100 a 200
+      raw.projects[id].modules.cost = { bac: 200 };
+      raw.projects[id].revs = Object.assign({}, raw.projects[id].revs, { cost: ((raw.projects[id].revs || {}).cost || 0) + 1 });
+    });
+
+    // A recupera lo pendiente Y guarda otra edición del Acta en la misma llamada
+    const r = saveModule("charter", { description: "segunda" }, s);
+    expect(r.status).toBe("saved");
+    expect(hasUnsavedChanges()).toBe(false);
+    const enDisco = JSON.parse(localStorage.getItem(KEY) as string).projects[id].modules;
+    expect(enDisco.charter).toEqual({ description: "segunda" });
+    expect(enDisco.cost).toEqual({ bac: 200 });          // antes de este fix volvía a { bac: 100 }
+  });
+
+  it("REPRO (P1, metadatos): un campo de meta que otra pestaña cambió durante la racha pendiente tampoco se revierte", () => {
+    const id = createProject({ name: "A", client: "C0", location: "L0" });
+    writeModule("charter", { a: 0 });
+    const s = openSession("charter")!;
+    const spy = bloquearCuota();
+    expect(saveState("charter", { a: 1 }, { location: "L1" }, s).status).toBe("pending");
+    spy.mockRestore();
+    otraPestana((raw) => { (raw.projects[id] as unknown as { meta: Record<string, unknown> }).meta.client = "C-de-B"; });
+
+    expect(saveState("charter", { a: 2 }, { location: "L1" }, s).status).toBe("saved");
+    const m = JSON.parse(localStorage.getItem(KEY) as string).projects[id].meta;
+    expect(m.client).toBe("C-de-B");
+    expect(m.location).toBe("L1");
+  });
+
   it("REPRO (media): conflicto del módulo => NO se guardan sus metadatos por separado (guardado atómico)", () => {
     createProject({ name: "N", sponsor: "S0" });
     writeModule("charter", { identification: { sponsor: "S0" } });

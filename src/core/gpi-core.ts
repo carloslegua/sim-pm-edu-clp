@@ -439,14 +439,30 @@ function confirmPending(s: EditSession): void {
 //     proyecto quedaban con S1 (versiones incompatibles del mismo dato).
 function commitState(session: EditSession, hasData: boolean, data: unknown, patch: Partial<ProjectMeta> | null): WriteResult {
   const name = session.module;
-  const d = db(), p = d.projects[session.projectId];
-  if (!p) return { status: "rejected", rev: null, reason: "no-active" };
-  if (d.activeId !== session.projectId) return { status: "rejected", rev: null, reason: "project-changed" };
+  const gate = (): WriteResult | null => {
+    const g = db(), gp = g.projects[session.projectId];
+    if (!gp) return { status: "rejected", rev: null, reason: "no-active" };
+    if (g.activeId !== session.projectId) return { status: "rejected", rev: null, reason: "project-changed" };
+    return null;
+  };
+  const closed = gate();
+  if (closed) return closed;
 
   // Lo pendiente de un intento anterior: se reintenta; si ya se persistió, se confirma.
   let settled = false; // lo pendiente acaba de quedar en disco en ESTA llamada -> es un "saved", no un "unchanged"
   if (session.pending && (!pendingUnsaved || flushPending())) { confirmPending(session); settled = true; }
   const pend = session.pending; // sigue definido solo si continúa sin persistirse
+
+  // La base se lee DESPUÉS de recuperar lo pendiente (tercera revisión externa, P1):
+  // flushPending() -> save() -> reconcileWithDisk() escribe una copia CONCILIADA con lo
+  // que otra pestaña cambió mientras tanto, y db() ya no devuelve el objeto en memoria
+  // sino esa versión de disco. Escribir sobre una base leída antes la sobrescribía
+  // ("saved" con el Costos de la otra pestaña de vuelta en su valor viejo). Como la
+  // conciliación también puede haber eliminado el proyecto o cambiado el activo, se
+  // vuelven a validar contra la base nueva antes de aplicar la edición.
+  const stale = gate();
+  if (stale) return stale;
+  const d = db(), p = d.projects[session.projectId];
 
   const mods = isPlainObject(p.modules) ? (p.modules as Record<string, unknown>) : {};
   const conflicts: string[] = [];

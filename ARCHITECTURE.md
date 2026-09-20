@@ -722,6 +722,22 @@ Cubierto en `tests/unit/write-contract.test.ts` (seis pruebas nuevas, las
 seis fallan contra el núcleo anterior) y en `project-charter.smoke.test.ts`
 (las dos repros, verificadas contra el código anterior).
 
+**Orden dentro de `commitState()` (tercera revisión, P1):** primero se
+recupera lo pendiente (`flushPending()`) y **después** se lee la base
+(`db()`) y el proyecto. `flushPending()` → `save()` →
+`reconcileWithDisk()` escribe una copia *conciliada* con lo que otra
+pestaña cambió durante la racha pendiente; leer la base antes y escribir
+la edición nueva sobre ella sobrescribía esa conciliación (la operación
+devolvía `saved`, pero un Costos que otra pestaña había subido de 100 a
+200 volvía a 100). Tras la recuperación se revalida que el proyecto siga
+existiendo y activo (la conciliación pudo eliminarlo o cambiar el
+activo) antes de validar conflictos y aplicar la edición. Regla general
+para cualquier función nueva que combine "recuperar pendiente" con
+"escribir": la base se lee después de la recuperación, nunca antes.
+Cubierto por dos pruebas de `write-contract.test.ts` (módulo ajeno y
+campo de meta ajeno, en el mismo reintento), verificadas contra el orden
+anterior.
+
 ### Cómo lo usan los 13 módulos
 
 Cada módulo pide `GPI.openSession("<módulo>")` en el mismo instante en

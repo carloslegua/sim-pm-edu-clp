@@ -66,6 +66,21 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Recuperar un guardado pendiente ya no borra cambios de otra pestaña
+  (tercera revisión externa, P1)** — reproducido con almacenamiento
+  simulado y en Chrome con dos pestañas: A intenta guardar el Acta y
+  queda pendiente por un fallo de almacenamiento; B sube Costos de 100 a
+  200; se recupera el almacenamiento y A guarda otra edición del Acta. La
+  operación devolvía `saved` pero Costos volvía a 100, porque
+  `commitState()` leía la base de datos antes de recuperar lo pendiente:
+  la recuperación escribía la copia conciliada con B, y la escritura
+  posterior reutilizaba la copia anterior y la pisaba. Ahora se recupera
+  primero, se vuelve a leer la base y se revalida el proyecto (existencia
+  y activo) antes de validar conflictos y aplicar la edición. Pruebas
+  nuevas en `write-contract.test.ts` (un módulo ajeno y un campo de meta
+  ajeno en el mismo reintento), verificadas contra el orden anterior. Ver
+  ARCHITECTURE.md, "Orden dentro de `commitState()`".
+
 - **Un reintento tras cuota agotada ya no dice «Sincronizado» sin
   guardar, y un conflicto del módulo ya no deja pasar sus metadatos
   (segunda revisión externa, hallazgos alta y media)** — reproducido en
