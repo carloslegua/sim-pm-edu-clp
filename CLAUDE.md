@@ -117,6 +117,8 @@ src/modules/<clave>/main.ts      → <clave>.js            (un módulo HTML)
 src/shared/styles/shared.css     → gpi-shared.css        (CSS común)
 src/shared/change-orders.ts      → (se inlinea en cost.js y gpi-core.js) órdenes de cambio de
                                     costos: naturaleza, financiación, aprobación, línea base
+src/shared/cost-variance.ts      → (se inlinea en cost.js) clasificación de variaciones CPI/CV
+                                    contra los umbrales del plan
 src/shared/write-session.ts      → (se inlinea en cada IIFE) guardado con sesión de
                                     edición + resultado común de escritura
 configs/<clave>.vite.config.ts   → config de build de ese módulo

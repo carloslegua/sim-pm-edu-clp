@@ -1,4 +1,63 @@
 (function() {
+	//#region src/shared/cost-variance.ts
+	var RANK = {
+		green: 0,
+		amber: 1,
+		red: 2
+	};
+	var isNum = (v) => typeof v === "number" && isFinite(v);
+	function levelOf(value, warn, esc) {
+		if (!isNum(value)) return null;
+		return value <= esc ? "red" : value <= warn ? "amber" : "green";
+	}
+	function validateThresholds(t) {
+		const p = [];
+		if (![
+			t.cpiWarn,
+			t.cpiEsc,
+			t.cvWarn,
+			t.cvEsc
+		].every(isNum)) {
+			p.push("todos los umbrales deben ser números");
+			return p;
+		}
+		if (t.cpiEsc > t.cpiWarn) p.push("CPI: el umbral de escalamiento (" + t.cpiEsc.toFixed(2) + ") debe ser menor o igual que el de alerta (" + t.cpiWarn.toFixed(2) + ")");
+		if (t.cvEsc > t.cvWarn) p.push("CV: el umbral de escalamiento (" + t.cvEsc.toFixed(2) + ") debe ser menor o igual que el de alerta (" + t.cvWarn.toFixed(2) + ")");
+		if (t.cpiWarn > 1) p.push("CPI: una alerta por encima de 1,00 se dispararía con el proyecto por debajo del costo previsto");
+		if (t.cvWarn > 0) p.push("CV: una alerta por encima de 0 se dispararía con el proyecto por debajo del costo previsto");
+		return p;
+	}
+	function classifyVariance(cpi, cv, t) {
+		const lc = levelOf(cpi, t.cpiWarn, t.cpiEsc), lv = levelOf(cv, t.cvWarn, t.cvEsc);
+		const ls = [lc, lv].filter((x) => x !== null);
+		if (!ls.length) return {
+			evaluated: false,
+			level: null,
+			cpi: null,
+			cv: null,
+			response: [],
+			changeRequestNeeded: false
+		};
+		const level = ls.reduce((a, b) => RANK[b] > RANK[a] ? b : a);
+		return {
+			evaluated: true,
+			level,
+			cpi: lc,
+			cv: lv,
+			response: level === "green" ? ["Dentro de tolerancia: continuar el monitoreo con la frecuencia del plan. No hay acción ni cambio que registrar."] : level === "amber" ? [
+				"Analizar la causa raíz de la variación.",
+				"Actualizar el pronóstico (EAC/ETC).",
+				"Aplicar acciones correctivas dentro de la autoridad del director del proyecto. La línea base no cambia."
+			] : [
+				"Analizar la causa raíz y actualizar el pronóstico (EAC/ETC).",
+				"Escalar al sponsor / CCB con el pronóstico actualizado.",
+				"Decidir la respuesta: acción correctiva o preventiva dentro del plan; uso de la contingencia si el origen es un riesgo identificado dentro del alcance; o una solicitud de cambio SOLO si la respuesta exige modificar la línea base o comprometer la reserva de gestión.",
+				"Una variación fuera de umbral no obliga por sí sola a registrar una orden de cambio."
+			],
+			changeRequestNeeded: false
+		};
+	}
+	//#endregion
 	//#region src/shared/change-orders.ts
 	var FUND_CONT = "Contingencia";
 	var CO_KIND_LABEL = {
@@ -524,6 +583,7 @@
       <table class="dt">
         <tr><td>CPI — alerta / escalamiento</td><td>≤ ${cpiW}  /  ≤ ${cpiE}</td></tr>
         <tr><td>CV — alerta / escalamiento</td><td>≤ ${cvW}  /  ≤ ${cvE}</td></tr>
+        <tr><td>Respuesta al superar el umbral</td><td><b>Alerta:</b> analizar la causa, actualizar el pronóstico y aplicar acciones correctivas (autoridad del director del proyecto). <b>Escalamiento:</b> decisión del sponsor / CCB con el pronóstico actualizado. Una orden de cambio solo se registra si la respuesta modifica la línea base o usa reservas.</td></tr>
       </table>
     </section>
 
@@ -582,7 +642,7 @@
 
     <section class="dsec">
       <h4 class="dsec-t"><span class="dn">07</span>Proceso de cambio y pronósticos</h4>
-      <p style="font-size:12.5px;margin:0">Ante una variación que cruce los umbrales anteriores: (1) detectar, (2) analizar la causa raíz y clasificar el cambio (riesgo materializado, trabajo imprevisto dentro del alcance o cambio de alcance: no se asume la fuente de fondos), (3) registrar la solicitud con su financiación y efecto presupuestario, (4) evaluar en el CCB (el sponsor autoriza el uso de la reserva de gestión o de fondos adicionales) y, solo si se aprueba y se decide, incorporar a la línea base con una versión nueva (LB-n), (5) actualizar ETC/EAC con frecuencia ${esc($("fcastFreq").value).toLowerCase()} y comunicar en el reporte de desempeño.</p>
+      <p style="font-size:12.5px;margin:0">Ante una variación que cruce los umbrales anteriores: (1) detectar y clasificar la variación contra los umbrales (una variación no es, por sí sola, una orden de cambio), (2) analizar la causa raíz y actualizar el pronóstico ETC/EAC, (3) decidir la respuesta: acción correctiva o preventiva dentro del plan, uso de la contingencia, o solicitud de cambio si exige modificar la línea base o comprometer la reserva de gestión, (4) si corresponde una orden, clasificar el cambio (riesgo materializado, trabajo imprevisto dentro del alcance o cambio de alcance: no se asume la fuente de fondos), (5) registrarla con su financiación y efecto presupuestario, (6) evaluar en el CCB (el sponsor autoriza el uso de la reserva de gestión o de fondos adicionales) y, solo si se aprueba y se decide, incorporar a la línea base con una versión nueva (LB-n), (7) actualizar ETC/EAC con frecuencia ${esc($("fcastFreq").value).toLowerCase()} y comunicar en el reporte de desempeño.</p>
     </section>`;
 		buildJSON();
 	}
@@ -740,7 +800,53 @@
 		$("saveTxt").textContent = GPI.describeWrite(r, "Estos datos de costos");
 		$("saveDot").style.background = "#dc3546";
 	}
+	function thresholds() {
+		const n = (id) => parseFloat($(id).value);
+		return {
+			cpiWarn: n("cpiWarn"),
+			cpiEsc: n("cpiEsc"),
+			cvWarn: n("cvWarn"),
+			cvEsc: n("cvEsc")
+		};
+	}
+	function checkThresholds() {
+		const box = document.getElementById("thrMsg");
+		if (!box) return;
+		const p = validateThresholds(thresholds());
+		box.style.display = p.length ? "block" : "none";
+		box.innerHTML = p.length ? "<b>⚠ Umbrales incoherentes:</b> " + p.map(esc).join(" · ") : "";
+	}
+	var LEVEL_UI = {
+		green: {
+			pill: "ok",
+			label: "Verde — dentro de tolerancia"
+		},
+		amber: {
+			pill: "warn",
+			label: "Ámbar — alerta"
+		},
+		red: {
+			pill: "bad",
+			label: "Rojo — escalamiento"
+		}
+	};
+	function evalVariance() {
+		const raw = (id) => {
+			const v = $(id).value;
+			return v === "" ? null : parseFloat(v);
+		};
+		const box = $("varOut"), r = classifyVariance(raw("varCpi"), raw("varCv"), thresholds());
+		if (!r.evaluated || !r.level) {
+			box.innerHTML = "Ingresa un valor para clasificar la variación.";
+			return;
+		}
+		const sub = (name, l) => l ? `${name}: <span class="pill ${LEVEL_UI[l].pill}">${LEVEL_UI[l].label}</span> ` : "";
+		box.innerHTML = `<div style="margin-bottom:8px">${sub("CPI", r.cpi)}${sub("CV", r.cv)}</div>
+    <div style="margin-bottom:6px"><b>Qué corresponde hacer:</b></div>
+    <ol style="margin:0 0 0 18px;padding:0">${r.response.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>`;
+	}
 	function save() {
+		checkThresholds();
 		if (gpiOn() && !GPI.getModule("cost") && !userEdited) {
 			buildJSON();
 			return;
@@ -885,6 +991,7 @@
 		renderCO();
 		recalcCont();
 		buildDoc();
+		checkThresholds();
 		if (!connected || GPI.getModule("cost")) save();
 		else {
 			$("saveTxt").textContent = "Sin guardar aún: se sincronizará con tu primer cambio";
@@ -923,7 +1030,8 @@
 		buildDoc,
 		coEdit,
 		coBaseline,
-		coKindHint
+		coKindHint,
+		evalVariance
 	});
 	//#endregion
 })();

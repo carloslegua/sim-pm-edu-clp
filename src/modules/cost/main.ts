@@ -7,9 +7,9 @@
 
    IMPORTANTE — a diferencia de OBS/RACI: el HTML de este módulo usa
    atributos onclick/onchange/oninput INLINE (no addEventListener) para
-   ~12 funciones (save, recalcCont, onBaseInput,
+   ~13 funciones (save, recalcCont, onBaseInput,
    pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc, coEdit,
-   coBaseline, coKindHint), incluidas varias generadas dinámicamente en filas de tabla
+   coBaseline, coKindHint, evalVariance), incluidas varias generadas dinámicamente en filas de tabla
    (coStatus, coEdit, coBaseline, delCO). Vite
    compila este módulo en su propio closure: esas funciones NO quedan
    accesibles por nombre desde el HTML a menos que se expongan
@@ -26,6 +26,7 @@
    ============================================================ */
 import type * as GpiCore from "../../core/gpi-core";
 import type { ActivitiesModule, CostEstimateModule, CostModule, EditSession, ProjectMeta, WbsModule, WriteResult } from "../../core/types";
+import { classifyVariance, validateThresholds, type CostThresholds, type VarianceLevel } from "../../shared/cost-variance";
 import {
   analyzeChangeOrders, orderEffect, planBaselining, validateApproval,
   CO_KIND_HINT, CO_KIND_LABEL, FUND_CONT, FUND_EXTRA,
@@ -332,6 +333,7 @@ function buildDoc(): void {
       <table class="dt">
         <tr><td>CPI — alerta / escalamiento</td><td>≤ ${cpiW}  /  ≤ ${cpiE}</td></tr>
         <tr><td>CV — alerta / escalamiento</td><td>≤ ${cvW}  /  ≤ ${cvE}</td></tr>
+        <tr><td>Respuesta al superar el umbral</td><td><b>Alerta:</b> analizar la causa, actualizar el pronóstico y aplicar acciones correctivas (autoridad del director del proyecto). <b>Escalamiento:</b> decisión del sponsor / CCB con el pronóstico actualizado. Una orden de cambio solo se registra si la respuesta modifica la línea base o usa reservas.</td></tr>
       </table>
     </section>
 
@@ -390,7 +392,7 @@ function buildDoc(): void {
 
     <section class="dsec">
       <h4 class="dsec-t"><span class="dn">07</span>Proceso de cambio y pronósticos</h4>
-      <p style="font-size:12.5px;margin:0">Ante una variación que cruce los umbrales anteriores: (1) detectar, (2) analizar la causa raíz y clasificar el cambio (riesgo materializado, trabajo imprevisto dentro del alcance o cambio de alcance: no se asume la fuente de fondos), (3) registrar la solicitud con su financiación y efecto presupuestario, (4) evaluar en el CCB (el sponsor autoriza el uso de la reserva de gestión o de fondos adicionales) y, solo si se aprueba y se decide, incorporar a la línea base con una versión nueva (LB-n), (5) actualizar ETC/EAC con frecuencia ${esc(($("fcastFreq") as HTMLSelectElement).value).toLowerCase()} y comunicar en el reporte de desempeño.</p>
+      <p style="font-size:12.5px;margin:0">Ante una variación que cruce los umbrales anteriores: (1) detectar y clasificar la variación contra los umbrales (una variación no es, por sí sola, una orden de cambio), (2) analizar la causa raíz y actualizar el pronóstico ETC/EAC, (3) decidir la respuesta: acción correctiva o preventiva dentro del plan, uso de la contingencia, o solicitud de cambio si exige modificar la línea base o comprometer la reserva de gestión, (4) si corresponde una orden, clasificar el cambio (riesgo materializado, trabajo imprevisto dentro del alcance o cambio de alcance: no se asume la fuente de fondos), (5) registrarla con su financiación y efecto presupuestario, (6) evaluar en el CCB (el sponsor autoriza el uso de la reserva de gestión o de fondos adicionales) y, solo si se aprueba y se decide, incorporar a la línea base con una versión nueva (LB-n), (7) actualizar ETC/EAC con frecuencia ${esc(($("fcastFreq") as HTMLSelectElement).value).toLowerCase()} y comunicar en el reporte de desempeño.</p>
     </section>`;
   buildJSON();
 }
@@ -512,7 +514,33 @@ function reportWrite(r: WriteResult): void {
   $("saveDot").style.background = "#dc3546";
 }
 
+/* ---------- Umbrales de control y evaluación de una variación ---------- */
+function thresholds(): CostThresholds {
+  const n = (id: string): number => parseFloat(($(id) as HTMLInputElement).value);
+  return { cpiWarn: n("cpiWarn"), cpiEsc: n("cpiEsc"), cvWarn: n("cvWarn"), cvEsc: n("cvEsc") };
+}
+// Escalar debe ser MÁS grave que alertar: se avisa si los umbrales son incoherentes.
+function checkThresholds(): void {
+  const box = document.getElementById("thrMsg"); if (!box) return;
+  const p = validateThresholds(thresholds());
+  box.style.display = p.length ? "block" : "none";
+  box.innerHTML = p.length ? "<b>⚠ Umbrales incoherentes:</b> " + p.map(esc).join(" · ") : "";
+}
+const LEVEL_UI: Record<VarianceLevel, { pill: string; label: string }> = {
+  green: { pill: "ok", label: "Verde — dentro de tolerancia" }, amber: { pill: "warn", label: "Ámbar — alerta" }, red: { pill: "bad", label: "Rojo — escalamiento" }
+};
+function evalVariance(): void {
+  const raw = (id: string): number | null => { const v = ($(id) as HTMLInputElement).value; return v === "" ? null : parseFloat(v); };
+  const box = $("varOut"), r = classifyVariance(raw("varCpi"), raw("varCv"), thresholds());
+  if (!r.evaluated || !r.level) { box.innerHTML = "Ingresa un valor para clasificar la variación."; return; }
+  const sub = (name: string, l: VarianceLevel | null): string => l ? `${name}: <span class="pill ${LEVEL_UI[l].pill}">${LEVEL_UI[l].label}</span> ` : "";
+  box.innerHTML = `<div style="margin-bottom:8px">${sub("CPI", r.cpi)}${sub("CV", r.cv)}</div>
+    <div style="margin-bottom:6px"><b>Qué corresponde hacer:</b></div>
+    <ol style="margin:0 0 0 18px;padding:0">${r.response.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>`;
+}
+
 function save(): void {
+  checkThresholds();
   if (gpiOn() && !(GPI as GpiApi).getModule("cost") && !userEdited) { buildJSON(); return; }
   if (gpiOn() && loadedProjectId != null && (GPI as GpiApi).activeId() !== loadedProjectId) { markProjectStale(); return; }
   let synced = false;
@@ -608,7 +636,7 @@ function init(reload: boolean): void {
   if (pe1) pe1.style.display = connected ? "inline-flex" : "none";
   if (pe3) pe3.style.display = connected ? "inline-flex" : "none";
   document.querySelectorAll("#classbar button").forEach((x) => x.classList.toggle("on", +(x as HTMLElement).dataset.c! === state.curClass));
-  renderClass(); renderCO(); recalcCont(); buildDoc();
+  renderClass(); renderCO(); recalcCont(); buildDoc(); checkThresholds();
   // Guardar solo si ya existe la rebanada "cost" del proyecto (o si estamos en
   // modo independiente). Con solo ABRIR la página no se crea el módulo: eso
   // evitaba antes que el Panel mostrara un BAC fantasma sin acción del alumno.
@@ -637,4 +665,4 @@ init(false);
 // archivo) que buscan estas funciones POR NOMBRE en el ámbito global.
 // Sin esto, Vite las deja encerradas en el closure del bundle y cada
 // clic tira "x is not defined".
-Object.assign(window, { save, recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc, coEdit, coBaseline, coKindHint });
+Object.assign(window, { save, recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc, coEdit, coBaseline, coKindHint, evalVariance });

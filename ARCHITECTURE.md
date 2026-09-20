@@ -1612,6 +1612,28 @@ laborables: la proporción no representa fines de semana ni feriados.
   rompen (regla #3). El caso de ejemplo del modo independiente cubre las
   tres naturalezas (OC-001 riesgo/contingencia, OC-002 ampliación del
   cliente/fondos adicionales, OC-003 imprevisto/reserva de gestión).
+- **Una variación no es una orden de cambio** (auditoría metodológica
+  PMI; lógica pura en `src/shared/cost-variance.ts`, inlineada en
+  `cost.js`). El flujo enseñaba «rojo = orden de cambio obligatoria» y los
+  umbrales de CPI/CV se rotulaban «Escalamiento · orden de cambio». Una
+  variación fuera de umbral dispara análisis de causa, **actualización del
+  pronóstico (ETC/EAC)** y una **decisión de respuesta** con tres caminos:
+  acción correctiva o preventiva dentro del plan (la línea base no
+  cambia); uso de la contingencia (riesgo identificado dentro del alcance:
+  baja la contingencia disponible, el BAC no cambia); o solicitud de
+  cambio, **solo** si la respuesta modifica la línea base o compromete la
+  reserva de gestión. El flujo de la pestaña 04 pasó de 5 a 7 pasos
+  (detectar → analizar y pronosticar → **decidir la respuesta** →
+  clasificar → registrar → evaluar → actualizar), y los umbrales pasan a
+  llamarse «Escalamiento · decisión del sponsor / CCB». Novedades
+  funcionales: `classifyVariance()` (tarjeta «Evaluar una variación»:
+  ámbar/rojo con la respuesta que corresponde; el nivel global es el peor
+  de CPI y CV) y `validateThresholds()` (aviso si el umbral de
+  escalamiento es menos grave que el de alerta, o si una alerta se
+  dispararía con el proyecto por debajo del costo previsto). Los umbrales
+  siguen siendo «desfavorables por debajo» (≤). Esta tarjeta le da al
+  plan de costos un primer consumidor real de sus umbrales; medir CPI/CV
+  automáticamente sigue dependiendo del módulo EVM, aún no construido.
 - Limitación conocida: las versiones `LB-n` guardan BAC anterior/nuevo
   como historia; si el alumno cambia después el estimado base o los
   porcentajes, el BAC inicial se recalcula pero esas fotos no. No se

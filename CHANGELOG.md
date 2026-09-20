@@ -66,6 +66,22 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Costos: una variación fuera de umbral ya no se equipara con una orden
+  de cambio (auditoría metodológica PMI)** — el flujo enseñaba «rojo =
+  orden de cambio obligatoria» y los umbrales de CPI/CV se rotulaban
+  «Escalamiento · orden de cambio». Una variación dispara el análisis de
+  la causa, la actualización del pronóstico (ETC/EAC) y una decisión de
+  respuesta: acción correctiva o preventiva dentro del plan, uso de la
+  contingencia, o solicitud de cambio solo si la respuesta modifica la
+  línea base o compromete la reserva de gestión. El flujo de la pestaña 04
+  pasa a 7 pasos con «Decidir la respuesta» antes de registrar cualquier
+  orden; los umbrales pasan a «Escalamiento · decisión del sponsor / CCB»;
+  el documento BOE recoge la misma regla. Nuevo: tarjeta «Evaluar una
+  variación» (clasifica CPI/CV en verde/ámbar/rojo y explica qué
+  corresponde hacer) y aviso de umbrales incoherentes (escalar menos grave
+  que alertar). Lógica pura en `src/shared/cost-variance.ts`; pruebas:
+  `cost-variance.test.ts` (10) y 3 smoke nuevos.
+
 - **Costos: el cambio de alcance ya no se equipara con la reserva de
   gestión, y aprobar una orden ya no se confunde con cambiar la línea base
   (revisión externa, alta; PMI: reservas y alcance / presupuesto y línea

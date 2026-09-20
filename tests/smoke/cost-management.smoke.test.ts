@@ -46,7 +46,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(doc.getElementById("kBAC")!.textContent).toBe("$ 8,075,181");
     expect(doc.querySelectorAll("#coBody tr").length).toBe(3); // SAMPLE_CO: riesgo, cambio de alcance, imprevisto
 
-    for (const fn of ["save", "recalcCont", "onBaseInput", "pullFromWBS", "pullFromCostEstimate", "addCO", "coStatus", "delCO", "buildDoc", "coEdit", "coBaseline", "coKindHint"]) {
+    for (const fn of ["save", "recalcCont", "onBaseInput", "pullFromWBS", "pullFromCostEstimate", "addCO", "coStatus", "delCO", "buildDoc", "coEdit", "coBaseline", "coKindHint", "evalVariance"]) {
       expect(typeof (dom.window as any)[fn]).toBe("function");
     }
 
@@ -91,6 +91,50 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(flow).toMatch(/no decide por sí sola/i);
     expect(doc.getElementById("p4")!.textContent).not.toMatch(/Reserva de gestión \(cambio de alcance, requiere sponsor\)/);
     expect(Array.from(doc.querySelectorAll("#coFund option")).map((o) => o.textContent)).toEqual(["Contingencia", "Reserva de gestión", "Financiamiento adicional"]);
+  });
+
+  // ---- Auditoría metodológica (PMI): el flujo enseñaba "rojo = orden de cambio obligatoria".
+  it("REPRO (auditoría PMI): una variación fuera de umbral ya NO se equipara con una orden de cambio; el flujo incluye pronosticar y decidir la respuesta", async () => {
+    const doc = (await abrirStandalone()).window.document;
+    const p4 = doc.getElementById("p4")!.textContent as string, p1 = doc.getElementById("p1")!.textContent as string; // los umbrales viven en la pestaña 1
+    expect(p4).not.toMatch(/orden de cambio obligatoria/i);
+    expect(p1 + p4).not.toMatch(/Escalamiento · orden de cambio/);
+    expect(p1).toMatch(/Escalamiento · decisión del sponsor \/ CCB/);
+    expect(p4).toMatch(/Ningún nivel es, por sí solo, una orden de cambio/);
+    const steps = Array.from(doc.querySelectorAll(".flow h4")).map((h) => h.textContent);
+    expect(steps.indexOf("Decidir la respuesta")).toBeGreaterThan(steps.indexOf("Analizar la causa raíz y actualizar el pronóstico"));
+    expect(steps.indexOf("Decidir la respuesta")).toBeLessThan(steps.indexOf("Registrar la solicitud de cambio")); // primero se decide, después se registra
+  });
+
+  it("'Evaluar una variación' clasifica contra los umbrales y explica la respuesta; rojo NO exige una orden de cambio", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    const set = (id: string, v: string) => { const el = doc.getElementById(id) as HTMLInputElement; el.value = v; el.dispatchEvent(new dom.window.Event("input", { bubbles: true })); };
+    const out = () => doc.getElementById("varOut")!.textContent as string;
+    expect(out()).toMatch(/Ingresa un valor/);
+    set("varCpi", "1.02");                                            // umbrales por defecto: 0.95 / 0.90
+    expect(out()).toMatch(/Verde — dentro de tolerancia/);
+    set("varCpi", "0.93");
+    expect(out()).toMatch(/Ámbar — alerta/);
+    expect(out()).toMatch(/La línea base no cambia/);
+    set("varCpi", "0.85");
+    expect(out()).toMatch(/Rojo — escalamiento/);
+    expect(out()).toMatch(/Escalar al sponsor \/ CCB/);
+    expect(out()).toMatch(/no obliga por sí sola a registrar una orden de cambio/);
+    set("varCpi", "1.0"); set("varCv", "-120000");                    // el peor de los indicadores manda
+    expect(out()).toMatch(/CPI: Verde/); expect(out()).toMatch(/CV: Rojo/);
+    set("varCpi", ""); set("varCv", "");
+    expect(out()).toMatch(/Ingresa un valor/);
+  });
+
+  it("umbrales incoherentes (escalar menos grave que alertar) se avisan", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    const box = doc.getElementById("thrMsg") as HTMLElement;
+    expect(box.style.display).toBe("none");
+    const esc = doc.getElementById("cpiEsc") as HTMLInputElement; esc.value = "0.97"; esc.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    expect(box.style.display).toBe("block");
+    expect(box.textContent).toMatch(/CPI: el umbral de escalamiento \(0\.97\)/);
+    esc.value = "0.90"; esc.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    expect(box.style.display).toBe("none");
   });
 
   it("REPRO (alta): aprobar una orden exige quién aprueba y la autorización del sponsor; y NO cambia la línea base (BAC vigente) hasta incorporarla", async () => {

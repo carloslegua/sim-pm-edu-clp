@@ -223,7 +223,7 @@
               <div class="hint">Amarillo cuando CPI ≤ valor.</div>
               <input id="cpiWarn" class="mono" type="number" value="0.95" step="0.01" min="0" onchange="save()">
             </label>
-            <label class="f"><span>Escalamiento · orden de cambio</span>
+            <label class="f"><span>Escalamiento · decisión del sponsor / CCB</span>
               <div class="hint">Rojo cuando CPI ≤ valor.</div>
               <input id="cpiEsc" class="mono" type="number" value="0.90" step="0.01" min="0" onchange="save()">
             </label>
@@ -234,12 +234,13 @@
               <div class="hint">Amarillo cuando CV ≤ valor (moneda base).</div>
               <input id="cvWarn" class="mono" type="number" value="-50000.00" step="0.01" onchange="save()">
             </label>
-            <label class="f"><span>Escalamiento · orden de cambio</span>
+            <label class="f"><span>Escalamiento · decisión del sponsor / CCB</span>
               <div class="hint">Rojo cuando CV ≤ valor (moneda base).</div>
               <input id="cvEsc" class="mono" type="number" value="-100000.00" step="0.01" onchange="save()">
             </label>
           </div>
-          <div class="note">Ambos umbrales son <b>desfavorables por debajo</b> del valor: CPI &lt; 1.00 indica sobrecosto; CV negativo indica gasto por encima del valor ganado. El plan documenta estos disparadores para el flujo de cambio (pestaña 04).</div>
+          <div class="note">Ambos umbrales son <b>desfavorables por debajo</b> del valor: CPI &lt; 1.00 indica sobrecosto; CV negativo indica gasto por encima del valor ganado. <b>Alerta</b> dispara el análisis y las acciones correctivas del director del proyecto; <b>escalamiento</b> lleva la decisión al sponsor / CCB con el pronóstico actualizado. Ninguno equivale a una orden de cambio: esta solo se registra si la respuesta modifica la línea base o usa reservas (pestaña 04). El de escalamiento debe ser menor o igual que el de alerta.</div>
+          <div class="note" id="thrMsg" style="display:none;margin-top:8px;border-color:#dc3546;color:#dc3546"></div>
         </div>
       </div>
     </div>
@@ -408,15 +409,28 @@
   <!-- ===================== PANEL 4: CAMBIO Y PRONÓSTICOS ===================== -->
   <section class="panel" id="p4">
     <div class="card">
-      <div class="card-h"><div class="eyebrow">Control integrado de cambios</div><h3>Flujo de orden de cambio de costos</h3><div class="sub">El estudiante sigue este flujo cuando la variación supera los umbrales del plan.</div></div>
+      <div class="card-h"><div class="eyebrow">Control de costos e integrado de cambios</div><h3>Del desvío a la decisión</h3><div class="sub">Una variación fuera de umbral dispara este análisis; solo algunas respuestas terminan en una orden de cambio.</div></div>
       <div class="card-b">
         <div class="flow">
-          <div class="step"><div class="num"></div><div><h4>Detectar la variación</h4><p>El desempeño de costo cruza un umbral: CPI ≤ los valores declarados o CV por debajo del límite. Verde = dentro de tolerancia; ámbar = acción correctiva; rojo = orden de cambio obligatoria.</p></div></div>
-          <div class="step"><div class="num"></div><div><h4>Analizar la causa raíz y clasificar el cambio</h4><p>Identificar el evento en el RBS y distinguir <b>tres situaciones</b>: <b>riesgo materializado</b> (un riesgo ya identificado que ocurrió; se atiende con la contingencia, dentro de la línea base), <b>trabajo imprevisto dentro del alcance</b> (necesario y no identificado, pero del alcance ya aprobado: no es un cambio de alcance) y <b>cambio de alcance</b> (trabajo nuevo o distinto, p. ej. una ampliación pedida por el cliente). La clasificación no decide por sí sola de dónde salen los fondos: se evalúa el cambio, su autorización y su financiación.</p></div></div>
+          <div class="step"><div class="num"></div><div><h4>Detectar la variación</h4><p>El desempeño de costo cruza un umbral del plan (pestaña 02): CPI o CV por debajo de los valores declarados. <b>Verde</b> = dentro de tolerancia, se sigue monitoreando. <b>Ámbar</b> = alerta: analizar y aplicar acciones correctivas dentro de la autoridad del director del proyecto. <b>Rojo</b> = escalamiento: se lleva al sponsor / CCB con el pronóstico actualizado para que decida. <b>Ningún nivel es, por sí solo, una orden de cambio.</b></p></div></div>
+          <div class="step"><div class="num"></div><div><h4>Analizar la causa raíz y actualizar el pronóstico</h4><p>Identificar el evento en el RBS y recalcular ETC/EAC: la consecuencia de la variación sobre el costo final es lo que permite decidir.</p></div></div>
+          <div class="step"><div class="num"></div><div><h4>Decidir la respuesta</h4><p>Tres caminos distintos: (a) <b>acción correctiva o preventiva dentro del plan</b> — la variación se absorbe y la línea base no cambia; (b) <b>usar la contingencia</b> — el origen es un riesgo identificado dentro del alcance; el consumo se registra y la contingencia disponible baja, pero el BAC no cambia; (c) <b>solicitud de cambio</b> — solo si la respuesta exige modificar el alcance, el presupuesto o el plazo de la línea base, o comprometer la reserva de gestión. Solo (b) y (c) llevan a registrar una orden.</p></div></div>
+          <div class="step"><div class="num"></div><div><h4>Analizar la causa raíz y clasificar el cambio</h4><p>Cuando la respuesta es (b) o (c), identificar el evento en el RBS y distinguir <b>tres situaciones</b>: <b>riesgo materializado</b> (un riesgo ya identificado que ocurrió; se atiende con la contingencia, dentro de la línea base), <b>trabajo imprevisto dentro del alcance</b> (necesario y no identificado, pero del alcance ya aprobado: no es un cambio de alcance) y <b>cambio de alcance</b> (trabajo nuevo o distinto, p. ej. una ampliación pedida por el cliente). La clasificación no decide por sí sola de dónde salen los fondos: se evalúa el cambio, su autorización y su financiación.</p></div></div>
           <div class="step"><div class="num"></div><div><h4>Registrar la solicitud de cambio</h4><p>Completar el formulario de abajo: naturaleza del cambio, impacto en costo, causa RBS y fuente de fondeo propuesta (contingencia, reserva de gestión o financiamiento adicional). Cada orden muestra su <b>efecto presupuestario</b>. Estado inicial: <span class="mono">Pendiente</span>.</p></div></div>
           <div class="step"><div class="num"></div><div><h4>Evaluar y decidir</h4><p>El CCB aprueba o rechaza y se registra <b>quién aprueba</b>. Usar la reserva de gestión o fondos adicionales requiere la <b>autorización expresa del sponsor</b>, y no se puede comprometer más de lo disponible. <b>Aprobar no cambia la línea base</b>: reserva los fondos. La línea base solo se modifica al <b>incorporar</b> la orden, lo que crea una versión nueva (LB-n) con el BAC anterior y el nuevo. Si se rechaza, se documenta la desviación.</p></div></div>
-          <div class="step"><div class="num"></div><div><h4>Actualizar pronósticos</h4><p>Refrescar ETC/EAC con la frecuencia declarada (<span class="mono" id="fcastEcho">mensual</span>) y comunicar en el reporte de desempeño.</p></div></div>
+          <div class="step"><div class="num"></div><div><h4>Actualizar pronósticos y comunicar</h4><p>Refrescar ETC/EAC con la frecuencia declarada (<span class="mono" id="fcastEcho">mensual</span>) y comunicar en el reporte de desempeño, incluida la decisión tomada y su efecto en las reservas y en la línea base.</p></div></div>
         </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="card-h"><div class="eyebrow">Umbrales de control · pestaña 02</div><h3>Evaluar una variación</h3><div class="sub">Ingresa el CPI y/o la CV del período: se clasifica contra los umbrales del plan y se indica qué corresponde hacer.</div></div>
+      <div class="card-b">
+        <div class="row row-2">
+          <label class="f"><span>CPI del período</span><input id="varCpi" class="mono" type="number" step="0.01" placeholder="Ej. 0.92" oninput="evalVariance()" onchange="evalVariance()"></label>
+          <label class="f"><span>CV del período (moneda base)</span><input id="varCv" class="mono" type="number" step="0.01" placeholder="Ej. -75000" oninput="evalVariance()" onchange="evalVariance()"></label>
+        </div>
+        <div id="varOut" class="note" style="margin-top:10px">Ingresa un valor para clasificar la variación.</div>
       </div>
     </div>
 
