@@ -119,6 +119,8 @@ src/shared/change-orders.ts      → (se inlinea en cost.js y gpi-core.js) órde
                                     costos: naturaleza, financiación, aprobación, línea base
 src/shared/cost-variance.ts      → (se inlinea en cost.js) clasificación de variaciones CPI/CV
                                     contra los umbrales del plan
+src/shared/range-estimating.ts   → (se inlinea en cost.js) contingencia por rangos + Monte Carlo
+                                    (AACE 41R-08), determinista (semilla fija)
 src/shared/stakeholder-engagement.ts → (se inlinea en stakeholder-studio.js) matriz de compromiso
                                     de interesados: brecha, prioridad, hallazgos
 src/shared/write-session.ts      → (se inlinea en cada IIFE) guardado con sesión de

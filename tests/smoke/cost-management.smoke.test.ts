@@ -53,7 +53,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     (doc.getElementById("coDesc") as HTMLInputElement).value = "Prueba";
     (doc.getElementById("coCost") as HTMLInputElement).value = "1000";
     (doc.getElementById("coKind") as HTMLSelectElement).value = "riesgo"; // la naturaleza es obligatoria
-    const addBtn = Array.from(doc.querySelectorAll("button")).find((b) => b.textContent?.includes("Agregar")) as HTMLElement;
+    const addBtn = doc.querySelector('button[onclick="addCO()"]') as HTMLElement;
     addBtn.click(); // dispara onclick="addCO()" -> window.addCO
     expect(doc.querySelectorAll("#coBody tr").length).toBe(4);
   });
@@ -180,7 +180,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     (doc.getElementById("coCost") as HTMLInputElement).value = "5000";
     (doc.getElementById("coKind") as HTMLSelectElement).value = "alcance";
     (doc.getElementById("coFund") as HTMLSelectElement).value = "Contingencia";
-    (Array.from(doc.querySelectorAll("button")).find((b) => b.textContent?.includes("Agregar")) as HTMLElement).click();
+    (doc.querySelector('button[onclick="addCO()"]') as HTMLElement).click();
     setApproval(dom, doc, "OC-004", "CCB", false);
     setStatus(dom, doc, "OC-004", "Aprobada");
     expect((rowOf(doc, "OC-004").querySelector("select") as HTMLSelectElement).value).toBe("Pendiente");
@@ -190,7 +190,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
   it("registrar una orden exige clasificarla, y cada orden muestra su efecto presupuestario", async () => {
     const dom = await abrirStandalone(), doc = dom.window.document;
     (doc.getElementById("coDesc") as HTMLInputElement).value = "Sin clasificar";
-    (Array.from(doc.querySelectorAll("button")).find((b) => b.textContent?.includes("Agregar")) as HTMLElement).click();
+    (doc.querySelector('button[onclick="addCO()"]') as HTMLElement).click();
     expect(doc.querySelectorAll("#coBody tr").length).toBe(3);          // no se agregó
     expect(toast(doc)).toMatch(/Clasifica el cambio/);
     expect(rowOf(doc, "OC-001").textContent).toMatch(/BAC sin cambio · contingencia −180,000\.00/);
@@ -328,5 +328,222 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(txt).not.toMatch(/Sincronizado/);
     expect(txt).toMatch(/SIN guardar/);
     expect(win.GPI.hasUnsavedChanges()).toBe(true); // el núcleo sí conservó el cambio en memoria
+  });
+
+  // ---- Contingencia por rangos + Monte Carlo (auditoría metodológica AACE): se ofrecía
+  // «Simulación Monte Carlo» pero se calculaba una tabla fija de % por clase y percentil.
+  const dinero = (s: string | null | undefined) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
+  const fijar = (dom: any, doc: Document, id: string, v: string, ev = "change") => { const el = doc.getElementById(id) as HTMLInputElement | HTMLSelectElement; el.value = v; el.dispatchEvent(new dom.window.Event(ev, { bubbles: true })); };
+  const filaRango = (doc: Document, i: number) => doc.querySelectorAll("#rngBody tr")[i] as HTMLElement;
+  const celdaRng = (doc: Document, i: number, f: string) => filaRango(doc, i).querySelector(`input[data-f="${f}"]`) as HTMLInputElement;
+  const filaP = (doc: Document, q: number) => Array.from(doc.querySelectorAll("#rngResults table")[0].querySelectorAll("tbody tr")).find((r) => r.querySelector("td")!.textContent!.startsWith("P" + q)) as HTMLElement;
+
+  it("REPRO (auditoría AACE): el selector ya NO ofrece «Simulación Monte Carlo» como rótulo de una tabla; cada método es lo que dice ser", async () => {
+    const doc = (await abrirStandalone()).window.document;
+    const opts = Array.from(doc.querySelectorAll("#contMethod option")).map((o) => o.textContent);
+    expect(opts).toEqual([
+      "Estimación por rangos + simulación Monte Carlo (AACE 41R-08)",
+      "Referencia por clase y percentil (tabla didáctica, no normativa)",
+      "Porcentaje manual definido por el equipo"
+    ]);
+    expect(doc.getElementById("p3")!.textContent).not.toMatch(/según los rangos de exactitud de AACE 18R-97/);
+    // por defecto conserva la referencia (y el BAC dorado), pero rotulada como lo que es:
+    expect((doc.getElementById("contMethod") as HTMLSelectElement).value).toBe("clase_tabla");
+    expect(doc.getElementById("kBAC")!.textContent).toBe("$ 8,075,181");
+    expect(doc.getElementById("contPctHint")!.textContent).toMatch(/referencia didáctica.*no proviene de una norma de AACE/);
+    expect(doc.getElementById("rangeCard")!.style.display).toBe("none");
+  });
+
+  it("rangos + Monte Carlo: simula de verdad (contingencia = P70 − base), los percentiles crecen, y el resultado es reproducible", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    fijar(dom, doc, "contMethod", "rangos_mc");
+    expect(doc.getElementById("rangeCard")!.style.display).toBe("block");
+    expect(doc.querySelectorAll("#rngBody tr").length).toBe(5);                      // las 5 fases de DISTRIB+
+    expect(doc.getElementById("rngFoot")!.textContent).toMatch(/Cubren el 100\.0 % del costo base/);
+    expect(doc.getElementById("rngWarn")!.style.display).toBe("none");               // cobertura completa, todo fundamentado, ρ = 30 %
+
+    const base = 7100000, cont = dinero(doc.getElementById("kCont")!.textContent);
+    const p50 = dinero(filaP(doc, 50).children[1].textContent), p70 = dinero(filaP(doc, 70).children[1].textContent), p90 = dinero(filaP(doc, 90).children[1].textContent);
+    expect(cont).toBeCloseTo(p70 - base, -1);                                        // kCont = P70 − Σ más probable (a la unidad de redondeo)
+    expect(cont).toBeGreaterThan(0);
+    expect(p50).toBeLessThan(p70); expect(p70).toBeLessThan(p90);
+    expect(dinero(doc.getElementById("kBAC")!.textContent)).toBeCloseTo(base + cont + dinero(doc.getElementById("kEsc")!.textContent), -1);   // BAC = base + contingencia + escalación
+    expect(cont / base).toBeGreaterThan(0.05); expect(cont / base).toBeLessThan(0.2);                                                          // ≈ 9 %: un resultado del análisis, no el 12 % de la tabla
+    expect(doc.getElementById("rngSvg")!.querySelectorAll("path").length).toBe(1);   // curva S
+    expect(doc.getElementById("rngResults")!.textContent).toMatch(/10,000 iteraciones · correlación 30 % · semilla 20260713/);
+
+    // reproducible: recalcular sin cambiar nada da exactamente lo mismo
+    (dom.window as any).recalcCont();
+    expect(dinero(doc.getElementById("kCont")!.textContent)).toBe(cont);
+  });
+
+  it("el percentil de decisión y la correlación mueven la contingencia en el sentido correcto; con ρ = 0 se avisa la subestimación", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    fijar(dom, doc, "contMethod", "rangos_mc");
+    const c = () => dinero(doc.getElementById("kCont")!.textContent);
+    fijar(dom, doc, "contPct", "P50"); const c50 = c();
+    fijar(dom, doc, "contPct", "P90"); const c90 = c();
+    expect(c90).toBeGreaterThan(c50);
+    fijar(dom, doc, "contPct", "P80");
+    fijar(dom, doc, "corrPct", "0"); const rho0 = c();
+    fijar(dom, doc, "corrPct", "100"); const rho100 = c();
+    expect(rho100).toBeGreaterThan(rho0);                                            // más correlación = más dispersión = más contingencia al mismo percentil
+    fijar(dom, doc, "corrPct", "0");
+    expect(doc.getElementById("rngWarn")!.textContent).toMatch(/Correlación 0 %.*SUBESTIMA/);
+    const sens = Array.from(doc.querySelectorAll("#rngResults table")[1].querySelectorAll("tbody tr")).map((r) => dinero(r.children[1].textContent));
+    expect(sens.length).toBe(4);
+    for (let i = 1; i < 4; i++) expect(sens[i]).toBeGreaterThan(sens[i - 1]);        // tabla de sensibilidad a la correlación
+  });
+
+  it("valida las partidas: un rango incoherente se señala y queda fuera de la simulación; una partida sin costo no se agrega", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    fijar(dom, doc, "contMethod", "rangos_mc");
+    const antes = dinero(doc.getElementById("kCont")!.textContent);
+    const lo = celdaRng(doc, 3, "lowPct"); lo.value = "5"; lo.dispatchEvent(new dom.window.Event("change", { bubbles: true })); // mínimo POR ENCIMA del más probable
+    expect(filaRango(doc, 3).textContent).toMatch(/el mínimo debe estar entre −100 % y 0 %/);
+    expect(filaRango(doc, 3).className).toMatch(/rng-bad/);
+    expect(doc.getElementById("rngWarn")!.textContent).toMatch(/1 partida\(s\) con datos inválidos quedan fuera/);
+    expect(dinero(doc.getElementById("kCont")!.textContent)).not.toBe(antes);
+    fijar(dom, doc, "rngName", "Sin costo"); fijar(dom, doc, "rngMl", "0");
+    (doc.querySelector('button[onclick="addRange()"]') as HTMLElement).click();
+    expect(doc.querySelectorAll("#rngBody tr").length).toBe(5);
+    expect(doc.getElementById("gpiToast")!.textContent).toMatch(/costo más probable mayor que cero/);
+  });
+
+  it("agregar una partida sin rango usa el de la clase, y sin fundamento se avisa; borrar todas deja la contingencia en 0", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    fijar(dom, doc, "contMethod", "rangos_mc");
+    fijar(dom, doc, "rngName", "Nueva bodega"); fijar(dom, doc, "rngMl", "100000");
+    (doc.querySelector('button[onclick="addRange()"]') as HTMLElement).click();
+    expect(doc.querySelectorAll("#rngBody tr").length).toBe(6);
+    expect(celdaRng(doc, 5, "lowPct").value).toBe("-15"); expect(celdaRng(doc, 5, "highPct").value).toBe("30");   // clase 3
+    expect(doc.getElementById("rngWarn")!.textContent).toMatch(/1 de 6 partida\(s\) sin fundamento/);
+    expect(doc.getElementById("rngWarn")!.textContent).toMatch(/suman 7,200,000 \(101\.4 % del costo base/);
+    for (let i = 0; i < 6; i++) (doc.querySelector('#rngBody button[onclick^="delRange"]') as HTMLElement).click();
+    expect(doc.querySelectorAll("#rngBody tr")[0].textContent).toMatch(/Sin partidas/);
+    expect(dinero(doc.getElementById("kCont")!.textContent)).toBe(0);
+    expect(doc.getElementById("contPctHint")!.textContent).toMatch(/la contingencia es 0 hasta definirlas/);
+  });
+
+  it("método manual: % del estimado base con fundamento; oculta el percentil", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    fijar(dom, doc, "contMethod", "manual");
+    fijar(dom, doc, "manualPct", "8");
+    expect(dinero(doc.getElementById("kCont")!.textContent)).toBe(568000);           // 8 % de 7.100.000
+    expect(doc.getElementById("manualWrap")!.style.display).toBe("block");
+    expect(doc.getElementById("contPctWrap")!.style.display).toBe("none");
+    expect(doc.getElementById("kContCap")!.textContent).toBe("manual");
+    expect(doc.getElementById("contPctHint")!.textContent).toMatch(/definida por el equipo/);
+  });
+
+  it("compatibilidad: un proyecto que declaraba «Simulación Monte Carlo» (pero calculaba la tabla) abre con los MISMOS montos, rotulado como referencia didáctica y con aviso", async () => {
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Costos", course: "GPI", currency: "USD", createdAt: 1, updatedAt: 1 },
+          modules: { cost: {
+            meta: { module: "cost_management_plan", version: 2 }, estimate: { class: 3 },
+            budget: { baseCost: 1000000, mgmtReservePct: 5, contingency: { method: "Simulación Monte Carlo", percentile: "P70", rate: 0.12 } },
+            changeOrders: []
+          } }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); } });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    expect((doc.getElementById("contMethod") as HTMLSelectElement).value).toBe("clase_tabla");
+    expect(dinero(doc.getElementById("kCont")!.textContent)).toBe(120000);          // clase 3 · P70 = 12 % (igual que antes)
+    expect(doc.getElementById("contPctHint")!.textContent).toMatch(/declaraba «Simulación Monte Carlo», pero lo que se calculaba era esta referencia/);
+    expect(doc.getElementById("rangeCard")!.style.display).toBe("none");
+  });
+
+  it("persiste en el proyecto: método, correlación, partidas con su fundamento y el resumen de resultados; recargar los conserva", async () => {
+    const seedDb = { version: 1, activeId: "p1", projects: { p1: { schema: "gpi.project/v1", meta: { id: "p1", name: "Proyecto Costos", course: "GPI", currency: "USD", createdAt: 1, updatedAt: 1 }, modules: {} } } };
+    const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); } });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document, win = dom.window as any;
+    fijar(dom, doc, "baseCost", "300000", "input");
+    fijar(dom, doc, "contMethod", "rangos_mc");
+    fijar(dom, doc, "rngName", "Obra civil"); fijar(dom, doc, "rngMl", "200000"); fijar(dom, doc, "rngLo", "-10"); fijar(dom, doc, "rngHi", "40"); fijar(dom, doc, "rngBasis", "Cotización de 3 contratistas");
+    (doc.querySelector('button[onclick="addRange()"]') as HTMLElement).click();
+    fijar(dom, doc, "rngName", "Equipos"); fijar(dom, doc, "rngMl", "100000");
+    (doc.querySelector('button[onclick="addRange()"]') as HTMLElement).click();
+    fijar(dom, doc, "corrPct", "50");
+    const guardado = win.GPI.getModule("cost").budget;
+    expect(guardado.contingency).toMatchObject({ method: "rangos_mc", percentile: "P70" });
+    expect(guardado.rangeAnalysis.correlation).toBe(0.5);
+    expect(guardado.rangeAnalysis.lines.map((l: any) => [l.name, l.ml, l.lowPct, l.highPct, l.basis])).toEqual([["Obra civil", 200000, -10, 40, "Cotización de 3 contratistas"], ["Equipos", 100000, -15, 30, ""]]);
+    expect(guardado.rangeAnalysis.results.p70).toBeGreaterThan(300000);
+    expect(guardado.contingency.rate).toBeGreaterThan(0);
+
+    const dom2 = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", dom.window.localStorage.getItem("gpi_db")); } });
+    await new Promise((r) => setTimeout(r, 800));
+    const d2 = dom2.window.document;
+    expect((d2.getElementById("contMethod") as HTMLSelectElement).value).toBe("rangos_mc");
+    expect(d2.querySelectorAll("#rngBody tr").length).toBe(2);
+    expect((d2.getElementById("corrPct") as HTMLInputElement).value).toBe("50");
+    expect(dinero(d2.getElementById("kCont")!.textContent)).toBe(dinero(doc.getElementById("kCont")!.textContent));
+  });
+
+  it("«Traer partidas de Estimar los Costos»: una partida por paquete de trabajo con el rango de la clase; al volver a traer conserva rango y fundamento", async () => {
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: { p1: { schema: "gpi.project/v1", meta: { id: "p1", name: "Proyecto Costos", course: "GPI", currency: "USD", createdAt: 1, updatedAt: 1 }, modules: {
+        wbs: { rootId: "root", idCounter: 3, nodes: { root: { id: "root", name: "P", children: ["w1", "w2"] }, w1: { id: "w1", name: "Cimentaciones", children: [] }, w2: { id: "w2", name: "Estructura", children: [] } } },
+        activities: { byLeaf: { w1: [{ id: "a1", name: "Excavar", unit: "m3", qty: 1000 }, { id: "a2", name: "Vaciar", unit: "m3", qty: 500 }], w2: [{ id: "a3", name: "Montar", unit: "kg", qty: 2000 }] }, idCounter: 4 },
+        costEstimate: { byActivity: { a1: 100, a2: 200, a3: 50 } }
+      } } }
+    };
+    const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); } });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document, win = dom.window as any;
+    expect(doc.getElementById("pullRngEst")!.style.display).not.toBe("none");        // conectado a un proyecto
+    fijar(dom, doc, "contMethod", "rangos_mc");
+    expect(doc.querySelectorAll("#rngBody tr")[0].textContent).toMatch(/Sin partidas/);   // un proyecto real arranca SIN partidas (regla de oro)
+    win.pullRangesFromEstimate();
+    expect(doc.querySelectorAll("#rngBody tr").length).toBe(2);
+    expect(celdaRng(doc, 0, "name").value).toMatch(/Cimentaciones/);
+    expect(celdaRng(doc, 0, "ml").value).toBe("200000");                             // 1000×100 + 500×200
+    expect(celdaRng(doc, 1, "ml").value).toBe("100000");
+    expect(celdaRng(doc, 0, "lowPct").value).toBe("-15");                             // rango inicial = clase 3
+    const b = celdaRng(doc, 0, "basis"); b.value = "Cotización vigente"; b.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    const lo = celdaRng(doc, 0, "lowPct"); lo.value = "-8"; lo.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    win.pullRangesFromEstimate();                                                     // vuelve a traer: no pisa lo trabajado
+    expect(celdaRng(doc, 0, "lowPct").value).toBe("-8");
+    expect(celdaRng(doc, 0, "basis").value).toBe("Cotización vigente");
+  });
+
+  it("SEGURIDAD: nombres y fundamentos importados con marcado HTML no inyectan código en la tabla de partidas", async () => {
+    const XSS = '"><img src=x onerror="window.__xssFired=true">';
+    const seedDb = { version: 1, activeId: "p1", projects: { p1: { schema: "gpi.project/v1", meta: { id: "p1", name: "P", course: "GPI", currency: "USD", createdAt: 1, updatedAt: 1 }, modules: { cost: {
+      meta: { module: "cost_management_plan", version: 2 }, estimate: { class: 3 },
+      budget: { baseCost: 100000, contingency: { method: "rangos_mc", percentile: "P70" }, rangeAnalysis: { lines: [{ id: "m-1", name: XSS, ml: 100000, lowPct: -10, highPct: 30, basis: XSS }], correlation: 0.3 } },
+      changeOrders: []
+    } } } } };
+    const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); } });
+    await new Promise((r) => setTimeout(r, 900));
+    const doc = dom.window.document;
+    expect((dom.window as any).__xssFired).toBeUndefined();
+    expect(doc.querySelector("#rngBody img")).toBeNull();
+    expect(celdaRng(doc, 0, "name").value).toBe(XSS);
+    expect(celdaRng(doc, 0, "basis").value).toBe(XSS);
+  });
+
+  it("el documento BOE recoge la base de la contingencia: método, correlación, semilla, partidas y su fundamento", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    fijar(dom, doc, "contMethod", "rangos_mc");
+    (dom.window as any).buildDoc();
+    const txt = doc.getElementById("doc")!.textContent as string;
+    expect(txt).toMatch(/Estimación por rangos \+ simulación Monte Carlo \(AACE 41R-08\), P70/);
+    expect(txt).toMatch(/correlación entre partidas 30 %; 10,000 iteraciones \(semilla 20260713, reproducible\)/);
+    expect(txt).toMatch(/Contingencia = P70 − estimado base/);
+    expect(txt).toMatch(/4 Construcción.*-10 % \/ \+35 %.*Rendimientos de cuadrilla estimados/);
+    expect(txt).toMatch(/los eventos de riesgo discretos no están incluidos/);
+    fijar(dom, doc, "contMethod", "clase_tabla");
+    (dom.window as any).buildDoc();
+    expect(doc.getElementById("doc")!.textContent).toMatch(/Referencia didáctica por clase y percentil: no proviene de una norma de AACE/);
   });
 });

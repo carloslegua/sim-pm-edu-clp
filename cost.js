@@ -58,6 +58,150 @@
 		};
 	}
 	//#endregion
+	//#region src/shared/range-estimating.ts
+	var PERCENTILES = [
+		5,
+		10,
+		20,
+		30,
+		40,
+		50,
+		60,
+		70,
+		80,
+		90,
+		95
+	];
+	var DEFAULT_ITERATIONS = 1e4;
+	var DEFAULT_SEED = 20260713;
+	var DEFAULT_CORRELATION = .3;
+	var num$1 = (v) => Number(v);
+	var finite = (v) => typeof v === "number" ? isFinite(v) : typeof v === "string" && v.trim() !== "" && isFinite(Number(v));
+	function mulberry32(seed) {
+		let a = seed >>> 0;
+		return () => {
+			a = a + 1831565813 >>> 0;
+			let t = a;
+			t = Math.imul(t ^ t >>> 15, t | 1);
+			t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+			return ((t ^ t >>> 14) >>> 0) / 4294967296;
+		};
+	}
+	function normCdf(x) {
+		const s = x < 0 ? -1 : 1, z = Math.abs(x) / Math.SQRT2, t = 1 / (1 + .3275911 * z);
+		return .5 * (1 + s * (1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - .284496736) * t + .254829592) * t * Math.exp(-z * z)));
+	}
+	function triInv(u, a, m, b) {
+		if (b <= a) return m;
+		return u < (m - a) / (b - a) ? a + Math.sqrt(u * (b - a) * (m - a)) : b - Math.sqrt((1 - u) * (b - a) * (b - m));
+	}
+	function lineProblems(l) {
+		const p = [];
+		if (!finite(l.ml) || num$1(l.ml) <= 0) p.push("el costo más probable debe ser mayor que cero");
+		if (!finite(l.lowPct) || num$1(l.lowPct) > 0 || num$1(l.lowPct) < -100) p.push("el mínimo debe estar entre −100 % y 0 % del más probable");
+		if (!finite(l.highPct) || num$1(l.highPct) < 0) p.push("el máximo debe ser 0 % o más sobre el más probable");
+		return p;
+	}
+	function quantile(sorted, p) {
+		const pos = (sorted.length - 1) * p / 100, lo = Math.floor(pos), hi = Math.ceil(pos);
+		return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+	}
+	function simulateRange(lines, opts) {
+		const o = opts || {};
+		const iterations = Math.max(1e3, Math.min(2e5, Math.floor(o.iterations || 1e4)));
+		const seed = Number.isFinite(o.seed) ? o.seed : DEFAULT_SEED;
+		const rho = Math.max(0, Math.min(1, o.correlation === void 0 || !isFinite(o.correlation) ? DEFAULT_CORRELATION : o.correlation));
+		const valid = (lines || []).filter((l) => l && lineProblems(l).length === 0);
+		if (!valid.length) return null;
+		const a = valid.map((l) => num$1(l.ml) * (1 + num$1(l.lowPct) / 100));
+		const m = valid.map((l) => num$1(l.ml));
+		const b = valid.map((l) => num$1(l.ml) * (1 + num$1(l.highPct) / 100));
+		const ml = m.reduce((s, x) => s + x, 0);
+		const rand = mulberry32(seed);
+		let spare = null;
+		const normal = () => {
+			if (spare !== null) {
+				const s = spare;
+				spare = null;
+				return s;
+			}
+			let u = 0;
+			while (u === 0) u = rand();
+			const v = rand(), r = Math.sqrt(-2 * Math.log(u)), th = 2 * Math.PI * v;
+			spare = r * Math.sin(th);
+			return r * Math.cos(th);
+		};
+		const sr = Math.sqrt(rho), se = Math.sqrt(1 - rho);
+		const totals = new Float64Array(iterations);
+		let sum = 0, sumSq = 0;
+		for (let i = 0; i < iterations; i++) {
+			const zc = normal();
+			let t = 0;
+			for (let j = 0; j < valid.length; j++) {
+				if (b[j] <= a[j]) {
+					t += m[j];
+					continue;
+				}
+				t += triInv(normCdf(sr * zc + se * normal()), a[j], m[j], b[j]);
+			}
+			totals[i] = t;
+			sum += t;
+			sumSq += t * t;
+		}
+		const mean = sum / iterations, sd = Math.sqrt(Math.max(0, sumSq / iterations - mean * mean));
+		const sorted = Float64Array.from(totals).sort();
+		const p = {};
+		PERCENTILES.forEach((q) => {
+			p[q] = quantile(sorted, q);
+		});
+		const curve = [];
+		for (let q = 1; q <= 99; q++) curve.push(quantile(sorted, q));
+		return {
+			n: valid.length,
+			excluded: (lines || []).length - valid.length,
+			iterations,
+			seed,
+			correlation: rho,
+			ml,
+			mean,
+			sd,
+			min: sorted[0],
+			max: sorted[iterations - 1],
+			p,
+			curve
+		};
+	}
+	function contingencyAt(res, percentile) {
+		const raw = (res.p[percentile] !== void 0 ? res.p[percentile] : NaN) - res.ml;
+		return {
+			amount: Math.max(0, raw),
+			raw,
+			covered: raw < 0
+		};
+	}
+	function rangeAdvisories(lines, res, baseCost, classRange) {
+		const out = [], ls = lines || [];
+		if (!ls.length) {
+			out.push("Define las partidas del análisis para calcular la contingencia.");
+			return out;
+		}
+		const bad = ls.filter((l) => lineProblems(l).length);
+		if (bad.length) out.push(bad.length + " partida(s) con datos inválidos quedan fuera de la simulación: " + bad.slice(0, 3).map((l) => l.name || l.id).join(", ") + (bad.length > 3 ? "…" : "") + ".");
+		if (!res) return out;
+		if (baseCost > 0 && Math.abs(res.ml - baseCost) / baseCost > .01) out.push("Las partidas suman " + Math.round(res.ml).toLocaleString("es-PE") + " (" + (res.ml / baseCost * 100).toFixed(1) + " % del costo base " + Math.round(baseCost).toLocaleString("es-PE") + "): la contingencia solo cubre lo que las partidas cubren.");
+		const noBasis = ls.filter((l) => !String(l.basis || "").trim()).length;
+		if (noBasis) out.push(noBasis + " de " + ls.length + " partida(s) sin fundamento del rango: cada rango debe justificarse en el Basis of Estimate.");
+		const flat = ls.filter((l) => !lineProblems(l).length && num$1(l.lowPct) === 0 && num$1(l.highPct) === 0).length;
+		if (flat === res.n) out.push("Ninguna partida tiene incertidumbre (mín = más probable = máx): la contingencia resulta 0.");
+		else if (flat) out.push(flat + " partida(s) sin incertidumbre (rango 0 %): se tratan como costo fijo.");
+		if (res.correlation === 0) out.push("Correlación 0 %: las partidas se tratan como independientes y la dispersión del total se SUBESTIMA (los errores de estimación suelen ir en la misma dirección).");
+		if (classRange && res.ml > 0) {
+			const simHi = (res.p[90] - res.ml) / res.ml * 100;
+			if (classRange.hi > 0 && simHi < classRange.hi * .4) out.push("El P90 queda a +" + simHi.toFixed(1) + " % del estimado base, mucho más estrecho que el rango típico de la clase (+" + classRange.hi + " %): revisa si los rangos por partida o la correlación son demasiado optimistas.");
+		}
+		return out;
+	}
+	//#endregion
 	//#region src/shared/change-orders.ts
 	var FUND_CONT = "Contingencia";
 	var CO_KIND_LABEL = {
@@ -179,6 +323,8 @@
 			use: "Screening / evaluación conceptual",
 			meth: "Estocástico (paramétrico, capacidad)",
 			range: "-30% / +50% (típico)",
+			lo: -30,
+			hi: 50,
 			desc: "Estimado de orden de magnitud. Mínima definición de ingeniería; se usa para descartar alternativas."
 		},
 		4: {
@@ -186,6 +332,8 @@
 			use: "Estudio de factibilidad",
 			meth: "Predominantemente estocástico",
 			range: "-20% / +40%",
+			lo: -20,
+			hi: 40,
 			desc: "Basado en factores y equipos mayores. Soporta decisiones de continuidad del proyecto."
 		},
 		3: {
@@ -193,6 +341,8 @@
 			use: "Autorización de presupuesto / control base",
 			meth: "Mixto estocástico–determinístico",
 			range: "-15% / +30%",
+			lo: -15,
+			hi: 30,
 			desc: "Semidetallado. Marca el paso de estudio a ejecución; suele ser la base del control."
 		},
 		2: {
@@ -200,6 +350,8 @@
 			use: "Control y oferta / licitación",
 			meth: "Predominantemente determinístico",
 			range: "-10% / +20%",
+			lo: -10,
+			hi: 20,
 			desc: "Detallado por partidas. Usado para control detallado y para ofertar."
 		},
 		1: {
@@ -207,6 +359,8 @@
 			use: "Estimado definitivo / cierre de oferta",
 			meth: "Determinístico (cantidades y precios)",
 			range: "-5% / +15%",
+			lo: -5,
+			hi: 15,
 			desc: "Máxima definición. Verificación final y check estimate."
 		}
 	};
@@ -261,10 +415,54 @@
 			sponsorAuth: false
 		}
 	];
+	var SAMPLE_RANGES = [
+		{
+			id: "m-1",
+			name: "1 Dirección de Proyecto",
+			ml: 195e3,
+			lowPct: -5,
+			highPct: 15,
+			basis: "Costo de personal propio; crece si el proyecto se alarga."
+		},
+		{
+			id: "m-2",
+			name: "2 Ingeniería y Diseño",
+			ml: 355e3,
+			lowPct: -10,
+			highPct: 25,
+			basis: "Diseño estructural al 80 %; el estudio de suelos (2.1) puede modificar la cimentación."
+		},
+		{
+			id: "m-3",
+			name: "3 Procura",
+			ml: 295e4,
+			lowPct: -5,
+			highPct: 20,
+			basis: "Cotizaciones vigentes de los Proveedores A/B/C; exposición al precio del acero y al tipo de cambio."
+		},
+		{
+			id: "m-4",
+			name: "4 Construcción",
+			ml: 3315e3,
+			lowPct: -10,
+			highPct: 35,
+			basis: "Rendimientos de cuadrilla estimados; incertidumbre geotécnica en movimiento de tierras y cimentaciones."
+		},
+		{
+			id: "m-5",
+			name: "5 Pruebas y Puesta en Marcha",
+			ml: 285e3,
+			lowPct: -5,
+			highPct: 20,
+			basis: "Depende de reprocesos tras las pruebas de instalaciones."
+		}
+	];
 	var state = {
 		curClass: 3,
 		co: [],
-		baselines: []
+		baselines: [],
+		ranges: [],
+		legacyMethod: ""
 	};
 	$("tabs").addEventListener("click", (e) => {
 		const b = e.target.closest(".tab");
@@ -349,11 +547,335 @@
 		save();
 		recalcCont();
 	}
+	var METHOD_LABEL = {
+		rangos_mc: "Estimación por rangos + simulación Monte Carlo (AACE 41R-08)",
+		clase_tabla: "Referencia por clase y percentil (tabla didáctica, no normativa)",
+		manual: "Porcentaje manual definido por el equipo"
+	};
+	function contMethod() {
+		const v = $("contMethod").value;
+		return v === "rangos_mc" || v === "manual" ? v : "clase_tabla";
+	}
+	var pctNum = () => parseInt($("contPct").value.replace(/\D/g, ""), 10) || 70;
+	function corrValue() {
+		const v = parseFloat($("corrPct").value);
+		return isFinite(v) ? Math.max(0, Math.min(100, v)) / 100 : DEFAULT_CORRELATION;
+	}
+	var simCache = {};
+	function simulate(rho) {
+		const key = JSON.stringify([state.ranges.map((l) => [
+			l.ml,
+			l.lowPct,
+			l.highPct
+		]), rho]);
+		if (!(key in simCache)) {
+			if (Object.keys(simCache).length > 16) Object.keys(simCache).forEach((k) => {
+				delete simCache[k];
+			});
+			simCache[key] = simulateRange(state.ranges, {
+				correlation: rho,
+				iterations: DEFAULT_ITERATIONS,
+				seed: DEFAULT_SEED
+			});
+		}
+		return simCache[key];
+	}
+	function contingencyCalc(base) {
+		const m = contMethod();
+		if (m === "manual") {
+			const p = Math.max(0, parseFloat($("manualPct").value) || 0);
+			return {
+				cont: base * p / 100,
+				method: m,
+				res: null,
+				note: "Contingencia = <b>" + p + " %</b> del estimado base, definida por el equipo: documenta su fundamento."
+			};
+		}
+		if (m === "rangos_mc") {
+			const res = simulate(corrValue());
+			if (!res) return {
+				cont: 0,
+				method: m,
+				res: null,
+				note: "Aún no hay partidas válidas: la contingencia es <b>0</b> hasta definirlas (o traerlas del estimado)."
+			};
+			const c = contingencyAt(res, pctNum());
+			return {
+				cont: c.amount,
+				method: m,
+				res,
+				note: "Contingencia = <b>P" + pctNum() + "</b> de la simulación − estimado base (Σ costo más probable)" + (c.covered ? ": el estimado base ya supera ese percentil, no hace falta reserva." : ".")
+			};
+		}
+		const rate = contingencyRate();
+		return {
+			cont: base * rate,
+			method: m,
+			res: null,
+			note: "Clase <b>" + state.curClass + "</b> · <b>" + $("contPct").value + "</b> → <b>" + (rate * 100).toFixed(1) + " %</b> del estimado base. Es una <b>referencia didáctica</b> (no proviene de una norma de AACE): a menor madurez del diseño, mayor contingencia para el mismo nivel de confianza. Para determinar la contingencia de un estimado usa la <b>estimación por rangos + simulación Monte Carlo</b>."
+		};
+	}
+	function renderContUi(calc, base) {
+		const hint = document.getElementById("contPctHint");
+		if (hint) hint.innerHTML = calc.note + (calc.method === "clase_tabla" && state.legacyMethod ? "<br><b>Nota:</b> este proyecto declaraba «" + esc(state.legacyMethod) + "», pero lo que se calculaba era esta referencia por clase y percentil; ahora se rotula como lo que es." : "");
+		$("rangeCard").style.display = calc.method === "rangos_mc" ? "block" : "none";
+		$("manualWrap").style.display = calc.method === "manual" ? "block" : "none";
+		$("contPctWrap").style.display = calc.method === "manual" ? "none" : "block";
+		if (calc.method === "rangos_mc") renderRange(calc, base);
+	}
+	var sgn = (n) => (n > 0 ? "+" : "") + n;
+	function curveSvg(res, p) {
+		const W = 560, H = 240, l = 58, t = 14;
+		const lo = Math.min(res.curve[0], res.ml), hi = Math.max(res.curve[98], res.ml), span = hi - lo || 1;
+		const xs = (v) => l + (v - lo) / span * 486, ys = (q) => t + (100 - q) / 100 * 186;
+		const path = res.curve.map((v, i) => (i ? "L" : "M") + xs(v).toFixed(1) + "," + ys(i + 1).toFixed(1)).join(" ");
+		const short = (v) => Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(2) + " M" : Math.round(v).toLocaleString("es-PE");
+		const xt = [
+			lo,
+			lo + span / 2,
+			hi
+		].map((v, i) => `<text x="${xs(v).toFixed(1)}" y="218" text-anchor="${[
+			"start",
+			"middle",
+			"end"
+		][i]}" class="rng-tick">${esc(short(v))}</text>`).join("");
+		const yt = [
+			0,
+			25,
+			50,
+			75,
+			100
+		].map((q) => `<line x1="${l}" x2="544" y1="${ys(q)}" y2="${ys(q)}" class="rng-grid"/><text x="52" y="${ys(q) + 3}" text-anchor="end" class="rng-tick">${q}%</text>`).join("");
+		const pv = res.p[p], px = xs(pv), py = ys(p), mx = xs(res.ml);
+		return `<svg id="rngSvg" viewBox="0 0 ${W} ${H}" class="rng-svg" role="img" aria-label="Curva S del costo total simulado: probabilidad acumulada de no superar cada costo. Estimado base ${esc(short(res.ml))}; P${p} ${esc(short(pv))}.">
+    ${yt}${xt}
+    <line x1="${mx}" x2="${mx}" y1="${t}" y2="200" class="rng-base"/><text x="${mx + 4}" y="24" class="rng-tick">Base</text>
+    <path d="${path}" class="rng-line"/>
+    <line x1="${px}" x2="${px}" y1="${py}" y2="200" class="rng-sel"/><line x1="${l}" x2="${px}" y1="${py}" y2="${py}" class="rng-sel"/>
+    <circle cx="${px}" cy="${py}" r="5" class="rng-dot"/><text x="${Math.min(px + 9, 520)}" y="${py + 16}" class="rng-tick" font-weight="700">P${p}</text>
+    <text x="301" y="236" text-anchor="middle" class="rng-cap">Costo total del estimado</text>
+    <text x="14" y="107" text-anchor="middle" class="rng-cap" transform="rotate(-90 14 107)">Prob. de no superarlo</text>
+    <line id="rngCross" x1="0" x2="0" y1="${t}" y2="200" class="rng-cross" style="display:none"/>
+    <rect id="rngHit" x="${l}" y="${t}" width="486" height="186" fill="transparent"/>
+  </svg>`;
+	}
+	function renderRange(calc, base) {
+		const res = calc.res, p = pctNum(), cls = CLASSES[state.curClass];
+		const lineIn = (i, f, v, w, type = "text", extra = "") => `<input ${type === "number" ? "type=\"number\" step=\"0.1\"" : ""} class="rng-in" style="width:${w}" value="${escA(v)}" data-i="${i}" data-f="${f}" onchange="rangeEdit(this)" ${extra}>`;
+		$("rngBody").innerHTML = state.ranges.length ? state.ranges.map((l, i) => {
+			const pr = lineProblems(l), ml = Number(l.ml);
+			const okv = !pr.length;
+			return `<tr class="${okv ? "" : "rng-bad"}">
+      <td>${lineIn(i, "name", l.name, "100%", "text", "aria-label=\"Nombre de la partida\"")}</td>
+      <td>${lineIn(i, "ml", l.ml, "110px", "number", "aria-label=\"Costo más probable\"")}</td>
+      <td>${lineIn(i, "lowPct", l.lowPct, "70px", "number", "aria-label=\"Mínimo en porcentaje\"")}</td>
+      <td>${lineIn(i, "highPct", l.highPct, "70px", "number", "aria-label=\"Máximo en porcentaje\"")}</td>
+      <td class="num muted">${okv ? fmt(ml * (1 + Number(l.lowPct) / 100)) : "—"}</td><td class="num muted">${okv ? fmt(ml * (1 + Number(l.highPct) / 100)) : "—"}</td>
+      <td>${lineIn(i, "basis", l.basis || "", "100%", "text", "placeholder=\"Fundamento del rango\" aria-label=\"Fundamento del rango\"")}${okv ? "" : `<div class="rng-msg">⚠ ${esc(pr.join("; "))}</div>`}</td>
+      <td><button class="btn ghost sm" onclick="delRange(${i})" title="Eliminar partida" aria-label="Eliminar partida">✕</button></td></tr>`;
+		}).join("") : `<tr><td colspan="8" class="muted">Sin partidas: agrégalas abajo o tráelas del estimado de costos.</td></tr>`;
+		const sumMl = state.ranges.reduce((s, l) => s + (lineProblems(l).length ? 0 : Number(l.ml)), 0);
+		$("rngFoot").innerHTML = `<tr style="font-weight:700"><td>Σ partidas</td><td class="num">${fmt(sumMl)}</td><td colspan="6" class="muted" style="font-weight:500;font-size:11.5px">${base ? "Cubren el " + (sumMl / base * 100).toFixed(1) + " % del costo base " + fmt(base) : "Define el costo base"}</td></tr>`;
+		const warn = rangeAdvisories(state.ranges, res, base, {
+			lo: cls.lo,
+			hi: cls.hi
+		});
+		$("rngWarn").innerHTML = warn.length ? "<b>Revisa:</b><ul>" + warn.map((w) => `<li>${esc(w)}</li>`).join("") + "</ul>" : "";
+		$("rngWarn").style.display = warn.length ? "block" : "none";
+		if (!res) {
+			$("rngResults").innerHTML = "";
+			return;
+		}
+		const row = (q) => {
+			const c = contingencyAt(res, q);
+			return `<tr class="${q === p ? "rng-selrow" : ""}"><td>P${q}${q === p ? " · decisión" : ""}</td><td class="num">${fmt(res.p[q])}</td><td class="num">${fmt(c.amount)}</td><td class="num">${res.ml ? (c.amount / res.ml * 100).toFixed(1) + " %" : "—"}</td></tr>`;
+		};
+		const sens = [
+			0,
+			.3,
+			.6,
+			1
+		].map((rho) => {
+			const s = simulate(rho);
+			const c = s ? contingencyAt(s, p).amount : 0;
+			const cur = Math.abs(rho - corrValue()) < .005;
+			return `<tr class="${cur ? "rng-selrow" : ""}"><td>${Math.round(rho * 100)} %${cur ? " · actual" : ""}</td><td class="num">${fmt(c)}</td><td class="num">${res.ml ? (c / res.ml * 100).toFixed(1) + " %" : "—"}</td></tr>`;
+		}).join("");
+		$("rngResults").innerHTML = `<div class="rng-grid2">
+      <div>
+        <div class="eyebrow" style="margin:0 0 6px">Distribución del costo total</div>
+        <table class="rng-res"><thead><tr><th>Percentil</th><th class="num">Costo total</th><th class="num">Contingencia (P − base)</th><th class="num">% del base</th></tr></thead>
+          <tbody>${[
+			10,
+			50,
+			70,
+			80,
+			90
+		].map(row).join("")}</tbody></table>
+        <div class="muted" style="font-size:11.5px;margin-top:6px">Estimado base Σ más probable ${fmt(res.ml)} · media ${fmt(res.mean)} · σ ${fmt(res.sd)} · rango simulado ${fmt(res.min)} – ${fmt(res.max)} · ${res.iterations.toLocaleString("es-PE")} iteraciones · correlación ${Math.round(res.correlation * 100)} % · semilla ${res.seed}</div>
+        <div class="eyebrow" style="margin:14px 0 6px">Efecto de la correlación (contingencia P${p})</div>
+        <table class="rng-res"><thead><tr><th>Correlación entre partidas</th><th class="num">Contingencia</th><th class="num">% del base</th></tr></thead><tbody>${sens}</tbody></table>
+        <div class="muted" style="font-size:11.5px;margin-top:6px">Con correlación 0 % las partidas se tratan como independientes y la dispersión del total se <b>subestima</b>.</div>
+      </div>
+      <div>${curveSvg(res, p)}<div id="rngHover" class="muted" style="font-size:12px;min-height:18px;margin-top:4px">Pasa el cursor sobre la curva para leer el costo de cada percentil.</div></div>
+    </div>`;
+		const hit = document.getElementById("rngHit"), cross = document.getElementById("rngCross"), out = document.getElementById("rngHover");
+		if (hit && cross && out) {
+			const svg = document.getElementById("rngSvg"), W = 560, l = 58, lo = Math.min(res.curve[0], res.ml), span = Math.max(res.curve[98], res.ml) - lo || 1;
+			hit.addEventListener("mousemove", (e) => {
+				const rect = svg.getBoundingClientRect(), vx = (e.clientX - rect.left) / (rect.width || 1) * W;
+				const cost = lo + Math.max(0, Math.min(1, (vx - l) / 486)) * span;
+				let q = 1;
+				while (q < 99 && res.curve[q] < cost) q++;
+				cross.setAttribute("x1", String(vx));
+				cross.setAttribute("x2", String(vx));
+				cross.style.display = "";
+				out.textContent = "P" + q + ": " + fmt(res.curve[q - 1]) + " · contingencia " + fmt(Math.max(0, res.curve[q - 1] - res.ml));
+			});
+			hit.addEventListener("mouseleave", () => {
+				cross.style.display = "none";
+			});
+		}
+	}
+	function onContMethod() {
+		userEdited = true;
+		recalcCont();
+		save();
+	}
+	function addRange() {
+		userEdited = true;
+		const name = $("rngName"), ml = +$("rngMl").value;
+		if (!name.value.trim() || !(ml > 0)) {
+			name.focus();
+			name.style.borderColor = "#dc3546";
+			showToast("Indica el nombre y un costo más probable mayor que cero.");
+			return;
+		}
+		name.style.borderColor = "";
+		const cls = CLASSES[state.curClass], loI = $("rngLo").value, hiI = $("rngHi").value;
+		state.ranges.push({
+			id: "m-" + (Date.now().toString(36) + state.ranges.length),
+			name: name.value.trim(),
+			ml,
+			lowPct: loI === "" ? cls.lo : +loI,
+			highPct: hiI === "" ? cls.hi : +hiI,
+			basis: $("rngBasis").value.trim()
+		});
+		name.value = "";
+		$("rngMl").value = "";
+		$("rngLo").value = "";
+		$("rngHi").value = "";
+		$("rngBasis").value = "";
+		recalcCont();
+		save();
+		flash();
+	}
+	function delRange(i) {
+		userEdited = true;
+		state.ranges.splice(i, 1);
+		recalcCont();
+		save();
+	}
+	function rangeEdit(el) {
+		const l = state.ranges[+el.dataset.i];
+		if (!l) return;
+		userEdited = true;
+		const f = el.dataset.f;
+		if (f === "name") l.name = el.value;
+		else if (f === "basis") l.basis = el.value;
+		else l[f] = el.value === "" ? NaN : +el.value;
+		recalcCont();
+		save();
+	}
+	function mergePulled(items) {
+		const cls = CLASSES[state.curClass], prev = new Map(state.ranges.map((l) => [l.id, l]));
+		const pulled = items.map((it) => {
+			const old = prev.get(it.id);
+			return old ? {
+				...old,
+				name: it.name,
+				ml: it.ml
+			} : {
+				id: it.id,
+				name: it.name,
+				ml: it.ml,
+				lowPct: cls.lo,
+				highPct: cls.hi,
+				basis: ""
+			};
+		});
+		state.ranges = pulled.concat(state.ranges.filter((l) => l.id.indexOf("r-") !== 0));
+		userEdited = true;
+		recalcCont();
+		save();
+		flash();
+		showToast(pulled.length + " partida(s) traídas. Los rangos nuevos parten de la clase " + state.curClass + ": ajústalos y fundaméntalos.");
+	}
+	function pullRangesFromEstimate() {
+		if (!gpiOn()) {
+			showToast("Abre este módulo desde el Panel de Control para conectar el estimado.");
+			return;
+		}
+		const G = GPI;
+		const rows = G.util.costEstimateRows(G.getModule("costEstimate"), G.getModule("activities"), G.getModule("wbs"));
+		const by = /* @__PURE__ */ new Map();
+		rows.forEach((r) => {
+			if (r.subtotal && r.subtotal > 0) {
+				const k = by.get(r.leafId) || {
+					name: (r.code + " " + r.leafName).trim(),
+					ml: 0
+				};
+				k.ml += r.subtotal;
+				by.set(r.leafId, k);
+			}
+		});
+		if (!by.size) {
+			showToast("Aún no hay actividades con Cantidad y Precio unitario cargados en Estimar los Costos.");
+			return;
+		}
+		mergePulled(Array.from(by, ([id, v]) => ({
+			id: "r-" + id,
+			name: v.name,
+			ml: Math.round(v.ml)
+		})));
+	}
+	function pullRangesFromWbs() {
+		if (!gpiOn()) {
+			showToast("Abre este módulo desde el Panel de Control para conectar la EDT.");
+			return;
+		}
+		const G = GPI, wbs = G.getModule("wbs");
+		const items = G.util.wbsLeaves(wbs).map((lf) => ({
+			id: "r-" + lf.id,
+			name: (lf.code + " " + lf.name).trim(),
+			ml: Math.round(Number(wbs.nodes[lf.id].cost) || 0)
+		})).filter((x) => x.ml > 0);
+		if (!items.length) {
+			showToast("La EDT del proyecto activo aún no tiene costos cargados en WBS Builder.");
+			return;
+		}
+		mergePulled(items);
+	}
+	function applyClassRange() {
+		const cls = CLASSES[state.curClass];
+		let n = 0;
+		state.ranges.forEach((l) => {
+			if (!String(l.basis || "").trim()) {
+				l.lowPct = cls.lo;
+				l.highPct = cls.hi;
+				n++;
+			}
+		});
+		userEdited = true;
+		recalcCont();
+		save();
+		showToast(n ? "Rango de la clase " + state.curClass + " aplicado a " + n + " partida(s) sin fundamento." : "Todas las partidas ya tienen fundamento: no se cambió ninguna.");
+	}
 	function recalcCont() {
 		$("fxBandWrap").style.display = $("fxMode").value === "float" ? "block" : "none";
 		const base = +$("baseCost").value || 0;
-		const contRate = contingencyRate();
-		const cont = base * contRate;
+		const calc = contingencyCalc(base);
+		const cont = calc.cont;
 		const i = (+$("inflRate").value || 0) / 100, n = +$("inflYears").value || 0;
 		const escInfl = base * (Math.pow(1 + i, n) - 1);
 		let escFx = 0;
@@ -362,11 +884,10 @@
 		const bac = base + cont + escT;
 		const mgmt = bac * ((+$("mgmtPct").value || 0) / 100);
 		const total = bac + mgmt;
-		const hint = document.getElementById("contPctHint");
-		if (hint) hint.innerHTML = "Clase <b>" + state.curClass + "</b> · <b>" + $("contPct").value + "</b> → contingencia <b>" + (contRate * 100).toFixed(1) + "%</b> del estimado base (AACE 18R-97: a menor madurez del diseño, mayor contingencia para el mismo nivel de confianza).";
+		renderContUi(calc, base);
 		$("kBase").textContent = fmt(base);
 		$("kCont").textContent = fmt(cont);
-		$("kContCap").textContent = $("contPct").value;
+		$("kContCap").textContent = calc.method === "manual" ? "manual" : $("contPct").value;
 		$("kEsc").textContent = fmt(escT);
 		$("kBAC").textContent = fmt(bac);
 		$("kMgmt").textContent = fmt(mgmt);
@@ -552,6 +1073,13 @@
     <td style="text-align:right" class="mono">${fmt2(+r.cost)}</td><td>${esc(r.fund)}</td>
     <td>${esc(r.status)}${r.status === "Aprobada" ? " · " + esc(r.approver || "—") + (r.sponsorAuth ? " (sponsor)" : "") : ""}${r.baselined ? " · " + esc(r.baselined) : ""}</td></tr>`).join("");
 	}
+	function rangeDocHtml() {
+		if (contMethod() !== "rangos_mc") return "";
+		const res = simulate(corrValue()), p = pctNum();
+		const lines = state.ranges.length ? state.ranges.map((l) => `<tr><td>${esc(l.name)}</td><td style="text-align:right" class="mono">${fmt(Number(l.ml))}</td><td style="text-align:right" class="mono">${sgn(Number(l.lowPct))} % / ${sgn(Number(l.highPct))} %</td><td>${esc(l.basis || "— (sin fundamento)")}</td></tr>`).join("") : `<tr><td colspan="4" class="muted">Sin partidas definidas</td></tr>`;
+		return `<p style="font-size:12.5px;margin:10px 0 4px"><b>Base de la contingencia — estimación por rangos y simulación Monte Carlo (AACE RP 41R-08).</b> ${res ? `Distribución triangular por partida; correlación entre partidas ${Math.round(res.correlation * 100)} %; ${res.iterations.toLocaleString("es-PE")} iteraciones (semilla ${res.seed}, reproducible). Estimado base Σ más probable ${fmt(res.ml)}; P50 ${fmt(res.p[50])}, P${p} ${fmt(res.p[p])}. Contingencia = P${p} − estimado base = <b>${fmt(contingencyAt(res, p).amount)}</b>. Cubre la incertidumbre de los rangos del estimado; los eventos de riesgo discretos no están incluidos.` : "Aún no hay partidas válidas."}</p>
+    <table class="dt"><thead><tr><td style="font-weight:700;color:var(--muted)">Partida</td><td style="font-weight:700;color:var(--muted);text-align:right">Más probable</td><td style="font-weight:700;color:var(--muted);text-align:right">Mín / Máx</td><td style="font-weight:700;color:var(--muted)">Fundamento del rango</td></tr></thead><tbody>${lines}</tbody></table>`;
+	}
 	function buildDoc() {
 		recalcCont();
 		const c = CLASSES[state.curClass], b = state._budget || {}, t = state._coTotals || {};
@@ -613,13 +1141,16 @@
       <h4 class="dsec-t"><span class="dn">05</span>Contingencia, escalation y presupuesto</h4>
       <table class="dt">
         <tr><td>Estimación de costos de las actividades</td><td>${fmt(b.base)}</td></tr>
-        <tr><td>Contingencia</td><td>${fmt(b.cont)} — ${esc($("contMethod").value)}, ${esc($("contPct").selectedOptions[0].text.split(" ")[0])} (${b.base ? (b.cont / b.base * 100).toFixed(1) : "—"}%)</td></tr>
+        <tr><td>Contingencia</td><td>${fmt(b.cont)} — ${esc(METHOD_LABEL[contMethod()])}${contMethod() === "manual" ? "" : ", " + esc($("contPct").selectedOptions[0].text.split(" ")[0])} (${b.base ? (b.cont / b.base * 100).toFixed(1) : "—"}%)</td></tr>
+        ${contMethod() === "clase_tabla" ? `<tr><td></td><td class="muted">Referencia didáctica por clase y percentil: no proviene de una norma de AACE ni de un análisis de riesgo del proyecto.</td></tr>` : ""}
+        ${contMethod() === "manual" ? `<tr><td>Fundamento del porcentaje</td><td>${esc($("manualBasis").value) || "— (documentar)"}</td></tr>` : ""}
         <tr><td>Escalation / FX</td><td>${fmt(b.esc)} — inflación ${esc($("inflRate").value)}% a ${esc($("inflYears").value)} años; componente FX ${esc($("fxShare").value)}%, TC ${fxTxt}</td></tr>
         <tr><td><b>BAC — línea base de costos${state.baselines.length ? " (inicial)" : ""}</b></td><td><b>${fmt(b.bac)}</b> (excluye reserva de gestión)</td></tr>
         <tr><td>Reserva de gestión</td><td>${fmt(b.mgmt)} — propiedad del sponsor</td></tr>
         <tr><td><b>Presupuesto total</b></td><td><b>${fmt(b.total)}</b></td></tr>
         ${state.baselines.length ? `<tr><td><b>BAC vigente</b></td><td><b>${fmt(t.bacCurrent)}</b> — ${esc(state.baselines[state.baselines.length - 1].version)} (${state.baselines.length} cambio(s) de línea base)</td></tr>` : ""}
       </table>
+      ${rangeDocHtml()}
     </section>
 
     <section class="dsec">
@@ -682,9 +1213,19 @@
 			budget: {
 				baseCost: +$("baseCost").value,
 				contingency: {
-					method: $("contMethod").value,
+					method: contMethod(),
+					methodLabel: METHOD_LABEL[contMethod()],
 					percentile: $("contPct").value,
-					rate: contingencyRate()
+					rate: state._budget && state._budget.base ? state._budget.cont / state._budget.base : 0,
+					manualPct: +$("manualPct").value || 0,
+					manualBasis: $("manualBasis").value
+				},
+				rangeAnalysis: {
+					lines: state.ranges,
+					correlation: corrValue(),
+					iterations: DEFAULT_ITERATIONS,
+					seed: DEFAULT_SEED,
+					results: rangeSummary()
 				},
 				mgmtReservePct: +$("mgmtPct").value,
 				escalation: {
@@ -700,6 +1241,19 @@
 			changeTotals: state._coTotals || null,
 			baselineLog: state.baselines
 		};
+	}
+	function rangeSummary() {
+		const r = simulate(corrValue());
+		return r ? {
+			ml: r.ml,
+			mean: r.mean,
+			sd: r.sd,
+			p10: r.p[10],
+			p50: r.p[50],
+			p70: r.p[70],
+			p80: r.p[80],
+			p90: r.p[90]
+		} : null;
 	}
 	function buildJSON() {
 		$("jsonView").textContent = JSON.stringify(collect(), null, 2);
@@ -917,7 +1471,14 @@
 			$("actCostP1").value = b.baseCost;
 		}
 		if (b.contingency) {
-			if (b.contingency.method) $("contMethod").value = b.contingency.method;
+			const m = b.contingency.method;
+			if (m === "rangos_mc" || m === "clase_tabla" || m === "manual") $("contMethod").value = m;
+			else if (m) {
+				$("contMethod").value = "clase_tabla";
+				state.legacyMethod = String(m);
+			}
+			if (b.contingency.manualPct != null) $("manualPct").value = b.contingency.manualPct;
+			if (b.contingency.manualBasis) $("manualBasis").value = b.contingency.manualBasis;
 			let pc = b.contingency.percentile;
 			if (typeof pc === "number" || /^0?\./.test(String(pc))) pc = {
 				"0.06": "P50",
@@ -938,6 +1499,18 @@
 			$("fxMode").value = x.fxMode;
 			$("fxBand").value = x.fxBand;
 		}
+		if (b.rangeAnalysis) {
+			const ra = b.rangeAnalysis;
+			if (Array.isArray(ra.lines)) state.ranges = ra.lines.map((l, i) => ({
+				id: String(l.id || "m-" + i),
+				name: String(l.name || ""),
+				ml: Number(l.ml),
+				lowPct: Number(l.lowPct),
+				highPct: Number(l.highPct),
+				basis: String(l.basis || "")
+			}));
+			if (ra.correlation != null && isFinite(Number(ra.correlation))) $("corrPct").value = String(Math.round(Number(ra.correlation) * 100));
+		}
 		if (d.changeOrders) state.co = d.changeOrders;
 		if (Array.isArray(d.baselineLog)) state.baselines = d.baselineLog;
 	}
@@ -953,7 +1526,10 @@
 			d = JSON.parse(localStorage.getItem(STORE_KEY));
 		} catch (e) {}
 		if (d) applyData(d);
-		else state.co = JSON.parse(JSON.stringify(SAMPLE_CO));
+		else {
+			state.co = JSON.parse(JSON.stringify(SAMPLE_CO));
+			state.ranges = JSON.parse(JSON.stringify(SAMPLE_RANGES));
+		}
 	}
 	function gpiBadge() {
 		if (document.getElementById("gpiBadge")) return;
@@ -986,6 +1562,10 @@
 		const pe1 = document.getElementById("pullEst1"), pe3 = document.getElementById("pullEst3");
 		if (pe1) pe1.style.display = connected ? "inline-flex" : "none";
 		if (pe3) pe3.style.display = connected ? "inline-flex" : "none";
+		["pullRngEst", "pullRngWbs"].forEach((id) => {
+			const b = document.getElementById(id);
+			if (b) b.style.display = connected ? "inline-flex" : "none";
+		});
 		document.querySelectorAll("#classbar button").forEach((x) => x.classList.toggle("on", +x.dataset.c === state.curClass));
 		renderClass();
 		renderCO();
@@ -1031,7 +1611,14 @@
 		coEdit,
 		coBaseline,
 		coKindHint,
-		evalVariance
+		evalVariance,
+		onContMethod,
+		addRange,
+		delRange,
+		rangeEdit,
+		pullRangesFromEstimate,
+		pullRangesFromWbs,
+		applyClassRange
 	});
 	//#endregion
 })();

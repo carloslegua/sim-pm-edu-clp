@@ -66,6 +66,27 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Costos: contingencia por estimación de rangos + simulación Monte Carlo
+  (auditoría metodológica AACE, RP 41R-08)** — el módulo ofrecía
+  «Simulación Monte Carlo», «Análisis paramétrico», «Rangos por porcentaje»
+  y «Árbol de decisión», pero los cuatro calculaban una tabla fija de % por
+  clase y percentil cuyos valores no provienen de AACE (citando además la
+  18R-97, que es una clasificación de estimados y no una metodología de
+  contingencia). Ahora hay tres métodos honestos: **rangos + Monte Carlo**
+  (partidas con costo más probable, mínimo, máximo y fundamento; triangular;
+  correlación entre partidas editable; 10.000 iteraciones con semilla fija;
+  contingencia = P(x) − Σ más probable; tabla de percentiles, curva S con
+  hover, sensibilidad a la correlación y avisos), **referencia por clase y
+  percentil** (la tabla anterior, rotulada «didáctica, no normativa» y
+  todavía por defecto para no alterar el BAC de referencia) y **porcentaje
+  manual** con fundamento. Las partidas se traen por paquete de trabajo de
+  Estimar los Costos o de la EDT, conservando lo ya trabajado. Los proyectos
+  antiguos abren con los mismos montos y un aviso. Declara sus límites: no
+  incluye eventos de riesgo discretos ni es integrada con el cronograma. El
+  ejemplo DISTRIB+ suma 5 partidas (las 5 fases, S/ 7.100.000). Lógica pura
+  en `src/shared/range-estimating.ts`, verificada contra resultados
+  analíticos; pruebas: `range-estimating.test.ts` (15) y 11 smoke nuevos.
+
 - **Stakeholder Studio: matriz de evaluación del compromiso (auditoría
   metodológica PMI)** — el Panel anunciaba una «matriz de compromiso» que
   no existía. Nueva vista «🤝 Compromiso»: por interesado, nivel **actual

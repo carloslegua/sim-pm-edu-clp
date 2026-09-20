@@ -1588,7 +1588,9 @@ laborables: la proporción no representa fines de semana ni feriados.
 - La otra excepción con atributos `onclick`/`onchange`/`oninput`
   inline (`Object.assign(window, { exportJSON, importJSON, save,
   recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO,
-  coStatus, delCO, buildDoc, coEdit, coBaseline, coKindHint })`).
+  coStatus, delCO, buildDoc, coEdit, coBaseline, coKindHint, evalVariance,
+  onContMethod, addRange, delRange, rangeEdit, pullRangesFromEstimate,
+  pullRangesFromWbs, applyClassRange })`).
 - Referencia `GPI` como identificador global bare (patrón 2 de la
   sección anterior).
 - No usa modales — usa un toast propio. No carga `gpi-shared.css`.
@@ -1648,6 +1650,59 @@ laborables: la proporción no representa fines de semana ni feriados.
   rompen (regla #3). El caso de ejemplo del modo independiente cubre las
   tres naturalezas (OC-001 riesgo/contingencia, OC-002 ampliación del
   cliente/fondos adicionales, OC-003 imprevisto/reserva de gestión).
+- **Contingencia: rangos + Monte Carlo, y una tabla rotulada como lo que
+  es** (auditoría metodológica AACE; lógica pura en
+  `src/shared/range-estimating.ts`, inlineada en `cost.js`). El módulo
+  ofrecía «Simulación Monte Carlo», «Análisis paramétrico», «Rangos por
+  porcentaje» y «Árbol de decisión», pero **todos** calculaban lo mismo:
+  una tabla fija de % por clase y percentil cuyos valores no provienen de
+  AACE (y la pantalla citaba la 18R-97, que clasifica estimados de industria
+  de proceso, no da una metodología de contingencia). Ahora hay tres
+  métodos (`budget.contingency.method` guarda el código):
+  - **`rangos_mc`** — Estimación por rangos + simulación Monte Carlo
+    (RP 41R-08). Por partida: costo más probable, mínimo y máximo (% sobre
+    el más probable) y **fundamento del rango**. Distribución
+    **triangular**; **correlación** entre partidas con un modelo de un factor
+    (cópula gaussiana, 30 % por defecto y editable: con 0 % se subestima la
+    dispersión, y la pantalla lo avisa y muestra la sensibilidad a 0/30/60/
+    100 %); 10.000 iteraciones con **semilla fija** (`20260713`): el mismo
+    análisis da siempre el mismo resultado. **Contingencia = P(x) − Σ costo
+    más probable**, nunca negativa (`covered` si el base ya supera el
+    percentil). Resultados: tabla de percentiles, curva S con lectura por
+    hover y avisos (cobertura del costo base, partidas sin fundamento o sin
+    incertidumbre, ρ = 0, y rango P90 mucho más estrecho que el típico de la
+    clase). La lógica se verifica contra resultados **analíticos** (media y
+    varianza de la triangular, suma de independientes, suma de perfectamente
+    correlacionadas: `tests/unit/range-estimating.test.ts`).
+  - **`clase_tabla`** — «Referencia por clase y percentil (tabla didáctica,
+    no normativa)»: la tabla anterior, ahora con su nombre real y con la
+    advertencia en pantalla y en el BOE. Sigue siendo el valor por defecto
+    para no cambiar en silencio el BAC de referencia (S/ 7.100.000 → BAC
+    8.075.181 en el ejemplo) ni dejar la contingencia en 0 en un proyecto
+    nuevo sin partidas.
+  - **`manual`** — % del estimado base definido por el equipo, con campo de
+    fundamento (documentado en el BOE).
+  - **Compatibilidad**: un proyecto guardado con la etiqueta antigua («Simulación
+    Monte Carlo», etc.) abre en `clase_tabla` **con los mismos montos** y un
+    aviso («declaraba X, pero lo que se calculaba era esta referencia»).
+    Campos nuevos, todos opcionales: `budget.rangeAnalysis` (`lines`,
+    `correlation`, `iterations`, `seed`, `results`) y
+    `contingency.manualPct/manualBasis/methodLabel`; `rate` sigue siendo lo
+    realmente aplicado.
+  - **Partidas**: se traen **por paquete de trabajo** de «Estimar los
+    Costos» o de la EDT con el rango inicial de la clase (editable); al
+    volver a traer se conservan el rango y el fundamento ya trabajados y las
+    partidas escritas a mano no se tocan. Un proyecto real arranca sin
+    partidas (regla de oro).
+  - **Límites declarados** (también en pantalla y en el BOE): cubre la
+    incertidumbre de los **rangos** del estimado; los **eventos de riesgo
+    discretos** no están incluidos hasta que exista el módulo de Riesgos, y
+    la simulación no es integrada de costo y cronograma.
+  - **Ejemplo DISTRIB+ ampliado, mismo caso**: 5 partidas = las 5 fases de la
+    EDT (1 Dirección 195.000 · 2 Ingeniería 355.000 · 3 Procura 2.950.000 ·
+    4 Construcción 3.315.000 · 5 Pruebas 285.000 = **S/ 7.100.000**, el 100 %
+    del costo base), con rangos y fundamento; con P70 la contingencia sale ≈
+    9,3 % (≈ 661.000), frente al 12 % de la tabla didáctica.
 - **Una variación no es una orden de cambio** (auditoría metodológica
   PMI; lógica pura en `src/shared/cost-variance.ts`, inlineada en
   `cost.js`). El flujo enseñaba «rojo = orden de cambio obligatoria» y los
@@ -2077,6 +2132,13 @@ vez que se agrega o toca un módulo:
   orden distinto, y el emparejamiento entre ambos para "Cargar ejemplo
   en el proyecto" es por Código EDT + nombre de actividad, nunca por id
   — ver esa sección más abajo).
+- **Análisis de rangos de Costos** (`cost`, `SAMPLE_RANGES` en
+  `src/modules/cost/main.ts`, solo modo independiente): 5 partidas = las 5
+  fases de la EDT (S/ 195.000 + 355.000 + 2.950.000 + 3.315.000 + 285.000 =
+  **7.100.000**, el total del WBS), cada una con su rango y fundamento
+  coherente con el caso (estudio de suelos, precio del acero, rendimientos
+  de cuadrilla…). El método por defecto sigue siendo la referencia por
+  clase; el análisis por rangos se activa desde el selector.
 - **OBS** (`obs`/`raci` la replican): Comité Directivo/Sponsor →
   Gerencia General DISTRIB+ · Director de Proyecto → PM · Jefe de
   Ingeniería/Ing. Civil → Geotecnia, Ing. Estructural, Ing. MEP · Jefe

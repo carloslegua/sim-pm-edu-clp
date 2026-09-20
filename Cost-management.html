@@ -133,6 +133,25 @@
   .footer{color:var(--muted);font-size:12px;text-align:center;padding:30px 0}
 
   /* Change order entry form */
+  .rng-form{grid-template-columns:1.4fr 1fr .6fr .6fr 1.6fr auto; margin-top:12px}
+  .rng-in{font-family:var(--mono);font-size:12px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);box-sizing:border-box}
+  tr.rng-bad td{background:var(--bad-bg)}
+  .rng-msg{font-size:11px;color:var(--bad);margin-top:3px}
+  .rng-grid2{display:grid;grid-template-columns:1fr 1.1fr;gap:20px;align-items:start}
+  @media(max-width:980px){.rng-grid2{grid-template-columns:1fr}}
+  .rng-res{width:100%;border-collapse:collapse;font-size:12.5px}
+  .rng-res th,.rng-res td{padding:5px 8px;border-bottom:1px solid var(--line-2);text-align:left}
+  .rng-res th.num,.rng-res td.num{text-align:right;font-family:var(--mono)}
+  .rng-selrow td{font-weight:700;background:var(--cyan-050)}
+  .rng-svg{width:100%;height:auto;background:#fff;border:1px solid var(--line);border-radius:10px}
+  .rng-grid{stroke:var(--line);stroke-width:1}
+  .rng-line{fill:none;stroke:var(--cyan-600);stroke-width:2.2;stroke-linejoin:round}
+  .rng-base{stroke:var(--muted);stroke-width:1.4;stroke-dasharray:4 4}
+  .rng-sel{stroke:var(--ink);stroke-width:1;stroke-dasharray:2 3}
+  .rng-cross{stroke:var(--muted);stroke-width:1}
+  .rng-dot{fill:var(--cyan-600);stroke:#fff;stroke-width:2}
+  .rng-tick{font-family:var(--mono);font-size:10px;fill:var(--muted)}
+  .rng-cap{font-family:var(--mono);font-size:10.5px;fill:var(--ink);font-weight:600}
   .co-form{display:grid;grid-template-columns:1.5fr 1.2fr 1fr .8fr 1fr auto;gap:10px;align-items:end;background:#fbfdfe;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:16px}
   .co-form label{display:block;margin:0}
   .co-form label span{display:block;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.03em;text-transform:uppercase;margin-bottom:4px}
@@ -178,7 +197,7 @@
     <span class="tag">PMBOK 8 · 7.x</span>
     <span class="tag">AACE 17R-97</span>
     <span class="tag">AACE 34R-05 (BOE)</span>
-    <span class="tag">AACE 40R/42R/44R (Contingencia)</span>
+    <span class="tag">AACE 40R/41R (Contingencia)</span>
     <span class="tag">COA [WBS]-[FASE]-[DISC]-[TIPO]-[SEC]</span>
   </div>
 
@@ -333,7 +352,7 @@
   <section class="panel" id="p3">
     <div class="grid g-2">
       <div class="card">
-        <div class="card-h"><div class="eyebrow">AACE 40R/42R/44R</div><h3>Reservas</h3><div class="sub">Separación estricta contingencia vs. gestión.</div></div>
+        <div class="card-h"><div class="eyebrow">AACE 40R/41R</div><h3>Reservas</h3><div class="sub">Separación estricta contingencia vs. gestión.</div></div>
         <div class="card-b">
           <label class="f"><span>Estimación de costos de las actividades</span>
             <div class="hint">Sincronizada con la pestaña 01 y con la EDT del proyecto activo. Base para contingencia y escalation.</div>
@@ -342,23 +361,26 @@
           </label>
           <div class="row row-2">
             <label class="f"><span>Método de contingencia</span>
-              <select id="contMethod" class="mono" onchange="save()">
-                <option selected>Simulación Monte Carlo</option>
-                <option>Análisis paramétrico</option>
-                <option>Rangos por porcentaje</option>
-                <option>Árbol de decisión (riesgo discreto)</option>
+              <select id="contMethod" class="mono" onchange="onContMethod()">
+                <option value="rangos_mc">Estimación por rangos + simulación Monte Carlo (AACE 41R-08)</option>
+                <option value="clase_tabla" selected>Referencia por clase y percentil (tabla didáctica, no normativa)</option>
+                <option value="manual">Porcentaje manual definido por el equipo</option>
               </select>
             </label>
-            <label class="f"><span>Percentil de decisión</span>
+            <label class="f" id="contPctWrap"><span>Percentil de decisión</span>
               <select id="contPct" class="mono" onchange="save();recalcCont()">
                 <option value="P50">P50 — estimado balanceado</option>
                 <option value="P70" selected>P70 — práctica habitual</option>
                 <option value="P80">P80 — aversión al riesgo</option>
                 <option value="P90">P90 — financiamiento / project finance</option>
               </select>
-              <div class="hint" id="contPctHint">El % se deriva de la <b>clase de estimado</b> (pestaña 02) y del percentil elegido, según los rangos de exactitud de AACE 18R-97.</div>
             </label>
           </div>
+          <div id="manualWrap" style="display:none">
+            <label class="f"><span>Contingencia (% del estimado base)</span><input id="manualPct" class="mono" type="number" value="10" step="0.5" min="0" onchange="save();recalcCont()"></label>
+            <label class="f"><span>Fundamento del porcentaje</span><textarea id="manualBasis" rows="2" placeholder="¿De dónde sale este porcentaje? (política de la organización, proyectos comparables, juicio de expertos…)" onchange="save();buildDoc()"></textarea></label>
+          </div>
+          <div class="hint" id="contPctHint" style="margin:-4px 0 12px"></div>
           <label class="f"><span>Reserva de gestión (% sobre la línea base de costos / BAC)</span><input id="mgmtPct" class="mono" type="number" value="5" step="0.5" onchange="save();recalcCont()"></label>
           <div class="note">Contingencia: riesgos <b>conocidos-desconocidos</b>, propiedad del PM, dentro de la línea base. Reserva de gestión: <b>desconocidos-desconocidos</b>, propiedad del sponsor, <b>fuera</b> de la línea base.</div>
         </div>
@@ -383,6 +405,36 @@
           <label class="f" id="fxBandWrap" style="display:none"><span>Banda de fluctuación cambiaria (±%)</span><input id="fxBand" class="mono" type="number" value="8" step="1" onchange="save();recalcCont()"></label>
           <div class="note">La escalation se calcula como <span class="mono">FV = base × (1 + i)ⁿ</span>. El régimen flotante añade una reserva por exposición cambiaria = componente FX × banda.</div>
         </div>
+      </div>
+    </div>
+
+    <div class="card" id="rangeCard" style="margin-top:18px;display:none">
+      <div class="card-h"><div class="eyebrow">AACE RP 41R-08 · estimación por rangos</div><h3>Análisis de rangos y simulación Monte Carlo</h3><div class="sub">Cada partida del estimado tiene un rango (mínimo / más probable / máximo). Se simula el costo total y la contingencia es el percentil de decisión <b>menos</b> el estimado base.</div></div>
+      <div class="card-b">
+        <div class="inline-actions" style="margin-bottom:12px">
+          <button class="btn sm" id="pullRngEst" onclick="pullRangesFromEstimate()" style="display:none">↧ Traer partidas de Estimar los Costos</button>
+          <button class="btn sm" id="pullRngWbs" onclick="pullRangesFromWbs()" style="display:none">↧ Traer partidas de la EDT</button>
+          <button class="btn sm" onclick="applyClassRange()" title="Aplica el rango típico de la clase del estimado a las partidas que aún no tienen fundamento">Aplicar el rango de la clase a las partidas sin fundamento</button>
+          <label class="f" style="display:inline-flex;align-items:center;gap:8px;margin:0 0 0 auto"><span style="margin:0">Correlación entre partidas (%)</span><input id="corrPct" class="mono" type="number" value="30" min="0" max="100" step="5" style="width:84px" onchange="onContMethod()"></label>
+        </div>
+        <div style="overflow-x:auto">
+          <table id="rngTable">
+            <thead><tr><th>Partida</th><th class="num">Más probable</th><th class="num">Mín (%)</th><th class="num">Máx (%)</th><th class="num">Mín</th><th class="num">Máx</th><th>Fundamento del rango</th><th></th></tr></thead>
+            <tbody id="rngBody"></tbody>
+            <tfoot id="rngFoot"></tfoot>
+          </table>
+        </div>
+        <div class="co-form rng-form">
+          <label><span>Partida</span><input id="rngName" placeholder="Ej. 4 Construcción"></label>
+          <label><span>Costo más probable</span><input id="rngMl" type="number" step="0.01" placeholder="0.00"></label>
+          <label><span>Mín (%)</span><input id="rngLo" type="number" step="0.1" placeholder="clase"></label>
+          <label><span>Máx (%)</span><input id="rngHi" type="number" step="0.1" placeholder="clase"></label>
+          <label><span>Fundamento</span><input id="rngBasis" placeholder="¿Por qué este rango?"></label>
+          <div class="co-add"><button class="btn primary" style="width:100%" onclick="addRange()">+ Agregar</button></div>
+        </div>
+        <div class="note" id="rngWarn" style="display:none;margin-bottom:12px"></div>
+        <div id="rngResults"></div>
+        <div class="note" style="margin-top:12px"><b>Qué cubre y qué no.</b> El análisis cubre la <b>incertidumbre de los rangos del estimado</b> (distribución triangular por partida). Los <b>eventos de riesgo discretos</b> (registro de riesgos) no están incluidos: se sumarán a la contingencia cuando exista el módulo de Riesgos. La <b>correlación</b> importa: con 0 % las partidas se tratan como independientes y la dispersión del total se subestima. La simulación usa una <b>semilla fija</b>: el mismo análisis da siempre el mismo resultado.</div>
       </div>
     </div>
 
