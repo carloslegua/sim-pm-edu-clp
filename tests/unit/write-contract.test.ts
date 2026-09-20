@@ -227,6 +227,57 @@ describe("segunda revisión externa: pendiente != confirmado, y guardado atómic
     expect(m.location).toBe("L1");
   });
 
+  // Cuarta revisión externa (P1): con el almacenamiento COMPLETAMENTE lleno falla
+  // hasta la sonda de 1 byte de avail(), y save() lo tomaba por "sin localStorage"
+  // (modo memoria) y devolvía éxito sin persistir -- aun con un guardado pendiente.
+  // La sesión lo confirmaba, y al recuperarse el almacenamiento el siguiente
+  // reintento daba "unchanged" con el disco en la versión vieja.
+  function bloquearTodo() {
+    return vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("Quota exceeded", "QuotaExceededError"); });
+  }
+
+  it("REPRO (P1): con el almacenamiento totalmente lleno (falla hasta la sonda) un reintento NO confirma un falso guardado; al recuperarse se persiste de verdad", () => {
+    const id = createProject({ name: "A" });
+    writeModule("charter", { description: "anterior" });
+    const s = openSession("charter")!;
+
+    const spy = bloquearCuota();                                       // 1) solo falla la escritura de gpi_db
+    expect(saveModule("charter", { description: "nueva" }, s).status).toBe("pending");
+
+    spy.mockRestore();
+    const total = bloquearTodo();                                      // 2) ahora falla también la comprobación de disponibilidad
+    const r2 = saveModule("charter", { description: "nueva" }, s);     // 3) el reintento: antes decía "saved" sin persistir
+    expect(r2.status).toBe("pending");
+    expect(describeWrite(r2)).toMatch(/SIN guardar/);
+    expect(hasUnsavedChanges()).toBe(true);
+    const r2b = saveModule("charter", { description: "nueva y más" }, s); // ni con datos distintos
+    expect(r2b.status).toBe("pending");
+
+    total.mockRestore();                                               // 4) el almacenamiento se recupera
+    const r3 = saveModule("charter", { description: "nueva y más" }, s);
+    expect(r3.status).toBe("saved");                                   // antes: "unchanged" con el disco viejo
+    expect(hasUnsavedChanges()).toBe(false);
+    expect(JSON.parse(localStorage.getItem(KEY) as string).projects[id].modules.charter).toEqual({ description: "nueva y más" });
+    expect(saveModule("charter", { description: "nueva y más" }, s).status).toBe("unchanged");
+  });
+
+  it("almacenamiento totalmente lleno DESDE EL INICIO (sin racha pendiente previa): no es 'saved', y la lectura sigue viendo lo que hay en disco", () => {
+    const id = createProject({ name: "A" });
+    writeModule("charter", { description: "anterior" });
+    const s = openSession("charter")!;
+    const total = bloquearTodo();
+
+    expect(getModule("charter")).toEqual({ description: "anterior" }); // antes: un respaldo vacío
+    const r = saveModule("charter", { description: "nueva" }, s);
+    expect(r.status).toBe("pending");
+    expect(hasUnsavedChanges()).toBe(true);
+    expect(getModule("charter")).toEqual({ description: "nueva" });    // la copia pendiente se sirve a toda lectura
+
+    total.mockRestore();
+    expect(saveModule("charter", { description: "nueva" }, s).status).toBe("saved");
+    expect(JSON.parse(localStorage.getItem(KEY) as string).projects[id].modules.charter).toEqual({ description: "nueva" });
+  });
+
   it("REPRO (media): conflicto del módulo => NO se guardan sus metadatos por separado (guardado atómico)", () => {
     createProject({ name: "N", sponsor: "S0" });
     writeModule("charter", { identification: { sponsor: "S0" } });

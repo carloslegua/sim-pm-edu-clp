@@ -66,6 +66,23 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Un almacenamiento completamente lleno ya no produce un falso
+  «guardado» (cuarta revisión externa, P1)** — reproducido en Chrome
+  simulando errores de cuota: la primera escritura devolvía `pending`;
+  al fallar también la comprobación de disponibilidad, el reintento
+  devolvía `saved` sin persistir (`save()` lo tomaba por "sin
+  localStorage" y usaba memoria); al recuperarse el almacenamiento, otro
+  reintento daba `unchanged` con el disco en el dato antiguo y
+  `hasUnsavedChanges()` en `true`, de modo que el alumno podía cerrar la
+  página creyendo que había guardado. Además, con el almacenamiento lleno
+  desde el inicio, `db()` servía una base vacía a las lecturas. Ahora el
+  modo memoria solo aplica cuando `localStorage` ni siquiera se puede
+  leer y no hay nada pendiente; con el almacenamiento lleno se intenta la
+  escritura real y, si falla, queda `pending`. Pruebas nuevas en
+  `write-contract.test.ts` (secuencia completa del reporte y "lleno desde
+  el inicio"), verificadas contra el código anterior. Ver
+  ARCHITECTURE.md, "Almacenamiento lleno ≠ sin almacenamiento".
+
 - **Recuperar un guardado pendiente ya no borra cambios de otra pestaña
   (tercera revisión externa, P1)** — reproducido con almacenamiento
   simulado y en Chrome con dos pestañas: A intenta guardar el Acta y

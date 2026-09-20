@@ -16,6 +16,17 @@ var GPI = (function(exports) {
 			return false;
 		}
 	}
+	function readable() {
+		try {
+			localStorage.getItem(KEY);
+			return true;
+		} catch (e) {
+			return false;
+		}
+	}
+	function memoryMode() {
+		return !avail() && !readable();
+	}
 	function fresh() {
 		return {
 			version: 1,
@@ -25,7 +36,7 @@ var GPI = (function(exports) {
 	}
 	function db() {
 		if (pendingUnsaved) return pendingUnsaved;
-		if (!avail()) return mem || (mem = fresh());
+		if (memoryMode()) return mem || (mem = fresh());
 		try {
 			return JSON.parse(localStorage.getItem("gpi_db")) || fresh();
 		} catch (e) {
@@ -137,7 +148,7 @@ var GPI = (function(exports) {
 		return lastReconcileConflicts.slice();
 	}
 	function save(d) {
-		if (!avail()) {
+		if (!pendingUnsaved && memoryMode()) {
 			mem = d;
 			return true;
 		}

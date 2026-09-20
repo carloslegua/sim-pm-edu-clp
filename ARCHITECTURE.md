@@ -738,6 +738,24 @@ Cubierto por dos pruebas de `write-contract.test.ts` (módulo ajeno y
 campo de meta ajeno, en el mismo reintento), verificadas contra el orden
 anterior.
 
+**Almacenamiento lleno ≠ sin almacenamiento (cuarta revisión, P1):**
+`save()` y `db()` trataban el fallo de la sonda de disponibilidad
+(`avail()`, un `setItem` de 1 byte) como "no hay `localStorage`" y
+pasaban a modo memoria. Con la cuota completamente agotada esa sonda
+también falla, aunque `getItem` siga funcionando: `save()` devolvía éxito
+sin persistir (incluso con un guardado pendiente, y la sesión lo
+confirmaba; al recuperarse el almacenamiento el reintento daba
+`unchanged` con el disco en la versión vieja y `hasUnsavedChanges()` en
+`true`), y `db()` servía una base vacía a las lecturas. Ahora el modo
+memoria exige además que el almacenamiento no se pueda **leer**
+(`memoryMode()` = `!avail() && !readable()`) y nunca aplica mientras haya
+un guardado pendiente: el respaldo en memoria no confirma nada, se sigue
+por el intento real de escritura y, si falla, queda `pending`. El modo
+memoria genuino (bloqueado, iframe sin permiso, `file://` opaco) no
+cambia. Cubierto por dos pruebas de `write-contract.test.ts` (la
+secuencia completa del reporte y "lleno desde el inicio"), verificadas
+contra el código anterior.
+
 ### Cómo lo usan los 13 módulos
 
 Cada módulo pide `GPI.openSession("<módulo>")` en el mismo instante en

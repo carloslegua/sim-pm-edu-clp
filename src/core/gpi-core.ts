@@ -62,6 +62,18 @@ function avail(): boolean {
   }
 }
 export { avail as available };
+// "No hay localStorage" de verdad (bloqueado, iframe sin permiso, file:// opaco):
+// ni siquiera se puede LEER. Distinto de "está lleno" (cuarta revisión externa,
+// P1): con la cuota agotada falla la sonda de 1 byte de avail() -- es un setItem
+// --, pero getItem sigue funcionando y lo que hay en disco es real. Tratar un
+// almacenamiento lleno como "sin almacenamiento" servía una base vacía a las
+// lecturas y confirmaba como guardado (en memoria) un dato que no se persistió.
+function readable(): boolean {
+  try { localStorage.getItem(KEY); return true; } catch (e) { return false; }
+}
+// Modo memoria legítimo: no hay almacenamiento ni se puede leer, y tampoco hay
+// nada pendiente que deba seguir contando como "sin guardar".
+function memoryMode(): boolean { return !avail() && !readable(); }
 
 function fresh(): GpiDb { return { version: 1, activeId: null, projects: {} }; }
 function db(): GpiDb {
@@ -74,7 +86,7 @@ function db(): GpiDb {
   // respaldo VACÍO (bug real reportado por el usuario) -- pendingUnsaved
   // sigue siendo la mejor versión conocida, con o sin acceso a disco.
   if (pendingUnsaved) return pendingUnsaved;
-  if (!avail()) return mem || (mem = fresh());
+  if (memoryMode()) return mem || (mem = fresh());
   try {
     return (JSON.parse(localStorage.getItem(KEY) as string) as GpiDb) || fresh();
   } catch (e) {
@@ -208,7 +220,11 @@ export function lastReconcile(): string[] { return lastReconcileConflicts.slice(
 // reportaban éxito de forma incondicional, sin importar si la escritura
 // real había fallado.
 function save(d: GpiDb): boolean {
-  if (!avail()) { mem = d; return true; } // modo memoria (sin localStorage): degradado pero no es un fallo de escritura
+  // Modo memoria (sin localStorage): degradado pero no es un fallo de escritura.
+  // NUNCA con un guardado pendiente ni con el almacenamiento solo lleno: ahí el
+  // respaldo en memoria no confirma nada, se sigue por el intento real y, si
+  // falla, queda pendiente (y la sesión no lo da por guardado).
+  if (!pendingUnsaved && memoryMode()) { mem = d; return true; }
   try {
     const rec = d === pendingUnsaved ? reconcileWithDisk(d) : null;
     localStorage.setItem(KEY, JSON.stringify(rec ? rec.merged : d));
