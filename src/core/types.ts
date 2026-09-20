@@ -174,6 +174,7 @@ export interface ScheduleBaseline {
   version?: string;
   date?: string;
   snapshot?: unknown;
+  log?: unknown[];       // versiones LB-n con motivo y aprobador (ver shared/schedule-control.ts); opcional: lo guardado antes no lo trae
 }
 
 export interface ScheduleModule {

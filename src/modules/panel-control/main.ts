@@ -652,6 +652,10 @@ function renderDashboard(): void {
     if (ss.ok) {
       scBody = '<div class="kpi"><span class="v" style="color:var(--danger)">' + ss.projectDuration + '</span><span class="l">días laborables · ' + ss.criticalCount + ' actividad(es) crítica(s) · ' + ss.links + ' enlace(s)</span></div>';
       if (ss.finishDate) scBody += '<div class="ok-note" style="margin-top:6px">Fin estimado: <b>' + esc(ss.finishDate) + '</b></div>';
+      if (ss.baselineVersion) {
+        const dv = ss.baselineDeviationDays || 0, pc = ss.baselineDeviationPct;
+        scBody += '<div class="' + (Math.abs(dv) < 0.05 ? "ok-note" : "warn-note") + '" style="margin-top:6px">Línea base <b>' + esc(ss.baselineVersion) + '</b>: ' + (Math.abs(dv) < 0.05 ? "sin desviación" : (dv > 0 ? "+" : "−") + Math.round(Math.abs(dv) * 10) / 10 + " d" + (pc !== null ? " (" + (pc > 0 ? "+" : "−") + Math.round(Math.abs(pc) * 10) / 10 + " %)" : "") + " frente al pronóstico") + '</div>';
+      } else scBody += '<div class="empty" style="margin-top:6px">Sin línea base del cronograma: fíjala en Cronograma / CPM → Salud y línea base.</div>';
     } else {
       scBody = '<div class="empty">La red tiene un ciclo (dependencia circular). Ábrela en Cronograma / CPM para corregir los enlaces.</div>';
     }

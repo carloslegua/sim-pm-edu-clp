@@ -63,6 +63,116 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
     expect(report).toContain("SS+4d"); // token real del enlace L3 (a3→a4, SS, 4 días) del ejemplo
   });
 
+  // ---- Salud de la red y línea base (auditoría metodológica: el CPM servía para planificar, no para controlar) ----
+  const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const vistaControl = async (dom: any) => { (dom.window.document.querySelector('[data-view="control"]') as HTMLElement).click(); await esperar(30); };
+  const proyectoConEnlaces = (extra: Record<string, unknown> = {}) => ({
+    version: 1, activeId: "p1",
+    projects: { p1: { schema: "gpi.project/v1", meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1, startDate: "2026-01-05" }, modules: {
+      wbs: { rootId: "root", idCounter: 3, nodes: { root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] }, w1: { id: "w1", parentId: "root", name: "Fase 1", children: ["w2"] }, w2: { id: "w2", parentId: "w1", name: "Paquete A", children: [] } } },
+      activities: { byLeaf: { w2: [{ id: "a1", name: "Excavar zanja", unit: "m³", qty: 100, perf: 25, teams: 1 }, { id: "a2", name: "Vaciar concreto", unit: "m³", qty: 50, perf: 10, teams: 1 }] }, idCounter: 3 },
+      ...extra
+    } } }
+  });
+  const abrirCon = async (seed: unknown) => {
+    const dom = await JSDOM.fromURL(base + "Cronograma_CPM.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seed)); } });
+    await esperar(800);
+    return dom;
+  };
+  const fijar = async (dom: any, approver: string, extraCheck = false) => {
+    const doc = dom.window.document;
+    (doc.getElementById("btnBaseline") as HTMLElement).click(); await esperar(30);
+    (doc.getElementById("blApprover") as HTMLInputElement).value = approver;
+    if (extraCheck) (doc.getElementById("blSponsor") as HTMLInputElement).checked = true;
+    (doc.getElementById("blOk") as HTMLElement).click(); await esperar(80);
+  };
+
+  it("Salud y línea base (ejemplo): evalúa la red con verificaciones tipo DCMA y la línea base exige motivo y aprobador; el Gantt la marca", async () => {
+    const dom = await JSDOM.fromURL(base + "Cronograma_CPM.html", { runScripts: "dangerously", resources: "usable" });
+    await esperar(500);
+    const doc = dom.window.document;
+    (doc.getElementById("btnSample") as HTMLElement).click(); await esperar(300);
+    await vistaControl(dom);
+    const t = () => doc.getElementById("ctlWrap")!.textContent!.replace(/\s+/g, " ");
+    expect(t()).toMatch(/Salud de la red/);
+    expect(t()).toMatch(/\d+ de \d+ verificaciones cumplen/);
+    expect(t()).toMatch(/Adelantos \(desfase negativo\).*0 \/ 13.*0.*✓ cumple/);
+    expect(t()).toMatch(/Todavía no hay una línea base/);
+    expect(t()).toMatch(/Ruta casi crítica \(holgura ≤ 10 d\).*umbral por omisión: el Plan no lo define/);
+
+    (doc.getElementById("btnBaseline") as HTMLElement).click(); await esperar(30);
+    (doc.getElementById("blOk") as HTMLElement).click();                               // sin aprobador
+    expect(doc.getElementById("blMsg")!.textContent).toMatch(/Registra quién aprueba/);
+    (doc.getElementById("blApprover") as HTMLInputElement).value = "Sponsor";
+    (doc.getElementById("blOk") as HTMLElement).click(); await esperar(80);
+    expect(t()).toMatch(/Línea base del cronograma · LB-1/);
+    expect(t()).toMatch(/53 → 53 d.*\+0 d|53 → 53 d/);
+    expect(t()).toMatch(/Ninguna actividad cambió/);
+    expect(t()).toMatch(/LB-1.*Línea base inicial aprobada.*Sponsor/);
+    (doc.querySelector('[data-view="gantt"]') as HTMLElement).click(); await esperar(30);
+    expect(doc.getElementById("ganttWrap")!.innerHTML).toMatch(/línea base LB-1/);
+    expect(doc.querySelectorAll("#ganttWrap rect[fill='#5b6472']").length).toBeGreaterThan(5);      // una marca por actividad
+  });
+
+  it("Línea base (proyecto real): se guarda versionada; el pronóstico se mide contra ella con los umbrales del plan (reserva, holgura); rebaselinar sobre el umbral exige al sponsor", async () => {
+    const dom = await abrirCon(proyectoConEnlaces({ schedulePlan: { criticalPath: { nearCriticalThresholdDays: 5 }, scheduleReserve: { pct: 10 }, changeControl: { baselineChangeThresholdPct: 5 } } }));
+    const doc = dom.window.document, t = () => doc.getElementById("ctlWrap")!.textContent!.replace(/\s+/g, " ");
+    await vistaControl(dom);
+    expect(t()).toMatch(/Ruta casi crítica \(holgura ≤ 5 d\)/);                       // el umbral es el del plan, no el de omisión
+    expect(t()).not.toMatch(/umbral por omisión/);
+    await fijar(dom, "Sponsor");                                                       // sin enlaces: 5 d (a2)
+    expect(t()).toMatch(/Línea base del cronograma · LB-1/);
+    dom.window.dispatchEvent(new dom.window.Event("beforeunload"));
+    let sch = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string).projects.p1.modules.schedule;
+    expect(sch.baseline).toMatchObject({ version: "LB-1", frozen: true, snapshot: { projectDuration: 5 } });
+    expect(sch.baseline.log).toHaveLength(1);
+
+    // el alumno enlaza a1 → a2 (FS): 4 + 5 = 9 d; la línea base sigue diciendo 5
+    (doc.getElementById("btnAddLink") as HTMLElement).click(); await esperar(50);
+    (doc.getElementById("lkFrom") as HTMLSelectElement).value = "a1"; (doc.getElementById("lkTo") as HTMLSelectElement).value = "a2";
+    (doc.getElementById("lkAdd") as HTMLElement).click(); await esperar(100);
+    (doc.getElementById("modalCancel") as HTMLElement).click(); await esperar(50);
+    expect(doc.getElementById("kpiDur")!.textContent).toBe("9");
+    await vistaControl(dom);
+    expect(t()).toMatch(/5 → 9 d/);
+    expect(t()).toMatch(/\+4 d \(\+80 %\)/);                                           // desplazamiento del fin
+    expect(t()).toMatch(/800 %.*reserva de cronograma consumida \(0\.5 d = 10 %\)/);   // la reserva del plan (10 % de 5 d) se consumió 8 veces
+    expect(t()).toMatch(/Excavar zanja|Vaciar concreto/);                              // lo que cambió
+    expect(t()).toMatch(/Versiones de la línea base/);
+
+    // rebaselinar: la desviación (+80 %) supera el umbral del plan (5 %): exige la autorización del sponsor
+    (doc.getElementById("btnBaseline") as HTMLElement).click(); await esperar(30);
+    expect(doc.getElementById("blSponsor")).toBeTruthy();
+    (doc.getElementById("blReason") as HTMLInputElement).value = "Se enlazó la excavación con el vaciado";
+    (doc.getElementById("blApprover") as HTMLInputElement).value = "CCB";
+    (doc.getElementById("blOk") as HTMLElement).click();
+    expect(doc.getElementById("blMsg")!.textContent).toMatch(/autorización del sponsor/);
+    (doc.getElementById("blSponsor") as HTMLInputElement).checked = true;
+    (doc.getElementById("blOk") as HTMLElement).click(); await esperar(80);
+    expect(t()).toMatch(/Línea base del cronograma · LB-2/);
+    expect(t()).toMatch(/Ninguna actividad cambió/);
+    dom.window.dispatchEvent(new dom.window.Event("beforeunload"));
+    sch = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string).projects.p1.modules.schedule;
+    expect(sch.baseline.version).toBe("LB-2");
+    expect(sch.baseline.log.map((e: any) => e.version)).toEqual(["LB-1", "LB-2"]);         // el historial conserva la versión anterior
+    expect(sch.baseline.log[1]).toMatchObject({ reason: "Se enlazó la excavación con el vaciado", approver: "CCB", sponsorAuth: true });
+    expect(sch.baseline.log[1].deviationPct).toBeCloseTo(80, 5);
+  });
+
+  it("Línea base: sin umbral de rebaselinado en el plan no se exige al sponsor; una «baseline» de un esquema anterior se ignora (sin línea base)", async () => {
+    const dom = await abrirCon(proyectoConEnlaces({ schedule: { links: [], linkCounter: 1, import: null, baseline: { frozen: true, version: "v0", date: "2025-01-01" } } }));
+    const doc = dom.window.document, t = () => doc.getElementById("ctlWrap")!.textContent!.replace(/\s+/g, " ");
+    await vistaControl(dom);
+    expect(t()).toMatch(/Todavía no hay una línea base/);                              // lo heredado sin instantánea no cuenta
+    await fijar(dom, "Director de Proyecto");
+    (doc.getElementById("btnBaseline") as HTMLElement).click(); await esperar(30);
+    expect(doc.getElementById("blSponsor")).toBeNull();                                // el plan no define umbral: no hay nada que exigir
+    (doc.getElementById("blReason") as HTMLInputElement).value = "Ajuste menor";
+    (doc.getElementById("blApprover") as HTMLInputElement).value = "CCB";
+    (doc.getElementById("blOk") as HTMLElement).click(); await esperar(80);
+    expect(t()).toMatch(/Línea base del cronograma · LB-2/);
+  });
+
   it("con proyecto activo real: un enlace manual FS entre dos actividades ajusta la duración del proyecto y persiste en GPI.getModule('schedule')", async () => {
     const seedDb = {
       version: 1, activeId: "p1",

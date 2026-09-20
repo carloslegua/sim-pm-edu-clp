@@ -55,6 +55,59 @@ var GPI = (function(exports) {
 			totalBudget: bacCurrent + pendingBase + mgmtAvailable
 		};
 	}
+	var str$1 = (v) => v === null || v === void 0 ? "" : String(v);
+	var fin = (v, d = 0) => {
+		const x = Number(v);
+		return isFinite(x) ? x : d;
+	};
+	function normalizeBaseline(o) {
+		if (!o || typeof o !== "object") return null;
+		const x = o, s = x.snapshot;
+		if (!s || typeof s !== "object" || !Array.isArray(s.rows) || !isFinite(Number(s.projectDuration))) return null;
+		const rows = s.rows.filter((r) => r && typeof r === "object").map((r) => {
+			const q = r;
+			return {
+				id: str$1(q.id),
+				code: str$1(q.code),
+				name: str$1(q.name),
+				isMilestone: !!q.isMilestone,
+				dur: fin(q.dur),
+				es: fin(q.es),
+				ef: fin(q.ef),
+				tf: fin(q.tf),
+				critical: !!q.critical
+			};
+		}).filter((r) => r.id);
+		const log = (Array.isArray(x.log) ? x.log : []).filter((e) => e && typeof e === "object").map((e) => {
+			const q = e;
+			return {
+				version: str$1(q.version),
+				date: str$1(q.date),
+				reason: str$1(q.reason),
+				approver: str$1(q.approver),
+				sponsorAuth: !!q.sponsorAuth,
+				projectDuration: fin(q.projectDuration),
+				finishDate: str$1(q.finishDate),
+				deviationPct: q.deviationPct === null || q.deviationPct === void 0 ? null : fin(q.deviationPct)
+			};
+		});
+		return {
+			frozen: x.frozen !== false,
+			version: str$1(x.version) || "LB-1",
+			date: str$1(x.date),
+			snapshot: {
+				projectDuration: fin(s.projectDuration),
+				startDate: str$1(s.startDate),
+				finishDate: str$1(s.finishDate),
+				nearCriticalDays: fin(s.nearCriticalDays, 10),
+				rows
+			},
+			log
+		};
+	}
+	function deviationPct(base, projectDuration) {
+		return base.projectDuration > 0 ? (projectDuration - base.projectDuration) / base.projectDuration * 100 : null;
+	}
 	//#endregion
 	//#region src/shared/risk-analysis.ts
 	var RISK_STATUSES = [
@@ -2991,10 +3044,12 @@ var GPI = (function(exports) {
 		try {
 			net = scheduleNetwork(getModule("wbs"), getModule("activities"), getModule("pert"), sched, getModule("schedulePlan"), m ? m.startDate : "");
 		} catch (e2) {}
-		const result = cpm(net ? net.nodes.map((n) => ({
+		const nodes = net ? net.nodes.map((n) => ({
 			id: n.id,
 			dur: n.dur
-		})) : [], net ? net.links : [], net ? net.calendar : projectCalendar(), { startDate: m ? m.startDate : void 0 });
+		})) : [];
+		const bl = normalizeBaseline(sched ? sched.baseline : null);
+		const result = cpm(nodes, net ? net.links : [], net ? net.calendar : projectCalendar(), { startDate: m ? m.startDate : void 0 });
 		return {
 			hasSlice: !!sched,
 			links: links.length,
@@ -3002,7 +3057,10 @@ var GPI = (function(exports) {
 			ok: result.ok,
 			projectDuration: result.ok ? result.projectDuration : null,
 			criticalCount: result.ok ? result.criticalIds.length : 0,
-			finishDate: result.ok ? result.projectFinishDate : ""
+			finishDate: result.ok ? result.projectFinishDate : "",
+			baselineVersion: bl ? bl.version : null,
+			baselineDeviationDays: bl && result.ok ? result.projectDuration - bl.snapshot.projectDuration : null,
+			baselineDeviationPct: bl && result.ok ? deviationPct(bl.snapshot, result.projectDuration) : null
 		};
 	}
 	function esc(s) {

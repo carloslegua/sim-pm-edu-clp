@@ -1040,6 +1040,38 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   confirma que ningún elemento/atributo inyectado llega al DOM.
 
 **Cronograma_CPM.html** — algorítmicamente el más crítico.
+- **Salud de la red y línea base (auditoría metodológica PMI / AACE: «el CPM
+  sirve para planificar, no para controlar»)**. Pestaña «✚ Salud y línea base»
+  (lógica pura en `src/shared/schedule-control.ts`, inlineada en
+  `cronograma-cpm.js` y en `gpi-core.js`):
+  - **Salud de la red**: verificaciones tipo **DCMA 14-Point Assessment**
+    (umbrales de *referencia* de la industria, confirmados: lógica faltante ≤ 5 %,
+    adelantos 0, desfases ≤ 5 % de los enlaces, FS ≥ 90 %, holgura alta > 44 d ≤ 5 %,
+    holgura negativa 0, duración alta > 44 d ≤ 5 %), más sin duración, ruta casi
+    crítica y peso de la ruta crítica (informativas). Orientan, no bloquean. No se
+    evalúan restricciones duras, recursos ni avance real (la suite no los modela). En
+    la lógica faltante se admite UN inicio y UN fin del proyecto (de preferencia
+    hitos). Con el ejemplo DISTRIB+ completo enseña dos cosas reales: 4 desfases SS
+    (7,8 % > 5 %) y holguras enormes (informes y Procura, 8 actividades > 44 d).
+  - **Línea base** `schedule.baseline`: `{frozen, version LB-n, date, snapshot, log}`
+    con instantánea (duración, fechas y, por actividad, ES/EF/holgura/criticidad) y un
+    historial de versiones con **motivo y aprobador**. Nada la creaba antes (siempre
+    `null`). Lo guardado antes sin instantánea se lee como «sin línea base»
+    (`normalizeBaseline`). Se fija con «Fijar la línea base»; cambiarla es una **nueva
+    versión**, y si la desviación de la duración supera el **umbral de rebaselinado**
+    del plan (`changeControl.baselineChangeThresholdPct`) exige la autorización del
+    sponsor.
+  - **Variación** contra la línea base: desplazamiento del fin (d y %), **reserva de
+    cronograma** del plan (`scheduleReserve.pct` × duración) consumida, actividades
+    que cambiaron y **consumo de holgura de la ruta casi crítica** contra el umbral
+    verde/rojo del plan (`controlThresholds` «HOLGURA», 40/70 por omisión), con la
+    ruta casi crítica definida por `criticalPath.nearCriticalThresholdDays` (10 d por
+    omisión si el plan no lo define, y se dice). Así el Plan del Cronograma deja de
+    ser un formulario que nadie lee. El Gantt marca la línea base bajo cada barra y el
+    Panel muestra «Línea base LB-n: ±X d». SV/SPI requieren avance real (EVM) y quedan
+    para ese módulo.
+  - Cubierto por `tests/unit/schedule-control.test.ts` (14), smoke de Cronograma y el
+    e2e `schedule-baseline.spec.ts` (Chrome real, proyecto completo).
 - Único módulo que **depende duro de `gpi-core.js`** incluso para su
   lógica local (no solo para sincronizar con el Panel): el cálculo CPM
   vive únicamente en `GPI.util.cpm`, sin copia local. Si el núcleo no

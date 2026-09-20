@@ -128,6 +128,8 @@ src/shared/risk-sample.ts        → (se inlinea en risks.js y cost.js) ÚNICA f
                                     DISTRIB+ de riesgos (plan, 10 riesgos, órdenes vinculadas)
 src/shared/reserve-policy.ts     → (se inlinea en risks.js, cost.js y gpi-core.js) política de reservas del plan de
                                     riesgos: niveles de autoridad por monto, alerta de agotamiento
+src/shared/schedule-control.ts   → (se inlinea en cronograma-cpm.js y gpi-core.js) salud de la red (DCMA), línea
+                                    base LB-n, variación y umbrales del Plan del Cronograma
 src/shared/schedule-risk.ts      → (se inlinea en risks.js y cost.js) riesgo de plazo: motor sobre el CPM
                                     del núcleo, ubicación de un riesgo en actividades, efecto en el fin
 src/shared/schedule-sample.ts    → (se inlinea en risks.js y cost.js) red DISTRIB+ completa (43 act.,

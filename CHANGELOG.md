@@ -11,6 +11,20 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Cronograma/CPM — salud de la red y línea base del cronograma (auditoría
+  metodológica PMI / AACE)** — el CPM servía para planificar, no para controlar.
+  Nueva pestaña «Salud y línea base»: (1) **salud de la red** con verificaciones tipo
+  DCMA 14-Point (lógica faltante, adelantos, desfases, relaciones FS, holgura alta y
+  negativa, duración alta, sin duración, ruta casi crítica; umbrales de referencia
+  confirmados, orientan y no bloquean); (2) **línea base versionada** (LB-n con
+  instantánea, motivo y aprobador) que antes nada creaba, y (3) **variación**: desplazamiento
+  del fin, reserva de cronograma consumida y consumo de holgura de la ruta casi crítica, todo
+  con los umbrales del **Plan de Gestión del Cronograma** que hasta ahora nadie consumía
+  (ruta casi crítica, reserva, umbral de rebaselinado —por encima exige al sponsor— y umbral
+  verde/rojo de holgura). El Gantt marca la línea base y el Panel muestra «Línea base LB-n: ±X d».
+  Nuevo `src/shared/schedule-control.ts`; `schedule.baseline.log` opcional (lo guardado antes
+  abre sin línea base). Pruebas: `schedule-control.test.ts` (14), smoke de Cronograma (16) y e2e en
+  Chrome real. Ver ARCHITECTURE.md.
 - **Política de reservas estructurada (PMBOK) que gobierna la aprobación de las
   órdenes de cambio** — la política del plan de riesgos era solo texto. Ahora define
   **quién libera la contingencia según el monto** (Director de Proyecto → CCB →

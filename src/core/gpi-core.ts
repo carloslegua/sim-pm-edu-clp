@@ -26,6 +26,7 @@ import type {
   EditSession, WriteResult
 } from "./types";
 import { analyzeChangeOrders } from "../shared/change-orders";
+import { deviationPct as baselineDeviationPct, normalizeBaseline } from "../shared/schedule-control";
 import { normalizePlan as normalizeRiskPlan, normalizeRisk, portfolio as riskPortfolioOf, type Portfolio as RiskPortfolio } from "../shared/risk-analysis";
 export type { EditSession, WriteResult, WriteStatus } from "./types";
 
@@ -2403,6 +2404,8 @@ export function addWorkingDays(date: Date | null, n: number, calendar?: { workDa
 export interface ScheduleStats {
   hasSlice: boolean; links: number; activities: number; ok: boolean;
   projectDuration: number | null; criticalCount: number; finishDate: string;
+  // Línea base del cronograma (LB-n) y cuánto se desvía de ella el pronóstico actual; null si no hay línea base.
+  baselineVersion: string | null; baselineDeviationDays: number | null; baselineDeviationPct: number | null;
 }
 
 // Resumen del cronograma del proyecto activo para tableros (Panel):
@@ -2422,12 +2425,16 @@ export function scheduleStats(): ScheduleStats {
       sched, getModule("schedulePlan") as SchedulePlanModule | null, m ? m.startDate : "");
   } catch (e2) { /* noop */ }
   const nodes: CpmNode[] = net ? net.nodes.map((n) => ({ id: n.id, dur: n.dur })) : [];
+  const bl = normalizeBaseline(sched ? sched.baseline : null);
   const result = cpm(nodes, net ? net.links : [], net ? net.calendar : projectCalendar(), { startDate: m ? m.startDate : undefined });
   return {
     hasSlice: !!sched, links: links.length, activities: net ? net.nodes.filter((n) => !n.isMilestone).length : 0, ok: result.ok,
     projectDuration: result.ok ? result.projectDuration : null,
     criticalCount: result.ok ? result.criticalIds.length : 0,
-    finishDate: result.ok ? result.projectFinishDate : ""
+    finishDate: result.ok ? result.projectFinishDate : "",
+    baselineVersion: bl ? bl.version : null,
+    baselineDeviationDays: bl && result.ok ? result.projectDuration - bl.snapshot.projectDuration : null,
+    baselineDeviationPct: bl && result.ok ? baselineDeviationPct(bl.snapshot, result.projectDuration) : null
   };
 }
 

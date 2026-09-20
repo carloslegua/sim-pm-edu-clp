@@ -25,6 +25,315 @@
 			session: next
 		};
 	}
+	function planOf(sp) {
+		const p = sp && typeof sp === "object" ? sp : {};
+		const rec = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+		const n = (v) => {
+			const x = Number(v);
+			return isFinite(x) ? x : 0;
+		};
+		const near = n(rec(p.criticalPath).nearCriticalThresholdDays);
+		const th = (Array.isArray(p.controlThresholds) ? p.controlThresholds : []).map(rec).filter((t) => t.key === "HOLGURA")[0];
+		const g = th ? n(th.greenValue) : 0, r = th ? n(th.redValue) : 0;
+		return {
+			nearCriticalDays: near > 0 ? near : 10,
+			nearCriticalDefined: near > 0,
+			reservePct: Math.max(0, n(rec(p.scheduleReserve).pct)),
+			rebaselinePct: Math.max(0, n(rec(p.changeControl).baselineChangeThresholdPct)),
+			floatGreen: g > 0 ? g : 40,
+			floatRed: r > g && r > 0 ? r : 70
+		};
+	}
+	var lagOf = (l) => Number(l.lag) || 0;
+	var pct = (a, b) => b > 0 ? a / b * 100 : 0;
+	var names = (ns, k = 4) => ns.slice(0, k).map((n) => n.code + " " + n.name).concat(ns.length > k ? ["… y " + (ns.length - k) + " más"] : []);
+	function scheduleHealth(nodes, links, rows, plan) {
+		const acts = nodes.filter((n) => !n.isMilestone), by = {};
+		nodes.forEach((n) => {
+			by[n.id] = n;
+		});
+		const valid = links.filter((l) => by[l.from] && by[l.to] && l.from !== l.to);
+		const hasPred = {}, hasSucc = {};
+		valid.forEach((l) => {
+			hasSucc[l.from] = true;
+			hasPred[l.to] = true;
+		});
+		const checks = [], add = (c) => {
+			checks.push(c);
+		};
+		const pickFree = (list, prefer) => list.length ? list.slice().sort(prefer)[0] : null;
+		const noPred = nodes.filter((n) => !hasPred[n.id]), noSucc = nodes.filter((n) => !hasSucc[n.id]);
+		const rowEs = (n) => rows[n.id] ? rows[n.id].es : 0, rowEf = (n) => rows[n.id] ? rows[n.id].ef : 0;
+		const freeStart = pickFree(noPred, (a, b) => Number(b.isMilestone) - Number(a.isMilestone) || rowEs(a) - rowEs(b));
+		const freeEnd = pickFree(noSucc, (a, b) => Number(b.isMilestone) - Number(a.isMilestone) || rowEf(b) - rowEf(a));
+		const missing = nodes.filter((n) => !hasPred[n.id] && n !== freeStart || !hasSucc[n.id] && n !== freeEnd);
+		add({
+			key: "logic",
+			label: "Lógica faltante (sin predecesora o sin sucesora)",
+			count: missing.length,
+			total: nodes.length,
+			pct: pct(missing.length, nodes.length),
+			limit: "≤ 5 % de las actividades",
+			pass: pct(missing.length, nodes.length) <= 5,
+			detail: "Actividades e hitos sin predecesora o sin sucesora, salvo el inicio y el fin del proyecto (los extremos abiertos hacen la holgura poco confiable).",
+			items: names(missing)
+		});
+		const leads = valid.filter((l) => lagOf(l) < 0), lags = valid.filter((l) => lagOf(l) > 0);
+		const linkTxt = (l) => by[l.from].code + " → " + by[l.to].code + " " + l.type + (lagOf(l) > 0 ? "+" : "") + lagOf(l) + (l.lagUnit || "d");
+		add({
+			key: "leads",
+			label: "Adelantos (desfase negativo)",
+			count: leads.length,
+			total: valid.length,
+			pct: pct(leads.length, valid.length),
+			limit: "0",
+			pass: leads.length === 0,
+			detail: "Un adelanto superpone actividades y distorsiona la holgura y la ruta crítica; se evita (mejor dividir la actividad).",
+			items: leads.slice(0, 4).map(linkTxt)
+		});
+		add({
+			key: "lags",
+			label: "Desfases positivos",
+			count: lags.length,
+			total: valid.length,
+			pct: pct(lags.length, valid.length),
+			limit: "≤ 5 % de los enlaces",
+			pass: pct(lags.length, valid.length) <= 5,
+			detail: "Un desfase oculta trabajo o espera que debería ser una actividad propia (con nombre, duración y responsable).",
+			items: lags.slice(0, 4).map(linkTxt)
+		});
+		const fs = valid.filter((l) => l.type === "FS");
+		add({
+			key: "fs",
+			label: "Relaciones fin-a-inicio (FS)",
+			count: fs.length,
+			total: valid.length,
+			pct: pct(fs.length, valid.length),
+			limit: "≥ 90 % de los enlaces",
+			pass: valid.length === 0 ? null : pct(fs.length, valid.length) >= 90,
+			detail: "Las relaciones SS, FF y SF hacen la red más difícil de leer y de mantener; FS debe ser la norma.",
+			items: []
+		});
+		const withRow = acts.filter((n) => rows[n.id]);
+		const hiFloat = withRow.filter((n) => rows[n.id].tf > 44.000000001), negFloat = withRow.filter((n) => rows[n.id].tf < -1e-9);
+		add({
+			key: "highFloat",
+			label: "Holgura alta (> 44 días)",
+			count: hiFloat.length,
+			total: withRow.length,
+			pct: pct(hiFloat.length, withRow.length),
+			limit: "≤ 5 % de las actividades",
+			pass: pct(hiFloat.length, withRow.length) <= 5,
+			detail: "Una holgura enorme suele indicar un enlace faltante a una sucesora: la actividad «flota» y nadie la controla.",
+			items: names(hiFloat)
+		});
+		add({
+			key: "negFloat",
+			label: "Holgura negativa",
+			count: negFloat.length,
+			total: withRow.length,
+			pct: pct(negFloat.length, withRow.length),
+			limit: "0",
+			pass: negFloat.length === 0,
+			detail: "Holgura negativa = el plan no cumple una fecha impuesta.",
+			items: names(negFloat)
+		});
+		const hiDur = acts.filter((n) => n.dur > 44.000000001);
+		add({
+			key: "highDur",
+			label: "Duración alta (> 44 días)",
+			count: hiDur.length,
+			total: acts.length,
+			pct: pct(hiDur.length, acts.length),
+			limit: "≤ 5 % de las actividades",
+			pass: pct(hiDur.length, acts.length) <= 5,
+			detail: "Las actividades muy largas se controlan mal: conviene descomponerlas para poder medir el avance.",
+			items: names(hiDur)
+		});
+		const noDur = acts.filter((n) => !n.hasDur);
+		add({
+			key: "noDur",
+			label: "Actividades sin duración",
+			count: noDur.length,
+			total: acts.length,
+			pct: pct(noDur.length, acts.length),
+			limit: "0",
+			pass: noDur.length === 0,
+			detail: "Sin metrado y rendimiento (o PERT) la actividad cuenta como 0 días y no aporta a la ruta crítica.",
+			items: names(noDur)
+		});
+		const near = withRow.filter((n) => rows[n.id].tf > 1e-9 && rows[n.id].tf <= plan.nearCriticalDays + 1e-9);
+		add({
+			key: "near",
+			label: "Ruta casi crítica (holgura ≤ " + plan.nearCriticalDays + " d)",
+			count: near.length,
+			total: withRow.length,
+			pct: pct(near.length, withRow.length),
+			limit: plan.nearCriticalDefined ? "umbral del Plan del Cronograma" : "umbral por omisión: el Plan no lo define",
+			pass: null,
+			detail: "Actividades con holgura pequeña: un retraso leve las vuelve críticas. Se vigilan igual que la ruta crítica.",
+			items: names(near)
+		});
+		const crit = withRow.filter((n) => rows[n.id].critical || rows[n.id].tf <= 1e-9);
+		add({
+			key: "critShare",
+			label: "Peso de la ruta crítica",
+			count: crit.length,
+			total: withRow.length,
+			pct: pct(crit.length, withRow.length),
+			limit: "referencia (sin umbral)",
+			pass: null,
+			detail: "Si casi todo es crítico, la red no tiene holgura para absorber imprevistos: cualquier retraso mueve el fin.",
+			items: []
+		});
+		const graded = checks.filter((c) => c.pass !== null);
+		return {
+			checks,
+			evaluated: graded.length,
+			passed: graded.filter((c) => c.pass).length,
+			nearCritical: near.length,
+			activities: acts.length
+		};
+	}
+	function makeSnapshot(nodes, rows, projectDuration, startDate, finishDate, nearCriticalDays) {
+		return {
+			projectDuration,
+			startDate,
+			finishDate,
+			nearCriticalDays,
+			rows: nodes.filter((n) => rows[n.id]).map((n) => ({
+				id: n.id,
+				code: n.code,
+				name: n.name,
+				isMilestone: n.isMilestone,
+				dur: n.dur,
+				es: rows[n.id].es,
+				ef: rows[n.id].ef,
+				tf: rows[n.id].tf,
+				critical: rows[n.id].critical
+			}))
+		};
+	}
+	var str = (v) => v === null || v === void 0 ? "" : String(v);
+	var fin = (v, d = 0) => {
+		const x = Number(v);
+		return isFinite(x) ? x : d;
+	};
+	function normalizeBaseline(o) {
+		if (!o || typeof o !== "object") return null;
+		const x = o, s = x.snapshot;
+		if (!s || typeof s !== "object" || !Array.isArray(s.rows) || !isFinite(Number(s.projectDuration))) return null;
+		const rows = s.rows.filter((r) => r && typeof r === "object").map((r) => {
+			const q = r;
+			return {
+				id: str(q.id),
+				code: str(q.code),
+				name: str(q.name),
+				isMilestone: !!q.isMilestone,
+				dur: fin(q.dur),
+				es: fin(q.es),
+				ef: fin(q.ef),
+				tf: fin(q.tf),
+				critical: !!q.critical
+			};
+		}).filter((r) => r.id);
+		const log = (Array.isArray(x.log) ? x.log : []).filter((e) => e && typeof e === "object").map((e) => {
+			const q = e;
+			return {
+				version: str(q.version),
+				date: str(q.date),
+				reason: str(q.reason),
+				approver: str(q.approver),
+				sponsorAuth: !!q.sponsorAuth,
+				projectDuration: fin(q.projectDuration),
+				finishDate: str(q.finishDate),
+				deviationPct: q.deviationPct === null || q.deviationPct === void 0 ? null : fin(q.deviationPct)
+			};
+		});
+		return {
+			frozen: x.frozen !== false,
+			version: str(x.version) || "LB-1",
+			date: str(x.date),
+			snapshot: {
+				projectDuration: fin(s.projectDuration),
+				startDate: str(s.startDate),
+				finishDate: str(s.finishDate),
+				nearCriticalDays: fin(s.nearCriticalDays, 10),
+				rows
+			},
+			log
+		};
+	}
+	var nextVersion = (b) => "LB-" + ((b && b.log.length || 0) + 1);
+	function deviationPct(base, projectDuration) {
+		return base.projectDuration > 0 ? (projectDuration - base.projectDuration) / base.projectDuration * 100 : null;
+	}
+	function needsSponsor(base, projectDuration, plan) {
+		if (!base || !(plan.rebaselinePct > 0)) return false;
+		const d = deviationPct(base, projectDuration);
+		return d !== null && Math.abs(d) > plan.rebaselinePct + 1e-9;
+	}
+	function compareBaseline(base, nodes, rows, projectDuration, plan) {
+		const bmap = {};
+		base.rows.forEach((r) => {
+			bmap[r.id] = r;
+		});
+		const cur = {};
+		nodes.forEach((n) => {
+			cur[n.id] = n;
+		});
+		const durationDelta = projectDuration - base.projectDuration, reserveDays = base.projectDuration * plan.reservePct / 100;
+		const changed = [];
+		nodes.forEach((n) => {
+			const b = bmap[n.id], r = rows[n.id];
+			if (!b || !r) return;
+			const efDelta = r.ef - b.ef, durDelta = n.dur - b.dur;
+			if (Math.abs(efDelta) > 1e-6 || Math.abs(durDelta) > 1e-6) changed.push({
+				id: n.id,
+				code: n.code,
+				name: n.name,
+				efDelta,
+				durDelta,
+				tfBase: b.tf,
+				tfNow: r.tf
+			});
+		});
+		changed.sort((a, b) => Math.abs(b.efDelta) - Math.abs(a.efDelta) || a.code.localeCompare(b.code));
+		const items = [], newCritical = [];
+		base.rows.forEach((b) => {
+			const r = rows[b.id], n = cur[b.id];
+			if (!r || !n || b.isMilestone) return;
+			if (b.tf > 1e-9 && b.tf <= base.nearCriticalDays + 1e-9) {
+				items.push({
+					id: b.id,
+					code: b.code,
+					name: b.name,
+					tfBase: b.tf,
+					tfNow: r.tf,
+					consumedPct: Math.max(0, (b.tf - r.tf) / b.tf * 100)
+				});
+				if (r.tf <= 1e-9) newCritical.push(b.code + " " + b.name);
+			}
+		});
+		const meanPct = items.length ? items.reduce((s, i) => s + i.consumedPct, 0) / items.length : 0, maxPct = items.reduce((m, i) => Math.max(m, i.consumedPct), 0);
+		const level = !items.length ? null : meanPct >= plan.floatRed - 1e-9 ? "rojo" : meanPct <= plan.floatGreen + 1e-9 ? "verde" : "ambar";
+		return {
+			durationDelta,
+			durationDeltaPct: deviationPct(base, projectDuration),
+			reserveDays,
+			reserveConsumedPct: reserveDays > 0 ? Math.max(0, durationDelta) / reserveDays * 100 : null,
+			changed,
+			added: nodes.filter((n) => !bmap[n.id]).map((n) => n.code + " " + n.name),
+			removed: base.rows.filter((r) => !cur[r.id]).map((r) => r.code + " " + r.name),
+			near: {
+				items: items.sort((a, b) => b.consumedPct - a.consumedPct),
+				meanPct,
+				maxPct,
+				level,
+				newCritical
+			}
+		};
+	}
 	//#endregion
 	//#region src/modules/cronograma-cpm/main.ts
 	var mode = "live";
@@ -384,6 +693,7 @@
 		renderProbability(R);
 		renderNet(R);
 		renderGantt(R);
+		renderControl(R);
 		const dd = document.getElementById("durDet"), dp = document.getElementById("durPert");
 		if (dd && dp) {
 			dd.className = "dur-src" + (durMode === "det" ? " pert" : "");
@@ -598,7 +908,8 @@
 		[
 			"tabla",
 			"red",
-			"gantt"
+			"gantt",
+			"control"
 		].forEach((k) => {
 			document.getElementById("view-" + k).classList.toggle("active", k === v);
 		});
@@ -707,7 +1018,11 @@
 			wrap.innerHTML = "<div class='empty-state'>Sin actividades para el Gantt.</div>";
 			return;
 		}
-		const D = Math.max(1, Math.ceil(R.cpm.projectDuration));
+		const baseSnap = normalizeBaseline(state().baseline), bmap = {};
+		if (baseSnap) baseSnap.snapshot.rows.forEach((r) => {
+			bmap[r.id] = r;
+		});
+		const D = Math.max(1, Math.ceil(Math.max(R.cpm.projectDuration, baseSnap ? baseSnap.snapshot.projectDuration : 0)));
 		const LW = 214, RH = 24, HH = 30, MB = 12;
 		const dayW = Math.max(9, Math.min(34, Math.floor(760 / D)));
 		const W = LW + D * dayW + 20, H = HH + acts.length * RH + MB;
@@ -734,9 +1049,108 @@
 				svg += "<rect x='" + sx + "' y='" + (y + RH / 2 - 1.5) + "' width='" + sw + "' height='3' fill='#c7d3de'/>";
 			}
 			svg += "<text x='" + (bx + bw + 5) + "' y='" + (y + RH / 2 + 3) + "' font-size='9' fill='#6b7684'>" + fmt(row.ef - row.es) + "d</text>";
+			const bb = bmap[r.activityId];
+			if (bb) svg += "<rect x='" + (LW + bb.es * dayW) + "' y='" + (y + RH - 6) + "' width='" + Math.max(3, (bb.ef - bb.es) * dayW) + "' height='3' rx='1.5' fill='#5b6472'><title>Línea base " + esc(baseSnap.version) + "</title></rect>";
 		});
+		if (baseSnap) svg += "<text x='" + (W - 8) + "' y='14' font-size='10' font-weight='700' fill='#5b6472' text-anchor='end'>▬ línea base " + esc(baseSnap.version) + "</text>";
 		svg += "</svg>";
 		wrap.innerHTML = svg;
+	}
+	function controlNodes(R) {
+		const cm = codeOf(R.snap), nm = nameOf(R.snap), ms = isMilestoneOf(R.snap);
+		return R.nodes.map((n) => ({
+			id: n.id,
+			code: cm[n.id] || n.id,
+			name: nm[n.id] || "",
+			isMilestone: !!ms[n.id],
+			hasDur: n.hasDur,
+			dur: n.dur
+		}));
+	}
+	function controlPlan() {
+		return planOf(mode === "sample" ? null : spLive);
+	}
+	var d1 = (v) => String(Math.round(v * 10) / 10);
+	var sg = (v) => (v > 0 ? "+" : v < 0 ? "−" : "") + d1(Math.abs(v));
+	function renderControl(R) {
+		const box = document.getElementById("ctlWrap");
+		if (!R.cpm.ok) {
+			box.innerHTML = "<div class='empty-state'>La red tiene un ciclo: corrígela para evaluar su salud y fijar una línea base.</div>";
+			return;
+		}
+		if (!R.nodes.length) {
+			box.innerHTML = "<div class='empty-state'>Aún no hay actividades en la red.</div>";
+			return;
+		}
+		const nodes = controlNodes(R), plan = controlPlan(), rows = R.cpm.rows;
+		const health = scheduleHealth(nodes, R.links, rows, plan);
+		const base = normalizeBaseline(state().baseline);
+		const pill = (p) => p === null ? "<span class='ctl-pill info'>info</span>" : p ? "<span class='ctl-pill ok'>✓ cumple</span>" : "<span class='ctl-pill bad'>✗ no cumple</span>";
+		const hrows = health.checks.map((c) => "<tr><td><b>" + esc(c.label) + "</b><div class='ctl-items'>" + esc(c.detail) + (c.items.length ? "<br>" + c.items.map(esc).join(" · ") : "") + "</div></td><td class='num'>" + c.count + " / " + c.total + " (" + d1(c.pct) + " %)</td><td>" + esc(c.limit) + "</td><td>" + pill(c.pass) + "</td></tr>").join("");
+		const healthHtml = "<div class='ctl-card'><h3>Salud de la red</h3><p class='sub'>Antes de fiarte de la ruta crítica, revisa la calidad de la red. Verificaciones tipo <b>DCMA 14-Point Assessment</b> (valores de <b>referencia</b> de la industria: orientan, no bloquean). <b>" + health.passed + " de " + health.evaluated + "</b> verificaciones cumplen.</p><table class='ctl'><thead><tr><th>Verificación</th><th class='num'>Resultado</th><th>Umbral de referencia</th><th>Estado</th></tr></thead><tbody>" + hrows + "</tbody></table><div class='ctl-note'>No se evalúan las restricciones duras de fecha, los recursos ni el avance real: la suite no los modela. La ruta casi crítica usa el umbral del Plan de Gestión del Cronograma (" + plan.nearCriticalDays + " d" + (plan.nearCriticalDefined ? "" : ", valor por omisión: el plan no lo define") + ").</div></div>";
+		let baseHtml;
+		if (!base) baseHtml = "<div class='ctl-card'><h3>Línea base del cronograma</h3><p class='sub'>Todavía no hay una línea base. Es la <b>versión aprobada</b> del cronograma contra la que se mide la variación: sin ella el pronóstico solo se compara consigo mismo. Fíjala cuando el cronograma esté aprobado; después solo cambia por control de cambios (nueva versión LB-n, con motivo y aprobador).</p><button class='btn violet' id='btnBaseline'>✚ Fijar la línea base (LB-1)</button></div>";
+		else {
+			const cmp = compareBaseline(base.snapshot, nodes, rows, R.cpm.projectDuration, plan), bs = base.snapshot;
+			const lvl = cmp.near.level ? "<span class='ctl-pill " + cmp.near.level + "'>" + cmp.near.level.toUpperCase() + "</span>" : "<span class='ctl-pill info'>sin ruta casi crítica</span>";
+			const kp = (v, k) => "<div class='ctl-kpi'><div class='v'>" + v + "</div><div class='k'>" + k + "</div></div>";
+			const kpis = "<div class='ctl-kpis'>" + kp(d1(bs.projectDuration) + " → " + d1(R.cpm.projectDuration) + " d", "duración: línea base → pronóstico") + kp(sg(cmp.durationDelta) + " d" + (cmp.durationDeltaPct !== null ? " (" + sg(cmp.durationDeltaPct) + " %)" : ""), "desplazamiento del fin del proyecto") + kp(cmp.reserveConsumedPct === null ? "—" : d1(cmp.reserveConsumedPct) + " %", plan.reservePct > 0 ? "reserva de cronograma consumida (" + d1(cmp.reserveDays) + " d = " + plan.reservePct + " %)" : "reserva de cronograma: el plan no la define") + kp(cmp.near.items.length ? d1(cmp.near.meanPct) + " %" : "—", "consumo medio de holgura, ruta casi crítica") + "</div>";
+			const nearRows = cmp.near.items.slice(0, 8).map((i) => "<tr><td class='mono'>" + esc(i.code) + "</td><td>" + esc(i.name) + "</td><td class='num'>" + d1(i.tfBase) + " → " + d1(i.tfNow) + " d</td><td class='num'>" + d1(i.consumedPct) + " %</td></tr>").join("");
+			const chRows = cmp.changed.slice(0, 12).map((c) => "<tr><td class='mono'>" + esc(c.code) + "</td><td>" + esc(c.name) + "</td><td class='num'>" + sg(c.durDelta) + " d</td><td class='num'>" + sg(c.efDelta) + " d</td><td class='num'>" + d1(c.tfBase) + " → " + d1(c.tfNow) + "</td></tr>").join("");
+			const logRows = base.log.slice().reverse().map((e) => "<tr><td class='mono'>" + esc(e.version) + "</td><td>" + esc(e.date) + "</td><td>" + esc(e.reason) + "</td><td>" + esc(e.approver) + (e.sponsorAuth ? " (sponsor autorizó)" : "") + "</td><td class='num'>" + d1(e.projectDuration) + " d</td><td class='num'>" + (e.deviationPct === null ? "—" : sg(e.deviationPct) + " %") + "</td></tr>").join("");
+			baseHtml = "<div class='ctl-card'><h3>Línea base del cronograma · " + esc(base.version) + "</h3><p class='sub'>Fijada el <b>" + esc(base.date) + "</b> · fin " + esc(bs.finishDate || "—") + ". El pronóstico es el CPM actual (con los cambios de duración y de enlaces desde entonces). El Gantt muestra la línea base como una marca gris bajo cada barra.</p>" + kpis + "<div class='ctl-note' style='margin:0 0 12px'><b>Consumo de holgura de la ruta casi crítica: " + lvl + "</b> — umbral del plan: verde ≤ " + plan.floatGreen + " %, rojo ≥ " + plan.floatRed + " %. " + (cmp.near.newCritical.length ? "Pasaron a ser críticas: " + esc(cmp.near.newCritical.slice(0, 4).join(", ")) + ". " : "") + (cmp.added.length || cmp.removed.length ? "Actividades nuevas: " + cmp.added.length + " · quitadas: " + cmp.removed.length + " desde la línea base." : "") + "</div>" + (nearRows ? "<h4 style='font-size:12px;margin:8px 0 4px'>Ruta casi crítica (holgura ≤ " + bs.nearCriticalDays + " d en la línea base)</h4><table class='ctl'><thead><tr><th>Cód.</th><th>Actividad</th><th class='num'>Holgura</th><th class='num'>Consumida</th></tr></thead><tbody>" + nearRows + "</tbody></table>" : "") + (chRows ? "<h4 style='font-size:12px;margin:12px 0 4px'>Actividades que cambiaron (mayor desplazamiento primero)</h4><table class='ctl'><thead><tr><th>Cód.</th><th>Actividad</th><th class='num'>Δ duración</th><th class='num'>Δ fin</th><th class='num'>Holgura</th></tr></thead><tbody>" + chRows + "</tbody></table>" + (cmp.changed.length > 12 ? "<div class='ctl-items'>… y " + (cmp.changed.length - 12) + " más.</div>" : "") : "<div class='ctl-items' style='margin-top:8px'>Ninguna actividad cambió de duración ni de fin desde la línea base.</div>") + "<h4 style='font-size:12px;margin:12px 0 4px'>Versiones de la línea base</h4><table class='ctl'><thead><tr><th>Versión</th><th>Fecha</th><th>Motivo</th><th>Aprobó</th><th class='num'>Duración</th><th class='num'>Desviación</th></tr></thead><tbody>" + logRows + "</tbody></table><div style='margin-top:12px'><button class='btn violet' id='btnBaseline'>✚ Nueva versión de la línea base (" + esc(nextVersion(base)) + ")…</button></div></div>";
+		}
+		const planHtml = "<div class='ctl-card'><h3>Umbrales del Plan de Gestión del Cronograma que se aplican aquí</h3><table class='ctl'><tbody><tr><td>Ruta casi crítica (holgura ≤)</td><td class='num'>" + plan.nearCriticalDays + " d</td><td>" + (plan.nearCriticalDefined ? "del plan" : "por omisión (el plan no lo define)") + "</td></tr><tr><td>Reserva de cronograma</td><td class='num'>" + plan.reservePct + " %</td><td>" + (plan.reservePct > 0 ? "del plan" : "el plan no la define") + "</td></tr><tr><td>Umbral de rebaselinado (desviación de la duración)</td><td class='num'>" + plan.rebaselinePct + " %</td><td>" + (plan.rebaselinePct > 0 ? "del plan: por encima, autoriza el sponsor" : "el plan no lo define: no se exige al sponsor") + "</td></tr><tr><td>Consumo de holgura de la ruta casi crítica</td><td class='num'>verde ≤ " + plan.floatGreen + " % · rojo ≥ " + plan.floatRed + " %</td><td>del plan (o 40 / 70 por omisión)</td></tr></tbody></table>" + (mode === "sample" ? "<div class='ctl-note'>Modo ejemplo: sin proyecto, se usan los valores por omisión.</div>" : "") + "</div>";
+		box.innerHTML = baseHtml + healthHtml + planHtml;
+		const b = document.getElementById("btnBaseline");
+		if (b) b.addEventListener("click", () => openBaselineDialog(runCpm()));
+	}
+	function openBaselineDialog(R) {
+		if (!R.cpm.ok) {
+			showAlert("La red tiene un ciclo: corrígela antes de fijar la línea base.");
+			return;
+		}
+		const plan = controlPlan(), base = normalizeBaseline(state().baseline), version = nextVersion(base), first = !base;
+		const dev = base ? deviationPct(base.snapshot, R.cpm.projectDuration) : null, sponsor = needsSponsor(base ? base.snapshot : null, R.cpm.projectDuration, plan);
+		const html = "<div class='ctl-form'><p style='font-size:12.5px;margin:0'>" + (first ? "Se guarda una <b>instantánea</b> del cronograma actual (" + d1(R.cpm.projectDuration) + " d laborables" + (R.cpm.projectFinishDate ? ", fin " + esc(R.cpm.projectFinishDate) : "") + ") como la versión aprobada contra la que se medirá la variación." : "Se reemplaza la línea base " + esc(base.version) + " (" + d1(base.snapshot.projectDuration) + " d) por el cronograma actual (" + d1(R.cpm.projectDuration) + " d): desviación " + (dev === null ? "—" : sg(dev) + " %") + ". El historial conserva la versión anterior.") + "</p><label>Motivo</label><input type='text' id='blReason' value='" + (first ? "Línea base inicial aprobada" : "") + "' placeholder='" + (first ? "" : "Ej. Orden de cambio OC-002: ampliación de sala eléctrica") + "'><label>Quién aprueba (Sponsor, CCB…)</label><input type='text' id='blApprover' placeholder='Sponsor / CCB'>" + (sponsor ? "<label style='display:flex;gap:8px;align-items:flex-start;font-weight:600'><input type='checkbox' id='blSponsor' style='margin-top:2px'><span>El <b>sponsor autorizó</b> esta nueva versión: la desviación de la duración (" + sg(dev) + " %) supera el umbral de rebaselinado del plan (" + plan.rebaselinePct + " %).</span></label>" : "") + "<div class='msg' id='blMsg'></div><div style='text-align:right;margin-top:10px'><button class='btn violet' id='blOk'>" + (first ? "Fijar la línea base" : "Fijar " + esc(version)) + "</button></div></div>";
+		showModalHTML({
+			title: first ? "Fijar la línea base del cronograma" : "Nueva versión de la línea base (" + version + ")",
+			html,
+			confirmText: null,
+			cancelText: "Cancelar",
+			afterOpen: (card) => {
+				const g = (id) => card.querySelector("#" + id);
+				g("blOk").onclick = () => {
+					const reason = g("blReason").value.trim(), approver = g("blApprover").value.trim(), sp = sponsor ? g("blSponsor").checked : false;
+					const msg = !reason ? "Indica el motivo." : !approver ? "Registra quién aprueba la línea base." : sponsor && !sp ? "Esta desviación supera el umbral del plan: confirma la autorización del sponsor." : "";
+					if (msg) {
+						card.querySelector("#blMsg").textContent = msg;
+						return;
+					}
+					const nodes = controlNodes(R), today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+					const snapshot = makeSnapshot(nodes, R.cpm.ok ? R.cpm.rows : {}, R.cpm.ok ? R.cpm.projectDuration : 0, R.cpm.ok ? R.cpm.projectStart : "", R.cpm.ok ? R.cpm.projectFinishDate : "", plan.nearCriticalDays);
+					const entry = {
+						version,
+						date: today,
+						reason,
+						approver,
+						sponsorAuth: sp,
+						projectDuration: snapshot.projectDuration,
+						finishDate: snapshot.finishDate,
+						deviationPct: dev
+					};
+					state().baseline = {
+						frozen: true,
+						version,
+						date: today,
+						snapshot,
+						log: (base ? base.log : []).concat([entry])
+					};
+					document.getElementById("modalCancel").click();
+					commit("Línea base " + version + " fijada (" + d1(snapshot.projectDuration) + " d).");
+				};
+			}
+		});
 	}
 	function normSchedule(o) {
 		o = o || {};
