@@ -136,7 +136,7 @@
   .bad-txt{color:var(--bad)}
   .rng-events{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fbfdfe;margin-top:4px}
   .rng-chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer}
-  .rng-chk input{margin-top:3px}
+  .rng-chk input{margin-top:3px;flex:none;width:auto}
   .rng-form{grid-template-columns:1.4fr 1fr .6fr .6fr 1.6fr auto; margin-top:12px}
   .rng-in{font-family:var(--mono);font-size:12px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);box-sizing:border-box}
   tr.rng-bad td{background:var(--bad-bg)}
@@ -437,7 +437,7 @@
           <div class="co-add"><button class="btn primary" style="width:100%" onclick="addRange()">+ Agregar</button></div>
         </div>
         <div class="rng-events">
-          <label class="rng-chk"><input type="checkbox" id="rngRisks" checked onchange="onContMethod()"> <b>Incluir los eventos de riesgo del Registro de Riesgos</b> <span class="muted">(AACE 40R-08: la contingencia reúne la incertidumbre del estimado y los riesgos discretos)</span></label>
+          <label class="rng-chk"><input type="checkbox" id="rngRisks" checked onchange="onContMethod()"><span><b>Incluir los eventos de riesgo del Registro de Riesgos</b> <span class="muted">(AACE 40R-08: la contingencia reúne la incertidumbre del estimado y los riesgos discretos)</span></span></label>
           <div id="rngEvents" style="margin-top:10px"></div>
         </div>
         <div class="note" id="rngWarn" style="display:none;margin:12px 0"></div>

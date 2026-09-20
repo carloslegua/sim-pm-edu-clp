@@ -1248,7 +1248,11 @@ compartido por Riesgos y Costos.
   (mín + más probable + máx)/3 del impacto; la exposición que interesa a la
   contingencia es la **residual**; separa el **riesgo** (eventos discretos,
   aquí) de la **incertidumbre** (variabilidad del estimado, análisis de
-  rangos de Costos). (Los números de RP se citan de memoria: confirmarlos.)
+  rangos de Costos). Números de RP verificados contra AACE (sept. 2026): 40R-08
+(principios generales de contingencia), 41R-08 (estimación por rangos; desde
+2021 se titula «Understanding Estimate Ranging», antes «…Using Range
+Estimating»; la RP 118R-21 cubre rangos + Monte Carlo de riesgos inherentes) y
+44R-08 (valor esperado, sobre riesgos **residuales** tras la mitigación).
 - **El plan gobierna el análisis**: escalas de probabilidad (% por nivel),
   de impacto en costo (% del costo base, traducido a moneda con el costo base
   de Costos) y en plazo (días), descriptores de alcance/calidad, umbrales,

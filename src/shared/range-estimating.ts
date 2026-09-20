@@ -1,6 +1,6 @@
 // Estimación por rangos con simulación Monte Carlo para determinar la contingencia
-// (AACE International, RP 41R-08 "Risk Analysis and Contingency Determination Using Range
-// Estimating") -- lógica PURA compartida en tiempo de COMPILACIÓN (Vite la inlinea en cost.js).
+// (AACE International, RP 41R-08, titulada hasta 2021 "Risk Analysis and Contingency Determination
+// Using Range Estimating" y hoy "Understanding Estimate Ranging"; ver también 40R-08 y 118R-21) -- lógica PURA compartida en tiempo de COMPILACIÓN (Vite la inlinea en cost.js).
 //
 // Auditoría metodológica: Costos ofrecía «Simulación Monte Carlo» como método de
 // contingencia pero calculaba una tabla fija de % por clase y percentil, cuyos valores no
