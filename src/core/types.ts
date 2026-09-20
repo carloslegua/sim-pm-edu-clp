@@ -328,6 +328,36 @@ export interface GpiProject {
   schema: string;
   meta: ProjectMeta;
   modules: ProjectModules;
+  // Revisión por módulo: sube en 1 con cada escritura de ese módulo (salvo
+  // las "derivadas", ver writeModule). Opcional a propósito -- los .json
+  // históricos no la traen y se leen como 0 (regla #3 de CLAUDE.md).
+  revs?: Record<string, number>;
+}
+
+// Resultado común de cualquier escritura del núcleo (ver saveModule/
+// saveMeta/writeModule en gpi-core.ts). "saved": llegó a disco.
+// "unchanged": nada que guardar (esta pestaña no modificó lo que cargó, o ya
+// es idéntico a lo guardado). "pending": el dato quedó aplicado SOLO en
+// memoria (cuota agotada) -- hay que exportar. "conflict": otra pestaña
+// cambió lo mismo después de que esta lo cargó; NO se sobrescribió.
+// "rejected": no se escribió (proyecto activo distinto, o ninguno).
+export type WriteStatus = "saved" | "unchanged" | "pending" | "conflict" | "rejected";
+export interface WriteResult {
+  status: WriteStatus;
+  rev: number | null;
+  conflicts?: string[];
+  reason?: "no-active" | "project-changed";
+}
+
+// Sesión de edición: qué proyecto y qué versión cargó una pestaña. La crea
+// GPI.openSession(módulo) en el mismo instante en que el módulo lee sus
+// datos, y la actualiza el propio núcleo tras cada guardado.
+export interface EditSession {
+  projectId: string;
+  module: string;
+  rev: number;
+  snapshot: string;
+  meta: Partial<ProjectMeta>;
 }
 
 export interface GpiDb {

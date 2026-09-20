@@ -35,47 +35,106 @@ var GPI = (function(exports) {
 	function hasUnsavedChanges() {
 		return pendingUnsaved !== null;
 	}
-	function mergeProjectModules(ours, theirs, base) {
+	function sameJson(a, b) {
+		return JSON.stringify(a === void 0 ? null : a) === JSON.stringify(b === void 0 ? null : b);
+	}
+	function mergeProject(id, ours, theirs, base, conflicts) {
 		if (!base) return (ours.meta.updatedAt || 0) >= (theirs.meta.updatedAt || 0) ? ours : theirs;
-		const oursMods = ours.modules || {};
-		const theirsMods = theirs.modules || {};
-		const baseMods = base.modules || {};
-		const merged = Object.assign({}, theirsMods);
+		const om = ours.meta, tm = theirs.meta, bm = base.meta;
+		const meta = {};
 		(/* @__PURE__ */ new Set([
-			...Object.keys(oursMods),
-			...Object.keys(theirsMods),
-			...Object.keys(baseMods)
+			...Object.keys(om),
+			...Object.keys(tm),
+			...Object.keys(bm)
+		])).forEach((k) => {
+			if (k === "updatedAt") return;
+			const oursCh = !sameJson(om[k], bm[k]), theirsCh = !sameJson(tm[k], bm[k]);
+			if (oursCh && theirsCh && !sameJson(om[k], tm[k])) conflicts.push(id + "/meta." + k);
+			const v = oursCh ? om[k] : tm[k];
+			if (v !== void 0) meta[k] = v;
+		});
+		meta.updatedAt = Math.max(Number(om.updatedAt) || 0, Number(tm.updatedAt) || 0);
+		const oMods = ours.modules || {}, tMods = theirs.modules || {}, bMods = base.modules || {};
+		const mods = {}, revs = {};
+		(/* @__PURE__ */ new Set([
+			...Object.keys(oMods),
+			...Object.keys(tMods),
+			...Object.keys(bMods)
 		])).forEach((mk) => {
-			if (JSON.stringify(oursMods[mk]) !== JSON.stringify(baseMods[mk])) merged[mk] = oursMods[mk];
+			const oursCh = !sameJson(oMods[mk], bMods[mk]), theirsCh = !sameJson(tMods[mk], bMods[mk]);
+			const both = oursCh && theirsCh && !sameJson(oMods[mk], tMods[mk]);
+			if (both) conflicts.push(id + "/" + mk);
+			const v = oursCh ? oMods[mk] : tMods[mk];
+			if (v !== void 0) mods[mk] = v;
+			const or = revOf(ours, mk), tr = revOf(theirs, mk);
+			revs[mk] = both ? Math.max(or, tr) + 1 : Math.max(or, tr);
 		});
 		return {
 			schema: ours.schema,
-			meta: (ours.meta.updatedAt || 0) >= (theirs.meta.updatedAt || 0) ? ours.meta : theirs.meta,
-			modules: merged
+			meta,
+			modules: mods,
+			revs
 		};
 	}
-	function mergeWithDisk(d) {
+	function reconcileWithDisk(d) {
 		let diskRaw = null;
 		try {
 			diskRaw = localStorage.getItem(KEY);
 		} catch (_) {}
-		if (!diskRaw) return d;
+		if (!diskRaw) return null;
 		let disk;
 		try {
 			disk = JSON.parse(diskRaw);
 		} catch (_) {
-			return d;
+			return null;
 		}
-		const projects = Object.assign({}, disk.projects);
-		Object.keys(d.projects).forEach((id) => {
-			const ours = d.projects[id], theirs = disk.projects[id];
-			projects[id] = theirs ? mergeProjectModules(ours, theirs, pendingBase ? pendingBase.projects[id] : void 0) : ours;
+		if (!disk || !isPlainObject(disk.projects)) return null;
+		const base = pendingBase || fresh(), conflicts = [];
+		const projects = {};
+		(/* @__PURE__ */ new Set([
+			...Object.keys(d.projects),
+			...Object.keys(disk.projects),
+			...Object.keys(base.projects)
+		])).forEach((id) => {
+			const o = d.projects[id], t = disk.projects[id], b = base.projects[id];
+			if (o && t) {
+				projects[id] = mergeProject(id, o, t, b, conflicts);
+				return;
+			}
+			if (o && !t) {
+				if (!b) {
+					projects[id] = o;
+					return;
+				}
+				if (sameJson(o, b)) return;
+				conflicts.push(id + " (eliminado en otra pestaña, modificado aquí: se conserva)");
+				projects[id] = o;
+				return;
+			}
+			if (!o && t) {
+				if (!b) {
+					projects[id] = t;
+					return;
+				}
+				if (sameJson(t, b)) return;
+				conflicts.push(id + " (eliminado aquí, modificado en otra pestaña: se conserva)");
+				projects[id] = t;
+			}
 		});
+		const pick = !sameJson(d.activeId, base.activeId) ? d.activeId : disk.activeId;
+		const activeId = pick && projects[pick] ? pick : disk.activeId && projects[disk.activeId] ? disk.activeId : d.activeId && projects[d.activeId] ? d.activeId : Object.keys(projects)[0] || null;
 		return {
-			version: d.version,
-			activeId: disk.activeId != null ? disk.activeId : d.activeId,
-			projects
+			merged: {
+				version: d.version,
+				activeId,
+				projects
+			},
+			conflicts
 		};
+	}
+	var lastReconcileConflicts = [];
+	function lastReconcile() {
+		return lastReconcileConflicts.slice();
 	}
 	function save(d) {
 		if (!avail()) {
@@ -83,11 +142,13 @@ var GPI = (function(exports) {
 			return true;
 		}
 		try {
-			const toWrite = d === pendingUnsaved ? mergeWithDisk(d) : d;
-			localStorage.setItem(KEY, JSON.stringify(toWrite));
+			const rec = d === pendingUnsaved ? reconcileWithDisk(d) : null;
+			localStorage.setItem(KEY, JSON.stringify(rec ? rec.merged : d));
+			if (rec) lastReconcileConflicts = rec.conflicts;
 			pendingUnsaved = null;
 			pendingBase = null;
 			hideQuotaNotice();
+			if (rec && rec.conflicts.length) showRecoverNotice(rec.conflicts);
 			return true;
 		} catch (e) {
 			if (pendingUnsaved == null) try {
@@ -110,6 +171,19 @@ var GPI = (function(exports) {
 			quotaEl.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:2500;background:#7a1f2b;color:#fff;font-family:'Manrope',sans-serif;font-size:12.5px;font-weight:600;line-height:1.5;padding:11px 18px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:560px;text-align:center;";
 			quotaEl.innerHTML = "⚠ <b>El almacenamiento del navegador está lleno: los últimos cambios NO se están guardando.</b><br>Exporta este proyecto a .json (botón ⭳ Guardar) para no perder tu trabajo y elimina proyectos antiguos desde el Panel de Control.";
 			document.body.appendChild(quotaEl);
+		} catch (_) {}
+	}
+	function showRecoverNotice(conflicts) {
+		try {
+			if (typeof document === "undefined" || !document.body) return;
+			const el = document.createElement("div");
+			el.id = "gpiRecoverNotice";
+			el.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:2500;background:#7a5a00;color:#fff;font-family:'Manrope',sans-serif;font-size:12.5px;font-weight:600;line-height:1.5;padding:11px 18px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:560px;text-align:center;cursor:pointer;";
+			el.textContent = "⚠ Se recuperó el guardado, pero otra pestaña había cambiado lo mismo: " + conflicts.join("; ") + ". Se conservó lo de esta pestaña (clic para cerrar).";
+			el.onclick = () => {
+				if (el.parentNode) el.parentNode.removeChild(el);
+			};
+			document.body.appendChild(el);
 		} catch (_) {}
 	}
 	function hideQuotaNotice() {
@@ -189,14 +263,153 @@ var GPI = (function(exports) {
 		save(d);
 		return p.meta;
 	}
-	function setModule(name, data, expectedProjectId) {
+	function revOf(p, module) {
+		const r = p.revs && p.revs[module];
+		return typeof r === "number" ? r : 0;
+	}
+	function bumpRev(p, module) {
+		if (!isPlainObject(p.revs)) p.revs = {};
+		const n = revOf(p, module) + 1;
+		p.revs[module] = n;
+		return n;
+	}
+	function jsonOf(v) {
+		return JSON.stringify(v === void 0 ? null : v);
+	}
+	function writeModule(name, data, opts) {
 		const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
-		if (!p) return false;
-		if (expectedProjectId != null && d.activeId !== expectedProjectId) return false;
+		if (!p) return {
+			status: "rejected",
+			rev: null,
+			reason: "no-active"
+		};
+		if (opts && opts.projectId != null && d.activeId !== opts.projectId) return {
+			status: "rejected",
+			rev: null,
+			reason: "project-changed"
+		};
 		p.modules = isPlainObject(p.modules) ? p.modules : {};
 		p.modules[name] = data;
+		const rev = opts && opts.derived ? revOf(p, name) : bumpRev(p, name);
 		p.meta.updatedAt = Date.now();
-		return save(d);
+		return {
+			status: save(d) ? "saved" : "pending",
+			rev
+		};
+	}
+	function setModule(name, data, expectedProjectId) {
+		return writeModule(name, data, { projectId: expectedProjectId }).status === "saved";
+	}
+	function openSession(module) {
+		const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
+		if (!p) return null;
+		const m = isPlainObject(p.modules) ? p.modules[module] : void 0;
+		return {
+			projectId: d.activeId,
+			module,
+			rev: revOf(p, module),
+			snapshot: jsonOf(m),
+			meta: JSON.parse(JSON.stringify(p.meta))
+		};
+	}
+	function rebaseSession(session, data) {
+		if (session) session.snapshot = jsonOf(data);
+	}
+	function saveModule(name, data, session) {
+		if (!session || session.module !== name) return writeModule(name, data);
+		const d = db(), p = d.projects[session.projectId];
+		if (!p) return {
+			status: "rejected",
+			rev: null,
+			reason: "no-active"
+		};
+		if (d.activeId !== session.projectId) return {
+			status: "rejected",
+			rev: null,
+			reason: "project-changed"
+		};
+		const json = jsonOf(data);
+		if (json === session.snapshot) return {
+			status: "unchanged",
+			rev: session.rev
+		};
+		const mods = isPlainObject(p.modules) ? p.modules : {};
+		const diskRev = revOf(p, name);
+		if (json === jsonOf(mods[name])) {
+			session.rev = diskRev;
+			session.snapshot = json;
+			return {
+				status: "unchanged",
+				rev: diskRev
+			};
+		}
+		if (diskRev !== session.rev) return {
+			status: "conflict",
+			rev: diskRev,
+			conflicts: [name]
+		};
+		const r = writeModule(name, data, { projectId: session.projectId });
+		if (r.rev != null) {
+			session.rev = r.rev;
+			session.snapshot = json;
+		}
+		return r;
+	}
+	function saveMeta(partial, session) {
+		const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
+		if (!p) return {
+			status: "rejected",
+			rev: null,
+			reason: "no-active"
+		};
+		if (!session) return {
+			status: patchMeta(partial) ? "saved" : "rejected",
+			rev: null
+		};
+		if (d.activeId !== session.projectId) return {
+			status: "rejected",
+			rev: null,
+			reason: "project-changed"
+		};
+		const cur = p.meta;
+		const base = session.meta;
+		const apply = {}, conflicts = [];
+		Object.keys(partial || {}).forEach((k) => {
+			const v = partial[k];
+			if (jsonOf(v) === jsonOf(base[k])) return;
+			if (jsonOf(cur[k]) === jsonOf(v)) {
+				base[k] = v;
+				return;
+			}
+			if (jsonOf(cur[k]) !== jsonOf(base[k])) {
+				conflicts.push(k);
+				return;
+			}
+			apply[k] = v;
+		});
+		let saved = true;
+		if (Object.keys(apply).length) {
+			Object.assign(p.meta, apply);
+			p.meta.updatedAt = Date.now();
+			saved = save(d);
+			Object.assign(base, apply);
+		}
+		const status = conflicts.length ? "conflict" : !Object.keys(apply).length ? "unchanged" : saved ? "saved" : "pending";
+		return conflicts.length ? {
+			status,
+			rev: null,
+			conflicts
+		} : {
+			status,
+			rev: null
+		};
+	}
+	function describeWrite(r, label) {
+		const what = label || "Estos datos";
+		if (r.status === "saved" || r.status === "unchanged") return "";
+		if (r.status === "pending") return "⚠ Cambios SIN guardar: el almacenamiento del navegador está lleno. Exporta el proyecto desde el Panel de Control para no perderlos.";
+		if (r.status === "conflict") return "⚠ " + what + " cambió en otra pestaña después de abrir esta" + (r.conflicts && r.conflicts.length ? " (" + r.conflicts.join(", ") + ")" : "") + ": no se sobrescribió. Recarga esta pestaña para ver la versión actual.";
+		return r.reason === "no-active" ? "⚠ No hay proyecto activo: no se guardó." : "⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.";
 	}
 	function createProject(metaOverrides, modules) {
 		const d = db(), id = uid();
@@ -404,6 +617,7 @@ var GPI = (function(exports) {
 		};
 		p.modules = isPlainObject(p.modules) ? p.modules : {};
 		p.modules[det.module] = det.data;
+		bumpRev(p, det.module);
 		if (obj.title && (!p.meta.name || p.meta.name === "Proyecto sin título")) p.meta.name = obj.title;
 		if (obj.course && !p.meta.course) p.meta.course = obj.course;
 		p.meta.updatedAt = Date.now();
@@ -2195,6 +2409,13 @@ var GPI = (function(exports) {
 		setActive,
 		patchMeta,
 		setModule,
+		writeModule,
+		openSession,
+		rebaseSession,
+		saveModule,
+		saveMeta,
+		describeWrite,
+		lastReconcile,
 		createProject,
 		renameProject,
 		duplicateProject,
@@ -2226,6 +2447,7 @@ var GPI = (function(exports) {
 	exports.createProject = createProject;
 	exports.defaultMeta = defaultMeta;
 	exports.deleteProject = deleteProject;
+	exports.describeWrite = describeWrite;
 	exports.duplicateProject = duplicateProject;
 	exports.esc = esc;
 	exports.exportActive = exportActive;
@@ -2234,11 +2456,13 @@ var GPI = (function(exports) {
 	exports.importProject = importProject;
 	exports.ingestToolExport = ingestToolExport;
 	exports.kpi = kpi;
+	exports.lastReconcile = lastReconcile;
 	exports.listProjects = listProjects;
 	exports.meta = meta;
 	exports.obsLabel = obsLabel;
 	exports.obsNodes = obsNodes;
 	exports.onChange = onChange;
+	exports.openSession = openSession;
 	exports.parseISO = parseISO;
 	exports.parsePredecessorCell = parsePredecessorCell;
 	exports.patchMeta = patchMeta;
@@ -2249,9 +2473,12 @@ var GPI = (function(exports) {
 	exports.raciCoverage = raciCoverage;
 	exports.raciResponsibleIds = raciResponsibleIds;
 	exports.raw = db;
+	exports.rebaseSession = rebaseSession;
 	exports.renameProject = renameProject;
 	exports.reqByWbsLeaf = reqByWbsLeaf;
 	exports.requirementsAudit = requirementsAudit;
+	exports.saveMeta = saveMeta;
+	exports.saveModule = saveModule;
 	exports.schedulePlanAudit = schedulePlanAudit;
 	exports.scheduleStats = scheduleStats;
 	exports.scheduleValidate = scheduleValidate;
@@ -2269,5 +2496,6 @@ var GPI = (function(exports) {
 	exports.wbsPhases = wbsPhases;
 	exports.wbsResources = wbsResources;
 	exports.wbsRollup = wbsRollup;
+	exports.writeModule = writeModule;
 	return exports;
 })({});

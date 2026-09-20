@@ -611,6 +611,87 @@ mezcla la EDT de A con el entregable de B, y "Promover a RAN"
 efectivamente agrega el RAN de A al Acta de B (2 requisitos en vez de
 1).
 
+## Contrato de escritura: sesiones de edición, revisiones y resultado común
+
+Revisión externa (2026-09) señaló que la guarda por `projectId`
+(sección anterior) evita escribir sobre OTRO proyecto pero no detecta
+que los datos del MISMO proyecto cambiaron después de abrir la
+pestaña, y que el resultado del guardado no gobernaba lo que los
+módulos muestran. Reproducido: abrir el Acta, actualizarla desde otra
+pestaña y ejecutar el guardado de salida de la primera dejaba la
+versión vieja (vacía) sobre la nueva. Causa común: la seguridad de una
+escritura dependía de que cada módulo recordara pasar parámetros
+opcionales, y "guardar" no tenía un resultado que distinguiera lo que
+pasó de verdad. Contrato nuevo, en el núcleo:
+
+- **Revisión por módulo** (`project.revs[módulo]`, opcional; los `.json`
+  históricos no la traen y se leen como 0): sube en cada escritura de
+  ese módulo. Las escrituras *derivadas* (`writeModule(..., {derived:
+  true})`: Matriz RACI reescribiendo los Responsables de la EDT) no la
+  suben, para no producir falsos conflictos en la pestaña dueña.
+  `ingestToolExport()` y `setModule()` sí la suben.
+- **`GPI.openSession(módulo)`** → `EditSession {projectId, rev,
+  snapshot, meta}`: el módulo la pide en el mismo instante en que lee
+  sus datos ("esta pestaña cargó ESTE proyecto en ESTA versión").
+- **`GPI.saveModule(nombre, datos, sesión)`**: (1) proyecto activo
+  distinto → `rejected`; (2) datos idénticos a lo que la pestaña cargó
+  → `unchanged` (un guardado de salida sin ediciones no escribe, aunque
+  otra pestaña ya haya cambiado el dato); (3) la revisión en disco ya no
+  es la de la sesión → `conflict`, **no se sobrescribe**; (4) si no,
+  escribe, sube la revisión y actualiza la sesión → `saved`/`pending`.
+  `GPI.rebaseSession()` fija como "lo cargado" la serialización propia
+  del módulo cuando este normaliza (defaults) lo que lee.
+- **`GPI.saveMeta(parcial, sesión)`**: metadatos por CAMPO — solo se
+  escriben los campos que la pestaña cambió respecto de lo que cargó; un
+  campo que no tocó nunca revierte un cambio ajeno (renombrar el
+  proyecto desde el Panel ya no se deshace con el guardado de salida de
+  un módulo abierto); si otra pestaña cambió el mismo campo a otro
+  valor → `conflict` con la lista de campos.
+- **Resultado común `WriteResult`** (`saved | unchanged | pending |
+  conflict | rejected`, ver `types.ts`) y **`GPI.describeWrite()`**, el
+  texto único con que los módulos informan: nunca "Sincronizado" si el
+  dato solo quedó en memoria (cuota) o se rechazó por conflicto.
+  `setModule()`/`patchMeta()` se conservan como envoltorios (Panel de
+  Control, escrituras cruzadas de lectura-modificación-escritura en el
+  mismo instante, módulos que arrancaron sin proyecto).
+
+Política explícita de conflicto: **nunca se sustituye en silencio**; la
+pestaña que quedó desactualizada no guarda y avisa (recargar para ver la
+versión vigente).
+
+### Reconciliación tras cuota agotada: operaciones explícitas, no unión
+
+La reconciliación de `save()` (sección "Cuota llena") combinaba los
+proyectos de ambos lados como una UNIÓN sin distinguir crear de
+eliminar, y elegía los metadatos como un objeto completo según
+`updatedAt` (hallazgo "alta" de la revisión externa, reproducido con dos
+contextos: un proyecto eliminado en otra pestaña reaparecía; una
+eliminación de la propia copia pendiente se revertía; un cambio de
+`client` ajeno desaparecía cuando la copia pendiente guardaba
+`location`). Ahora `reconcileWithDisk()` lee cada diferencia contra
+`pendingBase` como una operación:
+
+- **crear** (existe en un lado y no en la base) → se conserva;
+- **eliminar** (está en la base y falta en un lado) → se elimina si el
+  otro lado no lo tocó; si el otro lado lo **modificó**, gana la
+  modificación (no se destruye trabajo ajeno) y se informa;
+- **modificar** → por proyecto, y dentro de él **por módulo y por campo
+  de `meta`** (no como un objeto completo por `updatedAt`); si ambos
+  lados cambiaron lo mismo a valores distintos, gana la pestaña que
+  guarda ahora, se informa qué se pisó (`GPI.lastReconcile()` y un aviso
+  visible) y la revisión del módulo sube para que la otra pestaña vea un
+  conflicto en su próximo guardado.
+
+`activeId` sigue la misma regla (si esta pestaña lo cambió respecto de
+la base gana el suyo; si no, el de disco), y nunca apunta a un proyecto
+que la conciliación eliminó. Cubierto en `tests/unit/quota-recovery.test.ts`
+(eliminación ajena, eliminación propia, eliminar-vs-modificar, campo de
+meta distinto, mismo campo); verificado que las cinco fallan con la
+combinación anterior.
+
+Cubierto en `tests/unit/write-contract.test.ts` (incluye la repro exacta
+del Acta).
+
 ## Las tres formas de referenciar el núcleo
 
 Cada módulo referencia `GPI` de una de tres formas — no asumir que es

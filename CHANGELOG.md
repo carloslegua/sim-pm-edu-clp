@@ -66,6 +66,34 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Núcleo — contrato de escritura: versión del mismo proyecto,
+  reconciliación con eliminaciones/metadatos por campo y resultado
+  común (revisión externa, hallazgos alta/alta/media; parte del
+  núcleo)** — (1) la guarda por `projectId` no detectaba que los datos
+  del MISMO proyecto cambiaron tras abrir la pestaña (abrir el Acta,
+  actualizarla desde otra pestaña y ejecutar el guardado de salida de la
+  primera dejaba la versión vieja vacía). Ahora cada proyecto lleva una
+  revisión por módulo (`revs`, opcional) y cada pestaña una
+  `EditSession` (`GPI.openSession`): `GPI.saveModule` devuelve
+  `unchanged` si la pestaña no modificó lo que cargó, `conflict` (sin
+  sobrescribir) si otra pestaña cambió el módulo desde entonces, y
+  `saved`/`pending`/`rejected`; `GPI.saveMeta` escribe solo los campos
+  que la pestaña cambió (renombrar desde el Panel ya no se revierte con
+  un guardado de salida). (2) La reconciliación tras cuota agotada
+  ahora trabaja con operaciones explícitas contra la base (crear /
+  modificar / eliminar) y metadatos por campo: un proyecto eliminado en
+  otra pestaña ya no reaparece, una eliminación propia ya no se
+  revierte, y un cambio de `client` ajeno sobrevive cuando la copia
+  pendiente guarda `location`; conflictos reales con política explícita
+  y aviso (`GPI.lastReconcile()`). (3) `WriteResult` +
+  `GPI.describeWrite()` como resultado común. `setModule`/`patchMeta`
+  se conservan como envoltorios. Pruebas nuevas en
+  `tests/unit/write-contract.test.ts` y `tests/unit/quota-recovery.test.ts`
+  (verificadas contra el código anterior). La migración de los 13
+  módulos a este contrato va en el commit siguiente. Ver
+  ARCHITECTURE.md, "Contrato de escritura: sesiones de edición,
+  revisiones y resultado común".
+
 - **La importación JSON de actividades descartaba los hitos** — el
   usuario reportó: un archivo del formato reconocido
   `gpi.activities/v1` con `milestones` se importa con éxito, pero

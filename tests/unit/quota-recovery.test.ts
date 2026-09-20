@@ -117,6 +117,93 @@ describe("recuperación tras un fallo de guardado (cuota de localStorage agotada
     expect(onDisk.projects[idA].modules.scopeStatement).toEqual({ deliverables: [{ id: "d1", name: "Entregable de A (v2)" }] });
   });
 
+  // --- Segunda pasada (alta): eliminaciones y metadatos por campo ---
+  // Dos pestañas reales = dos instancias de módulo (vi.resetModules()) sobre el
+  // mismo localStorage. La pestaña A falla por cuota; B sigue guardando.
+  async function dosPestanas() {
+    const A = await import("../../src/core/gpi-core");
+    vi.resetModules();
+    const B = await import("../../src/core/gpi-core");
+    const real = Storage.prototype.setItem;
+    const bloquear = () => vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, key: string, value: string) {
+      if (key === A.KEY) throw new DOMException("Quota exceeded", "QuotaExceededError");
+      return real.call(this, key, value);
+    });
+    return { A, B, bloquear };
+  }
+
+  it("un proyecto ELIMINADO desde otra pestaña no reaparece cuando la pestaña atascada recupera el guardado", async () => {
+    const { A, B, bloquear } = await dosPestanas();
+    const p1 = A.createProject({ name: "Proyecto 1" });
+    const p2 = A.createProject({ name: "Proyecto 2" });      // p2 queda activo
+    const spy = bloquear();
+    expect(A.setModule("charter", { x: 1 })).toBe(false);      // A: cambio pendiente sobre p2
+    spy.mockRestore();
+    B.deleteProject(p1);                                       // B elimina p1
+    expect(A.setModule("charter", { x: 2 })).toBe(true);       // A recupera
+    const onDisk = JSON.parse(localStorage.getItem(A.KEY) as string);
+    expect(Object.keys(onDisk.projects)).toEqual([p2]);
+    expect(onDisk.projects[p2].modules.charter).toEqual({ x: 2 });
+  });
+
+  it("una eliminación hecha en la PROPIA copia pendiente no se revierte al recuperar", async () => {
+    const { A, B, bloquear } = await dosPestanas();
+    const p1 = A.createProject({ name: "Proyecto 1" });
+    const p2 = A.createProject({ name: "Proyecto 2" });
+    const spy = bloquear();
+    A.deleteProject(p1);                                       // A elimina p1 pero no llega a disco
+    expect(A.hasUnsavedChanges()).toBe(true);
+    spy.mockRestore();
+    B.setModule("charter", { deB: true });                     // B guarda otra cosa en p2
+    expect(A.setModule("wbs", { rootId: "r", idCounter: 1, nodes: {} })).toBe(true);
+    const onDisk = JSON.parse(localStorage.getItem(A.KEY) as string);
+    expect(Object.keys(onDisk.projects)).toEqual([p2]);
+    expect(onDisk.projects[p2].modules.charter).toEqual({ deB: true }); // lo de B sobrevive
+    expect(onDisk.projects[p2].modules.wbs).toBeDefined();
+  });
+
+  it("eliminar en un lado vs. MODIFICAR en el otro: gana la modificación y se informa", async () => {
+    const { A, B, bloquear } = await dosPestanas();
+    const p1 = A.createProject({ name: "Proyecto 1" });
+    A.createProject({ name: "Proyecto 2" });
+    A.setActive(p1);
+    const spy = bloquear();
+    A.setModule("charter", { trabajoNuevo: true });            // A modifica p1 (pendiente)
+    spy.mockRestore();
+    B.deleteProject(p1);                                       // B lo elimina
+    A.setModule("charter", { trabajoNuevo: true, v: 2 });
+    const onDisk = JSON.parse(localStorage.getItem(A.KEY) as string);
+    expect(onDisk.projects[p1].modules.charter).toEqual({ trabajoNuevo: true, v: 2 });
+    expect(A.lastReconcile().join(" ")).toMatch(/eliminado en otra pestaña, modificado aquí/);
+  });
+
+  it("metadatos por CAMPO: 'client' cambiado en otra pestaña sobrevive cuando la copia pendiente guarda 'location'", async () => {
+    const { A, B, bloquear } = await dosPestanas();
+    const id = A.createProject({ name: "P", client: "Cliente 0", location: "" });
+    const spy = bloquear();
+    A.patchMeta({ location: "Lima" });                         // A: cambio de meta pendiente
+    expect(A.hasUnsavedChanges()).toBe(true);
+    spy.mockRestore();
+    B.patchMeta({ client: "Cliente nuevo de B" });             // B cambia OTRO campo
+    A.patchMeta({ location: "Lima, Perú" });                   // A recupera
+    const m = JSON.parse(localStorage.getItem(A.KEY) as string).projects[id].meta;
+    expect(m.client).toBe("Cliente nuevo de B");
+    expect(m.location).toBe("Lima, Perú");
+  });
+
+  it("metadatos: el MISMO campo cambiado a valores distintos es conflicto explícito (gana quien guarda, se informa)", async () => {
+    const { A, B, bloquear } = await dosPestanas();
+    const id = A.createProject({ name: "P", client: "C0" });
+    const spy = bloquear();
+    A.patchMeta({ client: "C-de-A" });
+    spy.mockRestore();
+    B.patchMeta({ client: "C-de-B" });
+    A.patchMeta({ location: "x" });
+    const m = JSON.parse(localStorage.getItem(A.KEY) as string).projects[id].meta;
+    expect(m.client).toBe("C-de-A");
+    expect(A.lastReconcile()).toContain(id + "/meta.client");
+  });
+
   it("BUG REPORTADO: si también falla la sonda de disponibilidad, la lectura debe seguir sirviendo el cambio pendiente, no un respaldo vacío", () => {
     createProject({ name: "Proyecto A" });
     setModule("charter", { identification: { sponsor: "Versión real" } });

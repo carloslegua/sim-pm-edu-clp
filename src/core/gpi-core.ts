@@ -22,8 +22,10 @@ import type {
   ScheduleModule, ScheduleLink, ScheduleLinkType, ScheduleLagUnit,
   RequirementsModule, RequirementItem, ScopeStatementModule, ScopeDeliverable,
   CharterModule, CharterRequirement, CostModule,
-  SchedulePlanModule, SchedulePlanCalendar
+  SchedulePlanModule, SchedulePlanCalendar,
+  EditSession, WriteResult, WriteStatus
 } from "./types";
+export type { EditSession, WriteResult, WriteStatus } from "./types";
 
 export const KEY = "gpi_db";
 const SCHEMA = "gpi.project/v1";
@@ -120,36 +122,85 @@ export function hasUnsavedChanges(): boolean { return pendingUnsaved !== null; }
 // activeId se toma de disco cuando existe: es un puntero global, y otra
 // pestaña pudo haber activado un proyecto distinto mientras esta seguía
 // atascada.
-function mergeProjectModules(ours: GpiProject, theirs: GpiProject, base: GpiProject | undefined): GpiProject {
+//
+// SEGUNDA PASADA (hallazgo "alta" de la revisión externa): la combinación
+// anterior conservaba la UNIÓN de proyectos de ambos lados sin distinguir
+// una eliminación de una creación, y elegía los metadatos como un objeto
+// completo según updatedAt. Confirmado con dos contextos: (a) un proyecto
+// eliminado desde otra pestaña reaparecía al recuperar el guardado; (b) una
+// eliminación hecha en la propia copia pendiente también se revertía; (c) un
+// cambio de "client" hecho en otra pestaña desaparecía cuando la copia
+// pendiente guardaba después un cambio de "location". Ahora cada diferencia
+// se lee contra la base (pendingBase) como una OPERACIÓN explícita:
+//   crear    = existe en un lado y no en la base;
+//   eliminar = existe en la base y falta en un lado;
+//   modificar= difiere de la base (proyecto, módulo o CAMPO de meta).
+// Política de conflicto (explícita, nunca silenciosa):
+//   - eliminar vs. sin cambios del otro lado -> se elimina;
+//   - eliminar vs. modificar -> gana la modificación (no se destruye
+//     trabajo ajeno) y se informa;
+//   - el mismo módulo o campo modificado a valores distintos en ambos
+//     lados -> gana la pestaña que guarda ahora, se informa qué se pisó, y
+//     la revisión del módulo sube para que la otra pestaña vea un conflicto.
+type Reconcile = { merged: GpiDb; conflicts: string[] };
+function sameJson(a: unknown, b: unknown): boolean { return JSON.stringify(a === undefined ? null : a) === JSON.stringify(b === undefined ? null : b); }
+function mergeProject(id: string, ours: GpiProject, theirs: GpiProject, base: GpiProject | undefined, conflicts: string[]): GpiProject {
   if (!base) return (ours.meta.updatedAt || 0) >= (theirs.meta.updatedAt || 0) ? ours : theirs;
-  const oursMods = (ours.modules || {}) as Record<string, unknown>;
-  const theirsMods = (theirs.modules || {}) as Record<string, unknown>;
-  const baseMods = (base.modules || {}) as Record<string, unknown>;
-  const merged: Record<string, unknown> = Object.assign({}, theirsMods);
-  const keys = new Set([...Object.keys(oursMods), ...Object.keys(theirsMods), ...Object.keys(baseMods)]);
-  keys.forEach((mk) => {
-    const oursChanged = JSON.stringify(oursMods[mk]) !== JSON.stringify(baseMods[mk]);
-    if (oursChanged) merged[mk] = oursMods[mk];
+  // metadatos por CAMPO
+  const om = ours.meta as unknown as Record<string, unknown>, tm = theirs.meta as unknown as Record<string, unknown>, bm = base.meta as unknown as Record<string, unknown>;
+  const meta: Record<string, unknown> = {};
+  new Set([...Object.keys(om), ...Object.keys(tm), ...Object.keys(bm)]).forEach((k) => {
+    if (k === "updatedAt") return;
+    const oursCh = !sameJson(om[k], bm[k]), theirsCh = !sameJson(tm[k], bm[k]);
+    if (oursCh && theirsCh && !sameJson(om[k], tm[k])) conflicts.push(id + "/meta." + k);
+    const v = oursCh ? om[k] : tm[k];
+    if (v !== undefined) meta[k] = v;
   });
-  return {
-    schema: ours.schema,
-    meta: (ours.meta.updatedAt || 0) >= (theirs.meta.updatedAt || 0) ? ours.meta : theirs.meta,
-    modules: merged as GpiProject["modules"]
-  };
+  meta.updatedAt = Math.max(Number(om.updatedAt) || 0, Number(tm.updatedAt) || 0);
+  // módulos y revisiones
+  const oMods = (ours.modules || {}) as Record<string, unknown>, tMods = (theirs.modules || {}) as Record<string, unknown>, bMods = (base.modules || {}) as Record<string, unknown>;
+  const mods: Record<string, unknown> = {}, revs: Record<string, number> = {};
+  new Set([...Object.keys(oMods), ...Object.keys(tMods), ...Object.keys(bMods)]).forEach((mk) => {
+    const oursCh = !sameJson(oMods[mk], bMods[mk]), theirsCh = !sameJson(tMods[mk], bMods[mk]);
+    const both = oursCh && theirsCh && !sameJson(oMods[mk], tMods[mk]);
+    if (both) conflicts.push(id + "/" + mk);
+    const v = oursCh ? oMods[mk] : tMods[mk];
+    if (v !== undefined) mods[mk] = v;
+    const or = revOf(ours, mk), tr = revOf(theirs, mk);
+    revs[mk] = both ? Math.max(or, tr) + 1 : Math.max(or, tr);
+  });
+  return { schema: ours.schema, meta: meta as unknown as ProjectMeta, modules: mods as GpiProject["modules"], revs };
 }
-function mergeWithDisk(d: GpiDb): GpiDb {
+function reconcileWithDisk(d: GpiDb): Reconcile | null {
   let diskRaw: string | null = null;
   try { diskRaw = localStorage.getItem(KEY); } catch (_) { /* noop */ }
-  if (!diskRaw) return d;
+  if (!diskRaw) return null;
   let disk: GpiDb;
-  try { disk = JSON.parse(diskRaw) as GpiDb; } catch (_) { return d; }
-  const projects: Record<string, GpiProject> = Object.assign({}, disk.projects);
-  Object.keys(d.projects).forEach((id) => {
-    const ours = d.projects[id], theirs = disk.projects[id];
-    projects[id] = theirs ? mergeProjectModules(ours, theirs, pendingBase ? pendingBase.projects[id] : undefined) : ours;
+  try { disk = JSON.parse(diskRaw) as GpiDb; } catch (_) { return null; }
+  if (!disk || !isPlainObject(disk.projects)) return null;
+  const base = pendingBase || fresh(), conflicts: string[] = [];
+  const projects: Record<string, GpiProject> = {};
+  new Set([...Object.keys(d.projects), ...Object.keys(disk.projects), ...Object.keys(base.projects)]).forEach((id) => {
+    const o = d.projects[id], t = disk.projects[id], b = base.projects[id];
+    if (o && t) { projects[id] = mergeProject(id, o, t, b, conflicts); return; }
+    if (o && !t) {
+      if (!b) { projects[id] = o; return; }                       // creado aquí
+      if (sameJson(o, b)) return;                                  // eliminado en otra pestaña, aquí sin cambios -> sigue eliminado
+      conflicts.push(id + " (eliminado en otra pestaña, modificado aquí: se conserva)"); projects[id] = o; return;
+    }
+    if (!o && t) {
+      if (!b) { projects[id] = t; return; }                        // creado en otra pestaña
+      if (sameJson(t, b)) return;                                  // eliminado aquí, allá sin cambios -> sigue eliminado
+      conflicts.push(id + " (eliminado aquí, modificado en otra pestaña: se conserva)"); projects[id] = t;
+    }
   });
-  return { version: d.version, activeId: disk.activeId != null ? disk.activeId : d.activeId, projects };
+  const pick = !sameJson(d.activeId, base.activeId) ? d.activeId : disk.activeId;
+  const activeId = pick && projects[pick] ? pick : (disk.activeId && projects[disk.activeId] ? disk.activeId : (d.activeId && projects[d.activeId] ? d.activeId : (Object.keys(projects)[0] || null)));
+  return { merged: { version: d.version, activeId, projects }, conflicts };
 }
+let lastReconcileConflicts: string[] = [];
+// Conflictos de la última recuperación tras cuota agotada (vacío = ninguno).
+export function lastReconcile(): string[] { return lastReconcileConflicts.slice(); }
 
 // Devuelve true si el guardado llegó a localStorage, false si falló
 // (queda igual retenido en pendingUnsaved -- ver db()). Antes esta
@@ -159,10 +210,12 @@ function mergeWithDisk(d: GpiDb): GpiDb {
 function save(d: GpiDb): boolean {
   if (!avail()) { mem = d; return true; } // modo memoria (sin localStorage): degradado pero no es un fallo de escritura
   try {
-    const toWrite = d === pendingUnsaved ? mergeWithDisk(d) : d;
-    localStorage.setItem(KEY, JSON.stringify(toWrite));
+    const rec = d === pendingUnsaved ? reconcileWithDisk(d) : null;
+    localStorage.setItem(KEY, JSON.stringify(rec ? rec.merged : d));
+    if (rec) lastReconcileConflicts = rec.conflicts;
     pendingUnsaved = null; pendingBase = null; // volvió a guardar bien: ya no hace falta ni el respaldo ni la base de conciliación
     hideQuotaNotice();
+    if (rec && rec.conflicts.length) showRecoverNotice(rec.conflicts);
     return true;
   } catch (e) {
     // localStorage lleno (QuotaExceededError) u otro fallo de escritura:
@@ -193,6 +246,17 @@ function showQuotaNotice(): void {
     quotaEl.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:2500;background:#7a1f2b;color:#fff;font-family:'Manrope',sans-serif;font-size:12.5px;font-weight:600;line-height:1.5;padding:11px 18px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:560px;text-align:center;";
     quotaEl.innerHTML = "⚠ <b>El almacenamiento del navegador está lleno: los últimos cambios NO se están guardando.</b><br>Exporta este proyecto a .json (botón ⭳ Guardar) para no perder tu trabajo y elimina proyectos antiguos desde el Panel de Control.";
     document.body.appendChild(quotaEl);
+  } catch (_) { /* noop */ }
+}
+function showRecoverNotice(conflicts: string[]): void {
+  try {
+    if (typeof document === "undefined" || !document.body) return;
+    const el = document.createElement("div");
+    el.id = "gpiRecoverNotice";
+    el.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:2500;background:#7a5a00;color:#fff;font-family:'Manrope',sans-serif;font-size:12.5px;font-weight:600;line-height:1.5;padding:11px 18px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:560px;text-align:center;cursor:pointer;";
+    el.textContent = "⚠ Se recuperó el guardado, pero otra pestaña había cambiado lo mismo: " + conflicts.join("; ") + ". Se conservó lo de esta pestaña (clic para cerrar).";
+    el.onclick = () => { if (el.parentNode) el.parentNode.removeChild(el); };
+    document.body.appendChild(el);
   } catch (_) { /* noop */ }
 }
 function hideQuotaNotice(): void {
@@ -286,19 +350,125 @@ export function patchMeta(partial: Partial<ProjectMeta>, expectedProjectId?: str
   save(d);
   return p.meta;
 }
-export function setModule(name: string, data: unknown, expectedProjectId?: string | null): boolean {
+// ----- revisiones, sesiones de edición y resultado común de escritura -----
+//
+// Bug real reportado por el usuario (alta): la guarda por projectId evita
+// escribir sobre OTRO proyecto, pero no detecta que los datos del MISMO
+// proyecto cambiaron después de abrir la pestaña -- abrir el Acta, editarla
+// desde otra pestaña y ejecutar el guardado de salida de la primera dejaba
+// la versión vieja (vacía) sobre la nueva. Contrato:
+//  - cada proyecto lleva una revisión POR MÓDULO (project.revs), que sube
+//    en cada escritura de ese módulo;
+//  - openSession(módulo) captura, en el instante en que el módulo lee sus
+//    datos, el proyecto, la revisión y una foto (datos y metadatos);
+//  - saveModule()/saveMeta() comparan contra esa sesión ANTES de sustituir
+//    nada: sin cambios propios -> "unchanged" (no se escribe); con cambios
+//    ajenos posteriores -> "conflict" (no se sobrescribe); y devuelven un
+//    resultado común que los módulos usan para informar al usuario.
+function revOf(p: GpiProject, module: string): number {
+  const r = p.revs && p.revs[module];
+  return typeof r === "number" ? r : 0;
+}
+function bumpRev(p: GpiProject, module: string): number {
+  if (!isPlainObject(p.revs)) p.revs = {};
+  const n = revOf(p, module) + 1;
+  (p.revs as Record<string, number>)[module] = n;
+  return n;
+}
+function jsonOf(v: unknown): string { return JSON.stringify(v === undefined ? null : v); }
+
+// Escritura de un módulo SIN sesión (Panel de Control, escrituras cruzadas
+// de lectura-modificación-escritura en el mismo instante, módulos que
+// arrancaron sin proyecto). "derived": el dato se deriva de otro módulo
+// (p. ej. Matriz RACI reescribe los Responsables de la EDT) y no debe
+// contar como edición de ese módulo -- no sube su revisión, para no
+// provocar falsos conflictos en la pestaña dueña.
+export function writeModule(name: string, data: unknown, opts?: { projectId?: string | null; derived?: boolean }): WriteResult {
   const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
-  if (!p) return false;
-  if (expectedProjectId != null && d.activeId !== expectedProjectId) return false;
+  if (!p) return { status: "rejected", rev: null, reason: "no-active" };
+  if (opts && opts.projectId != null && d.activeId !== opts.projectId) return { status: "rejected", rev: null, reason: "project-changed" };
   p.modules = isPlainObject(p.modules) ? p.modules : {};
   (p.modules as Record<string, unknown>)[name] = data;
+  const rev = opts && opts.derived ? revOf(p, name) : bumpRev(p, name);
   p.meta.updatedAt = Date.now();
-  // El resultado real de save() (antes se ignoraba y siempre se
-  // devolvía true, incluso si localStorage rechazó la escritura por
-  // cuota): el dato igual queda aplicado y recuperable -- ver
-  // pendingUnsaved en save()/db() -- pero el llamador ahora puede
-  // distinguir "guardado en disco" de "solo en memoria, exportalo".
-  return save(d);
+  return { status: save(d) ? "saved" : "pending", rev };
+}
+// Compatibilidad: true solo si llegó a disco (pending/rechazado -> false).
+export function setModule(name: string, data: unknown, expectedProjectId?: string | null): boolean {
+  return writeModule(name, data, { projectId: expectedProjectId }).status === "saved";
+}
+
+export function openSession(module: string): EditSession | null {
+  const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
+  if (!p) return null;
+  const m = isPlainObject(p.modules) ? (p.modules as Record<string, unknown>)[module] : undefined;
+  return {
+    projectId: d.activeId as string, module, rev: revOf(p, module),
+    snapshot: jsonOf(m), meta: JSON.parse(JSON.stringify(p.meta)) as Partial<ProjectMeta>
+  };
+}
+// Algunos módulos normalizan lo que leen (defaults, migraciones): su primer
+// serializado difiere del dato crudo aunque el usuario no haya tocado nada.
+// rebaseSession() fija como "lo cargado" la serialización del propio módulo,
+// para que un guardado de salida sin ediciones sea un "unchanged" real.
+export function rebaseSession(session: EditSession | null, data: unknown): void {
+  if (session) session.snapshot = jsonOf(data);
+}
+export function saveModule(name: string, data: unknown, session: EditSession | null): WriteResult {
+  if (!session || session.module !== name) return writeModule(name, data);
+  const d = db(), p = d.projects[session.projectId];
+  if (!p) return { status: "rejected", rev: null, reason: "no-active" };
+  if (d.activeId !== session.projectId) return { status: "rejected", rev: null, reason: "project-changed" };
+  const json = jsonOf(data);
+  if (json === session.snapshot) return { status: "unchanged", rev: session.rev }; // esta pestaña no modificó lo que cargó
+  const mods = isPlainObject(p.modules) ? (p.modules as Record<string, unknown>) : {};
+  const diskRev = revOf(p, name);
+  if (json === jsonOf(mods[name])) { session.rev = diskRev; session.snapshot = json; return { status: "unchanged", rev: diskRev }; }
+  if (diskRev !== session.rev) return { status: "conflict", rev: diskRev, conflicts: [name] };
+  const r = writeModule(name, data, { projectId: session.projectId });
+  if (r.rev != null) { session.rev = r.rev; session.snapshot = json; }
+  return r;
+}
+// Metadatos por CAMPO: solo se escriben los campos que ESTA pestaña cambió
+// respecto de lo que cargó (session.meta); un campo que la pestaña no tocó
+// nunca pisa un cambio hecho en otra (p. ej. renombrar el proyecto desde el
+// Panel no se revierte con el guardado de salida de un módulo abierto). Si
+// otra pestaña cambió ese mismo campo a otro valor, no se sobrescribe y se
+// informa en "conflicts". Sin sesión: comportamiento anterior (patchMeta).
+export function saveMeta(partial: Partial<ProjectMeta>, session: EditSession | null): WriteResult {
+  const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
+  if (!p) return { status: "rejected", rev: null, reason: "no-active" };
+  if (!session) { const applied = patchMeta(partial); return { status: applied ? "saved" : "rejected", rev: null }; }
+  if (d.activeId !== session.projectId) return { status: "rejected", rev: null, reason: "project-changed" };
+  const cur = p.meta as unknown as Record<string, unknown>;
+  const base = session.meta as Record<string, unknown>;
+  const apply: Record<string, unknown> = {}, conflicts: string[] = [];
+  Object.keys(partial || {}).forEach((k) => {
+    const v = (partial as Record<string, unknown>)[k];
+    if (jsonOf(v) === jsonOf(base[k])) return;                       // esta pestaña no lo tocó
+    if (jsonOf(cur[k]) === jsonOf(v)) { base[k] = v; return; }       // ya coincide con lo guardado
+    if (jsonOf(cur[k]) !== jsonOf(base[k])) { conflicts.push(k); return; } // otra pestaña lo cambió a otra cosa
+    apply[k] = v;
+  });
+  let saved = true;
+  if (Object.keys(apply).length) {
+    Object.assign(p.meta, apply);
+    p.meta.updatedAt = Date.now();
+    saved = save(d);
+    Object.assign(base, apply);
+  }
+  const status: WriteStatus = conflicts.length ? "conflict" : !Object.keys(apply).length ? "unchanged" : saved ? "saved" : "pending";
+  return conflicts.length ? { status, rev: null, conflicts } : { status, rev: null };
+}
+// Texto común para informar al usuario según el resultado de una escritura
+// ("" cuando no hay nada que avisar): así ningún módulo muestra "Sincronizado"
+// cuando el dato solo quedó en memoria o se rechazó por un conflicto.
+export function describeWrite(r: WriteResult, label?: string): string {
+  const what = label || "Estos datos";
+  if (r.status === "saved" || r.status === "unchanged") return "";
+  if (r.status === "pending") return "⚠ Cambios SIN guardar: el almacenamiento del navegador está lleno. Exporta el proyecto desde el Panel de Control para no perderlos.";
+  if (r.status === "conflict") return "⚠ " + what + " cambió en otra pestaña después de abrir esta" + (r.conflicts && r.conflicts.length ? " (" + r.conflicts.join(", ") + ")" : "") + ": no se sobrescribió. Recarga esta pestaña para ver la versión actual.";
+  return r.reason === "no-active" ? "⚠ No hay proyecto activo: no se guardó." : "⚠ El proyecto activo cambió en otra pestaña: esta pestaña ya no puede guardar aquí.";
 }
 
 // ----- gestión de proyectos -----
@@ -517,6 +687,7 @@ export function ingestToolExport(obj: any): { ok: boolean; reason?: string; modu
   if (!det) return { ok: false, reason: "unknown-format" };
   p.modules = isPlainObject(p.modules) ? p.modules : {};
   (p.modules as Record<string, unknown>)[det.module] = det.data;
+  bumpRev(p, det.module); // una pestaña con este módulo abierto debe ver un conflicto, no pisar lo importado
   // completar metadatos si vienen y están vacíos
   if (obj.title && (!p.meta.name || p.meta.name === "Proyecto sin título")) p.meta.name = obj.title;
   if (obj.course && !p.meta.course) p.meta.course = obj.course;
@@ -2041,6 +2212,13 @@ export const GPI = {
   setActive,
   patchMeta,
   setModule,
+  writeModule,
+  openSession,
+  rebaseSession,
+  saveModule,
+  saveMeta,
+  describeWrite,
+  lastReconcile,
   createProject,
   renameProject,
   duplicateProject,
