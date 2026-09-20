@@ -967,6 +967,42 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
 - Poder e Interés son **campos derivados** de 5 criterios ponderados
   cada uno (nunca editables directamente) — patrón de cálculo
   multicriterio único en la suite.
+- **Vista «Compromiso» — matriz de evaluación del compromiso** (auditoría
+  metodológica PMI; lógica pura en `src/shared/stakeholder-engagement.ts`,
+  inlineada en `stakeholder-studio.js`). El Panel anunciaba una «matriz
+  de compromiso» que no existía. Compara, por interesado, el compromiso
+  **actual (C)** con el **deseado (D)** en los 5 niveles de PMI
+  (Desconocedor · Reticente · Neutral · Partidario · Líder); la **brecha**
+  D − C justifica el plan de involucramiento. Complementa a Mendelow y
+  Mitchell: esos dicen *a quién* atender; esta dice *en qué postura está y
+  cuál hace falta*.
+  - **Datos del alumno, nunca inferidos**: campos opcionales
+    `engCurrent`, `engDesired`, `engStrategy`, `engOwner`, `engAssessedOn`
+    (fecha en que se evaluó el nivel actual). Un interesado nuevo o de un
+    proyecto guardado antes de esta vista queda «Sin evaluar»; valores
+    fuera de 1..5 se leen como sin evaluar.
+  - **Prioridad = brecha × poder / 100** (alta ≥ 1,5 · media ≥ 0,75): una
+    brecha grande en quien no tiene poder pesa menos que una menor en quien
+    puede frenar el proyecto. Solo hay prioridad con brecha positiva.
+  - **Hallazgos de coherencia** (`engagementFindings`, orientan, no
+    bloquean): E1 sin evaluar (aviso si el poder es alto), E2 deseado menor
+    que actual, E3 brecha sin estrategia (riesgo si la brecha ≥ 2), E4 brecha
+    sin responsable, E5 «gestionar de cerca» con deseado < Partidario, E6
+    poder alto con postura Reticente/Desconocedor (riesgo), E7 evaluación
+    de más de 90 días.
+  - Marcadores con **letra y forma** (C relleno, D con borde discontinuo,
+    C=D), no solo color. El `placeholder` de la estrategia orienta según la
+    postura y el cuadrante (`approachHint`). El CSV y el reporte imprimible
+    incluyen la evaluación (resumen, brecha, prioridad, estrategia,
+    responsable).
+  - **Ejemplo DISTRIB+ ampliado, mismo caso**: los 12 interesados (`s1`…
+    `s12`) ganan compromiso actual/deseado, estrategia y responsable
+    (roles del OBS: Director de Proyecto, Asesoría Legal, Residente de
+    Obra, Jefe de Logística). Ilustra los casos: brechas de 1 (sponsor,
+    banco, municipalidad), de 2 con poder alto en riesgo (sindicato, la
+    mayor prioridad, 1,3), de 3 (futuros operarios) y sin brecha
+    (Constructora, OEFA, SUNAFIL). No se fija `engAssessedOn` en el
+    ejemplo para que no envejezca.
 - **Todo campo de `Stakeholder` que se interpola en HTML pasa por
   `escapeHtml()`, sin excepción — incluido `id`** (bug de seguridad real
   reportado por el usuario, 2026-09: un `.json` de interesados
@@ -2056,7 +2092,11 @@ vez que se agrega o toca un módulo:
   financista/BCP, Constructora/Contratista EPC, Municipalidad de Lurín
   (s4), OEFA, SUNAFIL (s6), Junta de vecinos, Sindicato de construcción
   civil, Futuros operarios (s9), Clientes/distribuidores (s10),
-  Proveedor de estructuras/Proveedor A, Prensa/medios locales.
+  Proveedor de estructuras/Proveedor A, Prensa/medios locales. Cada uno
+  tiene además su **compromiso actual/deseado** (p. ej. Sindicato:
+  Reticente → Partidario, responsable Asesoría Legal; Futuros operarios:
+  Desconocedor → Partidario, responsable Director de Proyecto) — ver la
+  vista «Compromiso» en la sección de `Stakeholder_Studio.html`.
 - **Requisitos/Alcance** (`project-charter` RAN.01–RAN.04 →
   `requirements` `ran1`-`ran4`/`q#` → `scope-statement` deliverables):
   encadenados por id, no por texto — cualquier módulo nuevo que agregue

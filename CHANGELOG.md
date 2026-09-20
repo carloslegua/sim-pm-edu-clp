@@ -64,6 +64,24 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
   `tests/unit/cpm.test.ts`. Ver ARCHITECTURE.md, secciones
   `Cronograma_CPM.html` y "Plantilla combinada" de `Panel_Control.html`.
 
+### Added
+
+- **Stakeholder Studio: matriz de evaluación del compromiso (auditoría
+  metodológica PMI)** — el Panel anunciaba una «matriz de compromiso» que
+  no existía. Nueva vista «🤝 Compromiso»: por interesado, nivel **actual
+  (C)** frente al **deseado (D)** en los 5 niveles de PMI (Desconocedor,
+  Reticente, Neutral, Partidario, Líder), **brecha**, **prioridad**
+  (brecha × poder / 100), estrategia y responsable, con hallazgos de
+  coherencia (brecha sin estrategia o sin responsable, poder alto con
+  postura reticente, «gestionar de cerca» con deseado inferior a
+  Partidario, evaluación vieja). Los niveles los evalúa el alumno: nunca se
+  inicializan ni se infieren, y los proyectos guardados antes de esta vista
+  abren igual como «Sin evaluar» (campos opcionales). CSV y reporte
+  imprimible incluyen la evaluación; el ejemplo DISTRIB+ amplía sus 12
+  interesados con compromiso, estrategia y responsable. Lógica pura en
+  `src/shared/stakeholder-engagement.ts`; pruebas:
+  `stakeholder-engagement.test.ts` (17) y 6 smoke nuevos (incluido XSS).
+
 ### Fixed
 
 - **Costos: una variación fuera de umbral ya no se equipara con una orden

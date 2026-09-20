@@ -80,6 +80,13 @@ export interface Stakeholder {
   legitimacy?: number;
   urgency?: number;
   notes?: string;
+  // Evaluación del compromiso (PMI), opcional: los proyectos guardados antes de la vista
+  // «Compromiso» no la traen y se leen como "sin evaluar" (ver shared/stakeholder-engagement.ts).
+  engCurrent?: number | null;
+  engDesired?: number | null;
+  engStrategy?: string;
+  engOwner?: string;
+  engAssessedOn?: string;
   [key: string]: unknown;
 }
 

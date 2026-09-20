@@ -28,6 +28,10 @@
 import type * as GpiCore from "../../core/gpi-core";
 import type { EditSession, ProjectMeta } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
+import {
+  approachHint, asLevel, engagementFindings, engagementGap, engagementPriority, engagementSummary,
+  levelName, quadrantOf, rankByPriority, ENG_LEVELS, QUADRANT_LABEL
+} from "../../shared/stakeholder-engagement";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global { interface Window { GPI?: GpiApi; } }
@@ -84,11 +88,15 @@ interface Stakeholder {
   id: string; name: string; org: string; role: string; category: string;
   power: number; interest: number; legitimacy: number; urgency: number;
   powerCriteria: PowerCriteria; interestCriteria: InterestCriteria;
+  // Evaluación del compromiso (PMI). TODOS opcionales: los proyectos guardados antes de esta
+  // vista no los traen y se leen como "sin evaluar"; nunca se inicializan por el alumno.
+  engCurrent?: number | null; engDesired?: number | null;
+  engStrategy?: string; engOwner?: string; engAssessedOn?: string;
 }
 
 let stakeholders: Stakeholder[] = [];
 let selectedId: string | null = null;
-let currentView: "registro" | "poderInteres" | "prominencia" = "registro";
+let currentView: "registro" | "poderInteres" | "prominencia" | "compromiso" = "registro";
 let idCounter = 1;
 let expandedIds = new Set<string>(); // filas del registro desplegadas (acordeón)
 // Ponderación global de los 5 criterios de poder (deben sumar 100)
@@ -147,29 +155,41 @@ function loadSample(): void {
   // interestCriteria = {afectación, stake, alineación, proximidad, atención} (1-5).
   // Con los pesos por defecto, el poder e interés 0-100 se derivan de estos criterios.
   S({ name: "Gerencia General DISTRIB+", org: "DISTRIB+ S.A.", role: "Patrocinador (Sponsor)", category: "Interno",
-    powerCriteria: { pos: 5, res: 5, net: 5, veto: 5, expert: 4 }, interestCriteria: { afect: 5, stake: 5, align: 5, prox: 4, atten: 4 }, legitimacy: 95, urgency: 70 });
+    powerCriteria: { pos: 5, res: 5, net: 5, veto: 5, expert: 4 }, interestCriteria: { afect: 5, stake: 5, align: 5, prox: 4, atten: 4 }, legitimacy: 95, urgency: 70,
+    engCurrent: 4, engDesired: 5, engOwner: "Director de Proyecto", engStrategy: "Reunión de avance quincenal; las decisiones de reserva de gestión y de línea base se llevan y se registran con el sponsor." });
   S({ name: "Banco financista", org: "BCP", role: "Financiamiento del proyecto", category: "Financiero",
-    powerCriteria: { pos: 4, res: 5, net: 4, veto: 5, expert: 3 }, interestCriteria: { afect: 4, stake: 5, align: 4, prox: 3, atten: 5 }, legitimacy: 85, urgency: 75 });
+    powerCriteria: { pos: 4, res: 5, net: 4, veto: 5, expert: 3 }, interestCriteria: { afect: 4, stake: 5, align: 4, prox: 3, atten: 5 }, legitimacy: 85, urgency: 75,
+    engCurrent: 3, engDesired: 4, engOwner: "Director de Proyecto", engStrategy: "Informe mensual de avance físico-financiero antes de cada desembolso." });
   S({ name: "Constructora principal", org: "Contratista EPC", role: "Ejecución de obra", category: "Proveedor",
-    powerCriteria: { pos: 3, res: 4, net: 3, veto: 4, expert: 5 }, interestCriteria: { afect: 5, stake: 4, align: 4, prox: 5, atten: 5 }, legitimacy: 80, urgency: 60 });
+    powerCriteria: { pos: 3, res: 4, net: 3, veto: 4, expert: 5 }, interestCriteria: { afect: 5, stake: 4, align: 4, prox: 5, atten: 5 }, legitimacy: 80, urgency: 60,
+    engCurrent: 4, engDesired: 4 });
   S({ name: "Municipalidad de Lurín", org: "Gobierno Local", role: "Licencias y permisos", category: "Regulador",
-    powerCriteria: { pos: 5, res: 3, net: 4, veto: 5, expert: 3 }, interestCriteria: { afect: 3, stake: 2, align: 3, prox: 2, atten: 3 }, legitimacy: 90, urgency: 35 });
+    powerCriteria: { pos: 5, res: 3, net: 4, veto: 5, expert: 3 }, interestCriteria: { afect: 3, stake: 2, align: 3, prox: 2, atten: 3 }, legitimacy: 90, urgency: 35,
+    engCurrent: 3, engDesired: 4, engOwner: "Asesoría Legal", engStrategy: "Reuniones técnicas previas al ingreso del expediente de licencia (paquete 2.4) y seguimiento semanal del trámite." });
   S({ name: "OEFA / Autoridad ambiental", org: "Estado", role: "Fiscalización ambiental", category: "Regulador",
-    powerCriteria: { pos: 4, res: 2, net: 3, veto: 5, expert: 5 }, interestCriteria: { afect: 3, stake: 2, align: 2, prox: 2, atten: 3 }, legitimacy: 88, urgency: 40 });
+    powerCriteria: { pos: 4, res: 2, net: 3, veto: 5, expert: 5 }, interestCriteria: { afect: 3, stake: 2, align: 2, prox: 2, atten: 3 }, legitimacy: 88, urgency: 40,
+    engCurrent: 3, engDesired: 3 });
   S({ name: "SUNAFIL", org: "Estado", role: "Fiscalización laboral / SST", category: "Regulador",
-    powerCriteria: { pos: 4, res: 2, net: 3, veto: 5, expert: 4 }, interestCriteria: { afect: 2, stake: 2, align: 2, prox: 2, atten: 3 }, legitimacy: 85, urgency: 45 });
+    powerCriteria: { pos: 4, res: 2, net: 3, veto: 5, expert: 4 }, interestCriteria: { afect: 2, stake: 2, align: 2, prox: 2, atten: 3 }, legitimacy: 85, urgency: 45,
+    engCurrent: 3, engDesired: 3 });
   S({ name: "Junta de vecinos de Lurín", org: "Comunidad", role: "Vecinos del entorno", category: "Comunidad",
-    powerCriteria: { pos: 2, res: 2, net: 4, veto: 3, expert: 1 }, interestCriteria: { afect: 5, stake: 4, align: 5, prox: 3, atten: 5 }, legitimacy: 75, urgency: 80 });
+    powerCriteria: { pos: 2, res: 2, net: 4, veto: 3, expert: 1 }, interestCriteria: { afect: 5, stake: 4, align: 5, prox: 3, atten: 5 }, legitimacy: 75, urgency: 80,
+    engCurrent: 2, engDesired: 4, engOwner: "Residente de Obra", engStrategy: "Mesas de diálogo mensuales, canal de reclamos y plan de manejo de tráfico y ruido comunicado antes del inicio de obra." });
   S({ name: "Sindicato de construcción civil", org: "Gremio", role: "Mano de obra sindicalizada", category: "Comunidad",
-    powerCriteria: { pos: 3, res: 3, net: 4, veto: 5, expert: 3 }, interestCriteria: { afect: 4, stake: 4, align: 4, prox: 3, atten: 4 }, legitimacy: 45, urgency: 85 });
+    powerCriteria: { pos: 3, res: 3, net: 4, veto: 5, expert: 3 }, interestCriteria: { afect: 4, stake: 4, align: 4, prox: 3, atten: 4 }, legitimacy: 45, urgency: 85,
+    engCurrent: 2, engDesired: 4, engOwner: "Asesoría Legal", engStrategy: "Acuerdo laboral previo al inicio de obra: jornadas, seguridad y contratación local; reunión de seguimiento cada dos semanas." });
   S({ name: "Futuros operarios del almacén", org: "DISTRIB+ S.A.", role: "Personal de operación", category: "Interno",
-    powerCriteria: { pos: 1, res: 1, net: 2, veto: 2, expert: 3 }, interestCriteria: { afect: 5, stake: 3, align: 4, prox: 4, atten: 4 }, legitimacy: 70, urgency: 40 });
+    powerCriteria: { pos: 1, res: 1, net: 2, veto: 2, expert: 3 }, interestCriteria: { afect: 5, stake: 3, align: 4, prox: 4, atten: 4 }, legitimacy: 70, urgency: 40,
+    engCurrent: 1, engDesired: 4, engOwner: "Director de Proyecto", engStrategy: "Talleres de capacitación y visitas guiadas a obra durante la puesta en marcha (paquetes 5.x)." });
   S({ name: "Clientes / distribuidores", org: "Cartera comercial", role: "Usuarios del servicio logístico", category: "Cliente",
-    powerCriteria: { pos: 3, res: 4, net: 3, veto: 2, expert: 2 }, interestCriteria: { afect: 3, stake: 3, align: 3, prox: 3, atten: 4 }, legitimacy: 65, urgency: 35 });
+    powerCriteria: { pos: 3, res: 4, net: 3, veto: 2, expert: 2 }, interestCriteria: { afect: 3, stake: 3, align: 3, prox: 3, atten: 4 }, legitimacy: 65, urgency: 35,
+    engCurrent: 3, engDesired: 4, engOwner: "Director de Proyecto", engStrategy: "Comunicado de hitos del proyecto y encuesta de necesidades logísticas del nuevo almacén." });
   S({ name: "Proveedor de estructuras", org: "Proveedor A", role: "Estructuras metálicas prefabricadas", category: "Proveedor",
-    powerCriteria: { pos: 2, res: 4, net: 2, veto: 3, expert: 5 }, interestCriteria: { afect: 3, stake: 3, align: 3, prox: 3, atten: 3 }, legitimacy: 40, urgency: 30 });
+    powerCriteria: { pos: 2, res: 4, net: 2, veto: 3, expert: 5 }, interestCriteria: { afect: 3, stake: 3, align: 3, prox: 3, atten: 3 }, legitimacy: 40, urgency: 30,
+    engCurrent: 3, engDesired: 4, engOwner: "Jefe de Logística", engStrategy: "Seguimiento semanal de fabricación y de fechas de entrega comprometidas (paquete 3.1)." });
   S({ name: "Prensa / medios locales", org: "Medios", role: "Cobertura del proyecto", category: "Comunidad",
-    powerCriteria: { pos: 1, res: 1, net: 4, veto: 3, expert: 2 }, interestCriteria: { afect: 2, stake: 2, align: 2, prox: 2, atten: 2 }, legitimacy: 40, urgency: 65 });
+    powerCriteria: { pos: 1, res: 1, net: 4, veto: 3, expert: 2 }, interestCriteria: { afect: 2, stake: 2, align: 2, prox: 2, atten: 2 }, legitimacy: 40, urgency: 65,
+    engCurrent: 1, engDesired: 3, engOwner: "Director de Proyecto", engStrategy: "Nota de prensa al inicio y al cierre del proyecto." });
   selectedId = stakeholders[0].id;
 }
 
@@ -200,6 +220,7 @@ function render(): void {
   if (currentView === "registro") main.innerHTML = renderRegister();
   else if (currentView === "poderInteres") main.innerHTML = renderPowerInterest();
   else if (currentView === "prominencia") main.innerHTML = renderSalience();
+  else if (currentView === "compromiso") main.innerHTML = renderEngagement();
   wireMainInteractions();
   renderSidebar();
   if (main) main.scrollTop = prevScroll; // no saltar al editar in situ
@@ -445,6 +466,106 @@ function renderSalience(): string {
     </svg></div>`;
 }
 
+// ---------- VIEW 4: MATRIZ DE COMPROMISO (PMI: Stakeholder Engagement Assessment Matrix) ----------
+// Compromiso ACTUAL (C) vs DESEADO (D) por interesado; la brecha D − C justifica el plan de
+// involucramiento. Complementa a Mendelow/Mitchell: aquellos dicen a QUIÉN atender, esta dice en
+// qué POSTURA está y cuál hace falta. Los niveles los evalúa el alumno: nunca se inicializan.
+// Lógica pura (brecha, prioridad, hallazgos) en src/shared/stakeholder-engagement.ts.
+const todayISO = (): string => new Date().toISOString().slice(0, 10);
+const PRIO_TXT: Record<string, string> = { alta: "ALTA", media: "MEDIA", baja: "BAJA" };
+function engFindingsHtml(s: Stakeholder): string {
+  const f = engagementFindings(s, todayISO());
+  return f.length ? `<ul class="eng-finds">${f.map((x) => `<li><span class="sv ${x.severity}">${x.severity === "riesgo" ? "RIESGO" : x.severity === "aviso" ? "AVISO" : "NOTA"}</span>${escapeHtml(x.text)}</li>`).join("")}</ul>` : "";
+}
+function engGapHtml(s: Stakeholder): string {
+  const g = engagementGap(s);
+  if (g === null) return `<span class="eng-gap" style="color:var(--ink-2)" title="Falta evaluar el nivel actual o el deseado">—</span>`;
+  const col = g >= 2 ? "#a3172f" : g === 1 ? "#8a5300" : g === 0 ? "#00675a" : "var(--ink-2)";
+  return `<span class="eng-gap" style="color:${col}" title="Deseado − actual">${g > 0 ? "+" + g : g}</span>`;
+}
+function engPrioHtml(s: Stakeholder): string {
+  const p = engagementPriority(s);
+  return p ? `<span class="eng-pill ${p.level}" title="Prioridad = brecha × poder / 100 = ${p.score}">${PRIO_TXT[p.level]} · ${p.score}</span>` : `<span style="color:var(--ink-2)">—</span>`;
+}
+function engLevelOptions(v: unknown): string {
+  return `<option value="">Sin evaluar</option>` + ENG_LEVELS.map((l) => `<option value="${l.v}" ${asLevel(v) === l.v ? "selected" : ""}>${l.v} · ${l.t}</option>`).join("");
+}
+function renderEngagement(): string {
+  const head = `<div class="view-head">
+      <h2>Matriz de evaluación del compromiso</h2>
+      <p>Para cada interesado, compara su nivel de compromiso <b>actual</b> (<b>C</b>) con el nivel <b>deseado</b> (<b>D</b>) para que el proyecto tenga éxito: la <b>brecha</b> (D − C) justifica las acciones del plan de involucramiento. Los niveles los evalúas tú, con evidencia: no se calculan ni se asumen. La <b>prioridad</b> pondera la brecha por el poder del interesado.</p>
+    </div>`;
+  if (!stakeholders.length) return head + `<div class="empty-hint">Aún no hay interesados. Usa <b>+ Interesado</b> o <b>Cargar ejemplo</b>.</div>`;
+  const rows = stakeholders.map((s) => {
+    const c = asLevel(s.engCurrent), d = asLevel(s.engDesired), q = quadrantOf(s.power, s.interest);
+    const cells = ENG_LEVELS.map((l) => {
+      const isC = c === l.v, isD = d === l.v;
+      const mk = isC && isD ? `<span class="eng-mk cd" title="Actual y deseado coinciden: ${l.t}">C=D</span>` : isC ? `<span class="eng-mk c" title="Actual: ${l.t}">C</span>` : isD ? `<span class="eng-mk d" title="Deseado: ${l.t}">D</span>` : "";
+      return `<td class="eng-cell" data-lv="${l.v}">${mk}</td>`;
+    }).join("");
+    return `<tr class="eng-r" data-id="${escapeHtml(s.id)}">
+      <td class="l"><div class="eng-name">${escapeHtml(s.name)}</div>
+        <div class="eng-sub">${escapeHtml(s.category)} · ${QUADRANT_LABEL[q]} · P${escapeHtml(s.power)}/I${escapeHtml(s.interest)}</div>
+        <div class="eng-f">${engFindingsHtml(s)}</div></td>
+      ${cells}
+      <td class="e-gap">${engGapHtml(s)}</td>
+      <td class="e-prio">${engPrioHtml(s)}</td>
+      <td><select class="e-cur" data-id="${escapeHtml(s.id)}" aria-label="Compromiso actual de ${escapeHtml(s.name)}">${engLevelOptions(s.engCurrent)}</select></td>
+      <td><select class="e-des" data-id="${escapeHtml(s.id)}" aria-label="Compromiso deseado de ${escapeHtml(s.name)}">${engLevelOptions(s.engDesired)}</select></td>
+      <td class="l"><textarea class="e-str" data-id="${escapeHtml(s.id)}" placeholder="${escapeHtml(approachHint(s.engCurrent, s.engDesired, q))}" aria-label="Estrategia de involucramiento de ${escapeHtml(s.name)}">${escapeHtml(s.engStrategy || "")}</textarea></td>
+      <td><input class="e-own" data-id="${escapeHtml(s.id)}" value="${escapeHtml(s.engOwner || "")}" placeholder="Responsable" aria-label="Responsable de ${escapeHtml(s.name)}"></td>
+    </tr>`;
+  }).join("");
+  return head + `<div class="eng-legend">
+      <span><span class="eng-mk c">C</span> compromiso actual</span>
+      <span><span class="eng-mk d">D</span> compromiso deseado</span>
+      <span><span class="eng-mk cd">C=D</span> ya coinciden</span>
+    </div>
+    <div class="eng-wrap"><table class="eng">
+      <thead><tr><th class="l">Interesado</th>${ENG_LEVELS.map((l) => `<th title="${escapeHtml(l.d)}">${l.t}</th>`).join("")}<th>Brecha</th><th>Prioridad</th><th>Actual</th><th>Deseado</th><th class="l">Estrategia para cerrar la brecha</th><th>Responsable</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+}
+function engagementSidebar(): string {
+  const sum = engagementSummary(stakeholders), rank = rankByPriority(stakeholders).slice(0, 5);
+  const counts = ENG_LEVELS.map((l) => `<tr><td>${l.v} · ${l.t}</td><td>${sum.byCurrent[l.v - 1]}</td><td>${sum.byDesired[l.v - 1]}</td></tr>`).join("");
+  const prio = rank.length
+    ? rank.map((r) => `<div class="strat-box"><div class="st"><span class="eng-pill ${r.level}">${PRIO_TXT[r.level]} · ${r.score}</span> ${escapeHtml(r.s.name)}</div>${levelName(r.s.engCurrent)} → ${levelName(r.s.engDesired)} (brecha +${r.gap})${String(r.s.engStrategy || "").trim() ? "" : " · <b>sin estrategia</b>"}</div>`).join("")
+    : `<div class="empty-hint">No hay brechas de compromiso por cerrar${sum.assessed ? "." : ": aún no evaluaste a ningún interesado."}</div>`;
+  return `<h3 class="mt">Compromiso: resumen</h3>
+    <div class="stat-grid">
+      <div class="stat"><div class="v">${sum.assessed}/${sum.total}</div><div class="l">Evaluados (${sum.coveragePct}%)</div></div>
+      <div class="stat"><div class="v">${sum.withGap}</div><div class="l">Con brecha</div></div>
+      <div class="stat"><div class="v" title="Poder alto (≥50) y postura Reticente o Desconocedor">${sum.highPowerResistant}</div><div class="l">Poder alto en riesgo</div></div>
+    </div>
+    <table class="eng-mini"><thead><tr><th>Nivel</th><th>Actual</th><th>Deseado</th></tr></thead><tbody>${counts}</tbody></table>
+    <h3 class="mt">Prioridades para cerrar brechas</h3>
+    ${prio}
+    <div class="tip-box"><b>Prioridad</b> = brecha × poder / 100 (alta ≥ 1,5 · media ≥ 0,75). Una brecha grande en quien no tiene poder pesa menos que una menor en quien puede frenar el proyecto.</div>
+    <h3 class="mt">Niveles de compromiso (PMI)</h3>
+    ${ENG_LEVELS.map((l) => strat("#0090c2", l.v + " · " + l.t, l.d)).join("")}`;
+}
+function wireEngagement(): void {
+  const byId = (el: HTMLElement): Stakeholder | undefined => stakeholders.find((x) => x.id === el.dataset.id);
+  document.querySelectorAll<HTMLSelectElement>("table.eng select.e-cur, table.eng select.e-des").forEach((el) => {
+    el.addEventListener("change", () => {
+      const s = byId(el); if (!s) return;
+      const v = asLevel(el.value);
+      if (el.classList.contains("e-cur")) { s.engCurrent = v; s.engAssessedOn = v ? todayISO() : undefined; } else s.engDesired = v;
+      render(); // los marcadores, la brecha, la prioridad y los hallazgos dependen de ambos niveles
+    });
+  });
+  const live = (el: HTMLElement, set: (s: Stakeholder) => void) => el.addEventListener("input", () => {
+    const s = byId(el); if (!s) return;
+    set(s);
+    const tr = document.querySelector(`tr.eng-r[data-id="${s.id}"]`); if (!tr) return;
+    const f = tr.querySelector(".eng-f"); if (f) f.innerHTML = engFindingsHtml(s);
+    renderSidebar(); // el panel derecho no tiene campos de texto en esta vista: es seguro reconstruirlo
+  });
+  document.querySelectorAll<HTMLTextAreaElement>("table.eng textarea.e-str").forEach((el) => live(el, (s) => { s.engStrategy = el.value; }));
+  document.querySelectorAll<HTMLInputElement>("table.eng input.e-own").forEach((el) => live(el, (s) => { s.engOwner = el.value; }));
+}
+
 // ---------- BUBBLE HELPERS ----------
 function bubbleNode(s: Stakeholder, x: number, y: number, rBase?: number): string {
   const r = rBase || 14;
@@ -477,6 +598,7 @@ function plotBubbles(points: BubblePoint[], rBase?: number): string {
 // ---------- SIDEBAR ----------
 function renderSidebar(): void {
   const sb = document.getElementById("sidebar") as HTMLElement;
+  if (currentView === "compromiso") { sb.innerHTML = statsBlock() + engagementSidebar(); return; }
   if (currentView === "registro") {
     // El editor va inline bajo cada interesado; el panel muestra resumen, ponderaciones y guía.
     sb.innerHTML = statsBlock()
@@ -624,6 +746,7 @@ function wireMainInteractions(): void {
   const bca = document.getElementById("btnCollapseAll");
   if (bca) bca.addEventListener("click", () => { expandedIds.clear(); render(); });
   wireDetailEditors();
+  wireEngagement();
 }
 function toggleExpand(id: string): void {
   if (!id) return;
@@ -818,7 +941,7 @@ function exportCsv(): void {
   const head = ["Nombre", "Organizacion", "Rol", "Categoria", "Poder", "Interes", "Legitimidad", "Urgencia",
     "Poder_Posicional", "Poder_Recursos", "Poder_Red", "Poder_Veto", "Poder_Experto", "Poder_Nivel",
     "Interes_Afectacion", "Interes_Stake", "Interes_Alineacion", "Interes_Proximidad", "Interes_Atencion", "Interes_Nivel",
-    "Prominencia"];
+    "Prominencia", "Compromiso_Actual", "Compromiso_Deseado", "Compromiso_Brecha", "Compromiso_Prioridad", "Compromiso_Estrategia", "Compromiso_Responsable"];
   const esc = (v: unknown) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
   const lines = [head.join(",")];
   stakeholders.forEach((s) => {
@@ -827,6 +950,8 @@ function exportCsv(): void {
     row.push(esc(pc.pos), esc(pc.res), esc(pc.net), esc(pc.veto), esc(pc.expert), esc(Math.round(powerLevel(s))));
     row.push(esc(ic.afect), esc(ic.stake), esc(ic.align), esc(ic.prox), esc(ic.atten), esc(Math.round(interestLevel(s))));
     row.push(esc(SAL_INFO[salienceType(s)].t));
+    const gap = engagementGap(s), pr = engagementPriority(s);
+    row.push(esc(levelName(s.engCurrent)), esc(levelName(s.engDesired)), esc(gap === null ? "" : gap), esc(pr ? pr.level + " (" + pr.score + ")" : ""), esc(s.engStrategy), esc(s.engOwner));
     lines.push(row.join(","));
   });
   const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
@@ -1034,6 +1159,22 @@ function buildReport(): void {
         + '<td class="num" style="text-align:center">' + (Number(s.power) || 0) + '</td>'
         + '<td class="num" style="text-align:center">' + (Number(s.interest) || 0) + '</td>'
         + '<td>' + quad(s) + '</td><td>' + escapeHtml(SAL_INFO[t].t) + '</td></tr>';
+    }).join("") || '<tr><td colspan="7" class="rep-note">— Sin interesados registrados —</td></tr>')
+    + '</table>'
+    + '<h2>3. Evaluación del compromiso de los interesados</h2>'
+    + '<p class="rep-note">Compromiso actual frente al deseado (PMI, matriz de evaluación del compromiso). Brecha = deseado − actual; la prioridad pondera la brecha por el poder (brecha × poder / 100). Los niveles los evalúa el equipo: «Sin evaluar» significa que aún no se valoró.</p>'
+    + (function () {
+      const sm = engagementSummary(stakeholders);
+      return '<table class="rep-kv"><tr><td>Evaluados</td><td><b>' + sm.assessed + '/' + sm.total + '</b> (' + sm.coveragePct + '%)</td></tr>'
+        + '<tr><td>Con brecha por cerrar</td><td><b>' + sm.withGap + '</b>' + (sm.withGapNoStrategy ? ' · sin estrategia: <b>' + sm.withGapNoStrategy + '</b>' : '') + '</td></tr>'
+        + '<tr><td>Poder alto con postura reticente o desconocedora</td><td><b>' + sm.highPowerResistant + '</b></td></tr></table>';
+    })()
+    + '<table><tr><th>Interesado</th><th style="width:11%">Actual</th><th style="width:11%">Deseado</th><th style="width:7%">Brecha</th><th style="width:10%">Prioridad</th><th>Estrategia</th><th style="width:14%">Responsable</th></tr>'
+    + (stakeholders.map((s) => {
+      const g = engagementGap(s), p = engagementPriority(s);
+      return '<tr><td><b>' + escapeHtml(s.name) + '</b></td><td>' + escapeHtml(levelName(s.engCurrent)) + '</td><td>' + escapeHtml(levelName(s.engDesired)) + '</td>'
+        + '<td class="num" style="text-align:center">' + (g === null ? "—" : (g > 0 ? "+" + g : g)) + '</td><td>' + (p ? p.level + ' · ' + p.score : "—") + '</td>'
+        + '<td>' + escapeHtml(s.engStrategy || "—") + '</td><td>' + escapeHtml(s.engOwner || "—") + '</td></tr>';
     }).join("") || '<tr><td colspan="7" class="rep-note">— Sin interesados registrados —</td></tr>')
     + '</table>';
   reportShell("Registro y Análisis de Interesados", "Stakeholder Studio · Gestión de Interesados", body);

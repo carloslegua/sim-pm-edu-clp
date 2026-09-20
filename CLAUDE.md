@@ -119,6 +119,8 @@ src/shared/change-orders.ts      → (se inlinea en cost.js y gpi-core.js) órde
                                     costos: naturaleza, financiación, aprobación, línea base
 src/shared/cost-variance.ts      → (se inlinea en cost.js) clasificación de variaciones CPI/CV
                                     contra los umbrales del plan
+src/shared/stakeholder-engagement.ts → (se inlinea en stakeholder-studio.js) matriz de compromiso
+                                    de interesados: brecha, prioridad, hallazgos
 src/shared/write-session.ts      → (se inlinea en cada IIFE) guardado con sesión de
                                     edición + resultado común de escritura
 configs/<clave>.vite.config.ts   → config de build de ese módulo

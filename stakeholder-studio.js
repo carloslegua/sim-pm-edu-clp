@@ -26,6 +26,178 @@
 		};
 	}
 	//#endregion
+	//#region src/shared/stakeholder-engagement.ts
+	var ENG_LEVELS = [
+		{
+			v: 1,
+			t: "Desconocedor",
+			d: "No conoce el proyecto ni sus posibles impactos."
+		},
+		{
+			v: 2,
+			t: "Reticente",
+			d: "Conoce el proyecto y sus impactos, pero se resiste al cambio."
+		},
+		{
+			v: 3,
+			t: "Neutral",
+			d: "Conoce el proyecto, pero ni lo apoya ni se resiste."
+		},
+		{
+			v: 4,
+			t: "Partidario",
+			d: "Conoce el proyecto y sus impactos, y lo apoya."
+		},
+		{
+			v: 5,
+			t: "Líder",
+			d: "Conoce el proyecto y se involucra activamente para asegurar su éxito."
+		}
+	];
+	var isNum = (v) => typeof v === "number" && isFinite(v);
+	function asLevel(v) {
+		const n = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
+		return isNum(n) && Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
+	}
+	function levelName(v) {
+		const l = asLevel(v);
+		return l ? ENG_LEVELS[l - 1].t : "Sin evaluar";
+	}
+	var QUADRANT_LABEL = {
+		cerca: "Gestionar de cerca",
+		satisfecho: "Mantener satisfecho",
+		informado: "Mantener informado",
+		monitorear: "Monitorear"
+	};
+	function quadrantOf(power, interest, threshold = 50) {
+		const P = power >= threshold, I = interest >= threshold;
+		return P && I ? "cerca" : P ? "satisfecho" : I ? "informado" : "monitorear";
+	}
+	function engagementGap(s) {
+		const c = asLevel(s.engCurrent), d = asLevel(s.engDesired);
+		return c && d ? d - c : null;
+	}
+	function engagementPriority(s) {
+		const g = engagementGap(s);
+		if (g === null || g <= 0) return null;
+		const score = Math.round(g * (Math.max(0, Math.min(100, Number(s.power) || 0)) / 100) * 100) / 100;
+		return {
+			score,
+			level: score >= 1.5 ? "alta" : score >= .75 ? "media" : "baja"
+		};
+	}
+	function daysBetween(fromIso, toIso) {
+		const a = Date.parse(fromIso + "T12:00:00Z"), b = Date.parse(toIso + "T12:00:00Z");
+		return isFinite(a) && isFinite(b) ? Math.round((b - a) / 864e5) : null;
+	}
+	function engagementFindings(s, today, staleDays = 90) {
+		const out = [];
+		const c = asLevel(s.engCurrent), d = asLevel(s.engDesired), q = quadrantOf(Number(s.power) || 0, Number(s.interest) || 0);
+		const key = q === "cerca" || q === "satisfecho";
+		if (!c || !d) {
+			out.push({
+				code: "E1",
+				severity: key ? "aviso" : "info",
+				text: "Sin evaluar" + (!c && !d ? "" : !c ? " el compromiso actual" : " el compromiso deseado") + (key ? " (interesado con poder alto: evaluarlo primero)" : "")
+			});
+			return out;
+		}
+		const g = d - c;
+		if (g < 0) out.push({
+			code: "E2",
+			severity: "info",
+			text: "El nivel deseado es menor que el actual: confirmar que es intencional (¿sobre-involucramiento?)."
+		});
+		if (g >= 1 && !String(s.engStrategy || "").trim()) out.push({
+			code: "E3",
+			severity: g >= 2 ? "riesgo" : "aviso",
+			text: "Hay una brecha de " + g + " nivel(es) y no hay estrategia para cerrarla."
+		});
+		if (g >= 1 && !String(s.engOwner || "").trim()) out.push({
+			code: "E4",
+			severity: "aviso",
+			text: "La brecha no tiene un responsable asignado."
+		});
+		if (q === "cerca" && d < 4) out.push({
+			code: "E5",
+			severity: "aviso",
+			text: "Un interesado a gestionar de cerca normalmente requiere al menos «Partidario» como nivel deseado."
+		});
+		if ((Number(s.power) || 0) >= 50 && c <= 2) out.push({
+			code: "E6",
+			severity: "riesgo",
+			text: "Poder alto con postura «" + levelName(c) + "»: riesgo de resistencia o de desconocimiento de quien puede frenar el proyecto."
+		});
+		if (today && s.engAssessedOn) {
+			const n = daysBetween(s.engAssessedOn, today);
+			if (n !== null && n > staleDays) out.push({
+				code: "E7",
+				severity: "info",
+				text: "Evaluado hace " + n + " días: reevaluar (el compromiso cambia durante el proyecto)."
+			});
+		}
+		return out;
+	}
+	function engagementSummary(list) {
+		const sum = {
+			total: list.length,
+			assessed: 0,
+			coveragePct: 0,
+			withGap: 0,
+			withGapNoStrategy: 0,
+			highPowerResistant: 0,
+			byCurrent: [
+				0,
+				0,
+				0,
+				0,
+				0
+			],
+			byDesired: [
+				0,
+				0,
+				0,
+				0,
+				0
+			]
+		};
+		list.forEach((s) => {
+			const c = asLevel(s.engCurrent), d = asLevel(s.engDesired);
+			if (c) sum.byCurrent[c - 1]++;
+			if (d) sum.byDesired[d - 1]++;
+			if (!c || !d) return;
+			sum.assessed++;
+			if (d - c >= 1) {
+				sum.withGap++;
+				if (!String(s.engStrategy || "").trim()) sum.withGapNoStrategy++;
+			}
+			if ((Number(s.power) || 0) >= 50 && c <= 2) sum.highPowerResistant++;
+		});
+		sum.coveragePct = sum.total ? Math.round(sum.assessed / sum.total * 100) : 0;
+		return sum;
+	}
+	function rankByPriority(list) {
+		const r = [];
+		list.forEach((s) => {
+			const p = engagementPriority(s);
+			if (p) r.push({
+				s,
+				score: p.score,
+				level: p.level,
+				gap: engagementGap(s)
+			});
+		});
+		return r.sort((a, b) => b.score - a.score || b.gap - a.gap);
+	}
+	function approachHint(current, desired, q) {
+		const c = asLevel(current), d = asLevel(desired);
+		if (!c || !d) return "Evalúa primero el compromiso actual y el deseado.";
+		if (d <= c) return "Mantener el nivel actual: seguimiento periódico y reevaluación.";
+		const how = c === 1 ? "Informar: dar a conocer el proyecto y sus impactos con un mensaje adaptado." : c === 2 ? "Escuchar sus objeciones y atenderlas: reuniones directas, acuerdos y seguimiento de compromisos." : c === 3 ? "Involucrar: mostrar el beneficio para su agenda y darle un rol concreto." : "Empoderar: delegarle una responsabilidad visible en el éxito del proyecto.";
+		const who = q === "cerca" ? "Es un interesado a gestionar de cerca: contacto directo y frecuente del director del proyecto." : q === "satisfecho" ? "Tiene poder pero poco interés: consultarlo en decisiones clave sin saturarlo." : q === "informado" ? "Tiene interés pero poco poder: comunicación frecuente y canal de retroalimentación." : "Bajo poder e interés: esfuerzo mínimo, vigilar cambios.";
+		return how + " " + who;
+	}
+	//#endregion
 	//#region src/modules/stakeholder-studio/main.ts
 	var CATS = {
 		"Interno": {
@@ -271,7 +443,11 @@
 				atten: 4
 			},
 			legitimacy: 95,
-			urgency: 70
+			urgency: 70,
+			engCurrent: 4,
+			engDesired: 5,
+			engOwner: "Director de Proyecto",
+			engStrategy: "Reunión de avance quincenal; las decisiones de reserva de gestión y de línea base se llevan y se registran con el sponsor."
 		});
 		S({
 			name: "Banco financista",
@@ -293,7 +469,11 @@
 				atten: 5
 			},
 			legitimacy: 85,
-			urgency: 75
+			urgency: 75,
+			engCurrent: 3,
+			engDesired: 4,
+			engOwner: "Director de Proyecto",
+			engStrategy: "Informe mensual de avance físico-financiero antes de cada desembolso."
 		});
 		S({
 			name: "Constructora principal",
@@ -315,7 +495,9 @@
 				atten: 5
 			},
 			legitimacy: 80,
-			urgency: 60
+			urgency: 60,
+			engCurrent: 4,
+			engDesired: 4
 		});
 		S({
 			name: "Municipalidad de Lurín",
@@ -337,7 +519,11 @@
 				atten: 3
 			},
 			legitimacy: 90,
-			urgency: 35
+			urgency: 35,
+			engCurrent: 3,
+			engDesired: 4,
+			engOwner: "Asesoría Legal",
+			engStrategy: "Reuniones técnicas previas al ingreso del expediente de licencia (paquete 2.4) y seguimiento semanal del trámite."
 		});
 		S({
 			name: "OEFA / Autoridad ambiental",
@@ -359,7 +545,9 @@
 				atten: 3
 			},
 			legitimacy: 88,
-			urgency: 40
+			urgency: 40,
+			engCurrent: 3,
+			engDesired: 3
 		});
 		S({
 			name: "SUNAFIL",
@@ -381,7 +569,9 @@
 				atten: 3
 			},
 			legitimacy: 85,
-			urgency: 45
+			urgency: 45,
+			engCurrent: 3,
+			engDesired: 3
 		});
 		S({
 			name: "Junta de vecinos de Lurín",
@@ -403,7 +593,11 @@
 				atten: 5
 			},
 			legitimacy: 75,
-			urgency: 80
+			urgency: 80,
+			engCurrent: 2,
+			engDesired: 4,
+			engOwner: "Residente de Obra",
+			engStrategy: "Mesas de diálogo mensuales, canal de reclamos y plan de manejo de tráfico y ruido comunicado antes del inicio de obra."
 		});
 		S({
 			name: "Sindicato de construcción civil",
@@ -425,7 +619,11 @@
 				atten: 4
 			},
 			legitimacy: 45,
-			urgency: 85
+			urgency: 85,
+			engCurrent: 2,
+			engDesired: 4,
+			engOwner: "Asesoría Legal",
+			engStrategy: "Acuerdo laboral previo al inicio de obra: jornadas, seguridad y contratación local; reunión de seguimiento cada dos semanas."
 		});
 		S({
 			name: "Futuros operarios del almacén",
@@ -447,7 +645,11 @@
 				atten: 4
 			},
 			legitimacy: 70,
-			urgency: 40
+			urgency: 40,
+			engCurrent: 1,
+			engDesired: 4,
+			engOwner: "Director de Proyecto",
+			engStrategy: "Talleres de capacitación y visitas guiadas a obra durante la puesta en marcha (paquetes 5.x)."
 		});
 		S({
 			name: "Clientes / distribuidores",
@@ -469,7 +671,11 @@
 				atten: 4
 			},
 			legitimacy: 65,
-			urgency: 35
+			urgency: 35,
+			engCurrent: 3,
+			engDesired: 4,
+			engOwner: "Director de Proyecto",
+			engStrategy: "Comunicado de hitos del proyecto y encuesta de necesidades logísticas del nuevo almacén."
 		});
 		S({
 			name: "Proveedor de estructuras",
@@ -491,7 +697,11 @@
 				atten: 3
 			},
 			legitimacy: 40,
-			urgency: 30
+			urgency: 30,
+			engCurrent: 3,
+			engDesired: 4,
+			engOwner: "Jefe de Logística",
+			engStrategy: "Seguimiento semanal de fabricación y de fechas de entrega comprometidas (paquete 3.1)."
 		});
 		S({
 			name: "Prensa / medios locales",
@@ -513,7 +723,11 @@
 				atten: 2
 			},
 			legitimacy: 40,
-			urgency: 65
+			urgency: 65,
+			engCurrent: 1,
+			engDesired: 3,
+			engOwner: "Director de Proyecto",
+			engStrategy: "Nota de prensa al inicio y al cierre del proyecto."
 		});
 		selectedId = stakeholders[0].id;
 	}
@@ -564,6 +778,7 @@
 		if (currentView === "registro") main.innerHTML = renderRegister();
 		else if (currentView === "poderInteres") main.innerHTML = renderPowerInterest();
 		else if (currentView === "prominencia") main.innerHTML = renderSalience();
+		else if (currentView === "compromiso") main.innerHTML = renderEngagement();
 		wireMainInteractions();
 		renderSidebar();
 		if (main) main.scrollTop = prevScroll;
@@ -906,6 +1121,112 @@
       ${dots}
     </svg></div>`;
 	}
+	var todayISO = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+	var PRIO_TXT = {
+		alta: "ALTA",
+		media: "MEDIA",
+		baja: "BAJA"
+	};
+	function engFindingsHtml(s) {
+		const f = engagementFindings(s, todayISO());
+		return f.length ? `<ul class="eng-finds">${f.map((x) => `<li><span class="sv ${x.severity}">${x.severity === "riesgo" ? "RIESGO" : x.severity === "aviso" ? "AVISO" : "NOTA"}</span>${escapeHtml(x.text)}</li>`).join("")}</ul>` : "";
+	}
+	function engGapHtml(s) {
+		const g = engagementGap(s);
+		if (g === null) return `<span class="eng-gap" style="color:var(--ink-2)" title="Falta evaluar el nivel actual o el deseado">—</span>`;
+		return `<span class="eng-gap" style="color:${g >= 2 ? "#a3172f" : g === 1 ? "#8a5300" : g === 0 ? "#00675a" : "var(--ink-2)"}" title="Deseado − actual">${g > 0 ? "+" + g : g}</span>`;
+	}
+	function engPrioHtml(s) {
+		const p = engagementPriority(s);
+		return p ? `<span class="eng-pill ${p.level}" title="Prioridad = brecha × poder / 100 = ${p.score}">${PRIO_TXT[p.level]} · ${p.score}</span>` : `<span style="color:var(--ink-2)">—</span>`;
+	}
+	function engLevelOptions(v) {
+		return `<option value="">Sin evaluar</option>` + ENG_LEVELS.map((l) => `<option value="${l.v}" ${asLevel(v) === l.v ? "selected" : ""}>${l.v} · ${l.t}</option>`).join("");
+	}
+	function renderEngagement() {
+		const head = `<div class="view-head">
+      <h2>Matriz de evaluación del compromiso</h2>
+      <p>Para cada interesado, compara su nivel de compromiso <b>actual</b> (<b>C</b>) con el nivel <b>deseado</b> (<b>D</b>) para que el proyecto tenga éxito: la <b>brecha</b> (D − C) justifica las acciones del plan de involucramiento. Los niveles los evalúas tú, con evidencia: no se calculan ni se asumen. La <b>prioridad</b> pondera la brecha por el poder del interesado.</p>
+    </div>`;
+		if (!stakeholders.length) return head + `<div class="empty-hint">Aún no hay interesados. Usa <b>+ Interesado</b> o <b>Cargar ejemplo</b>.</div>`;
+		const rows = stakeholders.map((s) => {
+			const c = asLevel(s.engCurrent), d = asLevel(s.engDesired), q = quadrantOf(s.power, s.interest);
+			const cells = ENG_LEVELS.map((l) => {
+				const isC = c === l.v, isD = d === l.v;
+				const mk = isC && isD ? `<span class="eng-mk cd" title="Actual y deseado coinciden: ${l.t}">C=D</span>` : isC ? `<span class="eng-mk c" title="Actual: ${l.t}">C</span>` : isD ? `<span class="eng-mk d" title="Deseado: ${l.t}">D</span>` : "";
+				return `<td class="eng-cell" data-lv="${l.v}">${mk}</td>`;
+			}).join("");
+			return `<tr class="eng-r" data-id="${escapeHtml(s.id)}">
+      <td class="l"><div class="eng-name">${escapeHtml(s.name)}</div>
+        <div class="eng-sub">${escapeHtml(s.category)} · ${QUADRANT_LABEL[q]} · P${escapeHtml(s.power)}/I${escapeHtml(s.interest)}</div>
+        <div class="eng-f">${engFindingsHtml(s)}</div></td>
+      ${cells}
+      <td class="e-gap">${engGapHtml(s)}</td>
+      <td class="e-prio">${engPrioHtml(s)}</td>
+      <td><select class="e-cur" data-id="${escapeHtml(s.id)}" aria-label="Compromiso actual de ${escapeHtml(s.name)}">${engLevelOptions(s.engCurrent)}</select></td>
+      <td><select class="e-des" data-id="${escapeHtml(s.id)}" aria-label="Compromiso deseado de ${escapeHtml(s.name)}">${engLevelOptions(s.engDesired)}</select></td>
+      <td class="l"><textarea class="e-str" data-id="${escapeHtml(s.id)}" placeholder="${escapeHtml(approachHint(s.engCurrent, s.engDesired, q))}" aria-label="Estrategia de involucramiento de ${escapeHtml(s.name)}">${escapeHtml(s.engStrategy || "")}</textarea></td>
+      <td><input class="e-own" data-id="${escapeHtml(s.id)}" value="${escapeHtml(s.engOwner || "")}" placeholder="Responsable" aria-label="Responsable de ${escapeHtml(s.name)}"></td>
+    </tr>`;
+		}).join("");
+		return head + `<div class="eng-legend">
+      <span><span class="eng-mk c">C</span> compromiso actual</span>
+      <span><span class="eng-mk d">D</span> compromiso deseado</span>
+      <span><span class="eng-mk cd">C=D</span> ya coinciden</span>
+    </div>
+    <div class="eng-wrap"><table class="eng">
+      <thead><tr><th class="l">Interesado</th>${ENG_LEVELS.map((l) => `<th title="${escapeHtml(l.d)}">${l.t}</th>`).join("")}<th>Brecha</th><th>Prioridad</th><th>Actual</th><th>Deseado</th><th class="l">Estrategia para cerrar la brecha</th><th>Responsable</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+	}
+	function engagementSidebar() {
+		const sum = engagementSummary(stakeholders), rank = rankByPriority(stakeholders).slice(0, 5);
+		const counts = ENG_LEVELS.map((l) => `<tr><td>${l.v} · ${l.t}</td><td>${sum.byCurrent[l.v - 1]}</td><td>${sum.byDesired[l.v - 1]}</td></tr>`).join("");
+		const prio = rank.length ? rank.map((r) => `<div class="strat-box"><div class="st"><span class="eng-pill ${r.level}">${PRIO_TXT[r.level]} · ${r.score}</span> ${escapeHtml(r.s.name)}</div>${levelName(r.s.engCurrent)} → ${levelName(r.s.engDesired)} (brecha +${r.gap})${String(r.s.engStrategy || "").trim() ? "" : " · <b>sin estrategia</b>"}</div>`).join("") : `<div class="empty-hint">No hay brechas de compromiso por cerrar${sum.assessed ? "." : ": aún no evaluaste a ningún interesado."}</div>`;
+		return `<h3 class="mt">Compromiso: resumen</h3>
+    <div class="stat-grid">
+      <div class="stat"><div class="v">${sum.assessed}/${sum.total}</div><div class="l">Evaluados (${sum.coveragePct}%)</div></div>
+      <div class="stat"><div class="v">${sum.withGap}</div><div class="l">Con brecha</div></div>
+      <div class="stat"><div class="v" title="Poder alto (≥50) y postura Reticente o Desconocedor">${sum.highPowerResistant}</div><div class="l">Poder alto en riesgo</div></div>
+    </div>
+    <table class="eng-mini"><thead><tr><th>Nivel</th><th>Actual</th><th>Deseado</th></tr></thead><tbody>${counts}</tbody></table>
+    <h3 class="mt">Prioridades para cerrar brechas</h3>
+    ${prio}
+    <div class="tip-box"><b>Prioridad</b> = brecha × poder / 100 (alta ≥ 1,5 · media ≥ 0,75). Una brecha grande en quien no tiene poder pesa menos que una menor en quien puede frenar el proyecto.</div>
+    <h3 class="mt">Niveles de compromiso (PMI)</h3>
+    ${ENG_LEVELS.map((l) => strat("#0090c2", l.v + " · " + l.t, l.d)).join("")}`;
+	}
+	function wireEngagement() {
+		const byId = (el) => stakeholders.find((x) => x.id === el.dataset.id);
+		document.querySelectorAll("table.eng select.e-cur, table.eng select.e-des").forEach((el) => {
+			el.addEventListener("change", () => {
+				const s = byId(el);
+				if (!s) return;
+				const v = asLevel(el.value);
+				if (el.classList.contains("e-cur")) {
+					s.engCurrent = v;
+					s.engAssessedOn = v ? todayISO() : void 0;
+				} else s.engDesired = v;
+				render();
+			});
+		});
+		const live = (el, set) => el.addEventListener("input", () => {
+			const s = byId(el);
+			if (!s) return;
+			set(s);
+			const tr = document.querySelector(`tr.eng-r[data-id="${s.id}"]`);
+			if (!tr) return;
+			const f = tr.querySelector(".eng-f");
+			if (f) f.innerHTML = engFindingsHtml(s);
+			renderSidebar();
+		});
+		document.querySelectorAll("table.eng textarea.e-str").forEach((el) => live(el, (s) => {
+			s.engStrategy = el.value;
+		}));
+		document.querySelectorAll("table.eng input.e-own").forEach((el) => live(el, (s) => {
+			s.engOwner = el.value;
+		}));
+	}
 	function bubbleNode(s, x, y, rBase) {
 		const r = rBase || 14;
 		return `<g class="bubble ${s.id === selectedId ? "selected" : ""}" data-id="${escapeHtml(s.id)}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})" role="button" tabindex="0" aria-label="${escapeHtml(s.name || "Interesado sin nombre")}">
@@ -934,6 +1255,10 @@
 	}
 	function renderSidebar() {
 		const sb = document.getElementById("sidebar");
+		if (currentView === "compromiso") {
+			sb.innerHTML = statsBlock() + engagementSidebar();
+			return;
+		}
 		if (currentView === "registro") {
 			sb.innerHTML = statsBlock() + weightsBlock({
 				title: "Ponderación del poder",
@@ -1109,6 +1434,7 @@
 			render();
 		});
 		wireDetailEditors();
+		wireEngagement();
 	}
 	function toggleExpand(id) {
 		if (!id) return;
@@ -1413,7 +1739,13 @@
 			"Interes_Proximidad",
 			"Interes_Atencion",
 			"Interes_Nivel",
-			"Prominencia"
+			"Prominencia",
+			"Compromiso_Actual",
+			"Compromiso_Deseado",
+			"Compromiso_Brecha",
+			"Compromiso_Prioridad",
+			"Compromiso_Estrategia",
+			"Compromiso_Responsable"
 		];
 		const esc = (v) => `"${String(v == null ? "" : v).replace(/"/g, "\"\"")}"`;
 		const lines = [head.join(",")];
@@ -1423,6 +1755,8 @@
 			row.push(esc(pc.pos), esc(pc.res), esc(pc.net), esc(pc.veto), esc(pc.expert), esc(Math.round(powerLevel(s))));
 			row.push(esc(ic.afect), esc(ic.stake), esc(ic.align), esc(ic.prox), esc(ic.atten), esc(Math.round(interestLevel(s))));
 			row.push(esc(SAL_INFO[salienceType(s)].t));
+			const gap = engagementGap(s), pr = engagementPriority(s);
+			row.push(esc(levelName(s.engCurrent)), esc(levelName(s.engDesired)), esc(gap === null ? "" : gap), esc(pr ? pr.level + " (" + pr.score + ")" : ""), esc(s.engStrategy), esc(s.engOwner));
 			lines.push(row.join(","));
 		});
 		const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
@@ -1664,6 +1998,12 @@
 		reportShell("Registro y Análisis de Interesados", "Stakeholder Studio · Gestión de Interesados", "<h2>1. Resumen</h2><table class=\"rep-kv\"><tr><td>Interesados registrados</td><td><b>" + stakeholders.length + "</b></td></tr><tr><td>Por cuadrante poder–interés</td><td>" + Object.keys(counts).map((k) => k + ": <b>" + counts[k] + "</b>").join(" · ") + "</td></tr><tr><td>Por categoría</td><td>" + (Object.keys(catCounts).map((k) => escapeHtml(k) + ": <b>" + catCounts[k] + "</b>").join(" · ") || "—") + "</td></tr></table><h2>2. Registro y análisis de interesados</h2><p class=\"rep-note\">El poder y el interés (0–100) son valores derivados del análisis multicriterio ponderado (nunca editados a mano). El cuadrante usa el umbral 50 y la prominencia sigue el modelo de Mitchell, Agle y Wood (poder, legitimidad, urgencia).</p><table><tr><th>Interesado</th><th>Organización / rol</th><th style=\"width:9%\">Categoría</th><th style=\"width:6%\">Poder</th><th style=\"width:6%\">Interés</th><th style=\"width:14%\">Cuadrante</th><th style=\"width:14%\">Prominencia</th></tr>" + (stakeholders.map((s) => {
 			const t = salienceType(s);
 			return "<tr><td><b>" + escapeHtml(s.name) + "</b></td><td>" + escapeHtml([s.org, s.role].filter((x) => x).join(" — ") || "—") + "</td><td>" + escapeHtml(s.category || "—") + "</td><td class=\"num\" style=\"text-align:center\">" + (Number(s.power) || 0) + "</td><td class=\"num\" style=\"text-align:center\">" + (Number(s.interest) || 0) + "</td><td>" + quad(s) + "</td><td>" + escapeHtml(SAL_INFO[t].t) + "</td></tr>";
+		}).join("") || "<tr><td colspan=\"7\" class=\"rep-note\">— Sin interesados registrados —</td></tr>") + "</table><h2>3. Evaluación del compromiso de los interesados</h2><p class=\"rep-note\">Compromiso actual frente al deseado (PMI, matriz de evaluación del compromiso). Brecha = deseado − actual; la prioridad pondera la brecha por el poder (brecha × poder / 100). Los niveles los evalúa el equipo: «Sin evaluar» significa que aún no se valoró.</p>" + (function() {
+			const sm = engagementSummary(stakeholders);
+			return "<table class=\"rep-kv\"><tr><td>Evaluados</td><td><b>" + sm.assessed + "/" + sm.total + "</b> (" + sm.coveragePct + "%)</td></tr><tr><td>Con brecha por cerrar</td><td><b>" + sm.withGap + "</b>" + (sm.withGapNoStrategy ? " · sin estrategia: <b>" + sm.withGapNoStrategy + "</b>" : "") + "</td></tr><tr><td>Poder alto con postura reticente o desconocedora</td><td><b>" + sm.highPowerResistant + "</b></td></tr></table>";
+		})() + "<table><tr><th>Interesado</th><th style=\"width:11%\">Actual</th><th style=\"width:11%\">Deseado</th><th style=\"width:7%\">Brecha</th><th style=\"width:10%\">Prioridad</th><th>Estrategia</th><th style=\"width:14%\">Responsable</th></tr>" + (stakeholders.map((s) => {
+			const g = engagementGap(s), p = engagementPriority(s);
+			return "<tr><td><b>" + escapeHtml(s.name) + "</b></td><td>" + escapeHtml(levelName(s.engCurrent)) + "</td><td>" + escapeHtml(levelName(s.engDesired)) + "</td><td class=\"num\" style=\"text-align:center\">" + (g === null ? "—" : g > 0 ? "+" + g : g) + "</td><td>" + (p ? p.level + " · " + p.score : "—") + "</td><td>" + escapeHtml(s.engStrategy || "—") + "</td><td>" + escapeHtml(s.engOwner || "—") + "</td></tr>";
 		}).join("") || "<tr><td colspan=\"7\" class=\"rep-note\">— Sin interesados registrados —</td></tr>") + "</table>");
 	}
 	(function() {
