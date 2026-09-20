@@ -8,7 +8,7 @@ fecha y evidencia puntual de cada paso, vive en [MIGRATION.md](MIGRATION.md).
 
 ## Qué es esto
 
-Suite educativa PMBOK 8 de 14 módulos HTML + un núcleo de datos
+Suite educativa PMBOK 8 de 15 módulos HTML (14 herramientas + el Panel) + un núcleo de datos
 compartido (`gpi-core.js`) sobre `localStorage`. Sitio 100% estático: sin
 backend, sin servidor de build en producción. Se despliega copiando
 archivos a GitHub Pages o abriendo cualquier módulo con doble clic
@@ -36,7 +36,7 @@ raíz son generados y commiteados — nunca se editan a mano.**
    DISTRIB+ sobre el proyecto activo sin una acción explícita del alumno
    (botón "Cargar ejemplo"). Un módulo sin datos arranca **en blanco**,
    nunca con el ejemplo precargado.
-6. **Los 13 "Cargar ejemplo" son UN SOLO proyecto coherente** ("DISTRIB+
+6. **Los 14 "Cargar ejemplo" son UN SOLO proyecto coherente** ("DISTRIB+
    S.A. — Almacén Lurín"): mismos códigos EDT, mismas personas del OBS,
    mismas fechas de hito, mismo presupuesto/moneda entre TODOS los
    módulos — ver el catálogo canónico en ARCHITECTURE.md ("Dataset de
@@ -119,6 +119,8 @@ src/shared/change-orders.ts      → (se inlinea en cost.js y gpi-core.js) órde
                                     costos: naturaleza, financiación, aprobación, línea base
 src/shared/cost-variance.ts      → (se inlinea en cost.js) clasificación de variaciones CPI/CV
                                     contra los umbrales del plan
+src/shared/risk-analysis.ts      → (se inlinea en risks.js y gpi-core.js) registro de riesgos: escalas,
+                                    puntaje, valor esperado (AACE), residual, hallazgos, matriz
 src/shared/range-estimating.ts   → (se inlinea en cost.js) contingencia por rangos + Monte Carlo
                                     (AACE 41R-08), determinista (semilla fija)
 src/shared/stakeholder-engagement.ts → (se inlinea en stakeholder-studio.js) matriz de compromiso

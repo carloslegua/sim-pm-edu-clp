@@ -21,11 +21,12 @@ import type {
   ActivitiesModule, ActivityItem, CostEstimateModule, PertModule,
   ScheduleModule, ScheduleLink, ScheduleLinkType, ScheduleLagUnit,
   RequirementsModule, RequirementItem, ScopeStatementModule, ScopeDeliverable,
-  CharterModule, CharterRequirement, CostModule,
+  CharterModule, CharterRequirement, CostModule, RisksModule,
   SchedulePlanModule, SchedulePlanCalendar,
   EditSession, WriteResult
 } from "./types";
 import { analyzeChangeOrders } from "../shared/change-orders";
+import { normalizePlan as normalizeRiskPlan, normalizeRisk, portfolio as riskPortfolioOf, type Portfolio as RiskPortfolio } from "../shared/risk-analysis";
 export type { EditSession, WriteResult, WriteStatus } from "./types";
 
 export const KEY = "gpi_db";
@@ -1504,6 +1505,14 @@ export function costSummary(cost?: CostModule | null): CostSummary {
   };
 }
 
+// Resumen del registro de riesgos (módulo "risks") para tableros: conteos por nivel, cobertura y valor
+// esperado. Recibe el módulo crudo (puede venir incompleto, viejo o manipulado): se normaliza al leer.
+export function riskPortfolio(mod?: RisksModule | null): RiskPortfolio {
+  const plan = normalizeRiskPlan(mod && mod.plan);
+  const rs = (mod && Array.isArray(mod.risks) ? mod.risks : []).map((o, i) => normalizeRisk(o, "rk" + (i + 1)));
+  return riskPortfolioOf(rs, plan);
+}
+
 export interface CharterRan { id: string; code: string; text: string; }
 
 // ---------------------------------------------------------------
@@ -2471,7 +2480,7 @@ export const util = {
   raciResponsibleIds, applyRaciToWbs, applyScheduleToWbs, costEstimateRows, costEstimateTotal,
   applyCostEstimateToWbs, wbsPhases, activitiesStats, pertStats,
   pertProbability, pertCriticalChain, charterAudit, schedulePlanAudit, raciCoverage, raciAudit,
-  costSummary, pad2, charterRans, requirementsAudit, reqByWbsLeaf,
+  costSummary, riskPortfolio, pad2, charterRans, requirementsAudit, reqByWbsLeaf,
   scopeDeliverables, wbsDelIds, scopeAudit, traceMatrix,
   parsePredecessorCell, buildScheduleLinks, scheduleValidate,
   projectCalendar, cpm, parseISO, addWorkingDays, scheduleStats

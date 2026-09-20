@@ -26,7 +26,8 @@ CORS) y los artefactos compilados se commitean junto a su fuente.
 flowchart TB
     subgraph nav["Navegador — file:// o GitHub Pages, sin servidor"]
         panel["Panel_Control.html<br>(punto de entrada)"]
-        subgraph tools["13 módulos de herramienta<br>(uno por área del PMBOK 8)"]
+        subgraph tools["14 módulos de herramienta<br>(uno por área del PMBOK 8)"]
+            risks["Risk_Register.html"]
             charter["Project_Charter.html"]
             stake["Stakeholder_Studio.html"]
             wbs["WBS_Builder.html"]
@@ -182,10 +183,14 @@ Cada campo de `modules.*` es independiente y puede faltar (`undefined`)
 o venir `null` (un módulo "vaciado" explícitamente desde el Panel, ver
 `GPI.setModule(key, null)`) — ningún módulo asume que otro ya se llenó.
 
-### Los 13 tipos de módulo, uno por herramienta
+### Los 14 tipos de módulo, uno por herramienta
+
+(Trece nacieron en la migración; `risks` se agregó después como módulo
+**nuevo**, no como port — ver su sección más abajo.)
 
 | Clave en `modules.*` | Tipo (en `core/types.ts`) | Lo escribe |
 |---|---|---|
+| `risks` | `RisksModule` | Risk_Register.html |
 | `charter` | `CharterModule` | Project_Charter.html |
 | `stakeholders` | `StakeholdersModule` | Stakeholder_Studio.html |
 | `wbs` | `WbsModule` | WBS_Builder.html |
@@ -1218,6 +1223,69 @@ laborables: la proporción no representa fines de semana ni feriados.
   actividad crítica (ocurre igual con desfases en días laborables); no se
   tocó aquí.
 
+**Risk_Register.html** (módulo `risks`, PMBOK + AACE) — primer módulo
+**nuevo** posterior a la migración (no es un port): patrón de Stakeholder
+Studio (`addEventListener` exclusivo, `window.GPI` explícito, sesión de
+edición con `pushWithSession`, todo texto interpolado escapado, blanco si el
+proyecto no tiene riesgos). Toda la lógica es **pura** y vive en
+`src/shared/risk-analysis.ts` (inlineada en `risks.js`; el núcleo la usa para
+`GPI.util.riskPortfolio()`, el indicador del Panel). Primera entrega:
+registro + matriz + análisis + plan. Segunda (pendiente): enlace con la
+contingencia de Costos y con las órdenes de cambio.
+- **Base metodológica.** PMI/PMBOK: enunciado **causa → evento → efecto**;
+  RBS (categorías del plan); matriz probabilidad × impacto con **umbrales del
+  plan** (medio desde 6, alto desde 15 por omisión); puntaje = probabilidad ×
+  **mayor** impacto entre costo, plazo y alcance/calidad; proximidad;
+  propietario; **estrategias distintas** para amenazas (escalar, evitar,
+  transferir, mitigar, aceptar) y oportunidades (escalar, explotar,
+  compartir, mejorar, aceptar); disparador de la respuesta contingente;
+  riesgo **residual** y secundario; revisión periódica. AACE: **valor
+  esperado** (RP 44R-08) = probabilidad × media de la triangular
+  (mín + más probable + máx)/3 del impacto; la exposición que interesa a la
+  contingencia es la **residual**; separa el **riesgo** (eventos discretos,
+  aquí) de la **incertidumbre** (variabilidad del estimado, análisis de
+  rangos de Costos). (Los números de RP se citan de memoria: confirmarlos.)
+- **El plan gobierna el análisis**: escalas de probabilidad (% por nivel),
+  de impacto en costo (% del costo base, traducido a moneda con el costo base
+  de Costos) y en plazo (días), descriptores de alcance/calidad, umbrales,
+  frecuencia de revisión, RBS, metodología, roles y política de reservas.
+  `validatePlan()` exige escalas crecientes y `1 ≤ medio < alto ≤ 25`.
+- **Residual**: con la estrategia *aceptar* el residual **es** el inherente;
+  con otra estrategia se evalúa aparte (nivel y rangos). Una respuesta sin
+  residual evaluado no cuenta en la matriz residual ni en la exposición
+  residual (se avisa).
+- **Hallazgos de coherencia** (`riskFindings`, orientan, no bloquean): R0/R1
+  título y enunciado incompletos; R2 sin propietario (riesgo si es alto); R3
+  sin analizar; R4 medio/alto sin estrategia; R5 amenaza alta aceptada sin
+  aceptación activa; R6 estrategia que no corresponde al tipo; R7 residual
+  mayor que inherente (solo amenazas: en una oportunidad es lo deseado); R8
+  respuesta sin residual evaluado; R9 sin paquetes de la EDT o con
+  referencias huérfanas; R10 impacto en costo ≥ 3 sin cuantificar; R11 nivel
+  declarado que discrepa ≥ 2 niveles del valor cuantificado (contraste
+  cualitativo ↔ cuantitativo según las escalas del plan); R12 revisión
+  vencida; R13 materializado sin impacto real; R14 respuesta sin responsable;
+  R15 rangos incoherentes; R16 probabilidad cuantificada fuera de su nivel.
+- **Vínculos**: `wbsIds` referencia paquetes de la EDT (multi-selección);
+  los propietarios se sugieren desde el OBS. En modo independiente usa la
+  EDT y los roles del caso DISTRIB+; con proyecto conectado, «Cargar ejemplo»
+  empareja los paquetes **por Código EDT** con la EDT real (lo que no existe
+  se omite), como el resto del ecosistema.
+- **Ejemplo DISTRIB+ ampliado, mismo caso**: 10 riesgos (9 amenazas + 1
+  oportunidad) sobre paquetes y roles ya existentes. **R-03 «Suelo»** está
+  materializado con costo real 180.000 = la orden **OC-001** de Costos
+  (cuya causa ya citaba «R-03 Suelo»); R-01 (licencia, paquete 2.4) y R-07
+  (vecinos) enlazan con las estrategias de la Municipalidad y la Junta de
+  vecinos de Stakeholder Studio; R-04 (tipo de cambio) con el 30 % en moneda
+  extranjera de Costos; R-09 es una **aceptación activa** (rendimientos de
+  cuadrilla) cubierta por la contingencia; R-10 es la oportunidad
+  (descuento por volumen en 3.2/3.3). Exposición esperada de las amenazas
+  abiertas **$ 734.833** (residual **$ 342.333**), oportunidad **$ 46.667**;
+  el ejemplo no tiene hallazgos. El costo base del plan es el de Costos
+  (7.100.000).
+- **Límites declarados**: el valor esperado es una media, no una
+  contingencia (percentil); aún no se suma al análisis Monte Carlo de Costos
+  ni hay correlación entre riesgos ni análisis integrado con el cronograma.
+
 **Schedule_Management_Plan.html**
 - Es un **documento vivo** de 15 secciones (checklist AACE RP 38R-06),
   no un módulo de cálculo con "modo ejemplo" separado: `init()` carga
@@ -2159,6 +2227,17 @@ vez que se agrega o toca un módulo:
   Reticente → Partidario, responsable Asesoría Legal; Futuros operarios:
   Desconocedor → Partidario, responsable Director de Proyecto) — ver la
   vista «Compromiso» en la sección de `Stakeholder_Studio.html`.
+- **Riesgos** (`risks`, `SAMPLE_RISKS` en `src/modules/risks/main.ts`): R-01
+  licencia municipal (2.4) · R-02 alza del acero (3.1) · **R-03 suelo
+  (2.1/4.2, materializado, costo real 180.000 = OC-001 de Costos)** · R-04
+  tipo de cambio (3.1/3.3) · R-05 paro del sindicato (4.1–4.3) · R-06
+  accidente en obra (4.1/4.3) · R-07 oposición vecinal (4.1) · R-08 retraso
+  de estructuras metálicas (3.1/4.3) · R-09 rendimientos de cuadrilla
+  (4.3/4.4, aceptación activa) · R-10 descuento por volumen (oportunidad,
+  3.2/3.3). Propietarios = roles del OBS (Asesoría Legal, Jefe de
+  Logística, Jefe de Ingeniería, Residente de Obra, Director de Proyecto).
+  Cualquier módulo que hable de un riesgo del caso debe reutilizar estos
+  códigos (Costos ya cita R-03).
 - **Requisitos/Alcance** (`project-charter` RAN.01–RAN.04 →
   `requirements` `ran1`-`ran4`/`q#` → `scope-statement` deliverables):
   encadenados por id, no por texto — cualquier módulo nuevo que agregue

@@ -66,6 +66,30 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Registro de Riesgos (`Risk_Register.html`), basado en PMBOK y AACE —
+  primera entrega** — módulo nuevo (no es un port) con cuatro vistas:
+  **Registro** (enunciado causa → evento → efecto, RBS, propietario,
+  proximidad, paquetes de la EDT, análisis cualitativo con probabilidad e
+  impacto en costo/plazo/alcance-calidad, análisis cuantitativo con rango de
+  tres puntos, estrategia distinta para amenazas y oportunidades, disparador,
+  riesgo residual y materialización), **Matriz probabilidad × impacto**
+  (amenazas y oportunidades por separado, antes y después de la respuesta),
+  **Análisis** (prioridad de atención, valor esperado AACE 44R-08 con la media
+  de la triangular antes y después de la respuesta, por categoría, cobertura y
+  hallazgos) y **Plan de gestión de los riesgos** (escalas de probabilidad e
+  impacto —el de costo traducido a moneda con el costo base de Costos—,
+  umbrales de apetito, RBS, metodología, roles y política de reservas; validado
+  para que las escalas crezcan). 16 guardas de coherencia (R0–R16), entre ellas
+  la discrepancia entre el nivel declarado y el valor cuantificado, aceptar una
+  amenaza alta sin aceptación activa, estrategias que no corresponden al tipo y
+  residual peor que el inherente. CSV, reporte imprimible, tarjeta en el Panel
+  con su indicador y ejemplo DISTRIB+ ampliado (10 riesgos; **R-03 «Suelo»**
+  materializado con el costo real de la orden OC-001 de Costos). Lógica pura en
+  `src/shared/risk-analysis.ts`; pruebas: `risk-analysis.test.ts` (34) y 14
+  smoke (incluido XSS y «Cargar ejemplo» sobre una EDT real). Pendiente (segunda
+  entrega): sumar la exposición residual al análisis de contingencia de Costos y
+  enlazar las órdenes de cambio con el riesgo que las causó.
+
 - **Costos: contingencia por estimación de rangos + simulación Monte Carlo
   (auditoría metodológica AACE, RP 41R-08)** — el módulo ofrecía
   «Simulación Monte Carlo», «Análisis paramétrico», «Rangos por porcentaje»

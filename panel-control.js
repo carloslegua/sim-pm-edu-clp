@@ -235,10 +235,10 @@
 			key: "risks",
 			group: "risk",
 			name: "Gestión de Riesgos",
-			file: null,
+			file: "Risk_Register.html",
 			icon: "⚠",
 			color: "#ff9f1c",
-			desc: "RBS, matriz probabilidad–impacto y plan de respuesta a riesgos."
+			desc: "Registro de riesgos (PMBOK + AACE): enunciado causa–evento–efecto, RBS, matriz probabilidad–impacto con umbrales del plan, estrategias para amenazas y oportunidades, riesgo residual y valor esperado."
 		},
 		{
 			key: "montecarlo",
@@ -445,6 +445,16 @@
 			}, {
 				v: close,
 				l: "gestionar de cerca"
+			}];
+		}
+		if (key === "risks") {
+			const pf = GPI.util.riskPortfolio(GPI.getModule("risks"));
+			return [{
+				v: pf.open,
+				l: "riesgos abiertos"
+			}, {
+				v: pf.byLevel.alto,
+				l: "de nivel alto"
 			}];
 		}
 		if (key === "requirements") {

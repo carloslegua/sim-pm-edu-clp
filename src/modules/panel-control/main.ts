@@ -168,8 +168,8 @@ let MODULES: ModuleDef[] = [
     desc: "Matriz de comunicaciones: qué información, a quién, cuándo, por qué medio y con qué frecuencia." },
 
   // — Riesgos —
-  { key: "risks", group: "risk", name: "Gestión de Riesgos", file: null, icon: "⚠", color: "#ff9f1c",
-    desc: "RBS, matriz probabilidad–impacto y plan de respuesta a riesgos." },
+  { key: "risks", group: "risk", name: "Gestión de Riesgos", file: "Risk_Register.html", icon: "⚠", color: "#ff9f1c",
+    desc: "Registro de riesgos (PMBOK + AACE): enunciado causa–evento–efecto, RBS, matriz probabilidad–impacto con umbrales del plan, estrategias para amenazas y oportunidades, riesgo residual y valor esperado." },
   { key: "montecarlo", group: "risk", name: "Simulación Monte Carlo", file: null, icon: "🎲", color: "#ff6b8b",
     desc: "Riesgo cuantitativo de costo y plazo: histograma, curva S y tornado." },
 
@@ -316,6 +316,10 @@ function statChips(key: string): StatChip[] | null {
     const arr = mod?.stakeholders || [];
     const close = arr.filter((s) => (s.power ?? 0) >= 50 && (s.interest ?? 0) >= 50).length;
     return [{ v: arr.length, l: "interesados" }, { v: close, l: "gestionar de cerca" }];
+  }
+  if (key === "risks") {
+    const pf = GPI.util.riskPortfolio(GPI.getModule("risks"));
+    return [{ v: pf.open, l: "riesgos abiertos" }, { v: pf.byLevel.alto, l: "de nivel alto" }];
   }
   if (key === "requirements") {
     const rq = GPI.getModule("requirements");

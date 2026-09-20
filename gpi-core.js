@@ -37,6 +37,301 @@ var GPI = (function(exports) {
 		};
 	}
 	//#endregion
+	//#region src/shared/risk-analysis.ts
+	var RISK_STATUSES = [
+		"identificado",
+		"analizado",
+		"con_respuesta",
+		"monitoreo",
+		"materializado",
+		"cerrado"
+	];
+	var PROXIMITY = [
+		"inmediata",
+		"corta",
+		"media",
+		"larga"
+	];
+	var DEFAULT_PLAN = {
+		probPct: [
+			10,
+			30,
+			50,
+			70,
+			90
+		],
+		costBandsPct: [
+			1,
+			3,
+			5,
+			10
+		],
+		timeBandsDays: [
+			5,
+			15,
+			30,
+			60
+		],
+		scopeDescriptors: [
+			"Cambio apenas perceptible",
+			"Áreas menores del alcance afectadas",
+			"Áreas importantes del alcance afectadas",
+			"Reducción inaceptable para el patrocinador",
+			"El entregable final es inservible"
+		],
+		thresholdMedium: 6,
+		thresholdHigh: 15,
+		reviewDays: 30,
+		categories: [
+			"Técnico",
+			"Externo",
+			"Organizacional",
+			"Gestión del proyecto"
+		],
+		methodology: "",
+		reservePolicy: "",
+		roles: ""
+	};
+	var isNum = (v) => typeof v === "number" && isFinite(v);
+	function toNum(v) {
+		if (v === null || v === void 0 || v === "") return null;
+		const n = typeof v === "string" ? Number(v.trim().replace(/\s/g, "")) : v;
+		return isNum(n) ? n : null;
+	}
+	function toLevel(v) {
+		const n = toNum(v);
+		return n !== null && Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
+	}
+	var str = (v) => v === null || v === void 0 ? "" : String(v);
+	var arrNum = (v, def) => Array.isArray(v) && v.length === def.length && v.every((x) => toNum(x) !== null) ? v.map((x) => toNum(x)) : def.slice();
+	function normalizePlan(p) {
+		const o = p && typeof p === "object" ? p : {};
+		const cats = Array.isArray(o.categories) ? o.categories.map(str).map((s) => s.trim()).filter(Boolean) : [];
+		return {
+			probPct: arrNum(o.probPct, DEFAULT_PLAN.probPct),
+			costBandsPct: arrNum(o.costBandsPct, DEFAULT_PLAN.costBandsPct),
+			timeBandsDays: arrNum(o.timeBandsDays, DEFAULT_PLAN.timeBandsDays),
+			scopeDescriptors: Array.isArray(o.scopeDescriptors) && o.scopeDescriptors.length === 5 ? o.scopeDescriptors.map(str) : DEFAULT_PLAN.scopeDescriptors.slice(),
+			thresholdMedium: toNum(o.thresholdMedium) ?? DEFAULT_PLAN.thresholdMedium,
+			thresholdHigh: toNum(o.thresholdHigh) ?? DEFAULT_PLAN.thresholdHigh,
+			reviewDays: toNum(o.reviewDays) ?? DEFAULT_PLAN.reviewDays,
+			categories: cats.length ? cats : DEFAULT_PLAN.categories.slice(),
+			methodology: str(o.methodology),
+			reservePolicy: str(o.reservePolicy),
+			roles: str(o.roles)
+		};
+	}
+	function maxImpact(c, t, s) {
+		const v = [
+			c,
+			t,
+			s
+		].filter((x) => x !== null);
+		return v.length ? Math.max(...v) : null;
+	}
+	function riskScore(prob, c, t, s) {
+		const i = maxImpact(c, t, s);
+		return prob !== null && i !== null ? prob * i : null;
+	}
+	function levelOf(score, p) {
+		if (score === null) return null;
+		return score >= p.thresholdHigh ? "alto" : score >= p.thresholdMedium ? "medio" : "bajo";
+	}
+	var inherentScore = (r) => riskScore(r.prob, r.impCost, r.impTime, r.impScope);
+	function rangeProblems(rg, label) {
+		const out = [];
+		if ([
+			rg.low,
+			rg.likely,
+			rg.high
+		].some((x) => x !== null && x < 0)) out.push(label + ": los valores no pueden ser negativos (se registra la magnitud)");
+		if (rg.low !== null && rg.likely !== null && rg.low > rg.likely) out.push(label + ": el mínimo supera al más probable");
+		if (rg.likely !== null && rg.high !== null && rg.likely > rg.high) out.push(label + ": el más probable supera al máximo");
+		if (rg.low !== null && rg.high !== null && rg.low > rg.high) out.push(label + ": el mínimo supera al máximo");
+		return out;
+	}
+	function impactMean(rg) {
+		if (rangeProblems(rg, "").length) return null;
+		if (rg.low !== null && rg.likely !== null && rg.high !== null) return (rg.low + rg.likely + rg.high) / 3;
+		return rg.likely;
+	}
+	function probEffective(pct, level, p) {
+		if (pct !== null && pct >= 0 && pct <= 100) return pct / 100;
+		return level !== null ? p.probPct[level - 1] / 100 : null;
+	}
+	function ev(pct, level, cost, time, p) {
+		const pr = probEffective(pct, level, p), c = impactMean(cost), t = impactMean(time);
+		return {
+			cost: pr !== null && c !== null ? pr * c : null,
+			time: pr !== null && t !== null ? pr * t : null
+		};
+	}
+	var inherentEV = (r, p) => ev(r.probPct, r.prob, r.costImpact, r.timeImpact, p);
+	function residualOf(r, p) {
+		if (r.strategy === "aceptar") return {
+			assessed: r.prob !== null,
+			derived: true,
+			prob: r.prob,
+			impCost: r.impCost,
+			impTime: r.impTime,
+			impScope: r.impScope,
+			ev: inherentEV(r, p),
+			score: inherentScore(r)
+		};
+		const has = r.resProb !== null || r.resImpCost !== null || r.resImpTime !== null || r.resImpScope !== null;
+		const prob = r.resProb;
+		return {
+			assessed: has && prob !== null,
+			derived: false,
+			prob,
+			impCost: r.resImpCost,
+			impTime: r.resImpTime,
+			impScope: r.resImpScope,
+			ev: ev(r.resProbPct, r.resProb, r.resCostImpact, r.resTimeImpact, p),
+			score: riskScore(prob, r.resImpCost, r.resImpTime, r.resImpScope)
+		};
+	}
+	function range(o) {
+		const x = o && typeof o === "object" ? o : {};
+		return {
+			low: toNum(x.low),
+			likely: toNum(x.likely),
+			high: toNum(x.high)
+		};
+	}
+	function normalizeRisk(o, fallbackId) {
+		const x = o && typeof o === "object" ? o : {};
+		const type = x.type === "oportunidad" ? "oportunidad" : "amenaza";
+		const status = RISK_STATUSES.indexOf(x.status) >= 0 ? x.status : "identificado";
+		const id = str(x.id) || fallbackId;
+		return {
+			id,
+			code: str(x.code) || id,
+			title: str(x.title),
+			cause: str(x.cause),
+			event: str(x.event),
+			effect: str(x.effect),
+			type,
+			category: str(x.category),
+			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str).filter(Boolean) : [],
+			owner: str(x.owner),
+			proximity: PROXIMITY.indexOf(str(x.proximity)) >= 0 ? str(x.proximity) : "",
+			identifiedOn: str(x.identifiedOn),
+			reviewedOn: str(x.reviewedOn),
+			status,
+			prob: toLevel(x.prob),
+			impCost: toLevel(x.impCost),
+			impTime: toLevel(x.impTime),
+			impScope: toLevel(x.impScope),
+			probPct: toNum(x.probPct),
+			costImpact: range(x.costImpact),
+			timeImpact: range(x.timeImpact),
+			strategy: str(x.strategy),
+			response: str(x.response),
+			trigger: str(x.trigger),
+			responseOwner: str(x.responseOwner),
+			responseCost: toNum(x.responseCost),
+			secondary: str(x.secondary),
+			resProb: toLevel(x.resProb),
+			resImpCost: toLevel(x.resImpCost),
+			resImpTime: toLevel(x.resImpTime),
+			resImpScope: toLevel(x.resImpScope),
+			resProbPct: toNum(x.resProbPct),
+			resCostImpact: range(x.resCostImpact),
+			resTimeImpact: range(x.resTimeImpact),
+			materializedOn: str(x.materializedOn),
+			actualCost: toNum(x.actualCost),
+			actualDelay: toNum(x.actualDelay),
+			notes: str(x.notes)
+		};
+	}
+	var isOpen = (r) => r.status !== "materializado" && r.status !== "cerrado";
+	function portfolio(risks, p) {
+		const pf = {
+			total: risks.length,
+			open: 0,
+			threats: 0,
+			opportunities: 0,
+			materialized: 0,
+			closed: 0,
+			byLevel: {
+				alto: 0,
+				medio: 0,
+				bajo: 0,
+				sin: 0
+			},
+			residualByLevel: {
+				alto: 0,
+				medio: 0,
+				bajo: 0,
+				sin: 0
+			},
+			byCategory: [],
+			evThreatCost: 0,
+			evOpportunityCost: 0,
+			netEvCost: 0,
+			resEvThreatCost: 0,
+			resEvOpportunityCost: 0,
+			netResEvCost: 0,
+			evThreatDays: 0,
+			actualCost: 0,
+			coverage: {
+				withOwner: 0,
+				withResponse: 0,
+				withWbs: 0,
+				analyzed: 0,
+				quantified: 0,
+				openCount: 0
+			}
+		};
+		const cat = {};
+		risks.forEach((r) => {
+			if (r.status === "materializado") {
+				pf.materialized++;
+				pf.actualCost += r.actualCost || 0;
+			}
+			if (r.status === "cerrado") pf.closed++;
+			if (r.type === "amenaza") pf.threats++;
+			else pf.opportunities++;
+			if (!isOpen(r)) return;
+			pf.open++;
+			pf.coverage.openCount++;
+			const lv = levelOf(inherentScore(r), p);
+			pf.byLevel[lv || "sin"]++;
+			const res = residualOf(r, p);
+			pf.residualByLevel[res.assessed ? levelOf(res.score, p) || "sin" : "sin"]++;
+			if (r.owner.trim()) pf.coverage.withOwner++;
+			if (r.strategy) pf.coverage.withResponse++;
+			if (r.wbsIds.length) pf.coverage.withWbs++;
+			if (lv) pf.coverage.analyzed++;
+			const e = inherentEV(r, p);
+			if (e.cost !== null) pf.coverage.quantified++;
+			const k = r.category.trim() || "Sin categoría";
+			cat[k] = cat[k] || {
+				count: 0,
+				evCost: 0
+			};
+			cat[k].count++;
+			if (e.cost !== null) cat[k].evCost += r.type === "amenaza" ? e.cost : -e.cost;
+			if (r.type === "amenaza") {
+				pf.evThreatCost += e.cost || 0;
+				pf.evThreatDays += e.time || 0;
+				pf.resEvThreatCost += res.assessed ? res.ev.cost || 0 : 0;
+			} else {
+				pf.evOpportunityCost += e.cost || 0;
+				pf.resEvOpportunityCost += res.assessed ? res.ev.cost || 0 : 0;
+			}
+		});
+		pf.netEvCost = pf.evThreatCost - pf.evOpportunityCost;
+		pf.netResEvCost = pf.resEvThreatCost - pf.resEvOpportunityCost;
+		pf.byCategory = Object.keys(cat).map((k) => ({
+			category: k,
+			count: cat[k].count,
+			evCost: cat[k].evCost
+		})).sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
+		return pf;
+	}
+	//#endregion
 	//#region src/core/gpi-core.ts
 	var KEY = "gpi_db";
 	var SCHEMA = "gpi.project/v1";
@@ -1569,6 +1864,10 @@ var GPI = (function(exports) {
 			hasData: !!(cost && (base || co.length))
 		};
 	}
+	function riskPortfolio(mod) {
+		const plan = normalizePlan(mod && mod.plan);
+		return portfolio((mod && Array.isArray(mod.risks) ? mod.risks : []).map((o, i) => normalizeRisk(o, "rk" + (i + 1))), plan);
+	}
 	function charterRans(charter) {
 		const reqs = charter && charter.requirements || [];
 		const out = [];
@@ -2723,6 +3022,7 @@ var GPI = (function(exports) {
 		raciCoverage,
 		raciAudit,
 		costSummary,
+		riskPortfolio,
 		pad2,
 		charterRans,
 		requirementsAudit,
@@ -2826,6 +3126,7 @@ var GPI = (function(exports) {
 	exports.renameProject = renameProject;
 	exports.reqByWbsLeaf = reqByWbsLeaf;
 	exports.requirementsAudit = requirementsAudit;
+	exports.riskPortfolio = riskPortfolio;
 	exports.saveMeta = saveMeta;
 	exports.saveModule = saveModule;
 	exports.saveState = saveState;

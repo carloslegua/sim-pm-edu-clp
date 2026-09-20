@@ -320,6 +320,15 @@ export interface SchedulePlanModule {
   [key: string]: unknown;
 }
 
+// Registro de riesgos (Risk_Register.html). El esquema completo y su normalización viven en
+// shared/risk-analysis.ts: aquí solo lo necesario para leerlo desde el núcleo. `risks` son objetos
+// crudos (los .json antiguos o manipulados pueden traer cualquier cosa): se normalizan al leer.
+export interface RisksModule {
+  plan?: Record<string, unknown> | null;
+  risks?: unknown[];
+  idCounter?: number;
+}
+
 export interface ProjectModules {
   charter?: CharterModule | null;
   stakeholders?: StakeholdersModule | null;
@@ -332,6 +341,7 @@ export interface ProjectModules {
   schedulePlan?: SchedulePlanModule | null;
   cost?: CostModule | null;
   requirements?: RequirementsModule | null;
+  risks?: RisksModule | null;
   scopeStatement?: ScopeStatementModule | null;
   schedule?: ScheduleModule | null;
   [key: string]: unknown;
