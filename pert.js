@@ -455,16 +455,23 @@
 		} catch (e) {}
 		const res = window.GPI.util.cpm(nodes, links, cal, {});
 		if (!res || !res.ok) return { reason: "cycle" };
-		const ids = res.criticalIds || [];
-		if (!ids.length) return { reason: "no-path" };
-		let te = 0, va = 0, cpNoTe = 0;
+		if (!(res.criticalIds || []).length) return { reason: "no-path" };
+		const vars = {};
+		Object.keys(byId).forEach((id) => {
+			vars[id] = byId[id].va;
+		});
+		const ch = window.GPI.util.pertCriticalChain(res, links, cal, vars);
+		if (!ch.ok) return ch.reason === "parallel" ? {
+			reason: "parallel",
+			count: res.criticalIds.length
+		} : ch.reason === "empty" ? { reason: "no-path" } : { reason: "inconsistent" };
+		const ids = ch.ids, te = ch.mean, va = ch.variance;
+		let cpNoTe = 0;
 		const names = [];
 		ids.forEach((id) => {
 			const c = byId[id];
 			if (!c) return;
-			te += c.te;
-			va += c.va;
-			if (!c.est) cpNoTe++;
+			if (!c.est && ch.weights[id]) cpNoTe++;
 			const row = actsCache.filter((r) => r.a.id === id)[0];
 			names.push((row ? row.a.name || id : id) + (c.est ? "" : " *"));
 		});
@@ -505,8 +512,12 @@
 				clear("La red tiene un <b>ciclo</b>: el CPM no puede resolverse. Corrígelo en Cronograma / CPM.");
 				return;
 			}
-			if (cp.reason === "no-path") {
-				clear("No se pudo determinar la ruta crítica.");
+			if (cp.reason === "no-path" || cp.reason === "inconsistent") {
+				clear("No se pudo determinar una ruta crítica única.");
+				return;
+			}
+			if (cp.reason === "parallel") {
+				clear("<b>No aplicable:</b> hay " + cp.count + " actividades críticas en ramas <b>paralelas o convergentes</b>. La probabilidad PERT de una sola ruta no vale ahí (subestima el riesgo: el fin depende de que <b>todas</b> las ramas terminen a tiempo); haría falta simular la red completa.");
 				return;
 			}
 			return;

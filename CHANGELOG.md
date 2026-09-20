@@ -66,6 +66,25 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **La probabilidad de plazo PERT ya no suma ramas paralelas ni omite
+  desfases (revisión externa, alta)** — `criticalPertSums()` (Cronograma/
+  CPM) y `criticalPathStats()` (PERT) sumaban ΣTE y Σσ² de todas las
+  actividades con holgura cero. Reproducción: dos actividades paralelas de
+  10 d (σ² = 1) hacia un hito; el CPM daba 10 d, pero la media usada era
+  20 d y se informaba ≈ 0 % de terminar en 10 d (bajo dos duraciones
+  normales independientes serían 25 %); además los desfases no entraban en
+  la media y, en Cronograma/CPM, se sumaban TE sobre la ruta de las
+  duraciones determinísticas aunque el CPM fuese otro. Nueva
+  `GPI.util.pertCriticalChain()`: solo calcula si las críticas forman una
+  cadena única (media = duración del proyecto con TE, desfases incluidos;
+  varianza = la de las actividades que de verdad deciden el fin, con SS/FF
+  bien tratados); con ramas paralelas o convergentes la pantalla dice «no
+  aplicable» y por qué, en vez de inventar un número. El selector
+  Determinística/PERT ya no altera la probabilidad. Pruebas nuevas
+  (`pert-critical-chain.test.ts` y smoke de ambos módulos), las de módulo
+  verificadas contra el código anterior. Ver ARCHITECTURE.md,
+  "Probabilidad de plazo PERT: solo sobre una ruta crítica única".
+
 - **Un almacenamiento completamente lleno ya no produce un falso
   «guardado» (cuarta revisión externa, P1)** — reproducido en Chrome
   simulando errores de cuota: la primera escritura devolvía `pending`;

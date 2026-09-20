@@ -2186,6 +2186,25 @@ var GPI = (function(exports) {
 			provisional: false
 		};
 	}
+	function lagToWorkDays(l, calendar) {
+		const cal = calendar || {
+			workDayIdx: [
+				1,
+				2,
+				3,
+				4,
+				5
+			],
+			hoursPerDay: 8
+		};
+		const wpw = cal.workDayIdx && cal.workDayIdx.length ? cal.workDayIdx.length : 5;
+		const hpd = Number(cal.hoursPerDay) > 0 ? Number(cal.hoursPerDay) : 8;
+		const v = Number(l.lag) || 0, u = l.lagUnit || "d";
+		if (u === "h") return v / hpd;
+		if (u === "w") return v * wpw;
+		if (u === "ed") return v * (wpw / 7);
+		return v;
+	}
 	function cpm(nodes, links, calendar, opts) {
 		const nd = nodes || [], lk = links || [];
 		const o = opts || {};
@@ -2201,14 +2220,8 @@ var GPI = (function(exports) {
 			holidays: [],
 			provisional: true
 		};
-		const wpw = cal.workDayIdx && cal.workDayIdx.length ? cal.workDayIdx.length : 5;
-		const hpd = Number(cal.hoursPerDay) > 0 ? Number(cal.hoursPerDay) : 8;
 		function lagWD(l) {
-			const v = Number(l.lag) || 0, u = l.lagUnit || "d";
-			if (u === "h") return v / hpd;
-			if (u === "w") return v * wpw;
-			if (u === "ed") return v * (wpw / 7);
-			return v;
+			return lagToWorkDays(l, cal);
 		}
 		const dur = {}, ids = [];
 		nd.forEach((n) => {
@@ -2333,6 +2346,114 @@ var GPI = (function(exports) {
 			projectFinishDate: start ? addWorkingDays(start, Math.max(0, Math.round(projDur) - 1), cal) : ""
 		};
 	}
+	function pertCriticalChain(res, links, calendar, variances) {
+		if (!res || !res.ok || !res.criticalIds.length) return {
+			ok: false,
+			reason: "empty"
+		};
+		const EPS = 1e-6, rows = res.rows, crit = {};
+		res.criticalIds.forEach((id) => {
+			crit[id] = true;
+		});
+		const inE = {}, outN = {};
+		res.criticalIds.forEach((id) => {
+			inE[id] = [];
+			outN[id] = 0;
+		});
+		(links || []).forEach((l) => {
+			if (l.from === l.to || !crit[l.from] || !crit[l.to]) return;
+			const a = rows[l.from], b = rows[l.to], g = lagToWorkDays(l, calendar);
+			const lhs = l.type === "FF" || l.type === "SF" ? b.ef : b.es;
+			const rhs = l.type === "SS" || l.type === "SF" ? a.es + g : a.ef + g;
+			if (Math.abs(lhs - rhs) > EPS) return;
+			inE[l.to].push({
+				l,
+				g
+			});
+			outN[l.from]++;
+		});
+		const sources = res.criticalIds.filter((id) => !inE[id].length);
+		if (sources.length !== 1 || res.criticalIds.some((id) => inE[id].length > 1 || outN[id] > 1)) return {
+			ok: false,
+			reason: "parallel"
+		};
+		const next = {};
+		res.criticalIds.forEach((id) => {
+			inE[id].forEach((e) => {
+				next[e.l.from] = {
+					to: id,
+					l: e.l,
+					g: e.g
+				};
+			});
+		});
+		const plus = (a, k, id, s) => {
+			const c = Object.assign({}, a.c);
+			if (id) c[id] = (c[id] || 0) + (s || 0);
+			return {
+				k: a.k + k,
+				c
+			};
+		};
+		const minusDur = (a, id) => plus(a, 0, id, -1);
+		const ids = [];
+		let cur = sources[0], ES = {
+			k: 0,
+			c: {}
+		}, EF = plus(ES, 0, cur, 1);
+		ids.push(cur);
+		while (next[cur]) {
+			const { to, l, g } = next[cur];
+			if (ids.indexOf(to) >= 0) return {
+				ok: false,
+				reason: "inconsistent"
+			};
+			let nES, nEF;
+			if (l.type === "SS") {
+				nES = plus(ES, g);
+				nEF = plus(nES, 0, to, 1);
+			} else if (l.type === "FF") {
+				nEF = plus(EF, g);
+				nES = minusDur(nEF, to);
+			} else if (l.type === "SF") {
+				nEF = plus(ES, g);
+				nES = minusDur(nEF, to);
+			} else {
+				nES = plus(EF, g);
+				nEF = plus(nES, 0, to, 1);
+			}
+			ES = nES;
+			EF = nEF;
+			cur = to;
+			ids.push(cur);
+		}
+		if (ids.length !== res.criticalIds.length) return {
+			ok: false,
+			reason: "parallel"
+		};
+		let t = EF.k;
+		Object.keys(EF.c).forEach((id) => {
+			t += EF.c[id] * (rows[id].ef - rows[id].es);
+		});
+		if (Math.abs(t - res.projectDuration) > 1e-4) return {
+			ok: false,
+			reason: "inconsistent"
+		};
+		const weights = {};
+		let variance = 0;
+		Object.keys(EF.c).forEach((id) => {
+			if (Math.abs(EF.c[id]) <= EPS) return;
+			weights[id] = EF.c[id];
+			variance += EF.c[id] * EF.c[id] * (Number(variances[id]) || 0);
+		});
+		return {
+			ok: true,
+			ids,
+			mean: res.projectDuration,
+			variance,
+			weights
+		};
+	}
 	function parseISO(s) {
 		const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ""));
 		if (!m) return null;
@@ -2438,6 +2559,7 @@ var GPI = (function(exports) {
 		activitiesStats,
 		pertStats,
 		pertProbability,
+		pertCriticalChain,
 		charterAudit,
 		schedulePlanAudit,
 		raciCoverage,
@@ -2534,6 +2656,7 @@ var GPI = (function(exports) {
 	exports.parseISO = parseISO;
 	exports.parsePredecessorCell = parsePredecessorCell;
 	exports.patchMeta = patchMeta;
+	exports.pertCriticalChain = pertCriticalChain;
 	exports.pertProbability = pertProbability;
 	exports.pertStats = pertStats;
 	exports.projectCalendar = projectCalendar;

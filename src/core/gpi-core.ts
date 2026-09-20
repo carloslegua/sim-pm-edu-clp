@@ -2062,6 +2062,20 @@ export function projectCalendar(sp?: SchedulePlanModule | null): ProjectCalendar
   };
 }
 
+// Desfase (lag) de un enlace en días laborables: h → horas/jornada, w → semanas
+// laborables, ed → días calendario proporcionales, d → tal cual. Lo comparten
+// cpm() y pertCriticalChain(): ambos deben leer el desfase exactamente igual.
+function lagToWorkDays(l: ScheduleLink, calendar?: ProjectCalendar | null): number {
+  const cal = calendar || { workDayIdx: [1, 2, 3, 4, 5], hoursPerDay: 8 };
+  const wpw = (cal.workDayIdx && cal.workDayIdx.length) ? cal.workDayIdx.length : 5;
+  const hpd = Number(cal.hoursPerDay) > 0 ? Number(cal.hoursPerDay) : 8;
+  const v = Number(l.lag) || 0, u = l.lagUnit || "d";
+  if (u === "h") return v / hpd;
+  if (u === "w") return v * wpw;
+  if (u === "ed") return v * (wpw / 7);
+  return v; // "d"
+}
+
 export interface CpmNode { id: string; dur?: number; }
 export interface CpmRow {
   es: number; ef: number; ls: number; lf: number; tf: number; ff: number; critical: boolean;
@@ -2082,15 +2096,7 @@ export type CpmResult =
 export function cpm(nodes?: CpmNode[] | null, links?: ScheduleLink[] | null, calendar?: ProjectCalendar | null, opts?: { startDate?: string }): CpmResult {
   const nd = nodes || [], lk = links || []; const o = opts || {};
   const cal = calendar || { workDayIdx: [1, 2, 3, 4, 5], hoursPerDay: 8, holidays: [], provisional: true };
-  const wpw = (cal.workDayIdx && cal.workDayIdx.length) ? cal.workDayIdx.length : 5;
-  const hpd = Number(cal.hoursPerDay) > 0 ? Number(cal.hoursPerDay) : 8;
-  function lagWD(l: ScheduleLink): number {
-    const v = Number(l.lag) || 0, u = l.lagUnit || "d";
-    if (u === "h") return v / hpd;
-    if (u === "w") return v * wpw;
-    if (u === "ed") return v * (wpw / 7);
-    return v; // "d"
-  }
+  function lagWD(l: ScheduleLink): number { return lagToWorkDays(l, cal); }
   const dur: Record<string, number> = {}, ids: string[] = [];
   nd.forEach((n) => { dur[n.id] = Number(n.dur) || 0; ids.push(n.id); });
   const inSet: Record<string, boolean> = {}; ids.forEach((id) => { inSet[id] = true; });
@@ -2172,6 +2178,84 @@ export function cpm(nodes?: CpmNode[] | null, links?: ScheduleLink[] | null, cal
     projectStart: start ? addWorkingDays(start, 0, cal) : "",
     projectFinishDate: start ? addWorkingDays(start, Math.max(0, Math.round(projDur) - 1), cal) : ""
   };
+}
+
+// ---------------------------------------------------------------
+// Probabilidad de plazo PERT: media y varianza de la RUTA crítica.
+// Hallazgo "alta" de revisión externa: sumar TODAS las actividades críticas
+// solo vale si forman UNA cadena. Con dos ramas paralelas de 10 d hacia un hito
+// el CPM da 10 d, pero la suma daba 20 d de media (~0 % de terminar en 10 d,
+// cuando bajo dos duraciones normales independientes sería 25 %); además se
+// omitían los desfases. PERT clásico asume una sola ruta: si la red no la
+// tiene, no hay número honesto que dar -- se dice por qué en vez de inventarlo.
+//
+// Se aísla el subgrafo de enlaces que "mandan" (los que fijan de verdad la
+// fecha del sucesor: FS ES(j)=EF(i)+lag, SS ES(j)=ES(i)+lag, FF EF(j)=EF(i)+lag,
+// SF EF(j)=ES(i)+lag) entre actividades críticas. Es una cadena si tiene una
+// sola fuente y cada actividad un único enlace entrante y uno saliente. En ese
+// caso el fin del proyecto es una función LINEAL de las duraciones,
+// T = k + Σ cᵢ·dᵢ, que se sigue enlace por enlace: la media es la duración del
+// proyecto (ya incluye desfases y calendario) y la varianza es Σ cᵢ²·σᵢ² -- en
+// FS cᵢ = 1; en SS la duración del predecesor no decide el fin (cᵢ = 0), en FF
+// la del sucesor tampoco. Sigue siendo la aproximación PERT (ignora rutas casi
+// críticas y que la ruta pueda cambiar): solo deja de ser un cálculo erróneo.
+// ---------------------------------------------------------------
+export type PertChainResult =
+  | { ok: true; ids: string[]; mean: number; variance: number; weights: Record<string, number> }
+  | { ok: false; reason: "empty" | "parallel" | "inconsistent" };
+
+export function pertCriticalChain(
+  res: CpmResult, links: ScheduleLink[] | null | undefined, calendar: ProjectCalendar | null | undefined,
+  variances: Record<string, number | null | undefined>
+): PertChainResult {
+  if (!res || !res.ok || !res.criticalIds.length) return { ok: false, reason: "empty" };
+  const EPS = 1e-6, rows = res.rows, crit: Record<string, boolean> = {};
+  res.criticalIds.forEach((id) => { crit[id] = true; });
+  const inE: Record<string, Array<{ l: ScheduleLink; g: number }>> = {}, outN: Record<string, number> = {};
+  res.criticalIds.forEach((id) => { inE[id] = []; outN[id] = 0; });
+  (links || []).forEach((l) => {
+    if (l.from === l.to || !crit[l.from] || !crit[l.to]) return;
+    const a = rows[l.from], b = rows[l.to], g = lagToWorkDays(l, calendar);
+    const lhs = (l.type === "FF" || l.type === "SF") ? b.ef : b.es;
+    const rhs = (l.type === "SS" || l.type === "SF") ? a.es + g : a.ef + g;
+    if (Math.abs(lhs - rhs) > EPS) return; // no es el enlace que fija la fecha del sucesor
+    inE[l.to].push({ l, g }); outN[l.from]++;
+  });
+  const sources = res.criticalIds.filter((id) => !inE[id].length);
+  if (sources.length !== 1 || res.criticalIds.some((id) => inE[id].length > 1 || outN[id] > 1)) return { ok: false, reason: "parallel" };
+
+  // Recorrer la cadena siguiendo, para cada actividad, su único sucesor que manda.
+  const next: Record<string, { to: string; l: ScheduleLink; g: number }> = {};
+  res.criticalIds.forEach((id) => { inE[id].forEach((e) => { next[e.l.from] = { to: id, l: e.l, g: e.g }; }); });
+  type Lin = { k: number; c: Record<string, number> };
+  const plus = (a: Lin, k: number, id?: string, s?: number): Lin => {
+    const c = Object.assign({}, a.c); if (id) c[id] = (c[id] || 0) + (s || 0); return { k: a.k + k, c };
+  };
+  const minusDur = (a: Lin, id: string): Lin => plus(a, 0, id, -1);
+  const ids: string[] = [];
+  let cur = sources[0], ES: Lin = { k: 0, c: {} }, EF: Lin = plus(ES, 0, cur, 1);
+  ids.push(cur);
+  while (next[cur]) {
+    const { to, l, g } = next[cur];
+    if (ids.indexOf(to) >= 0) return { ok: false, reason: "inconsistent" };
+    let nES: Lin, nEF: Lin;
+    if (l.type === "SS") { nES = plus(ES, g); nEF = plus(nES, 0, to, 1); }
+    else if (l.type === "FF") { nEF = plus(EF, g); nES = minusDur(nEF, to); }
+    else if (l.type === "SF") { nEF = plus(ES, g); nES = minusDur(nEF, to); }
+    else { nES = plus(EF, g); nEF = plus(nES, 0, to, 1); } // FS
+    ES = nES; EF = nEF; cur = to; ids.push(cur);
+  }
+  if (ids.length !== res.criticalIds.length) return { ok: false, reason: "parallel" };
+
+  // Comprobación de coherencia: la forma lineal debe reproducir la duración del proyecto.
+  let t = EF.k; Object.keys(EF.c).forEach((id) => { t += EF.c[id] * (rows[id].ef - rows[id].es); });
+  if (Math.abs(t - res.projectDuration) > 1e-4) return { ok: false, reason: "inconsistent" };
+  const weights: Record<string, number> = {}; let variance = 0;
+  Object.keys(EF.c).forEach((id) => {
+    if (Math.abs(EF.c[id]) <= EPS) return;
+    weights[id] = EF.c[id]; variance += EF.c[id] * EF.c[id] * (Number(variances[id]) || 0);
+  });
+  return { ok: true, ids, mean: res.projectDuration, variance, weights };
 }
 
 // Fecha ISO "YYYY-MM-DD" → Date (mediodía UTC para evitar saltos de huso).
@@ -2276,7 +2360,7 @@ export const util = {
   wbsRollup, wbsResources, wbsCodes, wbsLeaves, obsNodes, obsLabel,
   raciResponsibleIds, applyRaciToWbs, applyScheduleToWbs, costEstimateRows, costEstimateTotal,
   applyCostEstimateToWbs, wbsPhases, activitiesStats, pertStats,
-  pertProbability, charterAudit, schedulePlanAudit, raciCoverage, raciAudit,
+  pertProbability, pertCriticalChain, charterAudit, schedulePlanAudit, raciCoverage, raciAudit,
   costSummary, pad2, charterRans, requirementsAudit, reqByWbsLeaf,
   scopeDeliverables, wbsDelIds, scopeAudit, traceMatrix,
   parsePredecessorCell, buildScheduleLinks, scheduleValidate,

@@ -20,7 +20,7 @@
    introducido por este port.
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
-import type { CpmNode, CpmResult, PertProbabilityResult, ProjectCalendar, ScheduleValidateResult } from "../../core/gpi-core";
+import type { CpmNode, CpmResult, ProjectCalendar, ScheduleValidateResult } from "../../core/gpi-core";
 import type { ActivitiesModule, EditSession, MilestoneItem, PertModule, SchedulePlanModule, ScheduleLagUnit, ScheduleLinkType, WbsModule } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
 
@@ -371,19 +371,31 @@ function renderValidation(R: RunCpmResult): void {
   box.innerHTML = out.map((i) => "<div class='issue " + i.c + "'><span class='ic'>" + i.ic + "</span><span>" + i.t + "</span></div>").join("");
 }
 
-interface CriticalPertSums { sumTe: number; sumVar: number; allValid: boolean; count: number; }
+// Media y varianza de la RUTA crítica para la probabilidad de plazo PERT.
+// Antes se sumaban TODAS las actividades críticas (aunque estuvieran en ramas
+// paralelas) y se omitían los desfases: dos actividades paralelas de 10 d hacia
+// un hito daban 20 d de media y ~0 % de terminar en 10 d. Ahora el CPM se
+// recalcula con las duraciones ESPERADAS (TE) -- el modo "Duración" de la
+// pantalla no cambia el resultado -- y solo se calcula si las críticas forman
+// UNA cadena (GPI.util.pertCriticalChain); si no, `reason` dice por qué.
+interface CriticalPertSums { mean: number; sumVar: number; allValid: boolean; count: number; reason?: "empty" | "parallel" | "inconsistent"; }
 function criticalPertSums(R: RunCpmResult): CriticalPertSums {
+  if (!R.cpm.ok) return { mean: 0, sumVar: 0, allValid: false, count: 0, reason: "empty" };
   const idx: Record<string, Row> = {}; R.snap.forEach((r) => { if (r.kind === "activity") idx[r.activityId as string] = r; });
-  let sumTe = 0, sumVar = 0, allValid = true, count = 0;
-  (R.cpm.ok ? R.cpm.criticalIds : []).forEach((id) => {
-    const r = idx[id]; count++;
-    // Un hito nunca tiene terna O/M/P -- duración cero por definición, no
-    // dato faltante -- así que contribuye 0 exacto en vez de invalidar la
-    // probabilidad PERT de toda la ruta crítica solo porque cayó en ella.
-    if (r && r.isMilestone) { /* contribución exacta: 0 */ }
-    else if (r && r.te != null && r.variance != null && r.pertValid !== false) { sumTe += r.te; sumVar += r.variance; } else allValid = false;
-  });
-  return { sumTe, sumVar, allValid: allValid && count > 0, count };
+  const usable = (r: Row | undefined): boolean => !!r && r.te != null && r.variance != null && r.pertValid !== false;
+  const ids = R.nodes.map((n) => n.id), seen: Record<string, boolean> = {}; ids.forEach((i) => { seen[i] = true; });
+  const nodes = R.nodes.map((n) => ({ id: n.id, dur: usable(idx[n.id]) ? (idx[n.id].te as number) : (n.det != null ? n.det : 0) }));
+  const links = R.links.filter((l) => seen[l.from] && seen[l.to] && l.from !== l.to);
+  const res = GPI!.util.cpm(nodes as CpmNode[], links, calData(), {});
+  const vars: Record<string, number> = {}; ids.forEach((i) => { if (usable(idx[i])) vars[i] = idx[i].variance as number; });
+  const ch = GPI!.util.pertCriticalChain(res, links, calData(), vars);
+  if (!ch.ok) return { mean: 0, sumVar: 0, allValid: false, count: res.ok ? res.criticalIds.length : 0, reason: ch.reason };
+  // Un hito nunca tiene terna O/M/P -- duración cero por definición, no dato
+  // faltante -- así que no invalida la probabilidad solo porque cayó en la
+  // ruta; y una actividad que no decide el fin (peso 0, p. ej. la predecesora
+  // de un SS) tampoco necesita terna.
+  const allValid = Object.keys(ch.weights).every((id) => { const r = idx[id]; return !!r && (r.isMilestone || usable(r)); });
+  return { mean: ch.mean, sumVar: ch.variance, allValid, count: ch.ids.length };
 }
 
 function renderProbability(R: RunCpmResult): void {
@@ -391,11 +403,14 @@ function renderProbability(R: RunCpmResult): void {
   const t = parseFloat((document.getElementById("probTarget") as HTMLInputElement).value);
   if (!R.cpm.ok) { out.innerHTML = "<div class='p'>—</div><div class='z'>red con ciclo</div>"; return; }
   const s = criticalPertSums(R);
+  if (s.reason === "parallel") { out.innerHTML = "<div class='p'>—</div><div class='z'>no aplicable: hay <b>" + s.count + "</b> actividades críticas en ramas paralelas o convergentes. PERT de una sola ruta no vale ahí (subestima el riesgo: el fin depende de que TODAS las ramas terminen a tiempo) — requiere simular la red completa</div>"; return; }
+  if (s.reason) { out.innerHTML = "<div class='p'>—</div><div class='z'>no aplicable: no se pudo aislar una ruta crítica única</div>"; return; }
   if (!s.allValid) { out.innerHTML = "<div class='p'>—</div><div class='z'>completa O/M/P en PERT para la ruta crítica</div>"; return; }
-  if (!isFinite(t) || t <= 0) { out.innerHTML = "<div class='p'>—</div><div class='z'>ΣTE=" + fmt(s.sumTe) + " d · ingresa un plazo objetivo</div>"; return; }
-  const pr = GPI!.util.pertProbability(s.sumTe, s.sumVar, t) as PertProbabilityResult;
+  if (!isFinite(t) || t <= 0) { out.innerHTML = "<div class='p'>—</div><div class='z'>E[T]=" + fmt(s.mean) + " d · ingresa un plazo objetivo</div>"; return; }
+  const pr = GPI!.util.pertProbability(s.mean, s.sumVar, t);
+  if (!pr) { out.innerHTML = "<div class='p'>—</div><div class='z'>E[T]=" + fmt(s.mean) + " d · sin varianza en la ruta crítica (σ=0): no hay incertidumbre que evaluar</div>"; return; }
   const pct = Math.round(pr.prob * 1000) / 10;
-  out.innerHTML = "<div class='p'>" + pct + "%</div><div class='z'>P(fin ≤ " + fmt(t) + " d) · Z=" + fmt(pr.z) + " · ΣTE=" + fmt(s.sumTe) + " σ=" + fmt(pr.sigma) + "</div>";
+  out.innerHTML = "<div class='p'>" + pct + "%</div><div class='z'>P(fin ≤ " + fmt(t) + " d) · Z=" + fmt(pr.z) + " · E[T]=" + fmt(s.mean) + " σ=" + fmt(pr.sigma) + "</div>";
 }
 
 function renderCalNote(): void {
@@ -1084,7 +1099,8 @@ function buildReport(): void {
   h += "<p class='rep-note'>ES = Inicio Temprano (Early Start) · EF = Fin Temprano (Early Finish) · LS = Inicio Tardío (Late Start) · LF = Fin Tardío (Late Finish). Holgura Total = LS − ES; 0 = actividad crítica.</p>";
   h += "<p class='rep-note'>Predecesoras: Id. de red de la actividad de la que depende, con el tipo de relación si no es FS (fin-a-inicio) y el adelanto/atraso en días si lo hay — p. ej. “3SS+2d” significa “depende del inicio de la actividad Id. 3, con 2 días de adelanto”.</p>";
   h += "<p class='rep-note'>Auditoría: compara la fecha que calculó el simulador contra la fecha de MS Project que hayas importado con «⇧ Importar desde Excel» (columnas Comienzo/Fin, opcionales) — ✓ coinciden, ✗ difieren (revisa calendario o enlaces). Si todavía no importaste esas fechas, queda en “—”: no hay nada que auditar por ahora.</p>";
-  if (s.allValid) h += "<p class='rep-note'>Ruta crítica: ΣTE = " + fmt(s.sumTe) + " d, Σσ² = " + fmt(s.sumVar) + " (base para la probabilidad de plazo PERT).</p>";
+  if (s.reason === "parallel") h += "<p class='rep-note'>Probabilidad de plazo PERT: no aplicable — la ruta crítica tiene ramas paralelas o convergentes (PERT de una sola ruta subestimaría el riesgo; haría falta simular la red completa).</p>";
+  else if (s.allValid) h += "<p class='rep-note'>Ruta crítica: duración esperada = " + fmt(s.mean) + " d (incluye desfases), σ² = " + fmt(s.sumVar) + " (base para la probabilidad de plazo PERT).</p>";
   rep.innerHTML = h;
 }
 function printReport(): void { buildReport(); document.body.classList.add("report-mode"); window.print(); setTimeout(() => { document.body.classList.remove("report-mode"); }, 400); }

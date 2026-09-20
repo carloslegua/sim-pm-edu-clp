@@ -1105,6 +1105,42 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   definido en su propio `SAMPLE.acts` — su regresión dorada (53 días, 9
   críticas) no se toca.
 
+**Probabilidad de plazo PERT: solo sobre una ruta crítica única**
+(`GPI.util.pertCriticalChain`, usada por Cronograma/CPM y por PERT).
+Revisión externa (severidad alta): `criticalPertSums()` /
+`criticalPathStats()` sumaban ΣTE y Σσ² de **todas** las actividades con
+holgura cero, y omitían los desfases. Con dos actividades paralelas de
+10 d (σ² = 1) hacia un hito el CPM daba 10 d, pero la media usada era 20 d
+y la probabilidad de terminar en 10 d salía ≈ 0 % (bajo dos duraciones
+normales independientes sería 25 %). "Holgura cero" no implica "misma
+ruta". Ahora:
+- Se aísla el subgrafo de enlaces que **fijan** la fecha del sucesor
+  (FS `ES(j)=EF(i)+lag`, SS `ES(j)=ES(i)+lag`, FF `EF(j)=EF(i)+lag`, SF
+  `EF(j)=ES(i)+lag`) entre actividades críticas. Es una **cadena** si
+  tiene una sola fuente y cada actividad un único enlace entrante y
+  saliente; si no, el resultado es `reason:"parallel"` y la pantalla dice
+  "no aplicable" (ramas paralelas o convergentes: haría falta simular la
+  red completa, PMBOK «análisis de riesgos del cronograma») en vez de
+  inventar un número.
+- En una cadena el fin del proyecto es lineal en las duraciones,
+  `T = k + Σ cᵢ·dᵢ`, que se sigue enlace por enlace: **media** = duración
+  del proyecto (ya incluye desfases y calendario, con la misma conversión
+  de unidades que `cpm()` — `lagToWorkDays()`) y **varianza** = Σ cᵢ²·σᵢ².
+  En FS cᵢ = 1; en SS la duración del predecesor no decide el fin
+  (cᵢ = 0) y en FF la del sucesor tampoco, así que su σ² no cuenta ni
+  necesita terna.
+- El CPM de la probabilidad se calcula **siempre con las duraciones
+  esperadas (TE)**; el selector Determinística/PERT de Cronograma/CPM ya
+  no la cambia (antes se sumaban TE sobre la ruta de las duraciones
+  determinísticas, que puede ser otra).
+- Sigue siendo la aproximación PERT clásica: ignora las rutas casi
+  críticas y que la ruta pueda cambiar al variar las duraciones (lo
+  habitual del método), pero ya no es un cálculo matemáticamente erróneo
+  sobre una red compatible. Cubierto por
+  `tests/unit/pert-critical-chain.test.ts` y los smoke de ambos módulos
+  (la repro exacta del reporte y una cadena con desfase), verificados
+  contra el código anterior.
+
 **Schedule_Management_Plan.html**
 - Es un **documento vivo** de 15 secciones (checklist AACE RP 38R-06),
   no un módulo de cálculo con "modo ejemplo" separado: `init()` carga
@@ -1122,7 +1158,9 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
 - Calcula la ruta crítica **probabilística**: recalcula el CPM con
   duraciones esperadas (TE) de cada actividad — el "CPM sobre TE"
   clásico del método PERT — a diferencia de Cronograma/CPM
-  (determinístico).
+  (determinístico). La probabilidad de plazo sigue la regla de
+  "Probabilidad de plazo PERT: solo sobre una ruta crítica única" (más
+  abajo): con ramas paralelas o convergentes no da número.
 - La M (más probable) tiene un modo "automático" que sigue en vivo la
   duración `Dur = Met/(#Eq×R)` de Definir Actividades; escribir un
   valor la fija manualmente, borrarlo la regresa a automático.

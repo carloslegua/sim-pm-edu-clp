@@ -56,6 +56,68 @@ describe("Pert_Analysis.html (migrado a pert.js)", () => {
     expect(doc.getElementById("sbCpPath")!.innerHTML).toContain("Ruta crítica");
   });
 
+  // Mismo hallazgo "alta" que en Cronograma/CPM: criticalPathStats() sumaba todas
+  // las actividades críticas aunque estuvieran en ramas paralelas.
+  function seedRamas(links: unknown[]) {
+    return {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 3,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] },
+                w1: { id: "w1", parentId: "root", name: "Fase 1", children: ["w2"] },
+                w2: { id: "w2", parentId: "w1", name: "Paquete A", children: [] }
+              }
+            },
+            activities: {
+              byLeaf: { w2: [
+                { id: "a1", name: "Rama uno", unit: "m³", qty: 100, perf: 10, teams: 1 },
+                { id: "a2", name: "Rama dos", unit: "m³", qty: 100, perf: 10, teams: 1 }
+              ] },
+              idCounter: 3,
+              milestones: [{ id: "m1", code: "H1", name: "Hito de cierre", leafId: "w2" }]
+            },
+            pert: { byActivity: { a1: { o: "7", p: "13" }, a2: { o: "7", p: "13" } }, inputMode: "dias" }, // TE = 10, σ² = 1
+            schedule: { links, linkCounter: links.length + 1, import: null, baseline: null }
+          }
+        }
+      }
+    };
+  }
+  const fsLink = (id: string, from: string, to: string, lag = 0) => ({ id, from, to, type: "FS", lag, lagUnit: "d", source: "manual" });
+  async function abrirRamas(links: unknown[], plazo: string) {
+    const dom = await JSDOM.fromURL(base + "Pert_Analysis.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedRamas(links))); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    const inp = doc.getElementById("sbTarget") as HTMLInputElement;
+    inp.value = plazo; inp.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 100));
+    return doc;
+  }
+
+  it("REPRO (alta): dos ramas paralelas de 10 d hacia un hito -- la probabilidad PERT NO se calcula (antes: media 20 d y ~0 % de terminar en 10 d)", async () => {
+    const doc = await abrirRamas([fsLink("L1", "a1", "m1"), fsLink("L2", "a2", "m1")], "10");
+    expect(doc.getElementById("sbCpProb")!.textContent).toBe("—");     // antes: "0.0%"
+    expect(doc.getElementById("sbCpTe")!.textContent).toBe("—");
+    expect(doc.getElementById("sbCpPath")!.textContent).toMatch(/No aplicable/);
+    expect(doc.getElementById("sbCpPath")!.textContent).toMatch(/paralelas/);
+  });
+
+  it("una cadena válida sí da probabilidad y la media incluye el desfase: a1 -FS+3d-> a2 = 23 d (antes: 20 d, sin el desfase)", async () => {
+    const doc = await abrirRamas([fsLink("L1", "a1", "a2", 3)], "23");
+    expect(doc.getElementById("sbCpTe")!.textContent).toBe("23 d");
+    expect(doc.getElementById("sbCpProb")!.textContent).toBe("50.0%"); // plazo = media -> Z = 0
+    expect(doc.getElementById("sbCpPath")!.textContent).toContain("Ruta crítica (2 act.)");
+  });
+
   it("con proyecto activo real: la M sigue en automático a la Dur base, TE se calcula con O/P ingresados y persiste en GPI.getModule('pert')", async () => {
     const seedDb = {
       version: 1, activeId: "p1",

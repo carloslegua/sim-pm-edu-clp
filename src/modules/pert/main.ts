@@ -316,9 +316,14 @@ function renderSidebar(): void {
 
 // ---------- PROBABILIDAD PERT SOBRE LA RUTA CRÍTICA ----------
 // Metodológicamente la probabilidad NO se calcula con la suma de todas las
-// actividades, sino con ΣTE y Σσ² de las actividades de la RUTA CRÍTICA.
+// actividades, sino con la media y la varianza de la RUTA CRÍTICA.
 // Aquí la ruta crítica se recalcula con las duraciones ESPERADAS (TE), no
 // con las determinísticas: es el CPM probabilístico clásico del método PERT.
+// Solo vale si las actividades críticas forman UNA cadena (GPI.util.
+// pertCriticalChain): antes se sumaban todas las críticas aunque estuvieran en
+// ramas paralelas (dos de 10 d hacia un hito daban 20 d de media y ~0 % de
+// terminar en 10 d) y se omitían los desfases. Con ramas paralelas o
+// convergentes no se inventa un número: se explica por qué no aplica.
 function scheduleLinks(): ScheduleLink[] {
   if (mode === "sample") return SAMPLE_LINKS;
   try {
@@ -329,7 +334,8 @@ function scheduleLinks(): ScheduleLink[] {
 
 type CriticalPathStats =
   | null
-  | { reason: "no-links" | "no-te" | "cycle" | "no-path" }
+  | { reason: "no-links" | "no-te" | "cycle" | "no-path" | "inconsistent" }
+  | { reason: "parallel"; count: number }
   | { ids: string[]; names: string[]; te: number; va: number; duration: number; anyInvalid: number; missing: number; cpNoTe: number };
 
 function criticalPathStats(): CriticalPathStats {
@@ -357,13 +363,17 @@ function criticalPathStats(): CriticalPathStats {
   try { cal = window.GPI.util.projectCalendar(); } catch (e) { /* noop */ }
   const res = window.GPI.util.cpm(nodes, links, cal, {});
   if (!res || !res.ok) return { reason: "cycle" };
-  const ids = res.criticalIds || [];
-  if (!ids.length) return { reason: "no-path" };
-  let te = 0, va = 0, cpNoTe = 0; const names: string[] = [];
+  if (!(res.criticalIds || []).length) return { reason: "no-path" };
+  const vars: Record<string, number> = {}; Object.keys(byId).forEach((id) => { vars[id] = byId[id].va; });
+  const ch = window.GPI.util.pertCriticalChain(res, links, cal, vars);
+  if (!ch.ok) return ch.reason === "parallel" ? { reason: "parallel", count: res.criticalIds.length } : ch.reason === "empty" ? { reason: "no-path" } : { reason: "inconsistent" };
+  // Media = duración del proyecto con TE (incluye desfases); varianza = la de las
+  // actividades que de verdad deciden el fin (ver pertCriticalChain).
+  const ids = ch.ids, te = ch.mean, va = ch.variance;
+  let cpNoTe = 0; const names: string[] = [];
   ids.forEach((id) => {
     const c = byId[id]; if (!c) return;
-    te += c.te; va += c.va;
-    if (!c.est) cpNoTe++;
+    if (!c.est && ch.weights[id]) cpNoTe++;
     const row = actsCache.filter((r) => (r.a as ActivityItem).id === id)[0];
     names.push((row ? (row.a as ActivityItem).name || id : id) + (c.est ? "" : " *"));
   });
@@ -386,7 +396,8 @@ function renderProbability(): void {
     if (cp.reason === "no-links") { clear("Sin red de precedencias. Abre <b>Cronograma / CPM</b> y define las relaciones entre actividades para obtener la ruta crítica."); return; }
     if (cp.reason === "no-te") { clear("Ninguna actividad tiene una terna O–M–P válida todavía."); return; }
     if (cp.reason === "cycle") { clear("La red tiene un <b>ciclo</b>: el CPM no puede resolverse. Corrígelo en Cronograma / CPM."); return; }
-    if (cp.reason === "no-path") { clear("No se pudo determinar la ruta crítica."); return; }
+    if (cp.reason === "no-path" || cp.reason === "inconsistent") { clear("No se pudo determinar una ruta crítica única."); return; }
+    if (cp.reason === "parallel") { clear("<b>No aplicable:</b> hay " + cp.count + " actividades críticas en ramas <b>paralelas o convergentes</b>. La probabilidad PERT de una sola ruta no vale ahí (subestima el riesgo: el fin depende de que <b>todas</b> las ramas terminen a tiempo); haría falta simular la red completa."); return; }
     return;
   }
   if (!targetTouched && (!elT.value || +elT.value <= 0)) elT.value = String(Math.ceil(cp.te) + 3);

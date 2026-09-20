@@ -190,6 +190,83 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
     expect(saved.projects.p1.modules.schedule).toBeUndefined();
   });
 
+  // Hallazgo "alta" de revisión externa: la probabilidad de plazo PERT sumaba TODAS
+  // las actividades críticas aunque estuvieran en ramas paralelas, y omitía los
+  // desfases. Dos actividades paralelas de 10 d (σ² = 1 cada una) hacia un hito:
+  // el CPM da 10 d, pero se usaban 20 d de media y se informaba ~0 % de terminar
+  // en 10 d. Ahora, con ramas paralelas, no se inventa un número.
+  function seedPert(links: unknown[]) {
+    return {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1, startDate: "2026-01-05" },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 3,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto Live", children: ["w1"] },
+                w1: { id: "w1", parentId: "root", name: "Fase 1", children: ["w2"] },
+                w2: { id: "w2", parentId: "w1", name: "Paquete A", children: [] }
+              }
+            },
+            activities: {
+              byLeaf: { w2: [
+                { id: "a1", name: "Rama uno", unit: "m³", qty: 100, perf: 10, teams: 1 },
+                { id: "a2", name: "Rama dos", unit: "m³", qty: 100, perf: 10, teams: 1 }
+              ] },
+              idCounter: 3,
+              milestones: [{ id: "m1", code: "H1", name: "Hito de cierre", leafId: "w2" }]
+            },
+            pert: { byActivity: { a1: { o: "7", p: "13" }, a2: { o: "7", p: "13" } }, inputMode: "dias" }, // TE = 10, σ² = 1
+            schedule: { links, linkCounter: links.length + 1, import: null, baseline: null }
+          }
+        }
+      }
+    };
+  }
+  const fs = (id: string, from: string, to: string, lag = 0) => ({ id, from, to, type: "FS", lag, lagUnit: "d", source: "manual" });
+  async function abrirConPlazo(seed: unknown, plazo: string) {
+    const dom = await JSDOM.fromURL(base + "Cronograma_CPM.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seed)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document;
+    const inp = doc.getElementById("probTarget") as HTMLInputElement;
+    inp.value = plazo; inp.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 100));
+    return doc;
+  }
+
+  it("REPRO (alta): dos ramas paralelas de 10 d hacia un hito -- el CPM da 10 d y la probabilidad PERT NO se calcula (antes: media 20 d y ~0 %)", async () => {
+    const doc = await abrirConPlazo(seedPert([fs("L1", "a1", "m1"), fs("L2", "a2", "m1")]), "10");
+    expect(doc.getElementById("kpiDur")!.textContent).toBe("10");      // el CPM ya era correcto
+    const out = doc.getElementById("probOut")!;
+    expect(out.querySelector(".p")!.textContent).toBe("—");            // antes: "0%"
+    expect(out.querySelector(".z")!.textContent).toMatch(/no aplicable/);
+    expect(out.querySelector(".z")!.textContent).toMatch(/paralelas/);
+  });
+
+  it("una cadena válida sí da probabilidad y la media incluye el desfase: a1 -FS+3d-> a2 = 10 + 3 + 10 = 23 d (antes: ΣTE = 20, sin el desfase)", async () => {
+    const doc = await abrirConPlazo(seedPert([fs("L1", "a1", "a2", 3)]), "23");
+    expect(doc.getElementById("kpiDur")!.textContent).toBe("23");
+    const out = doc.getElementById("probOut")!;
+    expect(out.querySelector(".p")!.textContent).toBe("50%");          // plazo = media -> Z = 0
+    expect(out.querySelector(".z")!.textContent).toMatch(/E\[T\]=23/);
+    expect(out.querySelector(".z")!.textContent).toMatch(/σ=1\.4/);   // √(1+1)
+  });
+
+  it("el modo de duración de la pantalla (Determinística / PERT) no cambia la probabilidad: siempre se evalúa con las duraciones esperadas", async () => {
+    const seed = seedPert([fs("L1", "a1", "a2", 3)]);
+    const doc = await abrirConPlazo(seed, "26");
+    const antes = doc.getElementById("probOut")!.innerHTML;
+    (doc.getElementById("durPert") as HTMLElement).click();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(doc.getElementById("probOut")!.innerHTML).toBe(antes);
+  });
+
   it("Cronograma-CPM ahora sí ve los hitos: su Id (netId) coincide con Definir las Actividades/Estimar los Costos", async () => {
     // Mismo seed (EDT + actividades + hito en 'activities') que
     // activity-definition/cost-estimate.smoke.test.ts -- esos dos módulos
