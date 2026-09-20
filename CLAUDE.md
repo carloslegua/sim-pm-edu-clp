@@ -8,7 +8,7 @@ fecha y evidencia puntual de cada paso, vive en [MIGRATION.md](MIGRATION.md).
 
 ## Qué es esto
 
-Suite educativa PMBOK 8 de 16 módulos HTML (15 herramientas + el Panel) + un núcleo de datos
+Suite educativa PMBOK 8 de 17 módulos HTML (16 herramientas + el Panel) + un núcleo de datos
 compartido (`gpi-core.js`) sobre `localStorage`. Sitio 100% estático: sin
 backend, sin servidor de build en producción. Se despliega copiando
 archivos a GitHub Pages o abriendo cualquier módulo con doble clic
@@ -36,7 +36,7 @@ raíz son generados y commiteados — nunca se editan a mano.**
    DISTRIB+ sobre el proyecto activo sin una acción explícita del alumno
    (botón "Cargar ejemplo"). Un módulo sin datos arranca **en blanco**,
    nunca con el ejemplo precargado.
-6. **Los 15 "Cargar ejemplo" son UN SOLO proyecto coherente** ("DISTRIB+
+6. **Los 16 "Cargar ejemplo" son UN SOLO proyecto coherente** ("DISTRIB+
    S.A. — Almacén Lurín"): mismos códigos EDT, mismas personas del OBS,
    mismas fechas de hito, mismo presupuesto/moneda entre TODOS los
    módulos — ver el catálogo canónico en ARCHITECTURE.md ("Dataset de
@@ -130,6 +130,10 @@ src/shared/evm.ts                → (se inlinea en evm.js) Valor Ganado: PV sob
                                     índices, EAC/ETC/TCPI, cronograma ganado (Earned Schedule), umbrales
 src/shared/evm-sample.ts         → (se inlinea en evm.js) ejemplo DISTRIB+ del EVM (avance, costo real, cortes);
                                     prueba de oro en tests/unit/evm-sample.test.ts
+src/shared/change-control.ts     → (se inlinea en changes.js) control integrado de cambios: evaluación en seis
+                                    áreas, autoridad requerida, condiciones de aprobación/implementación, hallazgos
+src/shared/change-sample.ts      → (se inlinea en changes.js) ejemplo DISTRIB+ de solicitudes de cambio (CR-001…003
+                                    = OC-001…003 de Costos)
 src/shared/estimate-class.ts     → (se inlinea en cost.js) madurez de la definición → clase del estimado sugerida,
                                     aviso contra la clase declarada, rango de exactitud aplicado
 src/shared/reserve-policy.ts     → (se inlinea en risks.js, cost.js y gpi-core.js) política de reservas del plan de
@@ -233,7 +237,7 @@ scripts/static-server.mjs        → servidor HTTP mínimo, usado por tests/e2e
   vale la pena reevaluar volver a la serie 7 nativa.
 - **La cobertura de tests solo mide `src/core/**`, a propósito**: Vitest
   instrumenta el código que importa como módulo TS (`tests/unit/*` importa
-  `gpi-core.ts` directo), pero los smoke tests de los 15 módulos cargan el
+  `gpi-core.ts` directo), pero los smoke tests de los 16 módulos cargan el
   `.js` YA COMPILADO dentro de un jsdom (`runScripts:"dangerously"`, igual
   que un `<script>` clásico) — ese bundle no tiene sourcemap hacia el `.ts`
   fuente, así que la cobertura v8 no puede atribuirle líneas y mostraría

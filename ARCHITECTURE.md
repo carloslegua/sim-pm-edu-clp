@@ -1299,6 +1299,50 @@ todo texto interpolado escapado). Con un proyecto activo arranca **en blanco**
 - **Límites declarados**: no hay recursos ni compromisos (el costo real es el reportado); el
   PV es lineal por paquete; el seguimiento no reemplaza el análisis de causa raíz.
 
+**Control_Cambios.html** (módulo `changes`, PMBOK «Realizar el control integrado de
+cambios») — auditoría metodológica B4. El registro de cambios vivía solo en Costos y solo
+medía Δ costo. Lógica pura en `src/shared/change-control.ts` (inlineada en `changes.js`, con
+19 pruebas unitarias); el módulo es solo interfaz (patrón del Registro de Riesgos:
+`window.GPI` explícito, `pushWithSession`, todo texto escapado). Con un proyecto activo
+arranca **en blanco**; en modo independiente muestra el ejemplo.
+- **Una solicitud (SC) se evalúa a la vez en seis áreas** (alcance, cronograma, costo, riesgo,
+  calidad, recursos), cada una `sin_evaluar` / `sin_impacto` / `con_impacto` con nota: no se
+  puede aprobar con áreas sin evaluar, ni con «con impacto» sin describirlo (alcance, calidad y
+  recursos con nota; costo, plazo y riesgo con su cuantificación o vínculos). Cuantifica el plazo con el
+  **CPM real** (paquetes/actividades afectados × días → se vuelve a correr la red: la holgura
+  puede absorber el cambio; el resultado es el efecto en el fin del proyecto) y el costo (Δ costo
+  + fuente de fondos).
+- **Decisión con la autoridad que corresponde** (`requiredAuthorityOf`): un cambio que toca una
+  línea base pasa por el **CCB**; reserva de gestión o fondos adicionales, por el **sponsor**; la
+  contingencia, por los escalones de la **política de reservas** del Plan de Riesgos (mismo
+  `reserve-policy.ts` que Costos). Rechazar o diferir exige quién decide y el motivo.
+- **Implementada solo con las líneas base al día** (`implementationProblems`): la modificación
+  de alcance (MOD) de Recopilar Requisitos, la orden de cambio de Costos (existe, monto
+  coincide con el Δ costo, aprobada e incorporada a la línea base) y la versión **LB-n** del
+  cronograma (existe y no es anterior a la decisión). Cuáles hacen falta lo dice `summarize`:
+  alcance si cambia el alcance; cronograma si el fin se mueve (|retraso| > 0,05 d); costos si
+  la fuente no es contingencia (la contingencia ya está dentro de la línea base).
+- **Enlaza, no duplica**: lee (solo lectura) las órdenes de `cost.changeOrders`, las
+  modificaciones de `requirements.changes`, los riesgos y la política de `risks` y la bitácora
+  de `schedule.baseline`; escribe únicamente su propia rama `changes`. Como Costos no tiene
+  «Cargar ejemplo» con proyecto conectado, al cargar el ejemplo en un proyecto se avisa qué
+  órdenes OC-001…003 aún no existen en Costos (las referencia igual).
+- **Hallazgos C1–C6**: C1 pendiente con más de 14 días sin decisión; C2 evaluación incompleta;
+  C3 aprobada pero sin implementar (qué línea base falta; más severo pasados 14 d); C4 orden de
+  cambio vinculada que ya no existe en Costos; C5 origen «riesgo materializado» sin riesgo
+  vinculado; C6 declara «sin impacto» en el plazo pero el CPM mueve el fin. Y KPIs de cartera
+  (pendientes, aprobadas sin implementar, Δ costo y plazo aprobados).
+- **Ejemplo DISTRIB+ ampliado, mismo caso** (`src/shared/change-sample.ts`): CR-001 (refuerzo
+  de cimentación, R-03, OC-001, aprobada por el CCB, +8 d en 4.2 crítica, línea base del
+  cronograma sin actualizar → no puede implementarse); CR-002 (sala eléctrica, OC-002, +10 d
+  absorbidos por la holgura de 4.5, riesgo y calidad sin evaluar → no se puede decidir); CR-003
+  (losa no identificada, OC-003, reserva de gestión → sponsor, +5 d). Un test unitario verifica
+  que las órdenes coinciden con `SAMPLE_CO` de Costos. Smoke (12) y e2e en Chrome real: el
+  proyecto armado con los botones reales da los mismos efectos en el plazo que el ejemplo
+  independiente.
+- **Límites declarados**: no crea ni edita las órdenes de Costos, las MOD ni la LB-n (eso lo
+  hace cada módulo); solo verifica que existan y sean coherentes.
+
 **Risk_Register.html** (módulo `risks`, PMBOK + AACE) — primer módulo
 **nuevo** posterior a la migración (no es un port): patrón de Stakeholder
 Studio (`addEventListener` exclusivo, `window.GPI` explícito, sesión de

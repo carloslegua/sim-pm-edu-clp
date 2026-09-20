@@ -22,6 +22,7 @@
     "build:stakeholder-studio": "vite build --config configs/stakeholder-studio.vite.config.ts && node scripts/sync-artifact.mjs stakeholder-studio.js",
     "build:risks": "vite build --config configs/risks.vite.config.ts && node scripts/sync-artifact.mjs risks.js",
     "build:evm": "vite build --config configs/evm.vite.config.ts && node scripts/sync-artifact.mjs evm.js",
+    "build:changes": "vite build --config configs/changes.vite.config.ts && node scripts/sync-artifact.mjs changes.js",
     "build:project-charter": "vite build --config configs/project-charter.vite.config.ts && node scripts/sync-artifact.mjs project-charter.js",
     "build:panel-control": "vite build --config configs/panel-control.vite.config.ts && node scripts/sync-artifact.mjs panel-control.js",
     "build:all": "node scripts/build-all.mjs",

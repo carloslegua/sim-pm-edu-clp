@@ -11,6 +11,18 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Nuevo módulo «Control Integrado de Cambios» (`Control_Cambios.html`, auditoría
+  metodológica PMBOK B4)** — el registro de cambios vivía solo en Costos y solo medía Δ costo.
+  Cada solicitud de cambio evalúa **a la vez** alcance, cronograma, costo, riesgo, calidad y
+  recursos (el efecto en el plazo sale de volver a correr el CPM real); el CCB la decide con la
+  **autoridad que exige** (cambio de línea base → CCB; reserva de gestión o fondos adicionales →
+  sponsor; contingencia → política de reservas); y solo se marca **Implementada** cuando cada
+  línea base afectada está de verdad actualizada: la modificación de alcance (Requisitos), la
+  orden de cambio (Costos) y la versión LB-n del cronograma. Enlaza sin duplicar, con hallazgos
+  de seguimiento (C1–C6) y KPIs de cartera; CSV e impresión. Ejemplo DISTRIB+ ampliado (CR-001…003 = OC-001…003).
+  Nuevos `src/shared/change-control.ts`, `src/shared/change-sample.ts`, módulo `changes` (opcional)
+  y tarjeta del Panel activada. Pruebas: `change-control.test.ts` (19), `change-sample.test.ts` (2),
+  smoke (12) y e2e en Chrome real. Ver ARCHITECTURE.md.
 - **Nuevo módulo «Valor Ganado (EVM)» (`Valor_Ganado.html`, auditoría metodológica PMI /
   AACE)** — cierra el ciclo planificar → controlar. Cruza el costo del trabajo por paquete
   (**BAC**) con la **línea base del cronograma** (PV, distribuido en el tiempo), lo que el

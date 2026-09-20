@@ -32,15 +32,15 @@ beforeAll(async () => {
 afterAll(() => { server.close(); });
 
 describe("Panel_Control.html (migrado a panel-control.js)", () => {
-  it("localStorage vacío: ensureSeed crea el proyecto DISTRIB+ y el launcher pinta las 22 tarjetas de módulo (15 activas, 7 'próximamente')", async () => {
+  it("localStorage vacío: ensureSeed crea el proyecto DISTRIB+ y el launcher pinta las 22 tarjetas de módulo (16 activas, 6 'próximamente')", async () => {
     const dom = await JSDOM.fromURL(base + "Panel_Control.html", { runScripts: "dangerously", resources: "usable" });
     await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
     expect(doc.querySelectorAll("#projSelect option").length).toBe(1);
     expect(doc.querySelector("#projSelect option")!.textContent).toContain("DISTRIB+ S.A.");
     expect(doc.querySelectorAll(".mod-card").length).toBe(22);
-    expect(doc.querySelectorAll(".mod-card.active").length).toBe(15);   // + Gestión de Riesgos (Risk_Register.html) y Valor Ganado (Valor_Ganado.html)
-    expect(doc.querySelectorAll(".mod-card.soon").length).toBe(7);
+    expect(doc.querySelectorAll(".mod-card.active").length).toBe(16);   // + Gestión de Riesgos (Risk_Register.html), Valor Ganado (Valor_Ganado.html) y Control de Cambios (Control_Cambios.html)
+    expect(doc.querySelectorAll(".mod-card.soon").length).toBe(6);
 
     (doc.getElementById("btnRename") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 50));

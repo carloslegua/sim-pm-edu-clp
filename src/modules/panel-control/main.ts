@@ -118,8 +118,8 @@ let MODULES: ModuleDef[] = [
     desc: "Project Charter (PMBOK): propósito, objetivos y criterios de éxito, hitos, presupuesto, supuestos, restricciones, exclusiones y aprobación formal del proyecto." },
   { key: "pmplan", group: "integ", name: "Plan para la Dirección", file: null, icon: "📘", color: "#00967f",
     desc: "Documento integrador que consolida los planes subsidiarios y las líneas base de alcance, cronograma y costo." },
-  { key: "changes", group: "integ", name: "Control Integrado de Cambios", file: null, icon: "🔁", color: "#00967f",
-    desc: "Registro de solicitudes de cambio, evaluación de impacto, decisión del CCB y actualización de las líneas base." },
+  { key: "changes", group: "integ", name: "Control Integrado de Cambios", file: "Control_Cambios.html", icon: "🔁", color: "#00967f",
+    desc: "Solicitudes de cambio que evalúan a la vez alcance, cronograma, costo, riesgo, calidad y recursos; decisión del CCB con la autoridad que exige (línea base, reservas); y trazabilidad hasta las órdenes de cambio de Costos, las modificaciones de alcance y la línea base del cronograma." },
   { key: "closeout", group: "integ", name: "Cierre del Proyecto", file: null, icon: "🏁", color: "#00967f",
     desc: "Aceptación de entregables, liberación de recursos, lecciones aprendidas y cierre administrativo y contractual." },
 

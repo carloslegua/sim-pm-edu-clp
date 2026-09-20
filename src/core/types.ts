@@ -341,7 +341,15 @@ export interface EvmModule {
   reports?: unknown[];
 }
 
+// Control integrado de cambios (Control_Cambios.html): las solicitudes de cambio (SC). Esquema y normalización en
+// shared/change-control.ts; enlazan (no duplican) las OC de Costos, las MOD de Requisitos y la línea base del cronograma.
+export interface ChangesModule {
+  requests?: unknown[];
+  idCounter?: number;
+}
+
 export interface ProjectModules {
+  changes?: ChangesModule | null;
   evm?: EvmModule | null;
   charter?: CharterModule | null;
   stakeholders?: StakeholdersModule | null;

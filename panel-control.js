@@ -82,10 +82,10 @@
 			key: "changes",
 			group: "integ",
 			name: "Control Integrado de Cambios",
-			file: null,
+			file: "Control_Cambios.html",
 			icon: "🔁",
 			color: "#00967f",
-			desc: "Registro de solicitudes de cambio, evaluación de impacto, decisión del CCB y actualización de las líneas base."
+			desc: "Solicitudes de cambio que evalúan a la vez alcance, cronograma, costo, riesgo, calidad y recursos; decisión del CCB con la autoridad que exige (línea base, reservas); y trazabilidad hasta las órdenes de cambio de Costos, las modificaciones de alcance y la línea base del cronograma."
 		},
 		{
 			key: "closeout",
