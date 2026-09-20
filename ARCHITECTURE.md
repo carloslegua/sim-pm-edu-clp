@@ -692,6 +692,47 @@ combinación anterior.
 Cubierto en `tests/unit/write-contract.test.ts` (incluye la repro exacta
 del Acta).
 
+### Cómo lo usan los 13 módulos
+
+Cada módulo pide `GPI.openSession("<módulo>")` en el mismo instante en
+que lee sus datos (`init()`/`pull()`/`tryLoadLive()`, donde ya capturaba
+`loadedProjectId`) y, si normaliza lo que lee, llama a
+`GPI.rebaseSession(session, <su serialización>)`. Al guardar usa
+`pushWithSession()` de `src/shared/write-session.ts` — lógica técnica
+compartida **en tiempo de compilación** (Vite la inlinea en cada IIFE;
+ningún script extra, `file://` y GitHub Pages no cambian) — que llama a
+`saveModule` + `saveMeta`, y según el resultado: `conflict`/`pending` →
+estado + `<div id="banner">` con `describeWrite()`; `rejected` por
+proyecto distinto → el `markProjectStale()` que cada módulo ya tenía. Las
+funciones de guardado devuelven `boolean` y el botón "☁ Sincronizar" solo
+dice "✓ Sincronizado" si se guardó de verdad ("⚠ Sin sincronizar" si no).
+Casos particulares:
+
+- **Acta** (`project-charter`): `gpiPush()` con el mismo contrato y
+  `rebaseSession()` tras `normalizeState()`, de modo que el guardado de
+  salida sin ediciones es un `unchanged` real.
+- **Costos y Requisitos** (`cost`, `requirements`): además de la sesión,
+  el texto "Sincronizado con el Panel" solo aparece si el resultado fue
+  `saved`/`unchanged`; con cuota agotada muestra "⚠ Cambios SIN guardar…"
+  y NO cae al respaldo `localStorage` propio (que también mentiría).
+  "Promover a RAN" (Requisitos → Acta) usa `writeModule()` (lectura-
+  modificación-escritura en el mismo instante, sube la revisión del Acta:
+  una pestaña con el Acta abierta verá un conflicto en vez de pisar el
+  RAN).
+- **Matriz RACI**: su escritura de la EDT (Responsables) es *derivada*
+  (`derived: true`), y si el guardado de la propia matriz falla no se
+  reescribe la EDT.
+- **Panel de Control** conserva `setModule`/`patchMeta` sin sesión: sus
+  escrituras son acciones directas sobre el proyecto que él mismo activó;
+  igualmente suben la revisión, así que un módulo abierto con ese dato
+  verá el conflicto.
+
+Limitaciones deliberadas: (1) ante un `conflict` la pestaña desactualizada
+no guarda y pide recargar — no hay fusión automática de un mismo módulo
+editado en dos pestañas (política explícita > adivinar); (2) los tests de
+humo no cubren cada módulo por separado (sí Acta, Costos, EDT); el resto
+comparte el mismo helper.
+
 ## Las tres formas de referenciar el núcleo
 
 Cada módulo referencia `GPI` de una de tres formas — no asumir que es

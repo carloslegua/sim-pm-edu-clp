@@ -502,6 +502,15 @@
 		if (t) t.textContent = "⚠ El proyecto activo cambió en otra pestaña: no se puede guardar aquí";
 		if (d) d.style.background = "#dc3546";
 	}
+	var session = null;
+	function reportWrite(r) {
+		if (r.status === "rejected" && r.reason === "project-changed") {
+			markProjectStale();
+			return;
+		}
+		$("saveTxt").textContent = GPI.describeWrite(r, "Estos datos de costos");
+		$("saveDot").style.background = "#dc3546";
+	}
 	function save() {
 		if (gpiOn() && !GPI.getModule("cost") && !userEdited) {
 			buildJSON();
@@ -512,11 +521,19 @@
 			return;
 		}
 		let synced = false;
-		if (gpiOn()) try {
-			GPI.setModule("cost", collect(), loadedProjectId);
-			synced = true;
-			$("saveTxt").textContent = "Sincronizado con el Panel";
-		} catch (e) {}
+		if (gpiOn()) {
+			const r = GPI.saveModule("cost", collect(), session);
+			if (!session && r.status === "saved") session = GPI.openSession("cost");
+			if (r.status === "saved" || r.status === "unchanged") {
+				synced = true;
+				$("saveTxt").textContent = "Sincronizado con el Panel";
+			} else {
+				reportWrite(r);
+				$("fcastEcho").textContent = $("fcastFreq").value.toLowerCase();
+				buildJSON();
+				return;
+			}
+		}
 		if (!synced) try {
 			localStorage.setItem(STORE_KEY, JSON.stringify(collect()));
 			$("saveTxt").textContent = "Guardado " + (/* @__PURE__ */ new Date()).toLocaleTimeString("es-PE", {
@@ -623,6 +640,7 @@
 		});
 	}
 	function init(reload) {
+		session = gpiOn() ? GPI.openSession("cost") : null;
 		load();
 		const connected = gpiOn();
 		if (connected) loadedProjectId = GPI.activeId();

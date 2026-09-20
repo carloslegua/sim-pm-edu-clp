@@ -113,4 +113,37 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(baseCost).toBe("380000"); // 2000 x 190, no los 500000 del WBS
     expect(GPI.getModule("cost").budget.baseCost).toBe(380000);
   });
+
+  it("BUG REPORTADO (media): con cuota agotada la pantalla NO dice 'Sincronizado con el Panel' -- el estado sale del resultado real de la escritura", async () => {
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Costos", course: "GPI", currency: "USD", createdAt: 1, updatedAt: 1 },
+          modules: { wbs: { rootId: "root", idCounter: 2, nodes: { root: { name: "P", children: ["w1"] }, w1: { name: "Paquete 1", children: [], cost: 500000 } } } }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Cost-management.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const win = dom.window as any;
+
+    // Cuota agotada: solo la escritura de "gpi_db" falla (la sonda de
+    // disponibilidad de 1 byte sigue funcionando, como en un navegador real).
+    const realSetItem = win.Storage.prototype.setItem;
+    win.Storage.prototype.setItem = function (this: Storage, k: string, v: string) {
+      if (k === "gpi_db") throw new win.DOMException("Quota exceeded", "QuotaExceededError");
+      return realSetItem.call(this, k, v);
+    };
+
+    win.pullFromWBS(); // edición real -> intenta guardar
+    const txt = win.document.getElementById("saveTxt").textContent as string;
+    expect(txt).not.toMatch(/Sincronizado/);
+    expect(txt).toMatch(/SIN guardar/);
+    expect(win.GPI.hasUnsavedChanges()).toBe(true); // el núcleo sí conservó el cambio en memoria
+  });
 });

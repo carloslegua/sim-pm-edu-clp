@@ -14,7 +14,7 @@
    DELIBERADAMENTE NO se usa GPI.ui.esc (modo suelto sin gpi-core.js).
    ============================================================ */
 import type * as GpiCore from "../../core/gpi-core";
-import type { CharterModule, RequirementItem, RequirementsModule, Stakeholder, WbsModule } from "../../core/types";
+import type { CharterModule, EditSession, RequirementItem, RequirementsModule, Stakeholder, WbsModule, WriteResult } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -147,12 +147,24 @@ function collect(): RequirementsModule {
     idCounter: state.idCounter, changeCounter: state.changeCounter
   } as unknown as RequirementsModule;
 }
+// Versión de los requisitos que esta pestaña cargó (ver GPI.openSession).
+let session: EditSession | null = null;
+// El estado mostrado sale del resultado REAL de la escritura (revisión
+// externa: no decir "Sincronizado" si quedó solo en memoria o hubo conflicto).
+function reportWrite(r: WriteResult): void {
+  if (r.status === "rejected" && r.reason === "project-changed") { markProjectStale(); return; }
+  $("saveTxt").textContent = (GPI as GpiApi).describeWrite(r, "Los requisitos");
+  $("saveDot").style.background = "#dc3546";
+}
 function save(): void {
   if (gpiOn() && !(GPI as GpiApi).getModule("requirements") && !userEdited && !state.items.length) { return; }
   if (gpiOn() && loadedProjectId != null && (GPI as GpiApi).activeId() !== loadedProjectId) { markProjectStale(); return; }
   let synced = false;
   if (gpiOn()) {
-    try { (GPI as GpiApi).setModule("requirements", collect(), loadedProjectId); synced = true; $("saveTxt").textContent = "Sincronizado con el Panel"; } catch (e) { /* noop */ }
+    const r = (GPI as GpiApi).saveModule("requirements", collect(), session);
+    if (!session && r.status === "saved") session = (GPI as GpiApi).openSession("requirements");
+    if (r.status === "saved" || r.status === "unchanged") { synced = true; $("saveTxt").textContent = "Sincronizado con el Panel"; }
+    else { reportWrite(r); return; }
   }
   if (!synced) {
     try {
@@ -660,7 +672,11 @@ function promoteToRan(id: string): void {
     let mx = 0; ch.requirements.forEach((r) => { const m = r && typeof r === "object" && r.code && /RAN\.0*(\d+)/.exec(r.code); if (m) mx = Math.max(mx, Number(m[1])); });
     const num = mx + 1, code = "RAN." + (num < 10 ? "0" + num : num), rid = "ran" + num;
     ch.requirements.push({ id: rid, code, text: it.text });
-    (GPI as GpiApi).setModule("charter", ch, loadedProjectId);
+    // lectura-modificación-escritura en el mismo instante: sin sesión, pero
+    // sube la revisión del Acta -- una pestaña con el Acta abierta verá un
+    // conflicto en vez de pisar el RAN recién agregado.
+    const w = (GPI as GpiApi).writeModule("charter", ch, { projectId: loadedProjectId });
+    if (w.status !== "saved") { showToast((GPI as GpiApi).describeWrite(w, "El Acta")); return; }
     it.sourceRanIds = (it.sourceRanIds || []).concat([rid]);
     touch(); showToast(it.code + " ahora traza a " + code + " (agregado al Acta).");
   });
@@ -891,6 +907,7 @@ function gpiBadge(): void {
 
 /* ===================== Init ===================== */
 function init(): void {
+  session = gpiOn() ? (GPI as GpiApi).openSession("requirements") : null; // en el mismo instante en que load() lee el dato
   load(); renderAll();
   const connected = gpiOn();
   if (connected) loadedProjectId = (GPI as GpiApi).activeId();

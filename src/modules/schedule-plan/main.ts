@@ -23,7 +23,8 @@
    retorno estructuralmente compatible.
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
-import type { ObsModule, ProjectMeta, RaciModule, SchedulePlanModule, WbsModule } from "../../core/types";
+import type { EditSession, ObsModule, ProjectMeta, RaciModule, SchedulePlanModule, WbsModule } from "../../core/types";
+import { pushWithSession } from "../../shared/write-session";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global { interface Window { GPI?: GpiApi; } }
@@ -814,6 +815,8 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
   // reportado por el usuario, confirmado sistémico en los 13 módulos de
   // herramienta).
   let loadedProjectId: string | null = null;
+  // Versión del plan que esta pestaña cargó (GPI.openSession, en pull()).
+  let session: EditSession | null = null;
   let projectStale = false;
   function markProjectStale(): void {
     if (projectStale) return;
@@ -835,22 +838,26 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
   function pull(): void {
     const p = window.GPI!.active(); if (!p) return;
     loadedProjectId = window.GPI!.activeId();
+    session = window.GPI!.openSession("schedulePlan"); // versión del plan que esta pestaña carga
     if (p.meta) { if (p.meta.name) titleEl.value = p.meta.name; if (p.meta.course) courseEl.value = p.meta.course; }
     const mod = p.modules && p.modules.schedulePlan;
     // Sin plan aún: arranca EN BLANCO (defaultState), no con el ejemplo,
     // para que el guardado automático al salir no escriba el plan DISTRIB+
     // en un proyecto nuevo. El ejemplo queda en el botón "Cargar ejemplo".
     state = mod ? mergeWithDefaults(mod) : normalizeState(defaultState());
+    if (mod) window.GPI!.rebaseSession(session, state); // el dato ya normalizado, no el crudo
     fullRender();
     refreshPeopleList();
     setStatus(mod ? "Proyecto cargado desde el Panel de Control."
       : "Proyecto sin plan de cronograma todavía. Completa las secciones, o usa ⌘ Cargar ejemplo para explorar el caso DISTRIB+.");
   }
-  function push(): void {
-    if (!window.GPI!.active()) return;
-    if (loadedProjectId != null && window.GPI!.activeId() !== loadedProjectId) { markProjectStale(); return; }
-    window.GPI!.setModule("schedulePlan", state, loadedProjectId);
-    window.GPI!.patchMeta({ name: titleEl.value, course: courseEl.value }, loadedProjectId);
+  function push(): boolean {
+    if (!window.GPI!.active()) return false;
+    if (loadedProjectId != null && window.GPI!.activeId() !== loadedProjectId) { markProjectStale(); return false; }
+    // Guardado con sesión y resultado común (src/shared/write-session.ts).
+    const r = pushWithSession(window.GPI!, "schedulePlan", "El plan de cronograma", state, { name: titleEl.value, course: courseEl.value }, session, { setStatus, onStale: markProjectStale });
+    session = r.session;
+    return r.ok;
   }
   const proj = window.GPI!.active();
   if (proj) pull(); else refreshPeopleList();
@@ -863,7 +870,7 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
   gpiBadge(proj ? (proj.meta && proj.meta.name) : "", push);
 });
 
-function gpiBadge(name: string | undefined, pushFn: () => void): void {
+function gpiBadge(name: string | undefined, pushFn: () => boolean): void {
   const css = document.createElement("style");
   css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:42px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-dot{width:8px;height:8px;border-radius:50%;background:#00c2a8;box-shadow:0 0 0 3px rgba(0,194,168,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#0090c2;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#00b6ec;background:#fff}";
   document.head.appendChild(css);
@@ -872,7 +879,7 @@ function gpiBadge(name: string | undefined, pushFn: () => void): void {
   bar.innerHTML = '<span class="gpi-dot"></span><span>Panel: <b>' + String(name || "—").replace(/</g, "&lt;") + '</b></span><button class="gpi-btn" id="gpiSyncBtn">☁ Sincronizar</button><a class="gpi-btn" href="Panel_Control.html">⌂ Panel</a>';
   document.body.appendChild(bar);
   (bar.querySelector("#gpiSyncBtn") as HTMLElement).addEventListener("click", () => {
-    pushFn(); const b = bar.querySelector("#gpiSyncBtn") as HTMLElement, t = b.textContent; b.textContent = "✓ Sincronizado";
+    const ok = pushFn(); const b = bar.querySelector("#gpiSyncBtn") as HTMLElement, t = b.textContent; b.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar";
     setTimeout(() => { b.textContent = t; }, 1400);
   });
 }

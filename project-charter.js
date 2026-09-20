@@ -370,6 +370,7 @@
 	}
 	var state = defaultState();
 	var loadedProjectId = null;
+	var session = null;
 	var projectStale = false;
 	function esc(s) {
 		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
@@ -1087,13 +1088,29 @@
 			banner.classList.add("show");
 		}
 	}
+	function reportWrite(r, label) {
+		if (r.status === "saved" || r.status === "unchanged") return true;
+		if (r.status === "rejected" && r.reason === "project-changed") {
+			markProjectStale();
+			return false;
+		}
+		const msg = window.GPI.describeWrite(r, label);
+		setStatus(msg);
+		const banner = document.getElementById("banner");
+		if (banner && (r.status === "conflict" || r.status === "pending")) {
+			banner.textContent = msg;
+			banner.classList.add("show");
+		}
+		return false;
+	}
 	function gpiPush() {
-		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
+		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return false;
 		if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
 			markProjectStale();
-			return;
+			return false;
 		}
-		window.GPI.setModule("charter", state, loadedProjectId);
+		const rMod = window.GPI.saveModule("charter", state, session);
+		if (!session && rMod.status === "saved") session = window.GPI.openSession("charter");
 		const patch = {
 			name: document.getElementById("projectTitle").value,
 			course: document.getElementById("courseTitle").value
@@ -1105,7 +1122,8 @@
 			patch.capex = state.budget.amount;
 			patch.currency = state.budget.currency;
 		}
-		window.GPI.patchMeta(patch, loadedProjectId);
+		const rMeta = window.GPI.saveMeta(patch, session);
+		return reportWrite(rMod, "El Acta") && reportWrite(rMeta, "Los datos del proyecto");
 	}
 	function init() {
 		wireStatics();
@@ -1120,9 +1138,12 @@
 					if (proj.meta.name) titleEl.value = proj.meta.name;
 					if (proj.meta.course) courseEl.value = proj.meta.course;
 				}
+				session = window.GPI.openSession("charter");
 				const mod = window.GPI.getModule("charter");
-				if (mod) state = normalizeState(mod);
-				else {
+				if (mod) {
+					state = normalizeState(mod);
+					window.GPI.rebaseSession(session, state);
+				} else {
 					const m = proj.meta || {};
 					if (m.sponsor) state.identification.sponsor = m.sponsor;
 					if (m.manager) state.identification.manager = m.manager;
@@ -1155,9 +1176,9 @@
 		document.body.appendChild(bar);
 		const sb = bar.querySelector("#gpiSyncBtn");
 		if (sb) sb.addEventListener("click", () => {
-			pushFn();
+			const ok = pushFn();
 			const t = sb.textContent;
-			sb.textContent = "✓ Sincronizado";
+			sb.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar";
 			setTimeout(() => {
 				sb.textContent = t;
 			}, 1400);

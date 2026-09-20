@@ -13,7 +13,8 @@
    DELIBERADAMENTE NO se usa GPI.ui.esc (modo suelto sin gpi-core.js).
    ============================================================ */
 import type * as GpiCore from "../../core/gpi-core";
-import type { GpiProject, ProjectMeta, ProjectModules, RequirementItem, ScopeStatementModule } from "../../core/types";
+import type { EditSession, GpiProject, ProjectMeta, ProjectModules, RequirementItem, ScopeStatementModule } from "../../core/types";
+import { pushWithSession } from "../../shared/write-session";
 
 type ModuleKey = keyof ProjectModules;
 
@@ -41,6 +42,7 @@ let state: ScopeState;
 // real reportado por el usuario, confirmado sistémico en los 13 módulos
 // de herramienta).
 let loadedProjectId: string | null = null;
+let session: EditSession | null = null; // versión del enunciado que esta pestaña cargó (GPI.openSession)
 let projectStale = false;
 function markProjectStale(): void {
   if (projectStale) return;
@@ -470,13 +472,19 @@ function renderTrace(): void {
 /* ---------- persistencia ---------- */
 let pd: ReturnType<typeof setTimeout> | undefined;
 function persistDebounced(): void { clearTimeout(pd); pd = setTimeout(persist, 400); }
-function persist(): void {
+function persist(): boolean {
   if (gpiOn() && window.GPI!.available() && window.GPI!.active()) {
-    if (loadedProjectId != null && window.GPI!.activeId() !== loadedProjectId) { markProjectStale(); return; }
-    window.GPI!.setModule("scopeStatement", serialize(), loadedProjectId);
-    window.GPI!.patchMeta({ name: ($("projectTitle") as HTMLInputElement).value, course: ($("courseTitle") as HTMLInputElement).value }, loadedProjectId);
+    if (loadedProjectId != null && window.GPI!.activeId() !== loadedProjectId) { markProjectStale(); return false; }
+    // Guardado con sesión y resultado común (src/shared/write-session.ts):
+    // "Cambios guardados." solo si de verdad se guardó (antes se decía siempre).
+    const r = pushWithSession(window.GPI!, "scopeStatement", "El Enunciado del Alcance", serialize(),
+      { name: ($("projectTitle") as HTMLInputElement).value, course: ($("courseTitle") as HTMLInputElement).value },
+      session, { setStatus, onStale: markProjectStale });
+    session = r.session;
+    if (!r.ok) return false;
   }
   setStatus("Cambios guardados.");
+  return true;
 }
 function serialize(): ScopeStatementModule {
   return {
@@ -623,10 +631,11 @@ function boot(): void {
   const proj = activeProject();
   if (proj) {
     loadedProjectId = window.GPI!.activeId();
+    session = window.GPI!.openSession("scopeStatement"); // versión que esta pestaña carga
     // Regla de oro del ecosistema: con proyecto activo, hidrata desde el módulo;
     // si no hay datos aún, arranca EN BLANCO (con guía), sin datos de ejemplo.
     const d = mod("scopeStatement");
-    if (d) { state = normalize(d); setStatus("Cargado desde el Panel de Control."); }
+    if (d) { state = normalize(d); window.GPI!.rebaseSession(session, serialize()); setStatus("Cargado desde el Panel de Control."); }
     else { state = blank(); setStatus("Proyecto sin Enunciado del Alcance todavía. Agrega entregables o usa «Cargar ejemplo»."); }
     if (proj.meta) { if (proj.meta.name) ($("projectTitle") as HTMLInputElement).value = proj.meta.name; if (proj.meta.course) ($("courseTitle") as HTMLInputElement).value = proj.meta.course; }
     $("banner").classList.remove("show");
@@ -664,7 +673,7 @@ function gpiBadge(name: string | undefined): void {
   bar.innerHTML = '<span class="gpi-dot"></span><span>Panel: <b>' + String(name || "—").replace(/</g, "&lt;") + '</b></span><button class="gpi-btn" id="gpiSyncBtn">☁ Sincronizar</button><a class="gpi-btn" href="Panel_Control.html">⌂ Panel</a>';
   document.body.appendChild(bar);
   const sb = bar.querySelector("#gpiSyncBtn");
-  if (sb) (sb as HTMLElement).onclick = () => { persist(); const t = sb.textContent; sb.textContent = "✓ Sincronizado"; setTimeout(() => { sb.textContent = t; }, 1400); };
+  if (sb) (sb as HTMLElement).onclick = () => { const ok = persist(); const t = sb.textContent; sb.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar"; setTimeout(() => { sb.textContent = t; }, 1400); };
 }
 
 document.addEventListener("DOMContentLoaded", boot);

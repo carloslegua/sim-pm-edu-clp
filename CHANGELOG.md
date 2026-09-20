@@ -66,6 +66,30 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Los 13 módulos usan el contrato de escritura: sesión de edición y
+  estado según el resultado real (revisión externa, hallazgos alta y
+  media; parte de los módulos)** — reproducido en Chrome: abrir el Acta,
+  actualizarla desde otra pestaña y ejecutar el guardado de salida de la
+  primera dejaba la descripción vieja (vacía) sobre la nueva; y en
+  Costos, con un error de cuota forzado, el núcleo conservaba los
+  cambios pendientes pero la pantalla decía "Sincronizado con el Panel"
+  porque el módulo ignoraba el resultado de `setModule()`. Cada módulo
+  abre una `EditSession` al leer sus datos y guarda con
+  `pushWithSession()` (nuevo `src/shared/write-session.ts`, inlineado en
+  cada IIFE): un guardado sin ediciones propias es `unchanged`, un
+  cambio ajeno posterior es `conflict` (no se sobrescribe, se avisa en
+  estado y banner), y `pending`/`rejected` también se informan. El botón
+  "☁ Sincronizar" y el "Cambios guardados." de Enunciado del Alcance
+  solo confirman si se guardó de verdad; Costos y Requisitos ya no dicen
+  "Sincronizado" ni caen a su respaldo propio con cuota agotada. La
+  escritura de RACI hacia la EDT es derivada (no sube la revisión, sin
+  falsos conflictos) y "Promover a RAN" sube la del Acta. Pruebas:
+  repro exacta del Acta (`project-charter.smoke`), Costos con cuota
+  forzada (`cost-management.smoke`, verificada contra el módulo
+  anterior), EDT con escritura derivada vs. edición ajena
+  (`wbs-builder.smoke`). Ver ARCHITECTURE.md, "Cómo lo usan los 13
+  módulos".
+
 - **Núcleo — contrato de escritura: versión del mismo proyecto,
   reconciliación con eliminaciones/metadatos por campo y resultado
   común (revisión externa, hallazgos alta/alta/media; parte del

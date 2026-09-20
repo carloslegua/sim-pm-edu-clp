@@ -1,4 +1,37 @@
 (function() {
+	//#region src/shared/write-session.ts
+	function writeOk(r) {
+		return r.status === "saved" || r.status === "unchanged";
+	}
+	function showWriteProblem(msg, setStatus) {
+		setStatus(msg);
+		const banner = document.getElementById("banner");
+		if (banner) {
+			banner.textContent = msg;
+			banner.classList.add("show");
+		}
+	}
+	function pushWithSession(G, name, label, data, patch, session, hooks) {
+		const rMod = G.saveModule(name, data, session);
+		const next = !session && rMod.status === "saved" ? G.openSession(name) : session;
+		const rMeta = patch ? G.saveMeta(patch, session) : null;
+		const problems = [[rMod, label]];
+		if (rMeta) problems.push([rMeta, "Los datos del proyecto"]);
+		for (const [r, lab] of problems) {
+			if (writeOk(r)) continue;
+			if (r.status === "rejected" && r.reason === "project-changed") hooks.onStale();
+			else showWriteProblem(G.describeWrite(r, lab), hooks.setStatus);
+			return {
+				ok: false,
+				session: next
+			};
+		}
+		return {
+			ok: true,
+			session: next
+		};
+	}
+	//#endregion
 	//#region src/modules/stakeholder-studio/main.ts
 	var CATS = {
 		"Interno": {
@@ -1462,6 +1495,7 @@
 		const titleEl = document.getElementById("projectTitle");
 		const courseEl = document.getElementById("courseTitle");
 		let loadedProjectId = null;
+		let session = null;
 		let projectStale = false;
 		function markProjectStale() {
 			if (projectStale) return;
@@ -1477,6 +1511,7 @@
 			const p = window.GPI.active();
 			if (!p) return;
 			loadedProjectId = window.GPI.activeId();
+			session = window.GPI.openSession("stakeholders");
 			if (p.meta) {
 				if (p.meta.name) titleEl.value = p.meta.name;
 				if (p.meta.course) courseEl.value = p.meta.course;
@@ -1507,6 +1542,12 @@
 				});
 				selectedId = stakeholders.length ? stakeholders[0].id : null;
 				expandedIds = /* @__PURE__ */ new Set();
+				window.GPI.rebaseSession(session, {
+					stakeholders,
+					powerWeights,
+					interestWeights,
+					idCounter
+				});
 				render();
 				setStatus("Datos cargados desde el Panel de Control.");
 			} else {
@@ -1516,21 +1557,25 @@
 			}
 		}
 		function push() {
-			if (!window.GPI.active()) return;
+			if (!window.GPI.active()) return false;
 			if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
 				markProjectStale();
-				return;
+				return false;
 			}
-			window.GPI.setModule("stakeholders", {
+			const r = pushWithSession(window.GPI, "stakeholders", "Los interesados", {
 				stakeholders,
 				powerWeights,
 				interestWeights,
 				idCounter
-			}, loadedProjectId);
-			window.GPI.patchMeta({
+			}, {
 				name: titleEl.value,
 				course: courseEl.value
-			}, loadedProjectId);
+			}, session, {
+				setStatus,
+				onStale: markProjectStale
+			});
+			session = r.session;
+			return r.ok;
 		}
 		if (proj) pull();
 		window.addEventListener("beforeunload", push);
@@ -1562,9 +1607,9 @@
 		bar.innerHTML = "<span class=\"gpi-dot\"></span><span>Panel: <b>" + String(name || "—").replace(/</g, "&lt;") + "</b></span><button class=\"gpi-btn\" id=\"gpiSyncBtn\">☁ Sincronizar</button><a class=\"gpi-btn\" href=\"Panel_Control.html\">⌂ Panel</a>";
 		document.body.appendChild(bar);
 		bar.querySelector("#gpiSyncBtn").addEventListener("click", () => {
-			pushFn();
+			const ok = pushFn();
 			const b = bar.querySelector("#gpiSyncBtn"), t = b.textContent;
-			b.textContent = "✓ Sincronizado";
+			b.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar";
 			setTimeout(() => {
 				b.textContent = t;
 			}, 1400);

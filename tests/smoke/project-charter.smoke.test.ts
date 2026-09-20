@@ -105,6 +105,52 @@ describe("Project_Charter.html (migrado a project-charter.js)", () => {
     expect(ch.stakeholders[0].name).toBe("Interesado Alto");
   });
 
+  it("BUG REPORTADO (alta): otra pestaña actualiza el MISMO proyecto y el guardado de salida del Acta NO reemplaza la descripción nueva por la antigua", async () => {
+    // Repro: "abrir el Acta, actualizarla desde otra pestaña y ejecutar el
+    // guardado de salida de la primera. La descripción nueva quedó
+    // reemplazada por la antigua, vacía." La guarda por projectId no lo
+    // detectaba (es el mismo proyecto); ahora la sesión de edición compara
+    // la versión del Acta que cargó.
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto A", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: { charter: { description: "" } }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Project_Charter.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 600));
+    const doc = dom.window.document;
+
+    // Otra pestaña (Acta abierta en otra ventana, o el Panel) actualiza la descripción.
+    const db2 = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    db2.projects.p1.modules.charter = { description: "Descripción NUEVA escrita en la otra pestaña" };
+    db2.projects.p1.revs = { charter: 1 };
+    dom.window.localStorage.setItem("gpi_db", JSON.stringify(db2));
+
+    // (a) guardado de salida SIN modificaciones propias: no escribe nada.
+    dom.window.dispatchEvent(new dom.window.Event("beforeunload"));
+    let saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    expect(saved.projects.p1.modules.charter.description).toBe("Descripción NUEVA escrita en la otra pestaña");
+
+    // (b) guardado con una edición propia sobre la versión vieja: conflicto,
+    // NO se sobrescribe y el usuario ve el aviso.
+    const sponsor = doc.querySelector('[data-bind="identification.sponsor"]') as HTMLInputElement;
+    sponsor.value = "Sponsor editado en la pestaña vieja";
+    sponsor.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    dom.window.dispatchEvent(new dom.window.Event("beforeunload"));
+    saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    expect(saved.projects.p1.modules.charter.description).toBe("Descripción NUEVA escrita en la otra pestaña");
+    expect(saved.projects.p1.modules.charter.identification).toBeUndefined();
+    expect(doc.getElementById("statusLeft")!.textContent).toMatch(/cambió en otra pestaña/);
+  });
+
   it("BUG REPORTADO: si otra pestaña activa un proyecto distinto mientras el Acta sigue abierta, el guardado de salida NO debe sobrescribir ese otro proyecto", async () => {
     // Repro exacta: "abrir el Acta del proyecto A, activar B desde el
     // Panel y ejecutar el guardado de salida del Acta. B terminó con el

@@ -1,4 +1,37 @@
 (function() {
+	//#region src/shared/write-session.ts
+	function writeOk(r) {
+		return r.status === "saved" || r.status === "unchanged";
+	}
+	function showWriteProblem(msg, setStatus) {
+		setStatus(msg);
+		const banner = document.getElementById("banner");
+		if (banner) {
+			banner.textContent = msg;
+			banner.classList.add("show");
+		}
+	}
+	function pushWithSession(G, name, label, data, patch, session, hooks) {
+		const rMod = G.saveModule(name, data, session);
+		const next = !session && rMod.status === "saved" ? G.openSession(name) : session;
+		const rMeta = patch ? G.saveMeta(patch, session) : null;
+		const problems = [[rMod, label]];
+		if (rMeta) problems.push([rMeta, "Los datos del proyecto"]);
+		for (const [r, lab] of problems) {
+			if (writeOk(r)) continue;
+			if (r.status === "rejected" && r.reason === "project-changed") hooks.onStale();
+			else showWriteProblem(G.describeWrite(r, lab), hooks.setStatus);
+			return {
+				ok: false,
+				session: next
+			};
+		}
+		return {
+			ok: true,
+			session: next
+		};
+	}
+	//#endregion
 	//#region src/modules/schedule-plan/main.ts
 	var FIXED_TOOL = "Microsoft Project (MS Project)";
 	function defaultThresholds() {
@@ -1317,6 +1350,7 @@
 		const titleEl = document.getElementById("projectTitle");
 		const courseEl = document.getElementById("courseTitle");
 		let loadedProjectId = null;
+		let session = null;
 		let projectStale = false;
 		function markProjectStale() {
 			if (projectStale) return;
@@ -1342,27 +1376,33 @@
 			const p = window.GPI.active();
 			if (!p) return;
 			loadedProjectId = window.GPI.activeId();
+			session = window.GPI.openSession("schedulePlan");
 			if (p.meta) {
 				if (p.meta.name) titleEl.value = p.meta.name;
 				if (p.meta.course) courseEl.value = p.meta.course;
 			}
 			const mod = p.modules && p.modules.schedulePlan;
 			state = mod ? mergeWithDefaults(mod) : normalizeState(defaultState());
+			if (mod) window.GPI.rebaseSession(session, state);
 			fullRender();
 			refreshPeopleList();
 			setStatus(mod ? "Proyecto cargado desde el Panel de Control." : "Proyecto sin plan de cronograma todavía. Completa las secciones, o usa ⌘ Cargar ejemplo para explorar el caso DISTRIB+.");
 		}
 		function push() {
-			if (!window.GPI.active()) return;
+			if (!window.GPI.active()) return false;
 			if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
 				markProjectStale();
-				return;
+				return false;
 			}
-			window.GPI.setModule("schedulePlan", state, loadedProjectId);
-			window.GPI.patchMeta({
+			const r = pushWithSession(window.GPI, "schedulePlan", "El plan de cronograma", state, {
 				name: titleEl.value,
 				course: courseEl.value
-			}, loadedProjectId);
+			}, session, {
+				setStatus,
+				onStale: markProjectStale
+			});
+			session = r.session;
+			return r.ok;
 		}
 		const proj = window.GPI.active();
 		if (proj) pull();
@@ -1393,9 +1433,9 @@
 		bar.innerHTML = "<span class=\"gpi-dot\"></span><span>Panel: <b>" + String(name || "—").replace(/</g, "&lt;") + "</b></span><button class=\"gpi-btn\" id=\"gpiSyncBtn\">☁ Sincronizar</button><a class=\"gpi-btn\" href=\"Panel_Control.html\">⌂ Panel</a>";
 		document.body.appendChild(bar);
 		bar.querySelector("#gpiSyncBtn").addEventListener("click", () => {
-			pushFn();
+			const ok = pushFn();
 			const b = bar.querySelector("#gpiSyncBtn"), t = b.textContent;
-			b.textContent = "✓ Sincronizado";
+			b.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar";
 			setTimeout(() => {
 				b.textContent = t;
 			}, 1400);

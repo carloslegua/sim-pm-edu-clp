@@ -22,7 +22,7 @@
    el DOM/rutas dinámicas).
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
-import type { CharterModule, ProjectMeta, WbsModule } from "../../core/types";
+import type { CharterModule, EditSession, ProjectMeta, WbsModule, WriteResult } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global { interface Window { GPI?: GpiApi; } }
@@ -274,6 +274,9 @@ let state: CharterState = defaultState();
 // se haya activado desde otra pestaña mientras esta seguía abierta (bug
 // real reportado por el usuario: Acta de A guardada sobre B).
 let loadedProjectId: string | null = null;
+// Versión del Acta (y de los metadatos) que esta pestaña cargó: el núcleo
+// la compara antes de guardar y NO sobrescribe si otra pestaña la cambió.
+let session: EditSession | null = null;
 let projectStale = false;
 
 // ---------- utilidades ----------
@@ -877,10 +880,24 @@ function markProjectStale(): void {
     banner.classList.add("show");
   }
 }
-function gpiPush(): void {
-  if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
-  if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) { markProjectStale(); return; }
-  window.GPI.setModule("charter", state, loadedProjectId);
+// Resultado común de escritura (ver GPI.saveModule/describeWrite): el estado
+// que se muestra sale de lo que el núcleo DIJO que pasó, no de suponer éxito.
+// Un conflicto (otra pestaña cambió el Acta después de abrir esta) no se
+// sobrescribe -- se avisa con el mismo banner que ya usa el cambio de proyecto.
+function reportWrite(r: WriteResult, label: string): boolean {
+  if (r.status === "saved" || r.status === "unchanged") return true;
+  if (r.status === "rejected" && r.reason === "project-changed") { markProjectStale(); return false; }
+  const msg = window.GPI!.describeWrite(r, label);
+  setStatus(msg);
+  const banner = document.getElementById("banner");
+  if (banner && (r.status === "conflict" || r.status === "pending")) { banner.textContent = msg; banner.classList.add("show"); }
+  return false;
+}
+function gpiPush(): boolean {
+  if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return false;
+  if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) { markProjectStale(); return false; }
+  const rMod = window.GPI.saveModule("charter", state, session);
+  if (!session && rMod.status === "saved") session = window.GPI.openSession("charter"); // módulo que arrancó sin proyecto: desde ahora sí hay versión que vigilar
   const patch: Record<string, unknown> = {
     name: (document.getElementById("projectTitle") as HTMLInputElement).value,
     course: (document.getElementById("courseTitle") as HTMLInputElement).value
@@ -889,7 +906,8 @@ function gpiPush(): void {
   if ((state.identification.manager || "").trim()) patch.manager = state.identification.manager;
   if ((state.identification.client || "").trim()) patch.client = state.identification.client;
   if (Number(state.budget.amount) > 0) { patch.capex = state.budget.amount; patch.currency = state.budget.currency; }
-  window.GPI.patchMeta(patch, loadedProjectId);
+  const rMeta = window.GPI.saveMeta(patch as Partial<ProjectMeta>, session);
+  return reportWrite(rMod, "El Acta") && reportWrite(rMeta, "Los datos del proyecto");
 }
 
 function init(): void {
@@ -906,9 +924,16 @@ function init(): void {
         if (proj.meta.name) titleEl.value = proj.meta.name;
         if (proj.meta.course) courseEl.value = proj.meta.course;
       }
+      // Sesión de edición: proyecto + versión del Acta que esta pestaña cargó
+      // (se pide en el mismo instante en que se lee el dato).
+      session = window.GPI.openSession("charter");
       const mod = window.GPI.getModule("charter");
       if (mod) {
         state = normalizeState(mod);
+        // normalizeState agrega valores por defecto: sin esto, un guardado de
+        // salida SIN ediciones ya difiere del dato crudo y se trataría como
+        // modificación (y, si otra pestaña cambió el Acta, como conflicto).
+        window.GPI.rebaseSession(session, state);
       } else {
         // Primera vez: precargar identificación y presupuesto desde los
         // datos comunes del Panel para no arrancar de cero.
@@ -938,7 +963,7 @@ function init(): void {
   renderAll();
 }
 
-function gpiBadge(name: string | undefined, pushFn: () => void): void {
+function gpiBadge(name: string | undefined, pushFn: () => boolean): void {
   const css = document.createElement("style");
   css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:42px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-dot{width:8px;height:8px;border-radius:50%;background:#00c2a8;box-shadow:0 0 0 3px rgba(0,194,168,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#0090c2;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#00b6ec;background:#fff}";
   document.head.appendChild(css);
@@ -948,7 +973,7 @@ function gpiBadge(name: string | undefined, pushFn: () => void): void {
   document.body.appendChild(bar);
   const sb = bar.querySelector("#gpiSyncBtn");
   if (sb) sb.addEventListener("click", () => {
-    pushFn(); const t = sb.textContent; sb.textContent = "✓ Sincronizado";
+    const ok = pushFn(); const t = sb.textContent; sb.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar";
     setTimeout(() => { sb.textContent = t; }, 1400);
   });
 }

@@ -1,4 +1,37 @@
 (function() {
+	//#region src/shared/write-session.ts
+	function writeOk(r) {
+		return r.status === "saved" || r.status === "unchanged";
+	}
+	function showWriteProblem(msg, setStatus) {
+		setStatus(msg);
+		const banner = document.getElementById("banner");
+		if (banner) {
+			banner.textContent = msg;
+			banner.classList.add("show");
+		}
+	}
+	function pushWithSession(G, name, label, data, patch, session, hooks) {
+		const rMod = G.saveModule(name, data, session);
+		const next = !session && rMod.status === "saved" ? G.openSession(name) : session;
+		const rMeta = patch ? G.saveMeta(patch, session) : null;
+		const problems = [[rMod, label]];
+		if (rMeta) problems.push([rMeta, "Los datos del proyecto"]);
+		for (const [r, lab] of problems) {
+			if (writeOk(r)) continue;
+			if (r.status === "rejected" && r.reason === "project-changed") hooks.onStale();
+			else showWriteProblem(G.describeWrite(r, lab), hooks.setStatus);
+			return {
+				ok: false,
+				session: next
+			};
+		}
+		return {
+			ok: true,
+			session: next
+		};
+	}
+	//#endregion
 	//#region src/modules/cronograma-cpm/main.ts
 	var mode = "live";
 	var stateLive = {
@@ -14,6 +47,7 @@
 	var spLive = null;
 	var durMode = "det";
 	var loadedProjectId = null;
+	var session = null;
 	var projectStale = false;
 	function state() {
 		return mode === "sample" ? stateSample : stateLive;
@@ -702,17 +736,21 @@
 		}
 	}
 	function gpiPush() {
-		if (mode === "sample") return;
-		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
+		if (mode === "sample") return false;
+		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return false;
 		if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
 			markProjectStale();
-			return;
+			return false;
 		}
-		window.GPI.setModule("schedule", stateLive, loadedProjectId);
-		window.GPI.patchMeta({
+		const r = pushWithSession(window.GPI, "schedule", "El cronograma", stateLive, {
 			name: document.getElementById("projectTitle").value,
 			course: document.getElementById("courseTitle").value
-		}, loadedProjectId);
+		}, session, {
+			setStatus,
+			onStale: markProjectStale
+		});
+		session = r.session;
+		return r.ok;
 	}
 	function commit(statusMsg) {
 		if (statusMsg) setStatus(statusMsg);
@@ -1458,8 +1496,12 @@
 				if (proj.meta.course) document.getElementById("courseTitle").value = proj.meta.course;
 			}
 			gpiPullAll();
+			session = window.GPI.openSession("schedule");
 			const mod = window.GPI.getModule("schedule");
-			if (mod) stateLive = normSchedule(mod);
+			if (mod) {
+				stateLive = normSchedule(mod);
+				window.GPI.rebaseSession(session, stateLive);
+			}
 			if (!wbsLive || !wbsLive.nodes || !actsLive || !Object.keys(actsLive.byLeaf || {}).length) {
 				const bn = document.getElementById("banner");
 				bn.classList.add("show");
@@ -1499,9 +1541,9 @@
 		document.body.appendChild(bar);
 		const sb = bar.querySelector("#gpiSyncBtn");
 		if (sb) sb.addEventListener("click", () => {
-			pushFn();
+			const ok = pushFn();
 			const t = sb.textContent;
-			sb.textContent = "✓ Sincronizado";
+			sb.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar";
 			setTimeout(() => {
 				sb.textContent = t;
 			}, 1400);

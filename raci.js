@@ -1,4 +1,37 @@
 (function() {
+	//#region src/shared/write-session.ts
+	function writeOk(r) {
+		return r.status === "saved" || r.status === "unchanged";
+	}
+	function showWriteProblem(msg, setStatus) {
+		setStatus(msg);
+		const banner = document.getElementById("banner");
+		if (banner) {
+			banner.textContent = msg;
+			banner.classList.add("show");
+		}
+	}
+	function pushWithSession(G, name, label, data, patch, session, hooks) {
+		const rMod = G.saveModule(name, data, session);
+		const next = !session && rMod.status === "saved" ? G.openSession(name) : session;
+		const rMeta = patch ? G.saveMeta(patch, session) : null;
+		const problems = [[rMod, label]];
+		if (rMeta) problems.push([rMeta, "Los datos del proyecto"]);
+		for (const [r, lab] of problems) {
+			if (writeOk(r)) continue;
+			if (r.status === "rejected" && r.reason === "project-changed") hooks.onStale();
+			else showWriteProblem(G.describeWrite(r, lab), hooks.setStatus);
+			return {
+				ok: false,
+				session: next
+			};
+		}
+		return {
+			ok: true,
+			session: next
+		};
+	}
+	//#endregion
 	//#region src/modules/raci/main.ts
 	var RACI_DEFS = [
 		{
@@ -380,6 +413,7 @@
 	var cols = [];
 	var assignments = {};
 	var loadedProjectId = null;
+	var session = null;
 	var projectStale = false;
 	function loadSample() {
 		mode = "sample";
@@ -389,6 +423,7 @@
 	}
 	function tryLoadLive() {
 		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return false;
+		session = window.GPI.openSession("raci");
 		const wbsMod = window.GPI.getModule("wbs");
 		const obsMod = window.GPI.getModule("obs");
 		const leaves = window.GPI.util.wbsLeaves(wbsMod || void 0);
@@ -438,16 +473,21 @@
 			markProjectStale();
 			return;
 		}
-		window.GPI.setModule("raci", { assignments }, loadedProjectId);
+		const courseEl = document.getElementById("courseTitle");
+		const r = pushWithSession(window.GPI, "raci", "La matriz RACI", { assignments }, opts && opts.meta && courseEl ? { course: courseEl.value } : null, session, {
+			setStatus,
+			onStale: markProjectStale
+		});
+		session = r.session;
+		if (!r.ok) return;
 		const wbsMod = window.GPI.getModule("wbs");
 		const obsMod = window.GPI.getModule("obs");
 		if (wbsMod && obsMod) {
 			const updated = window.GPI.util.applyRaciToWbs(wbsMod, { assignments }, obsMod);
-			window.GPI.setModule("wbs", updated, loadedProjectId);
-		}
-		if (opts && opts.meta) {
-			const courseEl = document.getElementById("courseTitle");
-			if (courseEl) window.GPI.patchMeta({ course: courseEl.value }, loadedProjectId);
+			window.GPI.writeModule("wbs", updated, {
+				projectId: loadedProjectId,
+				derived: true
+			});
 		}
 	}
 	function render() {

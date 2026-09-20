@@ -1,7 +1,41 @@
 (function() {
+	//#region src/shared/write-session.ts
+	function writeOk(r) {
+		return r.status === "saved" || r.status === "unchanged";
+	}
+	function showWriteProblem(msg, setStatus) {
+		setStatus(msg);
+		const banner = document.getElementById("banner");
+		if (banner) {
+			banner.textContent = msg;
+			banner.classList.add("show");
+		}
+	}
+	function pushWithSession(G, name, label, data, patch, session, hooks) {
+		const rMod = G.saveModule(name, data, session);
+		const next = !session && rMod.status === "saved" ? G.openSession(name) : session;
+		const rMeta = patch ? G.saveMeta(patch, session) : null;
+		const problems = [[rMod, label]];
+		if (rMeta) problems.push([rMeta, "Los datos del proyecto"]);
+		for (const [r, lab] of problems) {
+			if (writeOk(r)) continue;
+			if (r.status === "rejected" && r.reason === "project-changed") hooks.onStale();
+			else showWriteProblem(G.describeWrite(r, lab), hooks.setStatus);
+			return {
+				ok: false,
+				session: next
+			};
+		}
+		return {
+			ok: true,
+			session: next
+		};
+	}
+	//#endregion
 	//#region src/modules/scope-statement/main.ts
 	var state;
 	var loadedProjectId = null;
+	var session = null;
 	var projectStale = false;
 	function markProjectStale() {
 		if (projectStale) return;
@@ -570,15 +604,20 @@
 		if (gpiOn() && window.GPI.available() && window.GPI.active()) {
 			if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
 				markProjectStale();
-				return;
+				return false;
 			}
-			window.GPI.setModule("scopeStatement", serialize(), loadedProjectId);
-			window.GPI.patchMeta({
+			const r = pushWithSession(window.GPI, "scopeStatement", "El Enunciado del Alcance", serialize(), {
 				name: $("projectTitle").value,
 				course: $("courseTitle").value
-			}, loadedProjectId);
+			}, session, {
+				setStatus,
+				onStale: markProjectStale
+			});
+			session = r.session;
+			if (!r.ok) return false;
 		}
 		setStatus("Cambios guardados.");
+		return true;
 	}
 	function serialize() {
 		return {
@@ -828,9 +867,11 @@
 		const proj = activeProject();
 		if (proj) {
 			loadedProjectId = window.GPI.activeId();
+			session = window.GPI.openSession("scopeStatement");
 			const d = mod("scopeStatement");
 			if (d) {
 				state = normalize(d);
+				window.GPI.rebaseSession(session, serialize());
 				setStatus("Cargado desde el Panel de Control.");
 			} else {
 				state = blank();
@@ -877,9 +918,9 @@
 		document.body.appendChild(bar);
 		const sb = bar.querySelector("#gpiSyncBtn");
 		if (sb) sb.onclick = () => {
-			persist();
+			const ok = persist();
 			const t = sb.textContent;
-			sb.textContent = "✓ Sincronizado";
+			sb.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar";
 			setTimeout(() => {
 				sb.textContent = t;
 			}, 1400);

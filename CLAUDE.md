@@ -115,6 +115,8 @@ src/core/gpi-core.ts             → gpi-core.js           (capa de datos)
 src/core/types.ts                → (solo tipos, no compila a artefacto)
 src/modules/<clave>/main.ts      → <clave>.js            (un módulo HTML)
 src/shared/styles/shared.css     → gpi-shared.css        (CSS común)
+src/shared/write-session.ts      → (se inlinea en cada IIFE) guardado con sesión de
+                                    edición + resultado común de escritura
 configs/<clave>.vite.config.ts   → config de build de ese módulo
 configs/lib.config.mjs           → factory compartida de vite.config
 scripts/sync-artifact.mjs        → copia .build-tmp/<clave>/* a la raíz

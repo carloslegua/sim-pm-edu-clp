@@ -1,4 +1,37 @@
 (function() {
+	//#region src/shared/write-session.ts
+	function writeOk(r) {
+		return r.status === "saved" || r.status === "unchanged";
+	}
+	function showWriteProblem(msg, setStatus) {
+		setStatus(msg);
+		const banner = document.getElementById("banner");
+		if (banner) {
+			banner.textContent = msg;
+			banner.classList.add("show");
+		}
+	}
+	function pushWithSession(G, name, label, data, patch, session, hooks) {
+		const rMod = G.saveModule(name, data, session);
+		const next = !session && rMod.status === "saved" ? G.openSession(name) : session;
+		const rMeta = patch ? G.saveMeta(patch, session) : null;
+		const problems = [[rMod, label]];
+		if (rMeta) problems.push([rMeta, "Los datos del proyecto"]);
+		for (const [r, lab] of problems) {
+			if (writeOk(r)) continue;
+			if (r.status === "rejected" && r.reason === "project-changed") hooks.onStale();
+			else showWriteProblem(G.describeWrite(r, lab), hooks.setStatus);
+			return {
+				ok: false,
+				session: next
+			};
+		}
+		return {
+			ok: true,
+			session: next
+		};
+	}
+	//#endregion
 	//#region src/modules/pert/main.ts
 	var mode = "live";
 	var stateLive = {
@@ -6,6 +39,7 @@
 		inputMode: "dias"
 	};
 	var loadedProjectId = null;
+	var session = null;
 	var projectStale = false;
 	var stateSample = null;
 	var wbsLive = null;
@@ -1237,17 +1271,21 @@
 		}
 	}
 	function gpiPush() {
-		if (mode === "sample") return;
-		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
+		if (mode === "sample") return false;
+		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return false;
 		if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) {
 			markProjectStale();
-			return;
+			return false;
 		}
-		window.GPI.setModule("pert", stateLive, loadedProjectId);
-		window.GPI.patchMeta({
+		const r = pushWithSession(window.GPI, "pert", "El análisis PERT", stateLive, {
 			name: document.getElementById("projectTitle").value,
 			course: document.getElementById("courseTitle").value
-		}, loadedProjectId);
+		}, session, {
+			setStatus,
+			onStale: markProjectStale
+		});
+		session = r.session;
+		return r.ok;
 	}
 	var initialized = false;
 	function init() {
@@ -1264,8 +1302,12 @@
 					if (proj.meta.course) document.getElementById("courseTitle").value = proj.meta.course;
 				}
 				gpiPull();
+				session = window.GPI.openSession("pert");
 				const modData = window.GPI.getModule("pert");
-				if (modData) stateLive = normalizeState(modData);
+				if (modData) {
+					stateLive = normalizeState(modData);
+					window.GPI.rebaseSession(session, stateLive);
+				}
 				setStatus("Proyecto cargado desde el Panel de Control.");
 			}
 			window.addEventListener("beforeunload", gpiPush);
@@ -1302,9 +1344,9 @@
 		document.body.appendChild(bar);
 		const sb = bar.querySelector("#gpiSyncBtn");
 		if (sb) sb.addEventListener("click", () => {
-			pushFn();
+			const ok = pushFn();
 			const t = sb.textContent;
-			sb.textContent = "✓ Sincronizado";
+			sb.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar";
 			setTimeout(() => {
 				sb.textContent = t;
 			}, 1400);

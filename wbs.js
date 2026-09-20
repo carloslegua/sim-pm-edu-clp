@@ -1,4 +1,37 @@
 (function() {
+	//#region src/shared/write-session.ts
+	function writeOk(r) {
+		return r.status === "saved" || r.status === "unchanged";
+	}
+	function showWriteProblem(msg, setStatus) {
+		setStatus(msg);
+		const banner = document.getElementById("banner");
+		if (banner) {
+			banner.textContent = msg;
+			banner.classList.add("show");
+		}
+	}
+	function pushWithSession(G, name, label, data, patch, session, hooks) {
+		const rMod = G.saveModule(name, data, session);
+		const next = !session && rMod.status === "saved" ? G.openSession(name) : session;
+		const rMeta = patch ? G.saveMeta(patch, session) : null;
+		const problems = [[rMod, label]];
+		if (rMeta) problems.push([rMeta, "Los datos del proyecto"]);
+		for (const [r, lab] of problems) {
+			if (writeOk(r)) continue;
+			if (r.status === "rejected" && r.reason === "project-changed") hooks.onStale();
+			else showWriteProblem(G.describeWrite(r, lab), hooks.setStatus);
+			return {
+				ok: false,
+				session: next
+			};
+		}
+		return {
+			ok: true,
+			session: next
+		};
+	}
+	//#endregion
 	//#region src/modules/wbs/main.ts
 	var NODE_W = 180;
 	var NODE_H = 118;
@@ -1583,6 +1616,7 @@
 		const GPI = window.GPI;
 		const proj = GPI.active();
 		const loadedProjectId = proj ? GPI.activeId() : null;
+		let session = null;
 		let projectStale = false;
 		function markProjectStale() {
 			if (projectStale) return;
@@ -1599,6 +1633,7 @@
 		function pull() {
 			const p = GPI.active();
 			if (!p) return;
+			session = GPI.openSession("wbs");
 			if (p.meta) {
 				if (p.meta.name) titleEl.value = p.meta.name;
 				if (p.meta.course) courseEl.value = p.meta.course;
@@ -1628,6 +1663,11 @@
 				selectedId = rootId;
 				scheduleLockedLeafIds = new Set(schedSync.lockedLeafIds);
 				costEstimateLockedLeafIds = new Set(costSync.lockedLeafIds);
+				GPI.rebaseSession(session, {
+					rootId,
+					idCounter,
+					nodes
+				});
 				render();
 				setTimeout(fitToScreen, 50);
 				setStatus("Proyecto cargado desde el Panel de Control.");
@@ -1641,20 +1681,24 @@
 			}
 		}
 		function push() {
-			if (!GPI.active()) return;
+			if (!GPI.active()) return false;
 			if (loadedProjectId != null && GPI.activeId() !== loadedProjectId) {
 				markProjectStale();
-				return;
+				return false;
 			}
-			GPI.setModule("wbs", {
+			const r = pushWithSession(GPI, "wbs", "La EDT", {
 				rootId,
 				idCounter,
 				nodes
-			}, loadedProjectId);
-			GPI.patchMeta({
+			}, {
 				name: titleEl.value,
 				course: courseEl.value
-			}, loadedProjectId);
+			}, session, {
+				setStatus,
+				onStale: markProjectStale
+			});
+			session = r.session;
+			return r.ok;
 		}
 		requestGpiPush = push;
 		ensureProjectFresh = () => {
@@ -1781,9 +1825,9 @@
 		bar.innerHTML = "<span class=\"gpi-dot\"></span><span>Panel: <b>" + String(name || "—").replace(/</g, "&lt;") + "</b></span><button class=\"gpi-btn\" id=\"gpiSyncBtn\">☁ Sincronizar</button><a class=\"gpi-btn\" href=\"Panel_Control.html\">⌂ Panel</a>";
 		document.body.appendChild(bar);
 		bar.querySelector("#gpiSyncBtn").addEventListener("click", () => {
-			pushFn();
+			const ok = pushFn();
 			const b = bar.querySelector("#gpiSyncBtn"), t = b.textContent;
-			b.textContent = "✓ Sincronizado";
+			b.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar";
 			setTimeout(() => {
 				b.textContent = t;
 			}, 1400);

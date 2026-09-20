@@ -24,7 +24,7 @@
    sin gpi-core.js.
    ============================================================ */
 import type * as GpiCore from "../../core/gpi-core";
-import type { ActivitiesModule, CostEstimateModule, CostModule, ProjectMeta, WbsModule } from "../../core/types";
+import type { ActivitiesModule, CostEstimateModule, CostModule, EditSession, ProjectMeta, WbsModule, WriteResult } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -407,12 +407,28 @@ function markProjectStale(): void {
   if (d) d.style.background = "#dc3546";
 }
 
+// Versión de los costos que esta pestaña cargó (ver GPI.openSession): el
+// núcleo no sobrescribe si otra pestaña los cambió después.
+let session: EditSession | null = null;
+// El texto de estado sale del resultado REAL de la escritura (revisión
+// externa, hallazgo "media": con un error de cuota forzado el núcleo
+// conservaba los cambios pendientes pero esta pantalla decía "Sincronizado
+// con el Panel", porque se ignoraba el resultado y se marcaba éxito siempre).
+function reportWrite(r: WriteResult): void {
+  if (r.status === "rejected" && r.reason === "project-changed") { markProjectStale(); return; }
+  $("saveTxt").textContent = (GPI as GpiApi).describeWrite(r, "Estos datos de costos");
+  $("saveDot").style.background = "#dc3546";
+}
+
 function save(): void {
   if (gpiOn() && !(GPI as GpiApi).getModule("cost") && !userEdited) { buildJSON(); return; }
   if (gpiOn() && loadedProjectId != null && (GPI as GpiApi).activeId() !== loadedProjectId) { markProjectStale(); return; }
   let synced = false;
   if (gpiOn()) {
-    try { (GPI as GpiApi).setModule("cost", collect() as unknown as CostModule, loadedProjectId); synced = true; $("saveTxt").textContent = "Sincronizado con el Panel"; } catch (e) { /* noop */ }
+    const r = (GPI as GpiApi).saveModule("cost", collect() as unknown as CostModule, session);
+    if (!session && r.status === "saved") session = (GPI as GpiApi).openSession("cost");
+    if (r.status === "saved" || r.status === "unchanged") { synced = true; $("saveTxt").textContent = "Sincronizado con el Panel"; }
+    else { reportWrite(r); $("fcastEcho").textContent = ($("fcastFreq") as HTMLSelectElement).value.toLowerCase(); buildJSON(); return; }
   }
   if (!synced) {
     try {
@@ -488,6 +504,7 @@ function gpiBadge(): void {
 
 /* ---------- Init ---------- */
 function init(reload: boolean): void {
+  session = gpiOn() ? (GPI as GpiApi).openSession("cost") : null; // en el mismo instante en que load() lee el dato
   load();
   const connected = gpiOn();
   if (connected) loadedProjectId = (GPI as GpiApi).activeId();

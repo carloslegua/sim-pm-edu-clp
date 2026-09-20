@@ -274,6 +274,61 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
     expect(doc.getElementById("propsPanel")!.textContent).not.toMatch(/Tomado de Estimar los Costos/);
   });
 
+  async function abrirEdtDeA() {
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto A", course: "GPI", createdAt: 1, updatedAt: 1 },
+          modules: {
+            wbs: {
+              rootId: "root", idCounter: 2,
+              nodes: {
+                root: { id: "root", parentId: null, name: "Proyecto A", children: ["w1"], duration: 0, cost: 0, resource: "", percent: 0, start: "", end: "", notes: "", collapsed: false, orientation: "spread" },
+                w1: { id: "w1", parentId: "root", name: "Paquete de A", duration: 5, cost: 1000, resource: "", percent: 0, start: "", end: "", notes: "", children: [], collapsed: false, orientation: "spread" }
+              }
+            }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "WBS_Builder.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    return dom;
+  }
+
+  it("contrato de escritura: una escritura DERIVADA de otra pestaña (RACI -> Responsables) no provoca un falso conflicto en la EDT", async () => {
+    const dom = await abrirEdtDeA();
+    const win = dom.window as any, doc = dom.window.document;
+    const actual = JSON.parse(JSON.stringify(win.GPI.getModule("wbs")));
+    actual.nodes.w1.resource = "Ana";
+    win.GPI.writeModule("wbs", actual, { derived: true }); // como hace RACI: no sube la revisión
+
+    (doc.getElementById("btnAddPhase") as HTMLElement).click(); // edición propia de la EDT
+    dom.window.dispatchEvent(new dom.window.Event("beforeunload"));
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    expect(saved.projects.p1.modules.wbs.nodes.root.children.length).toBe(2); // sí se guardó la edición
+  });
+
+  it("contrato de escritura: otra pestaña EDITA la EDT del mismo proyecto -> el guardado de esta NO la sobrescribe y avisa", async () => {
+    const dom = await abrirEdtDeA();
+    const win = dom.window as any, doc = dom.window.document;
+    const otra = JSON.parse(JSON.stringify(win.GPI.getModule("wbs")));
+    otra.nodes.w1.name = "Renombrado en otra pestaña";
+    win.GPI.writeModule("wbs", otra); // edición real (sube la revisión)
+
+    (doc.getElementById("btnAddPhase") as HTMLElement).click();
+    dom.window.dispatchEvent(new dom.window.Event("beforeunload"));
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    expect(saved.projects.p1.modules.wbs.nodes.w1.name).toBe("Renombrado en otra pestaña");
+    expect(saved.projects.p1.modules.wbs.nodes.root.children.length).toBe(1);
+    expect(doc.getElementById("statusLeft")!.textContent).toMatch(/cambió en otra pestaña/);
+  });
+
   it("BUG REPORTADO: 'Sembrar Entregables' no debe mezclar la EDT de A con los entregables de B si otra pestaña activó B mientras tanto", async () => {
     // Repro: "Abrir WBS en A, activar B y pulsar Sembrar Entregables: B
     // recibe la EDT de A mezclada con sus entregables." -- p1 (A) y p2 (B)

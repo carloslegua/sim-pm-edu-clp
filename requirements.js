@@ -174,6 +174,15 @@
 			changeCounter: state.changeCounter
 		};
 	}
+	var session = null;
+	function reportWrite(r) {
+		if (r.status === "rejected" && r.reason === "project-changed") {
+			markProjectStale();
+			return;
+		}
+		$("saveTxt").textContent = GPI.describeWrite(r, "Los requisitos");
+		$("saveDot").style.background = "#dc3546";
+	}
 	function save() {
 		if (gpiOn() && !GPI.getModule("requirements") && !userEdited && !state.items.length) return;
 		if (gpiOn() && loadedProjectId != null && GPI.activeId() !== loadedProjectId) {
@@ -181,11 +190,17 @@
 			return;
 		}
 		let synced = false;
-		if (gpiOn()) try {
-			GPI.setModule("requirements", collect(), loadedProjectId);
-			synced = true;
-			$("saveTxt").textContent = "Sincronizado con el Panel";
-		} catch (e) {}
+		if (gpiOn()) {
+			const r = GPI.saveModule("requirements", collect(), session);
+			if (!session && r.status === "saved") session = GPI.openSession("requirements");
+			if (r.status === "saved" || r.status === "unchanged") {
+				synced = true;
+				$("saveTxt").textContent = "Sincronizado con el Panel";
+			} else {
+				reportWrite(r);
+				return;
+			}
+		}
 		if (!synced) try {
 			localStorage.setItem(STORE_KEY, JSON.stringify(collect()));
 			$("saveTxt").textContent = "Guardado " + (/* @__PURE__ */ new Date()).toLocaleTimeString("es-PE", {
@@ -1028,7 +1043,11 @@
 				code,
 				text: it.text
 			});
-			GPI.setModule("charter", ch, loadedProjectId);
+			const w = GPI.writeModule("charter", ch, { projectId: loadedProjectId });
+			if (w.status !== "saved") {
+				showToast(GPI.describeWrite(w, "El Acta"));
+				return;
+			}
 			it.sourceRanIds = (it.sourceRanIds || []).concat([rid]);
 			touch();
 			showToast(it.code + " ahora traza a " + code + " (agregado al Acta).");
@@ -1334,6 +1353,7 @@
 		});
 	}
 	function init() {
+		session = gpiOn() ? GPI.openSession("requirements") : null;
 		load();
 		renderAll();
 		const connected = gpiOn();

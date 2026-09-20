@@ -10,7 +10,8 @@
    de este módulo debe seguir funcionando aunque gpi-core.js no cargue.
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
-import type { ObsModule, ProjectMeta, WbsModule } from "../../core/types";
+import type { EditSession, ObsModule, ProjectMeta, WbsModule } from "../../core/types";
+import { pushWithSession } from "../../shared/write-session";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -112,6 +113,7 @@ let assignments: Assignments = {};
 // esta seguía abierta (bug real reportado por el usuario, confirmado
 // sistémico en los 13 módulos de herramienta).
 let loadedProjectId: string | null = null;
+let session: EditSession | null = null; // versión de la matriz que esta pestaña cargó (GPI.openSession)
 let projectStale = false;
 
 function loadSample(): void {
@@ -123,6 +125,7 @@ function loadSample(): void {
 
 function tryLoadLive(): boolean {
   if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return false;
+  session = window.GPI.openSession("raci"); // versión de la matriz que esta pestaña carga
   const wbsMod = window.GPI.getModule("wbs");
   const obsMod = window.GPI.getModule("obs");
   const leaves = window.GPI.util.wbsLeaves(wbsMod || undefined);
@@ -166,16 +169,20 @@ function syncToGpi(opts?: { meta?: boolean }): void {
   if (mode !== "live") return;
   if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return;
   if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) { markProjectStale(); return; }
-  window.GPI.setModule("raci", { assignments }, loadedProjectId);
+  // Guardado con sesión y resultado común (src/shared/write-session.ts).
+  const courseEl = document.getElementById("courseTitle") as HTMLInputElement | null;
+  const r = pushWithSession(window.GPI, "raci", "La matriz RACI", { assignments },
+    opts && opts.meta && courseEl ? { course: courseEl.value } : null, session, { setStatus, onStale: markProjectStale });
+  session = r.session;
+  if (!r.ok) return; // conflicto o rechazo: tampoco se reescribe la EDT derivada
   const wbsMod = window.GPI.getModule("wbs") as WbsModule | null;
   const obsMod = window.GPI.getModule("obs") as ObsModule | null;
   if (wbsMod && obsMod) {
     const updated = window.GPI.util.applyRaciToWbs(wbsMod, { assignments }, obsMod);
-    window.GPI.setModule("wbs", updated, loadedProjectId);
-  }
-  if (opts && opts.meta) {
-    const courseEl = document.getElementById("courseTitle") as HTMLInputElement | null;
-    if (courseEl) window.GPI.patchMeta({ course: courseEl.value }, loadedProjectId);
+    // Escritura DERIVADA: los Responsables de la EDT salen de esta matriz, no
+    // son una edición de la EDT -- no sube su revisión, para no provocar un
+    // falso conflicto en la pestaña de WBS Builder.
+    window.GPI.writeModule("wbs", updated, { projectId: loadedProjectId, derived: true });
   }
 }
 

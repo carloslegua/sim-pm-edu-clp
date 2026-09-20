@@ -1,4 +1,37 @@
 (function() {
+	//#region src/shared/write-session.ts
+	function writeOk(r) {
+		return r.status === "saved" || r.status === "unchanged";
+	}
+	function showWriteProblem(msg, setStatus) {
+		setStatus(msg);
+		const banner = document.getElementById("banner");
+		if (banner) {
+			banner.textContent = msg;
+			banner.classList.add("show");
+		}
+	}
+	function pushWithSession(G, name, label, data, patch, session, hooks) {
+		const rMod = G.saveModule(name, data, session);
+		const next = !session && rMod.status === "saved" ? G.openSession(name) : session;
+		const rMeta = patch ? G.saveMeta(patch, session) : null;
+		const problems = [[rMod, label]];
+		if (rMeta) problems.push([rMeta, "Los datos del proyecto"]);
+		for (const [r, lab] of problems) {
+			if (writeOk(r)) continue;
+			if (r.status === "rejected" && r.reason === "project-changed") hooks.onStale();
+			else showWriteProblem(G.describeWrite(r, lab), hooks.setStatus);
+			return {
+				ok: false,
+				session: next
+			};
+		}
+		return {
+			ok: true,
+			session: next
+		};
+	}
+	//#endregion
 	//#region src/modules/obs/main.ts
 	var NODE_W = 190;
 	var NODE_H = 100;
@@ -829,6 +862,7 @@
 		const GPI = window.GPI;
 		const proj = GPI.active();
 		const loadedProjectId = proj ? GPI.activeId() : null;
+		let session = null;
 		let projectStale = false;
 		function markProjectStale() {
 			if (projectStale) return;
@@ -856,6 +890,7 @@
 		function pull() {
 			const p = GPI.active();
 			if (!p) return;
+			session = GPI.openSession("obs");
 			if (p.meta) {
 				if (p.meta.name) titleEl.value = "Organización del Proyecto — " + p.meta.name;
 				if (p.meta.course) courseEl.value = p.meta.course;
@@ -866,6 +901,11 @@
 				rootId = mod.rootId;
 				idCounter = mod.idCounter || 1;
 				selectedId = rootId;
+				GPI.rebaseSession(session, {
+					rootId,
+					idCounter,
+					nodes
+				});
 				render();
 				setTimeout(fitToScreen, 50);
 				setStatus("Organigrama cargado desde el Panel de Control.");
@@ -878,17 +918,21 @@
 			refreshStakeholderList();
 		}
 		function push() {
-			if (!GPI.active()) return;
+			if (!GPI.active()) return false;
 			if (loadedProjectId != null && GPI.activeId() !== loadedProjectId) {
 				markProjectStale();
-				return;
+				return false;
 			}
-			GPI.setModule("obs", {
+			const r = pushWithSession(GPI, "obs", "El organigrama", {
 				rootId,
 				idCounter,
 				nodes
-			}, loadedProjectId);
-			GPI.patchMeta({ course: courseEl.value }, loadedProjectId);
+			}, { course: courseEl.value }, session, {
+				setStatus,
+				onStale: markProjectStale
+			});
+			session = r.session;
+			return r.ok;
 		}
 		if (proj) pull();
 		else refreshStakeholderList();
@@ -914,9 +958,9 @@
 		bar.innerHTML = "<span class=\"gpi-dot\"></span><span>Panel: <b>" + String(name || "—").replace(/</g, "&lt;") + "</b></span><button class=\"gpi-btn\" id=\"gpiSyncBtn\">☁ Sincronizar</button><a class=\"gpi-btn\" href=\"Panel_Control.html\">⌂ Panel</a>";
 		document.body.appendChild(bar);
 		bar.querySelector("#gpiSyncBtn").addEventListener("click", () => {
-			pushFn();
+			const ok = pushFn();
 			const b = bar.querySelector("#gpiSyncBtn"), t = b.textContent;
-			b.textContent = "✓ Sincronizado";
+			b.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar";
 			setTimeout(() => {
 				b.textContent = t;
 			}, 1400);
