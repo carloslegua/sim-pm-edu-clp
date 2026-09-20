@@ -190,10 +190,10 @@
 			key: "evm",
 			group: "cost",
 			name: "Valor Ganado (EVM)",
-			file: null,
+			file: "Valor_Ganado.html",
 			icon: "📈",
 			color: "#2e4374",
-			desc: "PV, EV, AC, CV, SV, CPI, SPI, EAC y línea de corte dinámica."
+			desc: "Seguimiento del valor ganado: PV sobre la línea base del cronograma, EV con técnica por paquete, AC, CV, SV, CPI, SPI, pronósticos (EAC/ETC/VAC/TCPI) y cronograma ganado (Earned Schedule), con los umbrales de los planes de Costos y del Cronograma."
 		},
 		{
 			key: "quality",

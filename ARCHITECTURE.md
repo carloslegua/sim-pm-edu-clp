@@ -1255,6 +1255,50 @@ laborables: la proporción no representa fines de semana ni feriados.
   actividad crítica (ocurre igual con desfases en días laborables); no se
   tocó aquí.
 
+**Valor_Ganado.html** (módulo `evm`, PMBOK Practice Standard for EVM + AACE) —
+cierra el ciclo planificar → controlar de la auditoría metodológica. Lógica pura en
+`src/shared/evm.ts` (inlineada en `evm.js`); el módulo es solo interfaz. Patrón del
+Registro de Riesgos (`window.GPI` explícito, sesión de edición con `pushWithSession`,
+todo texto interpolado escapado). Con un proyecto activo arranca **en blanco**
+(regla de oro); en modo independiente muestra el ejemplo.
+- **Qué mide y de dónde sale cada dato.** **BAC** = el costo del **trabajo** por
+  paquete (Estimar los Costos; si no, el costo de la EDT): sin contingencia ni reserva
+  de gestión, que se comparan con el sobrecosto pronosticado. **PV** = ese costo
+  repartido **linealmente** entre el inicio más temprano y el fin más tardío de las
+  actividades de cada paquete, en la **línea base del cronograma** (LB-n de
+  Cronograma/CPM; si no existe usa el cronograma vigente y lo avisa). **EV** = según la
+  **técnica por paquete**: 0/100, 50/50, % físico o LOE (EV = PV: no mide desempeño y se
+  avisa su peso); por omisión la del Plan de Costos (`plan.evMethod`; «hitos ponderados» y
+  «apportioned effort» se aplican como % físico y se avisa). **AC** y el **% de avance**
+  los reporta el equipo por paquete en cada corte (módulo `evm`, campo nuevo; «Traer
+  avance de la EDT» copia el % de WBS Builder).
+- **Índices y pronósticos**: CV, SV, CPI, SPI; **EAC** típico (BAC/CPI), atípico
+  (AC + BAC − EV) y combinado (AC + (BAC − EV)/(CPI × SPI)); ETC, VAC y TCPI (a BAC y a
+  EAC). Sin costo real registrado no hay CPI (null, no infinito).
+- **Cronograma ganado (Earned Schedule, Lipke)**: el SPI en dinero tiende a 1 al final
+  aunque el proyecto termine tarde; ES/AT, SV(t) y la duración pronosticada (PD/SPI(t),
+  con su fecha de fin) no. Probado: con todo el trabajo hecho a los 25 d de 20
+  planificados, SPI $ = 1 pero SPI(t) = 0,8.
+- **Umbrales de los planes**: CPI/CV del Plan de Costos (desfavorable por debajo; ≤ alerta
+  = ámbar, ≤ escalamiento = rojo) y SPI/SV % del Plan del Cronograma (verde ≥ …, rojo < …);
+  el estado es el peor indicador. La sobrecosto pronosticado (VAC típico) se compara con la
+  contingencia disponible de Costos. Una variación fuera de umbral dispara análisis,
+  pronóstico y decisión de respuesta: no obliga a un cambio de línea base.
+- **Historial de cortes** (`reports`, uno por fecha) y curva S (PV, EV, AC). Avisos de
+  calidad de datos: sin línea base, paquetes sin actividades, avance sin reportar,
+  LOE alto, EV ≫ PV (avance de otra fecha), EV > BAC.
+- **Ejemplo DISTRIB+ ampliado, mismo caso** (`src/shared/evm-sample.ts`): 18 paquetes de
+  WBS Builder (Σ 7.100.000), red de 273 d; corte **2026-10-30 (día 85)**: PV 3.439.533 ·
+  EV 3.182.500 · AC 3.253.500 → **SPI 0,925 (ámbar), CPI 0,978 (verde), CV −71.000
+  (ámbar)**, EAC típico 7.258.397, fin pronosticado ≈ 2027-08-16 (plan 2027-07-21). La
+  historia cuadra con los riesgos: 2.4 Permisos (licencia retrasada, R-01) con 0/100 no
+  gana hasta emitirse; 3.1 Estructuras (R-08 fabricación y R-02 acero) al 90 % y sobre el
+  presupuesto; 1.3 Informes es LOE. Prueba de oro `evm-sample.test.ts`; smoke (12) y e2e en
+  Chrome real: el proyecto armado con los botones reales, con línea base, da exactamente las
+  mismas cifras que el ejemplo independiente.
+- **Límites declarados**: no hay recursos ni compromisos (el costo real es el reportado); el
+  PV es lineal por paquete; el seguimiento no reemplaza el análisis de causa raíz.
+
 **Risk_Register.html** (módulo `risks`, PMBOK + AACE) — primer módulo
 **nuevo** posterior a la migración (no es un port): patrón de Stakeholder
 Studio (`addEventListener` exclusivo, `window.GPI` explícito, sesión de

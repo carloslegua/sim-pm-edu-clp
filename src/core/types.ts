@@ -330,7 +330,19 @@ export interface RisksModule {
   idCounter?: number;
 }
 
+// Seguimiento de Valor Ganado (Valor_Ganado.html): lo que el equipo REPORTA en cada corte (avance físico y costo real por
+// paquete de trabajo, técnica de medición y fecha de corte) y el historial de cortes. El PV sale de la línea base del
+// cronograma y el BAC del costo del trabajo: no se guardan aquí. Esquema y normalización en shared/evm.ts.
+export interface EvmModule {
+  statusDate?: string;
+  percent?: Record<string, number | null>;
+  ac?: Record<string, number | null>;
+  techniques?: Record<string, string>;
+  reports?: unknown[];
+}
+
 export interface ProjectModules {
+  evm?: EvmModule | null;
   charter?: CharterModule | null;
   stakeholders?: StakeholdersModule | null;
   wbs?: WbsModule | null;

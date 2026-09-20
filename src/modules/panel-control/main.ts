@@ -150,8 +150,8 @@ let MODULES: ModuleDef[] = [
     desc: "Plan de gestión de costos (PMBOK 8 + AACE): moneda, clase de estimado, contingencia e inflación, umbrales CV/CPI, órdenes de cambio y documento BOE. Toma la estimación base de la EDT o de Estimar los Costos." },
   { key: "costEstimate", group: "cost", name: "Estimar los Costos", file: "Estimar_Costos.html", icon: "🧮", color: "#00967f",
     desc: "Estimación de costo por paquete de trabajo (Unidad, Cantidad, Precio unitario → Subtotal), importada/exportada desde un .xlsx verificado por Código EDT y nombre contra la EDT. Alimenta el costo real del WBS y la línea base de Planificar la Gestión Financiera." },
-  { key: "evm", group: "cost", name: "Valor Ganado (EVM)", file: null, icon: "📈", color: "#2e4374",
-    desc: "PV, EV, AC, CV, SV, CPI, SPI, EAC y línea de corte dinámica." },
+  { key: "evm", group: "cost", name: "Valor Ganado (EVM)", file: "Valor_Ganado.html", icon: "📈", color: "#2e4374",
+    desc: "Seguimiento del valor ganado: PV sobre la línea base del cronograma, EV con técnica por paquete, AC, CV, SV, CPI, SPI, pronósticos (EAC/ETC/VAC/TCPI) y cronograma ganado (Earned Schedule), con los umbrales de los planes de Costos y del Cronograma." },
 
   // — Calidad —
   { key: "quality", group: "qual", name: "Gestión de la Calidad", file: null, icon: "✔", color: "#00c2a8",

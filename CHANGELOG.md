@@ -11,6 +11,21 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Nuevo módulo «Valor Ganado (EVM)» (`Valor_Ganado.html`, auditoría metodológica PMI /
+  AACE)** — cierra el ciclo planificar → controlar. Cruza el costo del trabajo por paquete
+  (**BAC**) con la **línea base del cronograma** (PV, distribuido en el tiempo), lo que el
+  equipo reporta en cada corte (avance físico y costo real) y la **técnica de valor
+  ganado por paquete** (0/100, 50/50, % físico, LOE; por omisión la del Plan de Costos) para
+  obtener EV, CV, SV, CPI, SPI, los pronósticos **EAC** (típico, atípico y combinado), ETC,
+  VAC y TCPI, y el **cronograma ganado (Earned Schedule)**, que a diferencia del SPI en dinero no
+  tiende a 1 cuando el proyecto termina tarde (con fecha de fin pronosticada). Consume los
+  umbrales CPI/CV del Plan de Costos y SPI/SV del Plan del Cronograma, compara el sobrecosto
+  pronosticado con la contingencia disponible, guarda el historial de cortes y dibuja la curva S.
+  Ejemplo DISTRIB+ ampliado (corte 2026-10-30: SPI 0,925 ámbar, CPI 0,978 verde, CV −71.000 ámbar,
+  coherente con los riesgos R-01/R-02/R-08). Nuevos `src/shared/evm.ts`, `src/shared/evm-sample.ts`,
+  módulo `evm` (opcional) y tarjeta del Panel activada. Pruebas: `evm.test.ts` (20),
+  `evm-sample.test.ts` (3, oro), smoke (12) y e2e en Chrome real (proyecto real = ejemplo
+  independiente). Ver ARCHITECTURE.md.
 - **Costos — la clase del estimado se contrasta con la madurez de la definición y su
   rango de exactitud se aplica al presupuesto (auditoría metodológica AACE 17R-97 /
   56R-08)** — la clase se elegía a mano y su rango era solo un texto. Con un proyecto
