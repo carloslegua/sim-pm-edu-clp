@@ -66,6 +66,29 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Costos: el cambio de alcance ya no se equipara con la reserva de
+  gestión, y aprobar una orden ya no se confunde con cambiar la línea base
+  (revisión externa, alta; PMI: reservas y alcance / presupuesto y línea
+  base)** — los textos de Costos enseñaban que un cambio de alcance
+  «requiere reserva de gestión» y que la orden aprobada «actualiza la
+  línea base»; en el código, «Aprobada» solo sumaba totales del registro,
+  sin transferencia presupuestaria ni línea base nueva. Ahora cada orden se
+  evalúa en tres ejes independientes: **naturaleza** (riesgo materializado
+  / trabajo imprevisto dentro del alcance / cambio de alcance, obligatoria),
+  **fondeo** (contingencia / reserva de gestión / financiamiento adicional
+  nuevo) y **aprobación** (quién aprueba, autorización expresa del sponsor
+  si usa reserva o fondos adicionales, y saldos disponibles: no se puede
+  comprometer más de lo que hay; un cambio de alcance no se financia con
+  contingencia). Cada orden muestra su **efecto presupuestario**. Aprobar
+  compromete los fondos pero **no cambia el BAC**: la línea base solo se
+  modifica con «Incorporar a la línea base», que deja una versión LB-n
+  (fecha, órdenes, BAC anterior → nuevo, aprobador) y bloquea la orden. Los
+  indicadores muestran BAC vigente, pendiente de incorporar y reservas
+  disponibles; el Panel muestra el BAC vigente. Los `.json` antiguos abren
+  igual (campos nuevos opcionales; las pendientes deben clasificarse antes
+  de aprobarse). Lógica pura en `src/shared/change-orders.ts`; pruebas:
+  `change-orders.test.ts` (23) y 5 smoke nuevos de Costos.
+
 - **Los desfases en días transcurridos se calculan sobre fechas reales,
   no con una proporción semanal (revisión externa, alta)** — `cpm()`
   convertía un desfase `ed` con `lag × (días laborables / 7)`. Un hito el

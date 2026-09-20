@@ -1,5 +1,42 @@
 var GPI = (function(exports) {
 	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
+	var num = (v) => Number(v) || 0;
+	function fundOf(o) {
+		return o.fund === "Contingencia" ? "cont" : o.fund === "Financiamiento adicional" ? "extra" : "mgmt";
+	}
+	function analyzeChangeOrders(orders, budget) {
+		const b = budget || {};
+		let approved = 0, fromCont = 0, fromMgmt = 0, fromExtra = 0, pending = 0, incorporated = 0, pendingBase = 0;
+		(orders || []).forEach((o) => {
+			if (!o) return;
+			if (o.status === "Pendiente") pending++;
+			if (o.status !== "Aprobada") return;
+			const a = num(o.cost), f = fundOf(o);
+			approved += a;
+			if (f === "cont") fromCont += a;
+			else {
+				if (f === "extra") fromExtra += a;
+				else fromMgmt += a;
+				if (o.baselined) incorporated += a;
+				else pendingBase += a;
+			}
+		});
+		const bacInitial = num(b.bac), bacCurrent = bacInitial + incorporated, mgmtAvailable = num(b.mgmt) - fromMgmt;
+		return {
+			approved,
+			fromContingency: fromCont,
+			fromMgmt,
+			fromExtra,
+			pending,
+			bacInitial,
+			bacCurrent,
+			pendingBaseline: pendingBase,
+			contingencyAvailable: num(b.cont) - fromCont,
+			mgmtAvailable,
+			totalBudget: bacCurrent + pendingBase + mgmtAvailable
+		};
+	}
+	//#endregion
 	//#region src/core/gpi-core.ts
 	var KEY = "gpi_db";
 	var SCHEMA = "gpi.project/v1";
@@ -1508,13 +1545,10 @@ var GPI = (function(exports) {
 		const total = Number(comp.total) || 0;
 		const contPct = base ? Math.round((Number(comp.cont) || 0) / base * 100) : 0;
 		const co = cost && cost.changeOrders || [];
-		let approved = 0, coFromCont = 0, coFromMgmt = 0, pending = 0;
-		co.forEach((r) => {
-			if (r && r.status === "Aprobada") {
-				approved += Number(r.cost) || 0;
-				if (r.fund === "Contingencia") coFromCont += Number(r.cost) || 0;
-				else coFromMgmt += Number(r.cost) || 0;
-			} else if (r && r.status === "Pendiente") pending++;
+		const an = analyzeChangeOrders(co, {
+			bac,
+			cont: Number(comp.cont) || 0,
+			mgmt: Number(comp.mgmt) || Math.max(0, total - bac)
 		});
 		return {
 			baseCost: base,
@@ -1523,10 +1557,15 @@ var GPI = (function(exports) {
 			contingencyPct: contPct,
 			estimateClass: cost && cost.estimate && cost.estimate.class || null,
 			changeOrders: co.length,
-			pending,
-			approvedAmount: approved,
-			fromContingency: coFromCont,
-			fromMgmt: coFromMgmt,
+			pending: an.pending,
+			approvedAmount: an.approved,
+			fromContingency: an.fromContingency,
+			fromMgmt: an.fromMgmt,
+			fromExtra: an.fromExtra,
+			bacCurrent: an.bacCurrent,
+			pendingBaseline: an.pendingBaseline,
+			contingencyAvailable: an.contingencyAvailable,
+			mgmtAvailable: an.mgmtAvailable,
 			hasData: !!(cost && (base || co.length))
 		};
 	}

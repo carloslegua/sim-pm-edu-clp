@@ -25,6 +25,7 @@ import type {
   SchedulePlanModule, SchedulePlanCalendar,
   EditSession, WriteResult
 } from "./types";
+import { analyzeChangeOrders } from "../shared/change-orders";
 export type { EditSession, WriteResult, WriteStatus } from "./types";
 
 export const KEY = "gpi_db";
@@ -1469,6 +1470,11 @@ export interface CostSummary {
   estimateClass: string | number | null;
   changeOrders: number; pending: number;
   approvedAmount: number; fromContingency: number; fromMgmt: number;
+  // Financiación y línea base de las órdenes de cambio (ver shared/change-orders.ts):
+  // "bac" es la línea base INICIAL calculada; "bacCurrent" incluye lo ya incorporado
+  // a ella con una versión LB-n.
+  fromExtra: number; bacCurrent: number; pendingBaseline: number;
+  contingencyAvailable: number; mgmtAvailable: number;
   hasData: boolean;
 }
 
@@ -1484,19 +1490,16 @@ export function costSummary(cost?: CostModule | null): CostSummary {
   const total = Number(comp.total) || 0;
   const contPct = base ? Math.round(((Number(comp.cont) || 0) / base) * 100) : 0;
   const co = (cost && cost.changeOrders) || [];
-  let approved = 0, coFromCont = 0, coFromMgmt = 0, pending = 0;
-  co.forEach((r) => {
-    if (r && r.status === "Aprobada") {
-      approved += Number(r.cost) || 0;
-      if (r.fund === "Contingencia") coFromCont += Number(r.cost) || 0; else coFromMgmt += Number(r.cost) || 0;
-    } else if (r && r.status === "Pendiente") { pending++; }
-  });
+  // reserva de gestión: la guardada; en un .json antiguo sin ella, lo que separa el total del BAC
+  const an = analyzeChangeOrders(co, { bac, cont: Number(comp.cont) || 0, mgmt: Number(comp.mgmt) || Math.max(0, total - bac) });
   const estClass = (cost && cost.estimate && cost.estimate.class) || null;
   return {
     baseCost: base, bac, total, contingencyPct: contPct,
     estimateClass: estClass,
-    changeOrders: co.length, pending,
-    approvedAmount: approved, fromContingency: coFromCont, fromMgmt: coFromMgmt,
+    changeOrders: co.length, pending: an.pending,
+    approvedAmount: an.approved, fromContingency: an.fromContingency, fromMgmt: an.fromMgmt,
+    fromExtra: an.fromExtra, bacCurrent: an.bacCurrent, pendingBaseline: an.pendingBaseline,
+    contingencyAvailable: an.contingencyAvailable, mgmtAvailable: an.mgmtAvailable,
     hasData: !!(cost && (base || co.length))
   };
 }

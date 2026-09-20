@@ -44,17 +44,156 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     // Moneda por defecto USD (coherente con el CAPEX del caso DISTRIB+ en Charter/
     // Alcance/Cronograma, todos en USD -- ver ARCHITECTURE.md, "Dataset de referencia").
     expect(doc.getElementById("kBAC")!.textContent).toBe("$ 8,075,181");
-    expect(doc.querySelectorAll("#coBody tr").length).toBe(2); // SAMPLE_CO
+    expect(doc.querySelectorAll("#coBody tr").length).toBe(3); // SAMPLE_CO: riesgo, cambio de alcance, imprevisto
 
-    for (const fn of ["save", "recalcCont", "onBaseInput", "pullFromWBS", "pullFromCostEstimate", "addCO", "coStatus", "delCO", "buildDoc"]) {
+    for (const fn of ["save", "recalcCont", "onBaseInput", "pullFromWBS", "pullFromCostEstimate", "addCO", "coStatus", "delCO", "buildDoc", "coEdit", "coBaseline", "coKindHint"]) {
       expect(typeof (dom.window as any)[fn]).toBe("function");
     }
 
     (doc.getElementById("coDesc") as HTMLInputElement).value = "Prueba";
     (doc.getElementById("coCost") as HTMLInputElement).value = "1000";
+    (doc.getElementById("coKind") as HTMLSelectElement).value = "riesgo"; // la naturaleza es obligatoria
     const addBtn = Array.from(doc.querySelectorAll("button")).find((b) => b.textContent?.includes("Agregar")) as HTMLElement;
     addBtn.click(); // dispara onclick="addCO()" -> window.addCO
-    expect(doc.querySelectorAll("#coBody tr").length).toBe(3);
+    expect(doc.querySelectorAll("#coBody tr").length).toBe(4);
+  });
+
+  // ---- Órdenes de cambio (hallazgo "alta" de revisión externa; PMI: reservas y alcance /
+  // presupuesto y línea base). Los textos enseñaban que un cambio de alcance requiere
+  // reserva de gestión y "Aprobada" solo actualizaba totales, sin transferencia ni
+  // línea base nueva.
+  async function abrirStandalone() {
+    const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable" });
+    await new Promise((r) => setTimeout(r, 800));
+    return dom;
+  }
+  const change = (dom: any, el: Element) => el.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+  const rowOf = (doc: Document, id: string) => Array.from(doc.querySelectorAll("#coBody tr")).find((r) => r.querySelector("td")!.textContent === id) as HTMLElement;
+  const kpi = (doc: Document, n: number) => doc.querySelectorAll("#coKpis .val")[n].textContent;
+  const toast = (doc: Document) => doc.getElementById("gpiToast")?.textContent || "";
+  function setStatus(dom: any, doc: Document, id: string, value: string) {
+    const sel = rowOf(doc, id).querySelector("select") as HTMLSelectElement;
+    sel.value = value; change(dom, sel);
+  }
+  function setApproval(dom: any, doc: Document, id: string, approver: string, sponsor: boolean) {
+    const r = rowOf(doc, id);
+    const inp = r.querySelector('input[data-f="approver"]') as HTMLInputElement; inp.value = approver; change(dom, inp);
+    const chk = r.querySelector('input[data-f="sponsorAuth"]') as HTMLInputElement | null;
+    if (chk) { chk.checked = sponsor; change(dom, chk); }
+  }
+
+  it("REPRO (alta): los textos ya NO enseñan que un cambio de alcance requiere reserva de gestión; distinguen tres situaciones", async () => {
+    const doc = (await abrirStandalone()).window.document;
+    const flow = doc.querySelector(".flow")!.textContent as string;
+    expect(flow).not.toMatch(/cambio de alcance \(requiere reserva de gestión/i);
+    expect(flow).toMatch(/riesgo materializado/i);
+    expect(flow).toMatch(/trabajo imprevisto dentro del alcance/i);
+    expect(flow).toMatch(/no decide por sí sola/i);
+    expect(doc.getElementById("p4")!.textContent).not.toMatch(/Reserva de gestión \(cambio de alcance, requiere sponsor\)/);
+    expect(Array.from(doc.querySelectorAll("#coFund option")).map((o) => o.textContent)).toEqual(["Contingencia", "Reserva de gestión", "Financiamiento adicional"]);
+  });
+
+  it("REPRO (alta): aprobar una orden exige quién aprueba y la autorización del sponsor; y NO cambia la línea base (BAC vigente) hasta incorporarla", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    expect(kpi(doc, 0)).toBe("$ 8,075,181");                           // BAC vigente = inicial
+    setStatus(dom, doc, "OC-003", "Aprobada");                          // imprevisto con reserva de gestión, sin aprobador ni sponsor
+    expect((rowOf(doc, "OC-003").querySelector("select") as HTMLSelectElement).value).toBe("Pendiente");
+    expect(toast(doc)).toMatch(/quién aprueba/);
+    expect(toast(doc)).toMatch(/autorización expresa del sponsor/);
+
+    setApproval(dom, doc, "OC-003", "Comité de cambios", true);
+    setStatus(dom, doc, "OC-003", "Aprobada");
+    expect((rowOf(doc, "OC-003").querySelector("select") as HTMLSelectElement).value).toBe("Aprobada");
+    // aprobar RESERVA la reserva de gestión, pero la línea base sigue igual:
+    expect(kpi(doc, 0)).toBe("$ 8,075,181");                            // BAC vigente: sin cambio (antes: nadie lo distinguía)
+    expect(kpi(doc, 1)).toBe("$ 90,000");                               // aprobado, pendiente de incorporar
+    expect(kpi(doc, 3)).toBe("$ 313,759");                              // reserva disponible: 403,759 - 90,000
+    expect(doc.getElementById("blBody")!.textContent).toMatch(/Sin cambios de línea base/);
+
+    // incorporación EXPLÍCITA: crea LB-1 y sube el BAC
+    (rowOf(doc, "OC-003").querySelector('button[onclick^="coBaseline"]') as HTMLElement).click();
+    expect(kpi(doc, 0)).toBe("$ 8,165,181");                            // + 90,000
+    expect(kpi(doc, 1)).toBe("$ 0");
+    expect(doc.getElementById("blBody")!.textContent).toMatch(/LB-1.*OC-003.*8,075,181.*8,165,181.*Comité de cambios/);
+    expect((rowOf(doc, "OC-003").querySelector("select") as HTMLSelectElement).disabled).toBe(true); // ya forma parte de la línea base
+    (rowOf(doc, "OC-003").querySelector('button[onclick^="delCO"]') as HTMLElement).click();
+    expect(rowOf(doc, "OC-003")).toBeTruthy();                          // no se puede eliminar
+    expect(toast(doc)).toMatch(/ya forma parte de la línea base LB-1/);
+  });
+
+  it("un cambio de alcance no se aprueba con contingencia; con fondos adicionales y sponsor sí (no exige reserva de gestión) y sube BAC y total", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    // OC-002 (ampliación del cliente = cambio de alcance) parte con Financiamiento adicional
+    setApproval(dom, doc, "OC-002", "Sponsor", true);
+    setStatus(dom, doc, "OC-002", "Aprobada");
+    expect((rowOf(doc, "OC-002").querySelector("select") as HTMLSelectElement).value).toBe("Aprobada");
+    expect(kpi(doc, 3)).toBe("$ 403,759");                              // la reserva de gestión NO se tocó
+    (rowOf(doc, "OC-002").querySelector('button[onclick^="coBaseline"]') as HTMLElement).click();
+    expect(kpi(doc, 0)).toBe("$ 8,315,181");                            // + 240,000
+
+    // un cambio de alcance propuesto con contingencia se rechaza al aprobar
+    (doc.getElementById("coDesc") as HTMLInputElement).value = "Nueva bodega";
+    (doc.getElementById("coCost") as HTMLInputElement).value = "5000";
+    (doc.getElementById("coKind") as HTMLSelectElement).value = "alcance";
+    (doc.getElementById("coFund") as HTMLSelectElement).value = "Contingencia";
+    (Array.from(doc.querySelectorAll("button")).find((b) => b.textContent?.includes("Agregar")) as HTMLElement).click();
+    setApproval(dom, doc, "OC-004", "CCB", false);
+    setStatus(dom, doc, "OC-004", "Aprobada");
+    expect((rowOf(doc, "OC-004").querySelector("select") as HTMLSelectElement).value).toBe("Pendiente");
+    expect(toast(doc)).toMatch(/no se financia con contingencia/);
+  });
+
+  it("registrar una orden exige clasificarla, y cada orden muestra su efecto presupuestario", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    (doc.getElementById("coDesc") as HTMLInputElement).value = "Sin clasificar";
+    (Array.from(doc.querySelectorAll("button")).find((b) => b.textContent?.includes("Agregar")) as HTMLElement).click();
+    expect(doc.querySelectorAll("#coBody tr").length).toBe(3);          // no se agregó
+    expect(toast(doc)).toMatch(/Clasifica el cambio/);
+    expect(rowOf(doc, "OC-001").textContent).toMatch(/BAC sin cambio · contingencia −180,000\.00/);
+    expect(rowOf(doc, "OC-003").textContent).toMatch(/BAC \+90,000\.00 al incorporar · reserva de gestión −90,000\.00 · total sin cambio/);
+    expect(rowOf(doc, "OC-002").textContent).toMatch(/BAC \+240,000\.00 al incorporar · total \+240,000\.00/);
+  });
+
+  it("compatibilidad: un proyecto guardado con órdenes antiguas (sin naturaleza ni aprobación) abre igual; las pendientes exigen clasificarse; la versión de línea base persiste", async () => {
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: {
+        p1: {
+          schema: "gpi.project/v1",
+          meta: { id: "p1", name: "Proyecto Costos", course: "GPI", currency: "USD", createdAt: 1, updatedAt: 1 },
+          modules: {
+            cost: {
+              meta: { module: "cost_management_plan", version: 2 },
+              budget: { baseCost: 1000000, mgmtReservePct: 5, contingency: { method: "Simulación Monte Carlo", percentile: "P70" } },
+              changeOrders: [
+                { id: "OC-001", desc: "Antigua aprobada", cause: "R-01", cost: 50000, fund: "Contingencia", status: "Aprobada" },
+                { id: "OC-002", desc: "Antigua pendiente", cause: "R-02", cost: 20000, fund: "Reserva de gestión", status: "Pendiente" }
+              ]
+            }
+          }
+        }
+      }
+    };
+    const dom = await JSDOM.fromURL(base + "Cost-management.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 800));
+    const doc = dom.window.document, win = dom.window as any;
+    expect(doc.querySelectorAll("#coBody tr").length).toBe(2);
+    expect(rowOf(doc, "OC-001").textContent).toMatch(/Sin clasificar/);
+    expect(doc.getElementById("coTotal")!.textContent).toBe("$ 50,000.00"); // mismos totales que antes
+
+    setApproval(dom, doc, "OC-002", "CCB", true);
+    setStatus(dom, doc, "OC-002", "Aprobada");
+    expect((rowOf(doc, "OC-002").querySelector("select") as HTMLSelectElement).value).toBe("Pendiente");
+    expect(toast(doc)).toMatch(/clasifica la orden/);
+
+    // guardado con sesión: la rebanada conserva las órdenes y nunca borra campos
+    win.save();
+    const saved = win.GPI.getModule("cost");
+    expect(saved.changeOrders.length).toBe(2);
+    expect(saved.baselineLog).toEqual([]);
   });
 
   it("regla de oro: no crea la rebanada 'cost' hasta la primera edición real del usuario", async () => {

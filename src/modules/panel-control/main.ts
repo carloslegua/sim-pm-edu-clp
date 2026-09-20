@@ -363,8 +363,10 @@ function statChips(key: string): StatChip[] | null {
     const cm = GPI.getModule("cost");
     const cs = GPI.util.costSummary(cm);
     const cur = GPI.meta()?.currency;
-    const bacTxt = cs.bac ? money(cs.bac, cur).replace(/^\S+\s/, '') : "—";
-    return [{ v: bacTxt, l: "BAC (" + (CUR[cur || ""] || "$").replace(/\s.*/, '') + ")" }, { v: cs.changeOrders, l: "órdenes de cambio" }];
+    // BAC vigente: incluye lo ya incorporado a la línea base con una versión LB-n (sin incorporaciones = el inicial).
+    const bacNow = cs.bacCurrent || cs.bac;
+    const bacTxt = bacNow ? money(bacNow, cur).replace(/^\S+\s/, '') : "—";
+    return [{ v: bacTxt, l: (bacNow !== cs.bac ? "BAC vigente (" : "BAC (") + (CUR[cur || ""] || "$").replace(/\s.*/, '') + ")" }, { v: cs.changeOrders, l: "órdenes de cambio" }];
   }
   return null;
 }

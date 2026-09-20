@@ -7,9 +7,10 @@
 
    IMPORTANTE — a diferencia de OBS/RACI: el HTML de este módulo usa
    atributos onclick/onchange/oninput INLINE (no addEventListener) para
-   ~9 funciones (save, recalcCont, onBaseInput,
-   pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc), incluidas dos
-   generadas dinámicamente en filas de tabla (coStatus, delCO). Vite
+   ~12 funciones (save, recalcCont, onBaseInput,
+   pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc, coEdit,
+   coBaseline, coKindHint), incluidas varias generadas dinámicamente en filas de tabla
+   (coStatus, coEdit, coBaseline, delCO). Vite
    compila este módulo en su propio closure: esas funciones NO quedan
    accesibles por nombre desde el HTML a menos que se expongan
    explícitamente en window (al final de este archivo). El HTML no se
@@ -25,6 +26,11 @@
    ============================================================ */
 import type * as GpiCore from "../../core/gpi-core";
 import type { ActivitiesModule, CostEstimateModule, CostModule, EditSession, ProjectMeta, WbsModule, WriteResult } from "../../core/types";
+import {
+  analyzeChangeOrders, orderEffect, planBaselining, validateApproval,
+  CO_KIND_HINT, CO_KIND_LABEL, FUND_CONT, FUND_EXTRA,
+  type CoAnalysis, type CoBaselineEntry, type CoKind
+} from "../../shared/change-orders";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -51,29 +57,41 @@ const CUR: Record<string, string> = { PEN: "S/", USD: "$", EUR: "€" };
 function $(id: string): HTMLElement { return document.getElementById(id) as HTMLElement; }
 function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] as string)); }
 
-interface ChangeOrder { id: string; desc: string; cause: string; cost: number; fund: string; status: string; }
+// Una orden de cambio se evalúa en tres ejes que NO se deducen unos de otros (ver
+// shared/change-orders.ts): naturaleza (kind), fuente de fondos (fund) y aprobación
+// (approver/sponsorAuth). Los campos nuevos son opcionales: los .json antiguos abren igual.
+interface ChangeOrder {
+  id: string; desc: string; cause: string; cost: number; fund: string; status: string;
+  kind?: string; approver?: string; sponsorAuth?: boolean; approvedOn?: string; baselined?: string | null;
+  [key: string]: unknown; // compatible con CoOrder (shared/change-orders.ts)
+}
 
 /* Órdenes de cambio del caso de ejemplo: SOLO se siembran en modo
    independiente (sin gpi-core). Con un proyecto activo, el módulo arranca
    sin órdenes: así abrir la herramienta nunca escribe datos de ejemplo
-   en el proyecto del alumno. */
+   en el proyecto del alumno. Cubren las TRES naturalezas: un riesgo materializado
+   (contingencia), una ampliación del cliente (cambio de alcance, fondos adicionales)
+   y trabajo imprevisto dentro del alcance (reserva de gestión, con sponsor). */
 const SAMPLE_CO: ChangeOrder[] = [
-  { id: "OC-001", desc: "Refuerzo de cimentación por hallazgo geotécnico", cause: "R-03 Suelo", cost: 180000, fund: "Contingencia", status: "Aprobada" },
-  { id: "OC-002", desc: "Ampliación de sala eléctrica solicitada por cliente", cause: "Cambio alcance", cost: 240000, fund: "Reserva de gestión", status: "Pendiente" }
+  { id: "OC-001", desc: "Refuerzo de cimentación por hallazgo geotécnico", cause: "R-03 Suelo", cost: 180000, fund: "Contingencia", status: "Aprobada", kind: "riesgo", approver: "CCB", sponsorAuth: false, approvedOn: "2026-08-03" },
+  { id: "OC-002", desc: "Ampliación de sala eléctrica solicitada por cliente", cause: "Cambio alcance", cost: 240000, fund: "Financiamiento adicional", status: "Pendiente", kind: "alcance", approver: "", sponsorAuth: false },
+  { id: "OC-003", desc: "Demolición de losa existente no identificada en el levantamiento", cause: "No identificado en el RBS", cost: 90000, fund: "Reserva de gestión", status: "Pendiente", kind: "imprevisto", approver: "", sponsorAuth: false }
 ];
 
 interface BudgetComputed { base: number; cont: number; esc: number; bac: number; mgmt: number; total: number; }
-interface ChangeTotals { approved: number; fromContingency: number; fromMgmt: number; }
+type ChangeTotals = CoAnalysis;
 interface CostState {
   curClass: number;
   co: ChangeOrder[];
+  baselines: CoBaselineEntry[];
   _budget?: BudgetComputed;
   _coTotals?: ChangeTotals;
 }
 
 const state: CostState = {
   curClass: 3,
-  co: []
+  co: [],
+  baselines: []
 };
 
 /* ---------- Tabs ---------- */
@@ -154,43 +172,107 @@ function recalcCont(): void {
   $("kContP").textContent = base ? ((cont / base) * 100).toFixed(1) + "%" : "—";
   $("kEscP").textContent = base ? ((escT / base) * 100).toFixed(1) + "%" : "—";
   state._budget = { base, cont, esc: escT, bac, mgmt, total };
-  buildJSON();
+  renderCO(); // los saldos de las órdenes dependen del presupuesto recién calculado (y renderCO ya llama buildJSON)
 }
 
 /* ---------- Órdenes de cambio ---------- */
+// Presupuesto inicial contra el que se validan y analizan las órdenes.
+function coBudget(): { bac: number; cont: number; mgmt: number } {
+  const b = state._budget; return b ? { bac: b.bac, cont: b.cont, mgmt: b.mgmt } : { bac: 0, cont: 0, mgmt: 0 };
+}
+const todayISO = (): string => new Date().toISOString().slice(0, 10);
+// Como esc(), pero seguro dentro de un atributo entre comillas (value="...").
+const escA = (s: unknown): string => esc(s).replace(/"/g, "&quot;");
+const kindLabel = (k?: string): string => (k && (CO_KIND_LABEL as Record<string, string>)[k]) || "Sin clasificar";
+// Efecto presupuestario de la orden, en palabras (qué cambia en el BAC, las reservas y el total).
+function effectText(r: ChangeOrder): string {
+  const e = orderEffect(r), sg = (n: number): string => (n > 0 ? "+" : n < 0 ? "−" : "") + fmt2(Math.abs(n)).replace(/^\S+\s/, "");
+  if (r.fund === FUND_CONT) return "BAC sin cambio · contingencia " + sg(e.dContingency);
+  if (r.fund === FUND_EXTRA) return "BAC " + sg(e.dBac) + " al incorporar · total " + sg(e.dTotal);
+  return "BAC " + sg(e.dBac) + " al incorporar · reserva de gestión " + sg(e.dMgmt) + " · total sin cambio";
+}
 function renderCO(): void {
   const tb = $("coBody"); tb.innerHTML = "";
   state.co.forEach((r, i) => {
+    const locked = r.status !== "Pendiente";               // aprobada/rechazada: los datos de aprobación no se editan
+    const usesReserve = r.fund !== FUND_CONT;              // reserva de gestión o fondos adicionales: requiere sponsor
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="mono">${esc(r.id)}</td>
       <td>${esc(r.desc)}</td>
+      <td><span class="pill ${r.kind ? "ok" : "bad"}" title="${escA(r.kind ? (CO_KIND_HINT as Record<string, string>)[r.kind] : "Clasifica la orden antes de aprobarla")}">${esc(kindLabel(r.kind))}</span></td>
       <td class="muted">${esc(r.cause)}</td>
       <td class="num">${fmt2(+r.cost)}</td>
-      <td><span class="pill ${r.fund === "Contingencia" ? "ok" : "warn"}">${esc(r.fund)}</span></td>
-      <td><select class="mono" style="padding:5px 8px" data-i="${i}" onchange="coStatus(this)">
+      <td><span class="pill ${r.fund === FUND_CONT ? "ok" : "warn"}">${esc(r.fund)}</span></td>
+      <td class="co-appr">
+        <input class="mono" style="width:120px;padding:5px 7px" placeholder="Aprobador (CCB…)" value="${escA(r.approver || "")}" data-i="${i}" data-f="approver" onchange="coEdit(this)" ${locked ? "disabled" : ""} aria-label="Quién aprueba la orden ${escA(r.id)}">
+        ${usesReserve ? `<label style="display:block;font-size:11px;margin-top:4px"><input type="checkbox" data-i="${i}" data-f="sponsorAuth" onchange="coEdit(this)" ${r.sponsorAuth ? "checked" : ""} ${locked ? "disabled" : ""}> Sponsor autoriza</label>` : ""}
+        ${r.approvedOn ? `<div class="muted" style="font-size:11px">${esc(r.approvedOn)}</div>` : ""}
+      </td>
+      <td><select class="mono" style="padding:5px 8px" data-i="${i}" onchange="coStatus(this)" ${r.baselined ? "disabled" : ""}>
         ${["Pendiente", "Aprobada", "Rechazada"].map((s) => `<option ${s === r.status ? "selected" : ""}>${s}</option>`).join("")}</select></td>
+      <td class="muted" style="font-size:11.5px">${esc(effectText(r))}</td>
+      <td>${r.baselined ? `<span class="pill ok">${esc(r.baselined)}</span>`
+        : r.status === "Aprobada" && usesReserve ? `<button class="btn sm" onclick="coBaseline(${i})" title="Incorpora esta orden a la línea base (crea una versión nueva)">Incorporar a la línea base</button>`
+        : r.status === "Aprobada" ? `<span class="muted" style="font-size:11.5px">Dentro de la línea base</span>` : "—"}</td>
       <td><button class="btn ghost sm" onclick="delCO(${i})" title="Eliminar orden de cambio" aria-label="Eliminar orden de cambio">✕</button></td>`;
     tb.appendChild(tr);
   });
-  // totales
-  let apr = 0, cCont = 0, cMgmt = 0;
-  state.co.filter((r) => r.status === "Aprobada").forEach((r) => {
-    apr += +r.cost || 0;
-    if (r.fund === "Contingencia") cCont += +r.cost || 0; else cMgmt += +r.cost || 0;
-  });
-  $("coTotal").textContent = fmt2(apr);
-  $("coSplit").textContent = `Contingencia ${fmt2(cCont)} · Reserva de gestión ${fmt2(cMgmt)}`;
-  state._coTotals = { approved: apr, fromContingency: cCont, fromMgmt: cMgmt };
+  const an = analyzeChangeOrders(state.co, coBudget());
+  state._coTotals = an;
+  $("coTotal").textContent = fmt2(an.approved);
+  $("coSplit").textContent = `Contingencia ${fmt2(an.fromContingency)} · Reserva de gestión ${fmt2(an.fromMgmt)} · Financiamiento adicional ${fmt2(an.fromExtra)}`;
+  const kp = (lab: string, val: number, cap: string): string => `<div class="kpi"><div class="lab">${lab}</div><div class="val ${val < 0 ? "neg" : "neu"}">${fmt(val)}</div><div class="cap">${cap}</div></div>`;
+  $("coKpis").innerHTML =
+    kp("BAC vigente", an.bacCurrent, an.bacCurrent === an.bacInitial ? "línea base inicial" : "inicial " + fmt(an.bacInitial) + " + incorporado") +
+    kp("Pendiente de incorporar", an.pendingBaseline, "aprobado, aún fuera de la línea base") +
+    kp("Contingencia disponible", an.contingencyAvailable, "dentro de la línea base") +
+    kp("Reserva de gestión disponible", an.mgmtAvailable, "fuera de la línea base · sponsor");
+  $("blBody").innerHTML = state.baselines.length
+    ? state.baselines.map((v) => `<tr><td class="mono">${esc(v.version)}</td><td>${esc(v.date)}</td><td>${esc(v.orderIds.join(", "))}</td><td class="num">${fmt2(v.bacBefore)}</td><td class="num">${fmt2(v.bacAfter)}</td><td>${esc(v.approver || "—")}</td></tr>`).join("")
+    : `<tr><td class="muted" colspan="6">Sin cambios de línea base: el BAC vigente es el inicial.</td></tr>`;
   buildJSON();
 }
-function coStatus(sel: HTMLSelectElement): void { state.co[+(sel.dataset.i as string)].status = sel.value; renderCO(); save(); }
+// Muestra la guía de la naturaleza elegida al registrar la solicitud.
+function coKindHint(): void {
+  const k = ($("coKind") as HTMLSelectElement).value as CoKind | "";
+  $("coKindHint").textContent = k ? CO_KIND_HINT[k] : "Clasifica el cambio: la naturaleza no decide por sí sola la fuente de fondos.";
+}
+function coStatus(sel: HTMLSelectElement): void {
+  const r = state.co[+(sel.dataset.i as string)];
+  if (r.baselined) { showToast(r.id + " ya está incorporada a la línea base " + r.baselined + ": su estado no se puede cambiar."); renderCO(); return; }
+  if (sel.value === "Aprobada") {
+    const problems = validateApproval(r, state.co, coBudget());
+    if (problems.length) { showToast("No se puede aprobar " + r.id + ": " + problems.join("; ") + "."); renderCO(); return; }
+    r.approvedOn = todayISO();
+  } else { delete r.approvedOn; }
+  userEdited = true;
+  r.status = sel.value; renderCO(); save();
+}
+// Datos de aprobación (quién aprueba, autorización del sponsor): solo con la orden Pendiente.
+function coEdit(el: HTMLInputElement): void {
+  const r = state.co[+(el.dataset.i as string)]; if (!r || r.status !== "Pendiente") return;
+  userEdited = true;
+  if (el.dataset.f === "approver") r.approver = el.value.trim(); else if (el.dataset.f === "sponsorAuth") r.sponsorAuth = el.checked;
+  save();
+}
+// Incorporar a la línea base: acción EXPLÍCITA (aprobar no la toca) que deja una versión LB-n.
+function coBaseline(i: number): void {
+  const r = state.co[i], plan = planBaselining(r, state.co, coBudget(), state.baselines, todayISO());
+  if (!plan.ok) { showToast("No se puede incorporar " + r.id + " a la línea base: " + plan.problem + "."); return; }
+  userEdited = true;
+  r.baselined = plan.entry.version; state.baselines.push(plan.entry);
+  renderCO(); save(); flash(); showToast(r.id + " incorporada: " + plan.entry.version + " (BAC " + fmt(plan.entry.bacBefore) + " → " + fmt(plan.entry.bacAfter) + ").");
+}
 function addCO(): void {
   userEdited = true;
   const descInput = $("coDesc") as HTMLInputElement;
   const desc = descInput.value.trim();
   if (!desc) { descInput.focus(); descInput.style.borderColor = "#dc3546"; return; }
   descInput.style.borderColor = "";
+  const kindSel = $("coKind") as HTMLSelectElement;
+  if (!kindSel.value) { kindSel.focus(); kindSel.style.borderColor = "#dc3546"; showToast("Clasifica el cambio: riesgo materializado, trabajo imprevisto dentro del alcance o cambio de alcance."); return; }
+  kindSel.style.borderColor = "";
   const n = state.co.length + 1;
   state.co.push({
     id: "OC-" + String(n).padStart(3, "0"),
@@ -198,19 +280,26 @@ function addCO(): void {
     cause: ($("coCause") as HTMLInputElement).value.trim() || "—",
     cost: +($("coCost") as HTMLInputElement).value || 0,
     fund: ($("coFund") as HTMLSelectElement).value,
-    status: "Pendiente"
+    status: "Pendiente",
+    kind: kindSel.value, approver: "", sponsorAuth: false
   });
-  descInput.value = ""; ($("coCause") as HTMLInputElement).value = ""; ($("coCost") as HTMLInputElement).value = "";
+  descInput.value = ""; ($("coCause") as HTMLInputElement).value = ""; ($("coCost") as HTMLInputElement).value = ""; kindSel.value = ""; coKindHint();
   renderCO(); save(); flash(); descInput.focus();
 }
-function delCO(i: number): void { userEdited = true; state.co.splice(i, 1); renderCO(); save(); }
+function delCO(i: number): void {
+  const r = state.co[i];
+  if (r.baselined) { showToast(r.id + " ya forma parte de la línea base " + r.baselined + ": no se puede eliminar."); return; }
+  if (r.status === "Aprobada") { showToast(r.id + " está Aprobada (fondos comprometidos): devuélvela a Pendiente o Rechazada antes de eliminarla."); return; }
+  userEdited = true; state.co.splice(i, 1); renderCO(); save();
+}
 
 /* ---------- Documento BOE (recopilación integral) ---------- */
 function boeCORows(): string {
-  if (!state.co.length) return `<tr><td class="muted" colspan="6">Sin órdenes de cambio registradas</td></tr>`;
+  if (!state.co.length) return `<tr><td class="muted" colspan="7">Sin órdenes de cambio registradas</td></tr>`;
   return state.co.map((r) => `<tr>
-    <td class="mono">${esc(r.id)}</td><td>${esc(r.desc)}</td><td>${esc(r.cause)}</td>
-    <td style="text-align:right" class="mono">${fmt2(+r.cost)}</td><td>${esc(r.fund)}</td><td>${esc(r.status)}</td></tr>`).join("");
+    <td class="mono">${esc(r.id)}</td><td>${esc(r.desc)}</td><td>${esc(kindLabel(r.kind))}</td><td>${esc(r.cause)}</td>
+    <td style="text-align:right" class="mono">${fmt2(+r.cost)}</td><td>${esc(r.fund)}</td>
+    <td>${esc(r.status)}${r.status === "Aprobada" ? " · " + esc(r.approver || "—") + (r.sponsorAuth ? " (sponsor)" : "") : ""}${r.baselined ? " · " + esc(r.baselined) : ""}</td></tr>`).join("");
 }
 function buildDoc(): void {
   recalcCont();
@@ -274,31 +363,34 @@ function buildDoc(): void {
         <tr><td>Estimación de costos de las actividades</td><td>${fmt(b.base)}</td></tr>
         <tr><td>Contingencia</td><td>${fmt(b.cont)} — ${esc(($("contMethod") as HTMLSelectElement).value)}, ${esc((($("contPct") as HTMLSelectElement).selectedOptions[0].text).split(" ")[0])} (${b.base ? ((b.cont as number) / b.base * 100).toFixed(1) : "—"}%)</td></tr>
         <tr><td>Escalation / FX</td><td>${fmt(b.esc)} — inflación ${esc(($("inflRate") as HTMLInputElement).value)}% a ${esc(($("inflYears") as HTMLInputElement).value)} años; componente FX ${esc(($("fxShare") as HTMLInputElement).value)}%, TC ${fxTxt}</td></tr>
-        <tr><td><b>BAC — línea base de costos</b></td><td><b>${fmt(b.bac)}</b> (excluye reserva de gestión)</td></tr>
+        <tr><td><b>BAC — línea base de costos${state.baselines.length ? " (inicial)" : ""}</b></td><td><b>${fmt(b.bac)}</b> (excluye reserva de gestión)</td></tr>
         <tr><td>Reserva de gestión</td><td>${fmt(b.mgmt)} — propiedad del sponsor</td></tr>
         <tr><td><b>Presupuesto total</b></td><td><b>${fmt(b.total)}</b></td></tr>
+        ${state.baselines.length ? `<tr><td><b>BAC vigente</b></td><td><b>${fmt(t.bacCurrent)}</b> — ${esc(state.baselines[state.baselines.length - 1].version)} (${state.baselines.length} cambio(s) de línea base)</td></tr>` : ""}
       </table>
     </section>
 
     <section class="dsec">
       <h4 class="dsec-t"><span class="dn">06</span>Registro de órdenes de cambio</h4>
       <table class="dt">
-        <tr><td style="font-weight:700;color:var(--muted)">ID</td><td style="color:var(--muted);font-weight:700">Descripción · Causa · Δ Costo · Fondeo · Estado</td></tr>
+        <tr><td style="font-weight:700;color:var(--muted)">ID</td><td style="color:var(--muted);font-weight:700">Descripción · Naturaleza · Causa · Δ Costo · Fondeo · Estado y aprobación</td></tr>
       </table>
       <table class="dt" style="margin-top:2px">
         <thead><tr>
           <td style="width:auto;font-weight:700;color:var(--muted)">ID</td><td style="font-weight:700;color:var(--muted)">Descripción</td>
+          <td style="font-weight:700;color:var(--muted)">Naturaleza</td>
           <td style="font-weight:700;color:var(--muted)">Causa</td><td style="font-weight:700;color:var(--muted);text-align:right">Δ Costo</td>
-          <td style="font-weight:700;color:var(--muted)">Fondeo</td><td style="font-weight:700;color:var(--muted)">Estado</td>
+          <td style="font-weight:700;color:var(--muted)">Fondeo</td><td style="font-weight:700;color:var(--muted)">Estado y aprobación</td>
         </tr></thead>
         <tbody>${boeCORows()}</tbody>
       </table>
-      <p style="font-size:12.5px;margin:8px 0 0">Total aprobado: <b>${fmt2(t.approved || 0)}</b> — desde contingencia ${fmt2(t.fromContingency || 0)}, desde reserva de gestión ${fmt2(t.fromMgmt || 0)}.</p>
+      <p style="font-size:12.5px;margin:8px 0 0">Total aprobado: <b>${fmt2(t.approved || 0)}</b> — contingencia ${fmt2(t.fromContingency || 0)}, reserva de gestión ${fmt2(t.fromMgmt || 0)}, financiamiento adicional ${fmt2(t.fromExtra || 0)}. Disponible: contingencia ${fmt2(t.contingencyAvailable || 0)}, reserva de gestión ${fmt2(t.mgmtAvailable || 0)}. Aprobado pendiente de incorporar a la línea base: ${fmt2(t.pendingBaseline || 0)}.</p>
+      ${state.baselines.length ? `<table class="dt" style="margin-top:6px"><tbody>${state.baselines.map((v) => `<tr><td class="mono">${esc(v.version)}</td><td>${esc(v.date)} · ${esc(v.orderIds.join(", "))} · aprobó ${esc(v.approver || "—")}</td><td style="text-align:right" class="mono">${fmt2(v.bacBefore)} → ${fmt2(v.bacAfter)}</td></tr>`).join("")}</tbody></table>` : ""}
     </section>
 
     <section class="dsec">
       <h4 class="dsec-t"><span class="dn">07</span>Proceso de cambio y pronósticos</h4>
-      <p style="font-size:12.5px;margin:0">Ante una variación que cruce los umbrales anteriores: (1) detectar, (2) analizar causa raíz en el RBS, (3) registrar la solicitud, (4) evaluar en el CCB y re-baseline si se aprueba, (5) actualizar ETC/EAC con frecuencia ${esc(($("fcastFreq") as HTMLSelectElement).value).toLowerCase()} y comunicar en el reporte de desempeño.</p>
+      <p style="font-size:12.5px;margin:0">Ante una variación que cruce los umbrales anteriores: (1) detectar, (2) analizar la causa raíz y clasificar el cambio (riesgo materializado, trabajo imprevisto dentro del alcance o cambio de alcance: no se asume la fuente de fondos), (3) registrar la solicitud con su financiación y efecto presupuestario, (4) evaluar en el CCB (el sponsor autoriza el uso de la reserva de gestión o de fondos adicionales) y, solo si se aprueba y se decide, incorporar a la línea base con una versión nueva (LB-n), (5) actualizar ETC/EAC con frecuencia ${esc(($("fcastFreq") as HTMLSelectElement).value).toLowerCase()} y comunicar en el reporte de desempeño.</p>
     </section>`;
   buildJSON();
 }
@@ -330,7 +422,7 @@ function collect(): Record<string, unknown> {
       },
       computed: state._budget || null
     },
-    changeOrders: state.co, changeTotals: state._coTotals || null
+    changeOrders: state.co, changeTotals: state._coTotals || null, baselineLog: state.baselines
   };
 }
 function buildJSON(): void { $("jsonView").textContent = JSON.stringify(collect(), null, 2); }
@@ -472,6 +564,7 @@ function applyData(d: any): void {
     ($("fxShare") as HTMLInputElement).value = x.fxShare; ($("fxMode") as HTMLSelectElement).value = x.fxMode; ($("fxBand") as HTMLInputElement).value = x.fxBand;
   }
   if (d.changeOrders) state.co = d.changeOrders;
+  if (Array.isArray(d.baselineLog)) state.baselines = d.baselineLog; // .json antiguos: sin versiones de línea base
 }
 function load(): void {
   if (gpiOn()) {
@@ -544,4 +637,4 @@ init(false);
 // archivo) que buscan estas funciones POR NOMBRE en el ámbito global.
 // Sin esto, Vite las deja encerradas en el closure del bundle y cada
 // clic tira "x is not defined".
-Object.assign(window, { save, recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc });
+Object.assign(window, { save, recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc, coEdit, coBaseline, coKindHint });

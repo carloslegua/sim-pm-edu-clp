@@ -1552,7 +1552,7 @@ laborables: la proporción no representa fines de semana ni feriados.
 - La otra excepción con atributos `onclick`/`onchange`/`oninput`
   inline (`Object.assign(window, { exportJSON, importJSON, save,
   recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO,
-  coStatus, delCO, buildDoc })`).
+  coStatus, delCO, buildDoc, coEdit, coBaseline, coKindHint })`).
 - Referencia `GPI` como identificador global bare (patrón 2 de la
   sección anterior).
 - No usa modales — usa un toast propio. No carga `gpi-shared.css`.
@@ -1566,6 +1566,56 @@ laborables: la proporción no representa fines de semana ni feriados.
   `GPI.util.costEstimateTotal(estimate, activities, wbs)` — suma de
   Subtotal de TODAS las actividades con precio, completas o no, ignora
   estimados manuales del WBS).
+- **Órdenes de cambio: naturaleza, financiación, aprobación y línea
+  base** (lógica pura en `src/shared/change-orders.ts`, inlineada en
+  `cost.js` y `gpi-core.js`; `costSummary()` del Panel usa la misma).
+  Revisión externa (severidad alta, PMI: reservas y alcance / presupuesto
+  y línea base): los textos enseñaban que "un cambio de alcance requiere
+  reserva de gestión" y aprobar una orden solo actualizaba totales — sin
+  transferencia presupuestaria ni línea base nueva. Ahora son **tres ejes
+  que no se deducen unos de otros**:
+  - **Naturaleza** (`kind`): `riesgo` (riesgo materializado: uno ya
+    identificado que ocurrió), `imprevisto` (trabajo imprevisto **dentro
+    del alcance**: necesario y no identificado, pero del alcance ya
+    aprobado — no es cambio de alcance) o `alcance` (trabajo nuevo o
+    distinto, p. ej. ampliación pedida por el cliente). Obligatoria al
+    registrar la orden.
+  - **Fondeo** (`fund`): Contingencia (dentro de la línea base), Reserva
+    de gestión (fuera de ella, la autoriza el sponsor) o **Financiamiento
+    adicional** (fondos nuevos). Ninguna naturaleza fuerza una fuente; solo
+    se rechazan combinaciones inválidas al aprobar (un cambio de alcance no
+    se financia con contingencia).
+  - **Aprobación**: `validateApproval()` exige naturaleza, Δ costo ≠ 0,
+    quién aprueba (`approver`), autorización expresa del sponsor
+    (`sponsorAuth`) si usa reserva de gestión o fondos adicionales, y que no
+    supere la contingencia/reserva **disponibles** (descuenta lo ya
+    aprobado). Las órdenes de un `.json` antiguo (sin `kind`) siguen
+    abriendo con los mismos totales, pero no pueden aprobarse hasta
+    clasificarse.
+- **Efecto presupuestario** (`orderEffect()`), visible por orden:
+  contingencia → BAC sin cambio, baja la contingencia disponible;
+  reserva de gestión → transferencia a la línea base (BAC +Δ, reserva −Δ,
+  total sin cambio); financiamiento adicional → BAC +Δ y total +Δ.
+- **Línea base controlada**: **aprobar no cambia el BAC**, solo compromete
+  los fondos (baja la reserva disponible; el monto queda "pendiente de
+  incorporar"). El BAC vigente (`bacCurrent`) solo cambia con la acción
+  explícita **Incorporar a la línea base** (`planBaselining()`), que
+  registra una versión `LB-n` en `cost.baselineLog` (fecha, órdenes, BAC
+  anterior → nuevo, quién aprobó). Una orden incorporada no puede
+  cambiar de estado ni eliminarse; una aprobada no se elimina sin
+  devolverla antes a Pendiente. Las de contingencia no se incorporan (ya
+  están dentro de la línea base). `state._budget.bac` sigue siendo el BAC
+  **inicial** calculado; el Panel muestra el vigente.
+- Los campos nuevos son todos **opcionales** en `CostModule`
+  (`changeOrders[].kind/approver/sponsorAuth/approvedOn/baselined`,
+  `baselineLog`): el esquema de `gpi_db` y los `.json` de alumnos no se
+  rompen (regla #3). El caso de ejemplo del modo independiente cubre las
+  tres naturalezas (OC-001 riesgo/contingencia, OC-002 ampliación del
+  cliente/fondos adicionales, OC-003 imprevisto/reserva de gestión).
+- Limitación conocida: las versiones `LB-n` guardan BAC anterior/nuevo
+  como historia; si el alumno cambia después el estimado base o los
+  porcentajes, el BAC inicial se recalcula pero esas fotos no. No se
+  bloquea la edición de las pestañas de estimación.
 
 **Estimar_Costos.html** (módulo `costEstimate`, proceso PMBOK "Estimate
 Costs")

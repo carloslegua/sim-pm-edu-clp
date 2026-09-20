@@ -278,8 +278,14 @@ export interface CostModule {
     computed?: { base?: number; cont?: number; bac?: number; total?: number; [key: string]: unknown };
     [key: string]: unknown;
   };
-  changeOrders: Array<{ status?: string; fund?: string; cost?: number; [key: string]: unknown }>;
+  // Orden de cambio: además de estado/fondeo/costo lleva, de forma OPCIONAL (los .json
+  // antiguos no la traen), su naturaleza (kind: riesgo | imprevisto | alcance), la
+  // aprobación (approver, sponsorAuth, approvedOn) y la versión de línea base a la que se
+  // incorporó (baselined) -- ver shared/change-orders.ts.
+  changeOrders: Array<{ status?: string; fund?: string; cost?: number; kind?: string; approver?: string; sponsorAuth?: boolean; approvedOn?: string; baselined?: string | null; [key: string]: unknown }>;
   changeTotals?: Record<string, unknown>;
+  // Versiones de línea base creadas al incorporar órdenes (LB-1, LB-2…), con BAC anterior y nuevo.
+  baselineLog?: Array<{ version: string; date: string; orderIds: string[]; bacBefore: number; bacAfter: number; approver: string }>;
 }
 
 export interface SchedulePlanCalendar {

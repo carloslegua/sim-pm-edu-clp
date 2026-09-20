@@ -544,9 +544,10 @@
 			const cm = GPI.getModule("cost");
 			const cs = GPI.util.costSummary(cm);
 			const cur = GPI.meta()?.currency;
+			const bacNow = cs.bacCurrent || cs.bac;
 			return [{
-				v: cs.bac ? money(cs.bac, cur).replace(/^\S+\s/, "") : "—",
-				l: "BAC (" + (CUR[cur || ""] || "$").replace(/\s.*/, "") + ")"
+				v: bacNow ? money(bacNow, cur).replace(/^\S+\s/, "") : "—",
+				l: (bacNow !== cs.bac ? "BAC vigente (" : "BAC (") + (CUR[cur || ""] || "$").replace(/\s.*/, "") + ")"
 			}, {
 				v: cs.changeOrders,
 				l: "órdenes de cambio"
