@@ -12,22 +12,16 @@
 		}
 	}
 	function pushWithSession(G, name, label, data, patch, session, hooks) {
-		const rMod = G.saveModule(name, data, session);
-		const next = !session && rMod.status === "saved" ? G.openSession(name) : session;
-		const rMeta = patch ? G.saveMeta(patch, session) : null;
-		const problems = [[rMod, label]];
-		if (rMeta) problems.push([rMeta, "Los datos del proyecto"]);
-		for (const [r, lab] of problems) {
-			if (writeOk(r)) continue;
-			if (r.status === "rejected" && r.reason === "project-changed") hooks.onStale();
-			else showWriteProblem(G.describeWrite(r, lab), hooks.setStatus);
-			return {
-				ok: false,
-				session: next
-			};
-		}
-		return {
+		const r = G.saveState(name, data, patch, session);
+		const next = !session && r.status === "saved" ? G.openSession(name) : session;
+		if (writeOk(r)) return {
 			ok: true,
+			session: next
+		};
+		if (r.status === "rejected" && r.reason === "project-changed") hooks.onStale();
+		else showWriteProblem(G.describeWrite(r, label), hooks.setStatus);
+		return {
+			ok: false,
 			session: next
 		};
 	}

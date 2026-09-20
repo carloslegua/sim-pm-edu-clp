@@ -896,8 +896,6 @@ function reportWrite(r: WriteResult, label: string): boolean {
 function gpiPush(): boolean {
   if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) return false;
   if (loadedProjectId != null && window.GPI.activeId() !== loadedProjectId) { markProjectStale(); return false; }
-  const rMod = window.GPI.saveModule("charter", state, session);
-  if (!session && rMod.status === "saved") session = window.GPI.openSession("charter"); // módulo que arrancó sin proyecto: desde ahora sí hay versión que vigilar
   const patch: Record<string, unknown> = {
     name: (document.getElementById("projectTitle") as HTMLInputElement).value,
     course: (document.getElementById("courseTitle") as HTMLInputElement).value
@@ -906,8 +904,12 @@ function gpiPush(): boolean {
   if ((state.identification.manager || "").trim()) patch.manager = state.identification.manager;
   if ((state.identification.client || "").trim()) patch.client = state.identification.client;
   if (Number(state.budget.amount) > 0) { patch.capex = state.budget.amount; patch.currency = state.budget.currency; }
-  const rMeta = window.GPI.saveMeta(patch as Partial<ProjectMeta>, session);
-  return reportWrite(rMod, "El Acta") && reportWrite(rMeta, "Los datos del proyecto");
+  // UNA sola operación atómica (Acta + metadatos): un conflicto en cualquiera
+  // de los dos no escribe nada -- antes el Acta conservaba un patrocinador y los
+  // metadatos del proyecto quedaban con otro (ver commitState() en el núcleo).
+  const r = window.GPI.saveState("charter", state, patch as Partial<ProjectMeta>, session);
+  if (!session && r.status === "saved") session = window.GPI.openSession("charter"); // módulo que arrancó sin proyecto: desde ahora sí hay versión que vigilar
+  return reportWrite(r, "El Acta");
 }
 
 function init(): void {

@@ -355,9 +355,15 @@ export interface WriteResult {
 export interface EditSession {
   projectId: string;
   module: string;
+  // Lo CONFIRMADO en disco (cargado o guardado con éxito): revisión, foto del
+  // módulo y metadatos. Lo que se aplicó pero solo quedó en memoria (cuota
+  // agotada) vive aparte, en "pending", hasta que se persista de verdad --
+  // así un reintento con los mismos datos intenta guardar en vez de
+  // tomarlos por "sin cambios".
   rev: number;
   snapshot: string;
   meta: Partial<ProjectMeta>;
+  pending?: { module?: { json: string; rev: number }; meta?: Record<string, unknown> };
 }
 
 export interface GpiDb {

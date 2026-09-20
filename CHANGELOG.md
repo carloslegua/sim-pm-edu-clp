@@ -66,6 +66,25 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Un reintento tras cuota agotada ya no dice «Sincronizado» sin
+  guardar, y un conflicto del módulo ya no deja pasar sus metadatos
+  (segunda revisión externa, hallazgos alta y media)** — reproducido en
+  Chrome con el Acta: (alta) tras un fallo de cuota el botón decía «Sin
+  sincronizar», pero al restablecer el almacenamiento y reintentar decía
+  «✓ Sincronizado» con `hasUnsavedChanges()` aún en `true` y la
+  descripción anterior en disco, porque la sesión adoptaba lo pendiente
+  como confirmado y el reintento resultaba `unchanged`; (media) con un
+  conflicto en el Acta, el módulo no se sobrescribía pero sus metadatos
+  sí (patrocinador S0 en el Acta, S1 en el proyecto). `EditSession` ahora
+  separa lo confirmado de lo pendiente y el reintento intenta persistir
+  lo pendiente; el módulo y sus metadatos se guardan con la nueva
+  `GPI.saveState()` como una sola operación atómica (un conflicto en
+  cualquiera no escribe nada; los campos de meta en conflicto se listan
+  como `meta.<campo>`). Pruebas: seis nuevas en `write-contract.test.ts`
+  y las dos repros del Acta en `project-charter.smoke.test.ts`, todas
+  verificadas contra el código anterior. Ver ARCHITECTURE.md, "Segunda
+  revisión: lo pendiente no es lo confirmado…".
+
 - **Los 13 módulos usan el contrato de escritura: sesión de edición y
   estado según el resultado real (revisión externa, hallazgos alta y
   media; parte de los módulos)** — reproducido en Chrome: abrir el Acta,

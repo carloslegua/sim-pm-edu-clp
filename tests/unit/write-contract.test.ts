@@ -15,8 +15,8 @@
 //    describeWrite() da el texto común.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  KEY, activeId, createProject, describeWrite, getModule, meta, openSession,
-  patchMeta, rebaseSession, saveMeta, saveModule, setActive, setModule, writeModule
+  KEY, activeId, createProject, describeWrite, getModule, hasUnsavedChanges, meta, openSession,
+  patchMeta, rebaseSession, saveMeta, saveModule, saveState, setActive, setModule, writeModule
 } from "../../src/core/gpi-core";
 
 beforeEach(() => { localStorage.removeItem(KEY); });
@@ -117,8 +117,98 @@ describe("saveMeta -- metadatos por campo", () => {
     patchMeta({ client: "C-otra-pestaña" });
     const r = saveMeta({ client: "C-mía" }, s);
     expect(r.status).toBe("conflict");
-    expect(r.conflicts).toEqual(["client"]);
+    expect(r.conflicts).toEqual(["meta.client"]);
     expect(meta()!.client).toBe("C-otra-pestaña");
+  });
+});
+
+describe("segunda revisión externa: pendiente != confirmado, y guardado atómico módulo + metadatos", () => {
+  function bloquearCuota() {
+    const real = Storage.prototype.setItem;
+    return vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, k: string, v: string) {
+      if (k === KEY) throw new DOMException("Quota exceeded", "QuotaExceededError");
+      return real.call(this, k, v);
+    });
+  }
+
+  it("REPRO (alta): un reintento con los MISMOS datos tras un 'pending' intenta persistir -- nunca 'unchanged' mientras siga pendiente", () => {
+    createProject({ name: "A" });
+    writeModule("charter", { description: "anterior" });
+    const s = openSession("charter")!;
+    const spy = bloquearCuota();
+    const r1 = saveModule("charter", { description: "nueva" }, s);
+    expect(r1.status).toBe("pending");
+    expect(hasUnsavedChanges()).toBe(true);
+
+    // Reintento con el almacenamiento aún lleno: sigue pendiente, NO "unchanged".
+    const r2 = saveModule("charter", { description: "nueva" }, s);
+    expect(r2.status).toBe("pending");
+    expect(describeWrite(r2)).toMatch(/SIN guardar/);
+
+    // Se restablece el almacenamiento: el mismo reintento persiste de verdad.
+    spy.mockRestore();
+    const r3 = saveModule("charter", { description: "nueva" }, s);
+    expect(r3.status).toBe("saved");
+    expect(hasUnsavedChanges()).toBe(false);
+    const enDisco = JSON.parse(localStorage.getItem(KEY) as string);
+    expect(enDisco.projects[activeId() as string].modules.charter).toEqual({ description: "nueva" });
+    // y ahora sí, sin cambios nuevos, es unchanged legítimo
+    expect(saveModule("charter", { description: "nueva" }, s).status).toBe("unchanged");
+  });
+
+  it("lo mismo para metadatos pendientes: el reintento persiste, no se toma por 'sin cambios'", () => {
+    createProject({ name: "A", client: "C0" });
+    const s = openSession("charter")!;
+    const spy = bloquearCuota();
+    expect(saveMeta({ client: "C1" }, s).status).toBe("pending");
+    expect(saveMeta({ client: "C1" }, s).status).toBe("pending");
+    spy.mockRestore();
+    expect(saveMeta({ client: "C1" }, s).status).toBe("saved");
+    expect(hasUnsavedChanges()).toBe(false);
+    expect(JSON.parse(localStorage.getItem(KEY) as string).projects[activeId() as string].meta.client).toBe("C1");
+  });
+
+  it("un dato pendiente que cambia otra vez antes de persistirse se guarda con lo último", () => {
+    createProject({ name: "A" });
+    const s = openSession("charter")!;
+    const spy = bloquearCuota();
+    expect(saveModule("charter", { v: 1 }, s).status).toBe("pending");
+    expect(saveModule("charter", { v: 2 }, s).status).toBe("pending");
+    spy.mockRestore();
+    expect(saveModule("charter", { v: 3 }, s).status).toBe("saved");
+    expect(getModule("charter")).toEqual({ v: 3 });
+  });
+
+  it("REPRO (media): conflicto del módulo => NO se guardan sus metadatos por separado (guardado atómico)", () => {
+    createProject({ name: "N", sponsor: "S0" });
+    writeModule("charter", { identification: { sponsor: "S0" } });
+    const s = openSession("charter")!;
+    writeModule("charter", { identification: { sponsor: "de-otra-pestaña" } }); // otra pestaña cambia el Acta
+    // Esta pestaña edita el patrocinador a S1: Acta Y meta.sponsor cambian juntos
+    const r = saveState("charter", { identification: { sponsor: "S1" } }, { sponsor: "S1" }, s);
+    expect(r.status).toBe("conflict");
+    expect(getModule("charter")).toEqual({ identification: { sponsor: "de-otra-pestaña" } });
+    expect(meta()!.sponsor).toBe("S0"); // antes de este fix quedaba "S1": versiones incompatibles del mismo dato
+  });
+
+  it("conflicto de un campo de metadatos => tampoco se escribe el módulo (todo o nada)", () => {
+    createProject({ name: "N", client: "C0" });
+    writeModule("charter", { a: 1 });
+    const s = openSession("charter")!;
+    patchMeta({ client: "C-otra-pestaña" });
+    const r = saveState("charter", { a: 2 }, { client: "C-mía" }, s);
+    expect(r).toMatchObject({ status: "conflict", conflicts: ["meta.client"] });
+    expect(getModule("charter")).toEqual({ a: 1 });
+  });
+
+  it("sin conflictos, módulo y metadatos se aplican juntos con una sola escritura y actualizan la sesión", () => {
+    createProject({ name: "N", sponsor: "S0" });
+    const s = openSession("charter")!;
+    const r = saveState("charter", { identification: { sponsor: "S1" } }, { sponsor: "S1" }, s);
+    expect(r.status).toBe("saved");
+    expect(getModule("charter")).toEqual({ identification: { sponsor: "S1" } });
+    expect(meta()!.sponsor).toBe("S1");
+    expect(saveState("charter", { identification: { sponsor: "S1" } }, { sponsor: "S1" }, s).status).toBe("unchanged");
   });
 });
 

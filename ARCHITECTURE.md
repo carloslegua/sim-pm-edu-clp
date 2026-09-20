@@ -692,6 +692,36 @@ combinación anterior.
 Cubierto en `tests/unit/write-contract.test.ts` (incluye la repro exacta
 del Acta).
 
+### Segunda revisión: lo pendiente no es lo confirmado, y módulo + metadatos van juntos
+
+Dos fallos reproducidos sobre la primera versión del contrato:
+
+- **Alta — un reintento decía «Sincronizado» sin guardar.** Tras un
+  `pending` (cuota agotada) la sesión adoptaba los datos como si ya
+  estuvieran guardados; reintentar los mismos datos daba `unchanged` y no
+  se escribía nada. Ahora `EditSession` separa **lo confirmado**
+  (`rev`/`snapshot`/`meta`, lo que hay de verdad en disco) de **lo
+  pendiente** (`session.pending`: módulo y campos de meta aplicados solo
+  en memoria). Un fallo de escritura deja la sesión confirmada intacta y
+  registra lo pendiente; el reintento primero intenta persistir la copia
+  en memoria (`flushPending()`) y, si lo logra, promueve lo pendiente a
+  confirmado (`confirmPending()`) y devuelve `saved`. Mientras siga sin
+  poder escribirse, el resultado es `pending`, **nunca** `unchanged`.
+- **Media — un conflicto del módulo dejaba pasar sus metadatos.** El
+  módulo y sus metadatos comunes se guardaban con dos llamadas
+  (`saveModule` + `saveMeta`); si la primera rechazaba por conflicto, la
+  segunda igual escribía (el Acta conservaba el patrocinador S0 y el
+  proyecto quedaba con S1). Ahora **`GPI.saveState(nombre, datos, parche,
+  sesión)`** valida ambos contra la sesión y los aplica como UNA operación
+  (`commitState()`, un único `save()`): un conflicto en el módulo o en un
+  campo de meta (`meta.<campo>` en `conflicts`) no escribe nada.
+  `saveModule` y `saveMeta` son casos particulares de `saveState`.
+
+`pushWithSession()` y el `gpiPush()` del Acta llaman a `saveState`.
+Cubierto en `tests/unit/write-contract.test.ts` (seis pruebas nuevas, las
+seis fallan contra el núcleo anterior) y en `project-charter.smoke.test.ts`
+(las dos repros, verificadas contra el código anterior).
+
 ### Cómo lo usan los 13 módulos
 
 Cada módulo pide `GPI.openSession("<módulo>")` en el mismo instante en
@@ -701,7 +731,7 @@ que lee sus datos (`init()`/`pull()`/`tryLoadLive()`, donde ya capturaba
 `pushWithSession()` de `src/shared/write-session.ts` — lógica técnica
 compartida **en tiempo de compilación** (Vite la inlinea en cada IIFE;
 ningún script extra, `file://` y GitHub Pages no cambian) — que llama a
-`saveModule` + `saveMeta`, y según el resultado: `conflict`/`pending` →
+`saveState` (módulo + metadatos en una sola operación), y según el resultado: `conflict`/`pending` →
 estado + `<div id="banner">` con `describeWrite()`; `rejected` por
 proyecto distinto → el `markProjectStale()` que cada módulo ya tenía. Las
 funciones de guardado devuelven `boolean` y el botón "☁ Sincronizar" solo

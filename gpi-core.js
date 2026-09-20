@@ -315,8 +315,20 @@ var GPI = (function(exports) {
 	function rebaseSession(session, data) {
 		if (session) session.snapshot = jsonOf(data);
 	}
-	function saveModule(name, data, session) {
-		if (!session || session.module !== name) return writeModule(name, data);
+	function flushPending() {
+		return pendingUnsaved ? save(pendingUnsaved) : true;
+	}
+	function confirmPending(s) {
+		const p = db().projects[s.projectId];
+		if (s.pending && s.pending.module) {
+			s.rev = p ? revOf(p, s.module) : s.pending.module.rev;
+			s.snapshot = s.pending.module.json;
+		}
+		if (s.pending && s.pending.meta) Object.assign(s.meta, s.pending.meta);
+		delete s.pending;
+	}
+	function commitState(session, hasData, data, patch) {
+		const name = session.module;
 		const d = db(), p = d.projects[session.projectId];
 		if (!p) return {
 			status: "rejected",
@@ -328,81 +340,117 @@ var GPI = (function(exports) {
 			rev: null,
 			reason: "project-changed"
 		};
-		const json = jsonOf(data);
-		if (json === session.snapshot) return {
-			status: "unchanged",
+		let settled = false;
+		if (session.pending && (!pendingUnsaved || flushPending())) {
+			confirmPending(session);
+			settled = true;
+		}
+		const pend = session.pending;
+		const mods = isPlainObject(p.modules) ? p.modules : {};
+		const conflicts = [];
+		let writeMod = false, json = "";
+		const baseRev = pend && pend.module ? pend.module.rev : session.rev;
+		if (hasData) {
+			json = jsonOf(data);
+			const baseJson = pend && pend.module ? pend.module.json : session.snapshot;
+			if (json !== baseJson) {
+				const diskRev = revOf(p, name);
+				if (json === jsonOf(mods[name]) && !pendingUnsaved) {
+					session.rev = diskRev;
+					session.snapshot = json;
+				} else if (diskRev !== baseRev) conflicts.push(name);
+				else writeMod = true;
+			}
+		}
+		const cur = p.meta;
+		const base = Object.assign({}, session.meta, pend && pend.meta ? pend.meta : {});
+		const apply = {};
+		if (patch) Object.keys(patch).forEach((k) => {
+			const v = patch[k];
+			if (jsonOf(v) === jsonOf(base[k])) return;
+			if (jsonOf(cur[k]) === jsonOf(v) && !pendingUnsaved) {
+				session.meta[k] = v;
+				return;
+			}
+			if (jsonOf(cur[k]) !== jsonOf(base[k])) {
+				conflicts.push("meta." + k);
+				return;
+			}
+			apply[k] = v;
+		});
+		if (conflicts.length) return {
+			status: "conflict",
+			rev: revOf(p, name),
+			conflicts
+		};
+		if (!writeMod && !Object.keys(apply).length) return pend ? {
+			status: "pending",
+			rev: pend.module ? pend.module.rev : null
+		} : {
+			status: settled ? "saved" : "unchanged",
 			rev: session.rev
 		};
-		const mods = isPlainObject(p.modules) ? p.modules : {};
-		const diskRev = revOf(p, name);
-		if (json === jsonOf(mods[name])) {
-			session.rev = diskRev;
-			session.snapshot = json;
+		let rev = null;
+		if (writeMod) {
+			p.modules = isPlainObject(p.modules) ? p.modules : {};
+			p.modules[name] = data;
+			rev = bumpRev(p, name);
+		}
+		if (Object.keys(apply).length) Object.assign(p.meta, apply);
+		p.meta.updatedAt = Date.now();
+		if (save(d)) {
+			if (session.pending) confirmPending(session);
+			if (writeMod && rev != null) {
+				session.rev = rev;
+				session.snapshot = json;
+			}
+			Object.assign(session.meta, apply);
 			return {
-				status: "unchanged",
-				rev: diskRev
+				status: "saved",
+				rev: writeMod ? rev : session.rev
 			};
 		}
-		if (diskRev !== session.rev) return {
-			status: "conflict",
-			rev: diskRev,
-			conflicts: [name]
+		session.pending = {
+			module: writeMod && rev != null ? {
+				json,
+				rev
+			} : pend ? pend.module : void 0,
+			meta: Object.assign({}, pend && pend.meta ? pend.meta : {}, apply)
 		};
-		const r = writeModule(name, data, { projectId: session.projectId });
-		if (r.rev != null) {
-			session.rev = r.rev;
-			session.snapshot = json;
+		return {
+			status: "pending",
+			rev
+		};
+	}
+	function saveState(name, data, patch, session) {
+		if (!session || session.module !== name) {
+			const r = writeModule(name, data);
+			if (patch && r.status !== "rejected") {
+				patchMeta(patch);
+				if (r.status === "saved" && pendingUnsaved) return {
+					status: "pending",
+					rev: r.rev
+				};
+			}
+			return r;
 		}
-		return r;
+		return commitState(session, true, data, patch);
+	}
+	function saveModule(name, data, session) {
+		return saveState(name, data, null, session);
 	}
 	function saveMeta(partial, session) {
-		const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
-		if (!p) return {
+		const d = db();
+		if (!(d.activeId ? d.projects[d.activeId] : null)) return {
 			status: "rejected",
 			rev: null,
 			reason: "no-active"
 		};
 		if (!session) return {
-			status: patchMeta(partial) ? "saved" : "rejected",
+			status: patchMeta(partial) ? pendingUnsaved ? "pending" : "saved" : "rejected",
 			rev: null
 		};
-		if (d.activeId !== session.projectId) return {
-			status: "rejected",
-			rev: null,
-			reason: "project-changed"
-		};
-		const cur = p.meta;
-		const base = session.meta;
-		const apply = {}, conflicts = [];
-		Object.keys(partial || {}).forEach((k) => {
-			const v = partial[k];
-			if (jsonOf(v) === jsonOf(base[k])) return;
-			if (jsonOf(cur[k]) === jsonOf(v)) {
-				base[k] = v;
-				return;
-			}
-			if (jsonOf(cur[k]) !== jsonOf(base[k])) {
-				conflicts.push(k);
-				return;
-			}
-			apply[k] = v;
-		});
-		let saved = true;
-		if (Object.keys(apply).length) {
-			Object.assign(p.meta, apply);
-			p.meta.updatedAt = Date.now();
-			saved = save(d);
-			Object.assign(base, apply);
-		}
-		const status = conflicts.length ? "conflict" : !Object.keys(apply).length ? "unchanged" : saved ? "saved" : "pending";
-		return conflicts.length ? {
-			status,
-			rev: null,
-			conflicts
-		} : {
-			status,
-			rev: null
-		};
+		return commitState(session, false, void 0, partial);
 	}
 	function describeWrite(r, label) {
 		const what = label || "Estos datos";
@@ -2414,6 +2462,7 @@ var GPI = (function(exports) {
 		rebaseSession,
 		saveModule,
 		saveMeta,
+		saveState,
 		describeWrite,
 		lastReconcile,
 		createProject,
@@ -2479,6 +2528,7 @@ var GPI = (function(exports) {
 	exports.requirementsAudit = requirementsAudit;
 	exports.saveMeta = saveMeta;
 	exports.saveModule = saveModule;
+	exports.saveState = saveState;
 	exports.schedulePlanAudit = schedulePlanAudit;
 	exports.scheduleStats = scheduleStats;
 	exports.scheduleValidate = scheduleValidate;

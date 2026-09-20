@@ -151,6 +151,67 @@ describe("Project_Charter.html (migrado a project-charter.js)", () => {
     expect(doc.getElementById("statusLeft")!.textContent).toMatch(/cambió en otra pestaña/);
   });
 
+  async function abrirActa(modules: Record<string, unknown>, meta: Record<string, unknown> = {}) {
+    const seedDb = {
+      version: 1, activeId: "p1",
+      projects: { p1: { schema: "gpi.project/v1", meta: Object.assign({ id: "p1", name: "Proyecto A", course: "GPI", createdAt: 1, updatedAt: 1 }, meta), modules } }
+    };
+    const dom = await JSDOM.fromURL(base + "Project_Charter.html", {
+      runScripts: "dangerously", resources: "usable",
+      beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
+    });
+    await new Promise((r) => setTimeout(r, 600));
+    return dom;
+  }
+  function editarSponsor(dom: any, valor: string) {
+    const el = dom.window.document.querySelector('[data-bind="identification.sponsor"]') as HTMLInputElement;
+    el.value = valor;
+    el.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  }
+
+  it("REPRO (alta): tras un fallo de cuota, reintentar con los mismos datos NO dice «Sincronizado» sin guardar", async () => {
+    const dom = await abrirActa({ charter: { description: "anterior" } });
+    const win = dom.window as any, doc = dom.window.document;
+    const boton = () => doc.getElementById("gpiSyncBtn") as HTMLElement;
+
+    const real = win.Storage.prototype.setItem;
+    win.Storage.prototype.setItem = function (this: Storage, k: string, v: string) {
+      if (k === "gpi_db") throw new win.DOMException("Quota exceeded", "QuotaExceededError");
+      return real.call(this, k, v);
+    };
+    editarSponsor(dom, "Sponsor nuevo");
+    boton().click();
+    expect(boton().textContent).toMatch(/Sin sincronizar/);
+    expect(win.GPI.hasUnsavedChanges()).toBe(true);
+
+    // Reintento con el almacenamiento aún lleno: sigue sin sincronizar.
+    boton().click();
+    expect(boton().textContent).toMatch(/Sin sincronizar/);
+
+    // Almacenamiento restablecido: el mismo reintento guarda DE VERDAD.
+    win.Storage.prototype.setItem = real;
+    boton().click();
+    expect(boton().textContent).toMatch(/✓ Sincronizado/);
+    expect(win.GPI.hasUnsavedChanges()).toBe(false);
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    expect(saved.projects.p1.modules.charter.identification.sponsor).toBe("Sponsor nuevo");
+  });
+
+  it("REPRO (media): un conflicto del Acta no deja pasar sus metadatos por separado (patrocinador S0 en el Acta y S1 en el proyecto)", async () => {
+    const dom = await abrirActa({ charter: { identification: { sponsor: "S0" } } }, { sponsor: "S0" });
+    const win = dom.window as any, doc = dom.window.document;
+    // Otra pestaña actualiza el Acta (sube la revisión).
+    win.GPI.writeModule("charter", { identification: { sponsor: "de-otra-pestaña" } });
+
+    editarSponsor(dom, "S1"); // esta pestaña edita el patrocinador: Acta y meta.sponsor cambian juntos
+    (doc.getElementById("gpiSyncBtn") as HTMLElement).click();
+
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+    expect(saved.projects.p1.modules.charter.identification.sponsor).toBe("de-otra-pestaña");
+    expect(saved.projects.p1.meta.sponsor).toBe("S0"); // antes quedaba "S1"
+    expect((doc.getElementById("gpiSyncBtn") as HTMLElement).textContent).toMatch(/Sin sincronizar/);
+  });
+
   it("BUG REPORTADO: si otra pestaña activa un proyecto distinto mientras el Acta sigue abierta, el guardado de salida NO debe sobrescribir ese otro proyecto", async () => {
     // Repro exacta: "abrir el Acta del proyecto A, activar B desde el
     // Panel y ejecutar el guardado de salida del Acta. B terminó con el

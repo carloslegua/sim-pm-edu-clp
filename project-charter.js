@@ -1109,8 +1109,6 @@
 			markProjectStale();
 			return false;
 		}
-		const rMod = window.GPI.saveModule("charter", state, session);
-		if (!session && rMod.status === "saved") session = window.GPI.openSession("charter");
 		const patch = {
 			name: document.getElementById("projectTitle").value,
 			course: document.getElementById("courseTitle").value
@@ -1122,8 +1120,9 @@
 			patch.capex = state.budget.amount;
 			patch.currency = state.budget.currency;
 		}
-		const rMeta = window.GPI.saveMeta(patch, session);
-		return reportWrite(rMod, "El Acta") && reportWrite(rMeta, "Los datos del proyecto");
+		const r = window.GPI.saveState("charter", state, patch, session);
+		if (!session && r.status === "saved") session = window.GPI.openSession("charter");
+		return reportWrite(r, "El Acta");
 	}
 	function init() {
 		wireStatics();

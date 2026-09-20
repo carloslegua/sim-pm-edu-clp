@@ -36,16 +36,12 @@ export function pushWithSession(
   G: Gpi, name: string, label: string, data: unknown,
   patch: Partial<ProjectMeta> | null, session: EditSession | null, hooks: PushHooks
 ): { ok: boolean; session: EditSession | null } {
-  const rMod = G.saveModule(name, data, session);
-  const next = !session && rMod.status === "saved" ? G.openSession(name) : session;
-  const rMeta = patch ? G.saveMeta(patch, session) : null;
-  const problems: Array<[WriteResult, string]> = [[rMod, label]];
-  if (rMeta) problems.push([rMeta, "Los datos del proyecto"]);
-  for (const [r, lab] of problems) {
-    if (writeOk(r)) continue;
-    if (r.status === "rejected" && r.reason === "project-changed") hooks.onStale();
-    else showWriteProblem(G.describeWrite(r, lab), hooks.setStatus);
-    return { ok: false, session: next };
-  }
-  return { ok: true, session: next };
+  // UNA sola operación atómica (módulo + metadatos): un conflicto o rechazo
+  // en cualquiera de los dos no escribe nada -- ver commitState() en el núcleo.
+  const r = G.saveState(name, data, patch, session);
+  const next = !session && r.status === "saved" ? G.openSession(name) : session;
+  if (writeOk(r)) return { ok: true, session: next };
+  if (r.status === "rejected" && r.reason === "project-changed") hooks.onStale();
+  else showWriteProblem(G.describeWrite(r, label), hooks.setStatus);
+  return { ok: false, session: next };
 }

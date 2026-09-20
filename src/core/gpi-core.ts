@@ -23,7 +23,7 @@ import type {
   RequirementsModule, RequirementItem, ScopeStatementModule, ScopeDeliverable,
   CharterModule, CharterRequirement, CostModule,
   SchedulePlanModule, SchedulePlanCalendar,
-  EditSession, WriteResult, WriteStatus
+  EditSession, WriteResult
 } from "./types";
 export type { EditSession, WriteResult, WriteStatus } from "./types";
 
@@ -414,20 +414,100 @@ export function openSession(module: string): EditSession | null {
 export function rebaseSession(session: EditSession | null, data: unknown): void {
   if (session) session.snapshot = jsonOf(data);
 }
-export function saveModule(name: string, data: unknown, session: EditSession | null): WriteResult {
-  if (!session || session.module !== name) return writeModule(name, data);
+// Reintenta persistir lo que quedó solo en memoria por cuota agotada.
+function flushPending(): boolean { return pendingUnsaved ? save(pendingUnsaved) : true; }
+// Lo pendiente de la sesión ya está en disco: pasa a ser lo CONFIRMADO.
+function confirmPending(s: EditSession): void {
+  const p = db().projects[s.projectId];
+  if (s.pending && s.pending.module) { s.rev = p ? revOf(p, s.module) : s.pending.module.rev; s.snapshot = s.pending.module.json; }
+  if (s.pending && s.pending.meta) Object.assign(s.meta, s.pending.meta);
+  delete s.pending;
+}
+
+// Guardado ATÓMICO de un módulo y sus metadatos comunes (hallazgos de la
+// segunda revisión externa sobre el contrato de escritura):
+//  1) "unchanged" nunca puede significar éxito mientras haya una escritura
+//     pendiente: saveModule() actualizaba la foto de referencia de la sesión
+//     incluso cuando devolvía "pending", así que un reintento con los mismos
+//     datos se tomaba por "sin cambios" -- el botón decía «✓ Sincronizado»
+//     con hasUnsavedChanges() en true y el disco con el dato viejo. Ahora la
+//     sesión separa lo CONFIRMADO (rev/snapshot/meta) de lo PENDIENTE
+//     (session.pending) y un reintento intenta persistir lo pendiente.
+//  2) módulo y metadatos se validan ANTES de escribir y se aplican en UNA sola
+//     operación: un conflicto (o rechazo) en cualquiera de los dos no escribe
+//     nada -- antes el Acta conservaba el patrocinador S0 y los metadatos del
+//     proyecto quedaban con S1 (versiones incompatibles del mismo dato).
+function commitState(session: EditSession, hasData: boolean, data: unknown, patch: Partial<ProjectMeta> | null): WriteResult {
+  const name = session.module;
   const d = db(), p = d.projects[session.projectId];
   if (!p) return { status: "rejected", rev: null, reason: "no-active" };
   if (d.activeId !== session.projectId) return { status: "rejected", rev: null, reason: "project-changed" };
-  const json = jsonOf(data);
-  if (json === session.snapshot) return { status: "unchanged", rev: session.rev }; // esta pestaña no modificó lo que cargó
+
+  // Lo pendiente de un intento anterior: se reintenta; si ya se persistió, se confirma.
+  let settled = false; // lo pendiente acaba de quedar en disco en ESTA llamada -> es un "saved", no un "unchanged"
+  if (session.pending && (!pendingUnsaved || flushPending())) { confirmPending(session); settled = true; }
+  const pend = session.pending; // sigue definido solo si continúa sin persistirse
+
   const mods = isPlainObject(p.modules) ? (p.modules as Record<string, unknown>) : {};
-  const diskRev = revOf(p, name);
-  if (json === jsonOf(mods[name])) { session.rev = diskRev; session.snapshot = json; return { status: "unchanged", rev: diskRev }; }
-  if (diskRev !== session.rev) return { status: "conflict", rev: diskRev, conflicts: [name] };
-  const r = writeModule(name, data, { projectId: session.projectId });
-  if (r.rev != null) { session.rev = r.rev; session.snapshot = json; }
-  return r;
+  const conflicts: string[] = [];
+  let writeMod = false, json = "";
+  const baseRev = pend && pend.module ? pend.module.rev : session.rev;
+  if (hasData) {
+    json = jsonOf(data);
+    const baseJson = pend && pend.module ? pend.module.json : session.snapshot;
+    if (json !== baseJson) {
+      const diskRev = revOf(p, name);
+      if (json === jsonOf(mods[name]) && !pendingUnsaved) { session.rev = diskRev; session.snapshot = json; } // ya idéntico a lo guardado
+      else if (diskRev !== baseRev) conflicts.push(name);
+      else writeMod = true;
+    }
+  }
+  const cur = p.meta as unknown as Record<string, unknown>;
+  const base = Object.assign({}, session.meta, pend && pend.meta ? pend.meta : {}) as Record<string, unknown>;
+  const apply: Record<string, unknown> = {};
+  if (patch) {
+    Object.keys(patch).forEach((k) => {
+      const v = (patch as Record<string, unknown>)[k];
+      if (jsonOf(v) === jsonOf(base[k])) return;                                          // esta pestaña no lo tocó
+      if (jsonOf(cur[k]) === jsonOf(v) && !pendingUnsaved) { (session.meta as Record<string, unknown>)[k] = v; return; } // ya coincide con lo guardado
+      if (jsonOf(cur[k]) !== jsonOf(base[k])) { conflicts.push("meta." + k); return; }    // otra pestaña lo cambió a otra cosa
+      apply[k] = v;
+    });
+  }
+  if (conflicts.length) return { status: "conflict", rev: revOf(p, name), conflicts };
+  if (!writeMod && !Object.keys(apply).length) return pend ? { status: "pending", rev: pend.module ? pend.module.rev : null } : { status: settled ? "saved" : "unchanged", rev: session.rev };
+
+  // Una sola operación: módulo + metadatos + una sola llamada a save().
+  let rev: number | null = null;
+  if (writeMod) {
+    p.modules = isPlainObject(p.modules) ? p.modules : {};
+    (p.modules as Record<string, unknown>)[name] = data;
+    rev = bumpRev(p, name);
+  }
+  if (Object.keys(apply).length) Object.assign(p.meta, apply);
+  p.meta.updatedAt = Date.now();
+  if (save(d)) {
+    if (session.pending) confirmPending(session);
+    if (writeMod && rev != null) { session.rev = rev; session.snapshot = json; }
+    Object.assign(session.meta, apply);
+    return { status: "saved", rev: writeMod ? rev : session.rev };
+  }
+  session.pending = {
+    module: writeMod && rev != null ? { json, rev } : (pend ? pend.module : undefined),
+    meta: Object.assign({}, pend && pend.meta ? pend.meta : {}, apply)
+  };
+  return { status: "pending", rev };
+}
+export function saveState(name: string, data: unknown, patch: Partial<ProjectMeta> | null, session: EditSession | null): WriteResult {
+  if (!session || session.module !== name) {
+    const r = writeModule(name, data);
+    if (patch && r.status !== "rejected") { patchMeta(patch); if (r.status === "saved" && pendingUnsaved) return { status: "pending", rev: r.rev }; }
+    return r;
+  }
+  return commitState(session, true, data, patch);
+}
+export function saveModule(name: string, data: unknown, session: EditSession | null): WriteResult {
+  return saveState(name, data, null, session);
 }
 // Metadatos por CAMPO: solo se escriben los campos que ESTA pestaña cambió
 // respecto de lo que cargó (session.meta); un campo que la pestaña no tocó
@@ -438,27 +518,8 @@ export function saveModule(name: string, data: unknown, session: EditSession | n
 export function saveMeta(partial: Partial<ProjectMeta>, session: EditSession | null): WriteResult {
   const d = db(), p = d.activeId ? d.projects[d.activeId] : null;
   if (!p) return { status: "rejected", rev: null, reason: "no-active" };
-  if (!session) { const applied = patchMeta(partial); return { status: applied ? "saved" : "rejected", rev: null }; }
-  if (d.activeId !== session.projectId) return { status: "rejected", rev: null, reason: "project-changed" };
-  const cur = p.meta as unknown as Record<string, unknown>;
-  const base = session.meta as Record<string, unknown>;
-  const apply: Record<string, unknown> = {}, conflicts: string[] = [];
-  Object.keys(partial || {}).forEach((k) => {
-    const v = (partial as Record<string, unknown>)[k];
-    if (jsonOf(v) === jsonOf(base[k])) return;                       // esta pestaña no lo tocó
-    if (jsonOf(cur[k]) === jsonOf(v)) { base[k] = v; return; }       // ya coincide con lo guardado
-    if (jsonOf(cur[k]) !== jsonOf(base[k])) { conflicts.push(k); return; } // otra pestaña lo cambió a otra cosa
-    apply[k] = v;
-  });
-  let saved = true;
-  if (Object.keys(apply).length) {
-    Object.assign(p.meta, apply);
-    p.meta.updatedAt = Date.now();
-    saved = save(d);
-    Object.assign(base, apply);
-  }
-  const status: WriteStatus = conflicts.length ? "conflict" : !Object.keys(apply).length ? "unchanged" : saved ? "saved" : "pending";
-  return conflicts.length ? { status, rev: null, conflicts } : { status, rev: null };
+  if (!session) { const applied = patchMeta(partial); return { status: applied ? (pendingUnsaved ? "pending" : "saved") : "rejected", rev: null }; }
+  return commitState(session, false, undefined, partial);
 }
 // Texto común para informar al usuario según el resultado de una escritura
 // ("" cuando no hay nada que avisar): así ningún módulo muestra "Sincronizado"
@@ -2217,6 +2278,7 @@ export const GPI = {
   rebaseSession,
   saveModule,
   saveMeta,
+  saveState,
   describeWrite,
   lastReconcile,
   createProject,
