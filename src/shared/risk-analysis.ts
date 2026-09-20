@@ -20,6 +20,7 @@
 //    (ver schedule-risk.ts); aquí solo viven los hallazgos que contrastan el nivel declarado con ese efecto.
 
 import type { RiskEventInput } from "./range-estimating";
+import { DEFAULT_RESERVES, normalizeReserves, validateReserves, type ReservePolicy } from "./reserve-policy";
 
 export type RiskType = "amenaza" | "oportunidad";
 export type RiskStatus = "identificado" | "analizado" | "con_respuesta" | "monitoreo" | "materializado" | "cerrado";
@@ -74,6 +75,9 @@ export interface RiskPlan {
   reviewDays: number;           // cada cuántos días se revisa un riesgo abierto
   categories: string[];         // RBS de primer nivel
   methodology: string; reservePolicy: string; roles: string;
+  // Política de reservas ESTRUCTURADA (quién libera la contingencia y hasta qué monto; umbral de alerta). `reservePolicy`
+  // (texto) la explica; esta es la que valida la aprobación de las órdenes de cambio en Costos (ver reserve-policy.ts).
+  reserves: ReservePolicy;
 }
 export const DEFAULT_PLAN: RiskPlan = {
   probPct: [10, 30, 50, 70, 90],
@@ -85,7 +89,7 @@ export const DEFAULT_PLAN: RiskPlan = {
   ],
   thresholdMedium: 6, thresholdHigh: 15, reviewDays: 30,
   categories: ["Técnico", "Externo", "Organizacional", "Gestión del proyecto"],
-  methodology: "", reservePolicy: "", roles: ""
+  methodology: "", reservePolicy: "", roles: "", reserves: DEFAULT_RESERVES
 };
 
 const isNum = (v: unknown): v is number => typeof v === "number" && isFinite(v);
@@ -106,7 +110,8 @@ export function normalizePlan(p: unknown): RiskPlan {
     scopeDescriptors: Array.isArray(o.scopeDescriptors) && o.scopeDescriptors.length === 5 ? o.scopeDescriptors.map(str) : DEFAULT_PLAN.scopeDescriptors.slice(),
     thresholdMedium: toNum(o.thresholdMedium) ?? DEFAULT_PLAN.thresholdMedium, thresholdHigh: toNum(o.thresholdHigh) ?? DEFAULT_PLAN.thresholdHigh,
     reviewDays: toNum(o.reviewDays) ?? DEFAULT_PLAN.reviewDays, categories: cats.length ? cats : DEFAULT_PLAN.categories.slice(),
-    methodology: str(o.methodology), reservePolicy: str(o.reservePolicy), roles: str(o.roles)
+    methodology: str(o.methodology), reservePolicy: str(o.reservePolicy), roles: str(o.roles),
+    reserves: normalizeReserves(o.reserves)      // los planes guardados antes no lo traen: sin política por montos
   };
 }
 // El plan solo tiene sentido si sus escalas son crecientes y sus umbrales coherentes.
@@ -119,6 +124,7 @@ export function validatePlan(p: RiskPlan): string[] {
   if (!(p.thresholdMedium >= 1) || !(p.thresholdHigh <= 25) || !(p.thresholdMedium < p.thresholdHigh)) out.push("los umbrales de puntaje deben cumplir 1 ≤ medio < alto ≤ 25");
   if (!(p.reviewDays >= 1)) out.push("la frecuencia de revisión debe ser de al menos 1 día");
   if (new Set(p.categories.map((c) => c.toLowerCase())).size !== p.categories.length) out.push("las categorías de la RBS no pueden repetirse");
+  validateReserves(p.reserves).forEach((m) => out.push(m));
   return out;
 }
 

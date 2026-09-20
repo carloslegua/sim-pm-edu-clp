@@ -11,6 +11,19 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Política de reservas estructurada (PMBOK) que gobierna la aprobación de las
+  órdenes de cambio** — la política del plan de riesgos era solo texto. Ahora define
+  **quién libera la contingencia según el monto** (Director de Proyecto → CCB →
+  sponsor; límites por orden) y un **umbral de alerta de agotamiento**; la reserva de
+  gestión y los fondos adicionales siguen siendo siempre del sponsor. Se edita en el
+  Plan del Registro de Riesgos y **la aplica Costos**: una orden a contingencia no se
+  aprueba si el nivel de autoridad con que se aprueba (nuevo `authLevel` por orden,
+  deducido en las anteriores) no cubre el que exige su monto; al registrar una orden se
+  muestra qué instancia la autoriza; si la contingencia disponible baja del umbral se
+  alerta; el BOE incluye la política. Campos nuevos opcionales (`plan.reserves`,
+  `changeOrders[].authLevel`): los `.json` viejos abren sin límites, como antes. Nuevo
+  `src/shared/reserve-policy.ts`. Pruebas: `reserve-policy.test.ts` (16) y smoke de Costos
+  y Riesgos. Ver ARCHITECTURE.md.
 - **Registro de riesgos ↔ Cronograma (tercera entrega, AACE 40R-08 / 65R-11 +
   PMBOK)** — el impacto en plazo de un riesgo ya se traduce al **fin del
   proyecto**: se vuelve a correr el CPM con la duración afectada (una actividad

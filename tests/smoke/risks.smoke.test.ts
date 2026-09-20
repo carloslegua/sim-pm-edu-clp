@@ -359,6 +359,34 @@ describe("Risk_Register.html (Registro de riesgos)", () => {
     expect(doc.getElementById("mainArea")!.textContent).toMatch(/aún no tiene actividades enlazadas en el cronograma/);
   });
 
+  // ---- Política de reservas: quién libera la contingencia (la aplica Costos al aprobar órdenes de cambio) ----
+  const inpPlan = (doc: Document, p: string) => doc.querySelector(`.pi[data-p="${p}"]`) as HTMLInputElement;
+
+  it("Plan: la política de reservas define quién libera la contingencia por monto y el umbral de alerta; se valida su coherencia", async () => {
+    const dom = await abrir(), doc = dom.window.document;
+    await vista(dom, "plan");
+    expect(inpPlan(doc, "reserves.pmLimit").value).toBe("50000");                     // el ejemplo: PM hasta 50.000, CCB hasta 250.000, alerta al 25 %
+    expect(inpPlan(doc, "reserves.ccbLimit").value).toBe("250000");
+    expect(inpPlan(doc, "reserves.contAlertPct").value).toBe("25");
+    expect(doc.getElementById("planMsg")!.style.display).toBe("none");
+    poner(dom, inpPlan(doc, "reserves.ccbLimit"), "40000");                            // el CCB no puede tener menos autoridad que el PM
+    expect(doc.getElementById("planMsg")!.textContent).toMatch(/límite del Director de Proyecto no puede superar el del CCB/);
+    poner(dom, inpPlan(doc, "reserves.ccbLimit"), "");                                 // vacío = sin tope (todo lo demás lo libera el CCB)
+    expect(doc.getElementById("planMsg")!.style.display).toBe("none");
+    poner(dom, inpPlan(doc, "reserves.contAlertPct"), "150");
+    expect(doc.getElementById("planMsg")!.textContent).toMatch(/entre 0 y 100/);
+  });
+
+  it("Plan: un proyecto guardado antes de la política (sin `reserves`) abre sin límites y queda editable", async () => {
+    const dom = await abrir(proyecto({ risks: { plan: { reservePolicy: "texto libre" }, idCounter: 1, risks: [] } })), doc = dom.window.document;
+    await vista(dom, "plan");
+    expect(inpPlan(doc, "reserves.pmLimit").value).toBe("");
+    expect(inpPlan(doc, "reserves.ccbLimit").value).toBe("");
+    expect(doc.querySelector('.pi[data-p="reservePolicy"]')!.textContent).toBe("texto libre");
+    poner(dom, inpPlan(doc, "reserves.pmLimit"), "10000");
+    expect(doc.getElementById("planMsg")!.style.display).toBe("none");
+  });
+
   it("el Panel de Control ya lista el módulo y su indicador (riesgos abiertos y altos)", async () => {
     const seed = proyecto({ risks: { risks: [
       { id: "a", code: "R-01", title: "x", prob: 5, impCost: 5, status: "identificado" }, { id: "b", code: "R-02", title: "y", prob: 1, impCost: 1 }, { id: "c", code: "R-03", title: "z", prob: 5, impCost: 5, status: "cerrado" }] } });

@@ -1,5 +1,24 @@
 var GPI = (function(exports) {
 	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
+	//#region src/shared/reserve-policy.ts
+	var DEFAULT_RESERVES = {
+		pmLimit: null,
+		ccbLimit: null,
+		contAlertPct: null
+	};
+	var numOrNull$1 = (v) => {
+		if (v === null || v === void 0 || v === "") return null;
+		const n = typeof v === "string" ? Number(v.trim().replace(/\s/g, "")) : v;
+		return typeof n === "number" && isFinite(n) ? n : null;
+	};
+	function normalizeReserves(o) {
+		const x = o && typeof o === "object" ? o : {};
+		return {
+			pmLimit: numOrNull$1(x.pmLimit),
+			ccbLimit: numOrNull$1(x.ccbLimit),
+			contAlertPct: numOrNull$1(x.contAlertPct)
+		};
+	}
 	var num = (v) => Number(v) || 0;
 	function fundOf(o) {
 		return o.fund === "Contingencia" ? "cont" : o.fund === "Financiamiento adicional" ? "extra" : "mgmt";
@@ -90,7 +109,8 @@ var GPI = (function(exports) {
 		],
 		methodology: "",
 		reservePolicy: "",
-		roles: ""
+		roles: "",
+		reserves: DEFAULT_RESERVES
 	};
 	var isNum = (v) => typeof v === "number" && isFinite(v);
 	function toNum(v) {
@@ -118,7 +138,8 @@ var GPI = (function(exports) {
 			categories: cats.length ? cats : DEFAULT_PLAN.categories.slice(),
 			methodology: str(o.methodology),
 			reservePolicy: str(o.reservePolicy),
-			roles: str(o.roles)
+			roles: str(o.roles),
+			reserves: normalizeReserves(o.reserves)
 		};
 	}
 	function maxImpact(c, t, s) {

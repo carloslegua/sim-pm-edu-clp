@@ -14,7 +14,8 @@ import { normalizePlan, normalizeRisk, type Risk } from "./risk-analysis";
 export interface SampleRisk extends Partial<Risk> { wbs: string[]; }
 export const SAMPLE_PLAN = normalizePlan({
   methodology: "Identificación por talleres de expertos y revisión de lecciones aprendidas; análisis cualitativo con la matriz probabilidad × impacto del plan; cuantificación del valor esperado con rangos de tres puntos para los riesgos de costo ≥ 3; respuesta por estrategia; revisión mensual en la reunión de control.",
-  reservePolicy: "La contingencia cubre la incertidumbre del estimado (análisis de rangos de Costos) y la exposición residual de los riesgos abiertos. La reserva de gestión (fuera de la línea base) solo se usa con autorización del sponsor.",
+  reservePolicy: "La contingencia cubre la incertidumbre del estimado (análisis de rangos de Costos) y la exposición residual de los riesgos abiertos. La libera la instancia que corresponde al monto de cada orden (límites de abajo) y solo contra un riesgo del registro. La reserva de gestión (fuera de la línea base) solo se usa con autorización del sponsor. Si la contingencia disponible baja del umbral de alerta, el Director de Proyecto escala al sponsor.",
+  reserves: { pmLimit: 50000, ccbLimit: 250000, contAlertPct: 25 },
   roles: "Director de Proyecto: dueño del proceso y del registro. Propietario del riesgo: vigila el disparador y ejecuta la respuesta. Sponsor: autoriza el uso de la reserva de gestión. CCB: aprueba los cambios a la línea base."
 });
 export const SAMPLE_RISKS: SampleRisk[] = [

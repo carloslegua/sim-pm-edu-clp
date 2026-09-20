@@ -1237,6 +1237,25 @@ consumo de contingencia por riesgo, hallazgos R17/R18); ver la sección de
 `Cost-management.html`. El ejemplo vive en `src/shared/risk-sample.ts`,
 compartido por Riesgos y Costos. Tercera (entregada): **riesgo de plazo** con
 el CPM real (ver abajo).
+- **Política de reservas (PMBOK: contingencia dentro de la línea base, reserva de
+  gestión fuera; niveles de autoridad y monitoreo del consumo).** Antes era solo
+  texto libre. Ahora `plan.reserves` (`src/shared/reserve-policy.ts`, campo nuevo
+  opcional: los planes guardados antes lo leen como «sin límites») define **quién
+  libera la contingencia según el monto de cada orden**: hasta `pmLimit` el
+  Director de Proyecto, hasta `ccbLimit` el CCB, por encima el sponsor (un límite
+  vacío = ese nivel no tiene autoridad propia y se pasa al siguiente), y
+  `contAlertPct`, el umbral de alerta de agotamiento. La reserva de gestión y el
+  financiamiento adicional **siempre** los autoriza el sponsor. Se edita en la
+  vista Plan del Registro de Riesgos (con `validatePlan`: no negativos, PM ≤ CCB,
+  alerta entre 0 y 100 %) y **la aplica Costos**: `validateApproval(…, policy)`
+  impide aprobar una orden a contingencia si su nivel de autoridad no cubre el
+  que exige el monto (`requiredLevel`, `levelCovers`). Cada orden lleva su
+  `authLevel` (Director de Proyecto / CCB / Sponsor; campo nuevo opcional: en las
+  órdenes anteriores se deduce de `sponsorAuth` o del texto del aprobador,
+  `authLevelOf`); solo se pide cuando la política define límites. Al registrar una
+  orden se muestra qué instancia la autoriza, y si la contingencia disponible
+  baja del umbral (`contingencyAlert`) se avisa en la traza de contingencia. El
+  BOE incluye la política. Las órdenes ya aprobadas no se vuelven a juzgar.
 - **Riesgo de plazo (AACE 40R-08 / 65R-11 + PMBOK).** El impacto en plazo de un
   riesgo (`timeImpact`, días) se traduce al **fin del proyecto** volviendo a
   correr el CPM con la duración afectada (`src/shared/schedule-risk.ts`): una
@@ -1859,6 +1878,11 @@ Estimating»; la RP 118R-21 cubre rangos + Monte Carlo de riesgos inherentes) y
     se calcula una vez (el CPM es lo caro) y se reutiliza (`EventOutcomes`), y
     Costos y el Registro de Riesgos obtienen **exactamente el mismo plazo**
     (probado: smoke y e2e en Chrome real).
+  - **Política de reservas del ejemplo DISTRIB+**: el Director de Proyecto libera
+    hasta 50.000 por orden, el CCB hasta 250.000 y el sponsor lo demás; alerta si
+    la contingencia disponible baja del 25 % de la inicial (hoy 78,9 %: 672.000 de
+    852.000 con la tabla por clase). OC-001 (180.000, contingencia) la aprobó el CCB,
+    que es el nivel que le corresponde.
   - **Límites declarados** (también en pantalla y en el BOE): la simulación
     cubre la incertidumbre de los **rangos** y los **eventos** del Registro,
     con su efecto en el plazo y su costo, pero no incluye la incertidumbre de las

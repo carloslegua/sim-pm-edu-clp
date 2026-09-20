@@ -26,6 +26,33 @@
 		};
 	}
 	//#endregion
+	//#region src/shared/reserve-policy.ts
+	var DEFAULT_RESERVES = {
+		pmLimit: null,
+		ccbLimit: null,
+		contAlertPct: null
+	};
+	var numOrNull = (v) => {
+		if (v === null || v === void 0 || v === "") return null;
+		const n = typeof v === "string" ? Number(v.trim().replace(/\s/g, "")) : v;
+		return typeof n === "number" && isFinite(n) ? n : null;
+	};
+	function normalizeReserves(o) {
+		const x = o && typeof o === "object" ? o : {};
+		return {
+			pmLimit: numOrNull(x.pmLimit),
+			ccbLimit: numOrNull(x.ccbLimit),
+			contAlertPct: numOrNull(x.contAlertPct)
+		};
+	}
+	function validateReserves(r) {
+		const out = [];
+		if (r.pmLimit !== null && !(r.pmLimit >= 0) || r.ccbLimit !== null && !(r.ccbLimit >= 0)) out.push("los límites de autoridad para liberar contingencia no pueden ser negativos");
+		else if (r.pmLimit !== null && r.ccbLimit !== null && r.pmLimit > r.ccbLimit) out.push("el límite del Director de Proyecto no puede superar el del CCB");
+		if (r.contAlertPct !== null && !(r.contAlertPct > 0 && r.contAlertPct <= 100)) out.push("el umbral de alerta de contingencia debe estar entre 0 y 100 % de la contingencia inicial");
+		return out;
+	}
+	//#endregion
 	//#region src/shared/risk-analysis.ts
 	var RISK_STATUSES = [
 		"identificado",
@@ -131,7 +158,8 @@
 		],
 		methodology: "",
 		reservePolicy: "",
-		roles: ""
+		roles: "",
+		reserves: DEFAULT_RESERVES
 	};
 	var isNum = (v) => typeof v === "number" && isFinite(v);
 	function toNum(v) {
@@ -159,7 +187,8 @@
 			categories: cats.length ? cats : DEFAULT_PLAN.categories.slice(),
 			methodology: str(o.methodology),
 			reservePolicy: str(o.reservePolicy),
-			roles: str(o.roles)
+			roles: str(o.roles),
+			reserves: normalizeReserves(o.reserves)
 		};
 	}
 	function validatePlan(p) {
@@ -171,6 +200,7 @@
 		if (!(p.thresholdMedium >= 1) || !(p.thresholdHigh <= 25) || !(p.thresholdMedium < p.thresholdHigh)) out.push("los umbrales de puntaje deben cumplir 1 ≤ medio < alto ≤ 25");
 		if (!(p.reviewDays >= 1)) out.push("la frecuencia de revisión debe ser de al menos 1 día");
 		if (new Set(p.categories.map((c) => c.toLowerCase())).size !== p.categories.length) out.push("las categorías de la RBS no pueden repetirse");
+		validateReserves(p.reserves).forEach((m) => out.push(m));
 		return out;
 	}
 	function bandLevel(v, bands) {
@@ -594,7 +624,12 @@
 	//#region src/shared/risk-sample.ts
 	var SAMPLE_PLAN = normalizePlan({
 		methodology: "Identificación por talleres de expertos y revisión de lecciones aprendidas; análisis cualitativo con la matriz probabilidad × impacto del plan; cuantificación del valor esperado con rangos de tres puntos para los riesgos de costo ≥ 3; respuesta por estrategia; revisión mensual en la reunión de control.",
-		reservePolicy: "La contingencia cubre la incertidumbre del estimado (análisis de rangos de Costos) y la exposición residual de los riesgos abiertos. La reserva de gestión (fuera de la línea base) solo se usa con autorización del sponsor.",
+		reservePolicy: "La contingencia cubre la incertidumbre del estimado (análisis de rangos de Costos) y la exposición residual de los riesgos abiertos. La libera la instancia que corresponde al monto de cada orden (límites de abajo) y solo contra un riesgo del registro. La reserva de gestión (fuera de la línea base) solo se usa con autorización del sponsor. Si la contingencia disponible baja del umbral de alerta, el Director de Proyecto escala al sponsor.",
+		reserves: {
+			pmLimit: 5e4,
+			ccbLimit: 25e4,
+			contAlertPct: 25
+		},
 		roles: "Director de Proyecto: dueño del proceso y del registro. Propietario del riesgo: vigila el disparador y ejecuta la respuesta. Sponsor: autoriza el uso de la reserva de gestión. CCB: aprueba los cambios a la línea base."
 	});
 	var SAMPLE_RISKS = [
@@ -2808,7 +2843,12 @@
     <div class="an-grid" style="margin-top:14px">
       <div class="card"><h3 class="mxh">Metodología</h3><textarea class="pi wide" rows="5" data-p="methodology" data-i="-1" placeholder="Cómo se identifican, analizan y responden los riesgos; herramientas y fuentes de información.">${esc(plan.methodology)}</textarea></div>
       <div class="card"><h3 class="mxh">Roles y responsabilidades</h3><textarea class="pi wide" rows="5" data-p="roles" data-i="-1" placeholder="Quién es dueño del proceso, de cada riesgo, quién autoriza reservas…">${esc(plan.roles)}</textarea></div>
-      <div class="card"><h3 class="mxh">Política de reservas</h3><textarea class="pi wide" rows="5" data-p="reservePolicy" data-i="-1" placeholder="Qué cubre la contingencia y qué la reserva de gestión; quién autoriza su uso.">${esc(plan.reservePolicy)}</textarea></div>
+      <div class="card"><h3 class="mxh">Política de reservas</h3><textarea class="pi wide" rows="5" data-p="reservePolicy" data-i="-1" placeholder="Qué cubre la contingencia y qué la reserva de gestión; quién autoriza su uso.">${esc(plan.reservePolicy)}</textarea>
+        <h3 class="mxh" style="margin-top:12px">Quién libera la contingencia (por orden, en ${esc(currency)})</h3>
+        <div class="fd"><label>Hasta este monto lo libera el Director de Proyecto</label>${pi("reserves.pmLimit", -1, plan.reserves.pmLimit === null ? "" : plan.reserves.pmLimit, "min=\"0\" placeholder=\"sin límite propio\"")}</div>
+        <div class="fd"><label>Hasta este monto lo libera el CCB (por encima, el sponsor)</label>${pi("reserves.ccbLimit", -1, plan.reserves.ccbLimit === null ? "" : plan.reserves.ccbLimit, "min=\"0\" placeholder=\"sin tope\"")}</div>
+        <div class="fd"><label>Alerta: escalar si la contingencia disponible baja de (% de la inicial)</label>${pi("reserves.contAlertPct", -1, plan.reserves.contAlertPct === null ? "" : plan.reserves.contAlertPct, "min=\"1\" max=\"100\" placeholder=\"sin alerta\"")}</div>
+        <div class="muted small">Esto <b>gobierna la aprobación</b> de las órdenes de cambio en Costos: una orden con cargo a contingencia solo se aprueba si la autoriza el nivel que corresponde a su monto. La reserva de gestión y los fondos adicionales <b>siempre</b> los autoriza el sponsor. Sin límites no hay política por montos.</div></div>
     </div>`;
 	}
 	function onPlanField(el) {
@@ -2830,7 +2870,8 @@
 		].indexOf(key) >= 0) {
 			const v = toNum(el.value);
 			rec[key] = v === null ? NaN : v;
-		} else rec[key] = el.value;
+		} else if (key.indexOf("reserves.") === 0) plan.reserves[key.slice(9)] = toNum(el.value);
+		else rec[key] = el.value;
 		const problems = validatePlan(plan), box = $("planMsg");
 		box.style.display = problems.length ? "block" : "none";
 		box.innerHTML = problems.length ? "<b>⚠ El plan tiene problemas:</b> " + problems.map(esc).join(" · ") : "";

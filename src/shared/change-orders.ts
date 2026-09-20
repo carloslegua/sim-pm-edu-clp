@@ -34,10 +34,14 @@ export const CO_KIND_HINT: Record<CoKind, string> = {
 };
 
 import type { RiskRef } from "./risk-analysis";
+import { AUTH_LABEL, authLevelOf, hasTiers, levelCovers, requiredLevel, tiersText, type ReservePolicy } from "./reserve-policy";
 
 export interface CoOrder {
   id?: string; kind?: string; fund?: string; status?: string; cost?: number | string;
   approver?: string; sponsorAuth?: boolean; approvedOn?: string; baselined?: string | null;
+  // Nivel de autoridad con que se autoriza (Director de Proyecto / CCB / Sponsor). Opcional: las órdenes anteriores no lo
+  // traen y se deduce de `sponsorAuth` o del texto del aprobador (ver authLevelOf en reserve-policy.ts).
+  authLevel?: string;
   // Vínculo con el Registro de Riesgos (solo tiene sentido si kind = "riesgo"): id del riesgo y su código (foto,
   // para mostrarlo aunque el registro no esté a mano).
   riskId?: string; riskCode?: string;
@@ -107,9 +111,15 @@ export function riskLinkProblems(o: CoOrder, risks: RiskRef[]): string[] {
   return [];
 }
 
+// Nivel de autoridad que exige la política de reservas del plan de riesgos a esta orden (null = la política no exige uno).
+export function requiredAuthority(o: CoOrder, policy?: ReservePolicy | null): ReturnType<typeof requiredLevel> {
+  const f = fundOf(o);
+  return f === "cont" && !hasTiers(policy) ? null : requiredLevel(policy, f, num(o.cost));
+}
 // Problemas que impiden APROBAR la orden (lista vacía = puede aprobarse). `risks` = referencias del Registro de
-// Riesgos; si no se pasa (undefined) no se comprueba el vínculo (compatibilidad con quien no lo tiene a mano).
-export function validateApproval(o: CoOrder, orders: CoOrder[], budget?: Partial<CoBudget> | null, risks?: RiskRef[] | null): string[] {
+// Riesgos; si no se pasa (undefined) no se comprueba el vínculo (compatibilidad con quien no lo tiene a mano). `policy` =
+// política de reservas del plan de riesgos; si no se pasa (o no define límites) no se comprueban los niveles por monto.
+export function validateApproval(o: CoOrder, orders: CoOrder[], budget?: Partial<CoBudget> | null, risks?: RiskRef[] | null, policy?: ReservePolicy | null): string[] {
   const p: string[] = [], f = fundOf(o), a = num(o.cost);
   if (o.kind === "riesgo" && Array.isArray(risks)) riskLinkProblems(o, risks).forEach((x) => p.push(x));
   const an = analyzeChangeOrders((orders || []).filter((x) => x !== o), budget); // saldos SIN esta orden
@@ -118,6 +128,12 @@ export function validateApproval(o: CoOrder, orders: CoOrder[], budget?: Partial
   if (!String(o.approver || "").trim()) p.push("registra quién aprueba (CCB, sponsor…)");
   if (o.kind === "alcance" && f === "cont") p.push("un cambio de alcance no se financia con contingencia (la contingencia cubre riesgos identificados dentro del alcance de la línea base)");
   if ((f === "mgmt" || f === "extra") && !o.sponsorAuth) p.push("usar la reserva de gestión o fondos adicionales requiere la autorización expresa del sponsor");
+  if (f === "cont" && hasTiers(policy)) {   // política de reservas: quién puede liberar esta contingencia según el monto
+    const need = requiredAuthority(o, policy), have = authLevelOf(o);
+    if (!levelCovers(have, need))
+      p.push("según la política de reservas del plan de riesgos, una orden de " + Math.round(a) + " con cargo a contingencia la autoriza el " + AUTH_LABEL[need as "pm"] + " (" + tiersText(policy as ReservePolicy, (n) => String(Math.round(n))) + ")"
+        + (have ? "; la aprobación registrada es del " + AUTH_LABEL[have] : "; indica el nivel de autoridad con que se aprueba"));
+  }
   if (f === "cont" && a > an.contingencyAvailable + 1e-9) p.push("excede la contingencia disponible (" + Math.round(an.contingencyAvailable) + ")");
   if (f === "mgmt" && a > an.mgmtAvailable + 1e-9) p.push("excede la reserva de gestión disponible (" + Math.round(an.mgmtAvailable) + ")");
   return p;

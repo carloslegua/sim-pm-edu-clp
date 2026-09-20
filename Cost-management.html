@@ -518,9 +518,9 @@
             </select>
           </label>
           <label><span>Causa (evento RBS)</span><input id="coCause" placeholder="Ej. R-03 Suelo"></label>
-          <label><span>Δ Costo</span><input id="coCost" type="number" step="0.01" placeholder="0.00"></label>
+          <label><span>Δ Costo</span><input id="coCost" type="number" step="0.01" placeholder="0.00" oninput="coPolicyHint()"></label>
           <label><span>Fondeo propuesto</span>
-            <select id="coFund" class="mono">
+            <select id="coFund" class="mono" onchange="coPolicyHint()">
               <option>Contingencia</option>
               <option>Reserva de gestión</option>
               <option>Financiamiento adicional</option>
@@ -529,6 +529,7 @@
           <div class="co-add"><button class="btn primary" style="width:100%" onclick="addCO()">+ Agregar</button></div>
         </div>
         <div class="note" id="coKindHint" style="margin:-6px 0 14px">Clasifica el cambio: la naturaleza no decide por sí sola la fuente de fondos.</div>
+        <div class="note" id="coPolicyHint" style="display:none;margin:-6px 0 14px"></div>
         <div id="coRiskWrap" style="display:none;margin:-6px 0 14px">
           <label class="f"><span>Riesgo del registro que se materializó</span><select id="coRisk" class="mono"></select></label>
           <div class="hint" id="coRiskHint" style="margin-top:-6px"></div>

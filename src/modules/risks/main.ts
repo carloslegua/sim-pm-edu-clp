@@ -498,7 +498,12 @@ function renderPlan(): string {
     <div class="an-grid" style="margin-top:14px">
       <div class="card"><h3 class="mxh">Metodología</h3><textarea class="pi wide" rows="5" data-p="methodology" data-i="-1" placeholder="Cómo se identifican, analizan y responden los riesgos; herramientas y fuentes de información.">${esc(plan.methodology)}</textarea></div>
       <div class="card"><h3 class="mxh">Roles y responsabilidades</h3><textarea class="pi wide" rows="5" data-p="roles" data-i="-1" placeholder="Quién es dueño del proceso, de cada riesgo, quién autoriza reservas…">${esc(plan.roles)}</textarea></div>
-      <div class="card"><h3 class="mxh">Política de reservas</h3><textarea class="pi wide" rows="5" data-p="reservePolicy" data-i="-1" placeholder="Qué cubre la contingencia y qué la reserva de gestión; quién autoriza su uso.">${esc(plan.reservePolicy)}</textarea></div>
+      <div class="card"><h3 class="mxh">Política de reservas</h3><textarea class="pi wide" rows="5" data-p="reservePolicy" data-i="-1" placeholder="Qué cubre la contingencia y qué la reserva de gestión; quién autoriza su uso.">${esc(plan.reservePolicy)}</textarea>
+        <h3 class="mxh" style="margin-top:12px">Quién libera la contingencia (por orden, en ${esc(currency)})</h3>
+        <div class="fd"><label>Hasta este monto lo libera el Director de Proyecto</label>${pi("reserves.pmLimit", -1, plan.reserves.pmLimit === null ? ("" as unknown as number) : plan.reserves.pmLimit, 'min="0" placeholder="sin límite propio"')}</div>
+        <div class="fd"><label>Hasta este monto lo libera el CCB (por encima, el sponsor)</label>${pi("reserves.ccbLimit", -1, plan.reserves.ccbLimit === null ? ("" as unknown as number) : plan.reserves.ccbLimit, 'min="0" placeholder="sin tope"')}</div>
+        <div class="fd"><label>Alerta: escalar si la contingencia disponible baja de (% de la inicial)</label>${pi("reserves.contAlertPct", -1, plan.reserves.contAlertPct === null ? ("" as unknown as number) : plan.reserves.contAlertPct, 'min="1" max="100" placeholder="sin alerta"')}</div>
+        <div class="muted small">Esto <b>gobierna la aprobación</b> de las órdenes de cambio en Costos: una orden con cargo a contingencia solo se aprueba si la autoriza el nivel que corresponde a su monto. La reserva de gestión y los fondos adicionales <b>siempre</b> los autoriza el sponsor. Sin límites no hay política por montos.</div></div>
     </div>`;
 }
 function onPlanField(el: HTMLInputElement | HTMLTextAreaElement): void {
@@ -508,6 +513,7 @@ function onPlanField(el: HTMLInputElement | HTMLTextAreaElement): void {
   else if (key === "scopeDescriptors") plan.scopeDescriptors[i] = el.value;
   else if (["probPct", "costBandsPct", "timeBandsDays"].indexOf(key) >= 0) { const v = toNum(el.value); (rec[key] as number[])[i] = v === null ? NaN : v; }
   else if (["thresholdMedium", "thresholdHigh", "reviewDays"].indexOf(key) >= 0) { const v = toNum(el.value); rec[key] = v === null ? NaN : v; }
+  else if (key.indexOf("reserves.") === 0) { (plan.reserves as unknown as Record<string, number | null>)[key.slice(9)] = toNum(el.value); }   // vacío = sin límite (null)
   else rec[key] = el.value;
   const problems = validatePlan(plan), box = $("planMsg");
   box.style.display = problems.length ? "block" : "none";

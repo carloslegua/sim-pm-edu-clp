@@ -40,10 +40,11 @@ import { SAMPLE_PLAN as SAMPLE_RISK_PLAN, buildSampleRisks } from "../../shared/
 import { SAMPLE_START_DATE, sampleScheduleModules } from "../../shared/schedule-sample";
 import { fmtDays, makeEngine, resolveTargets, type Engine, type Network } from "../../shared/schedule-risk";
 import {
-  analyzeChangeOrders, contingencyByRisk, orderEffect, planBaselining, validateApproval,
-  CO_KIND_HINT, CO_KIND_LABEL, FUND_CONT, FUND_EXTRA,
+  analyzeChangeOrders, contingencyByRisk, orderEffect, planBaselining, requiredAuthority, validateApproval,
+  CO_KIND_HINT, CO_KIND_LABEL, FUND_CONT, FUND_EXTRA, FUND_MGMT,
   type CoAnalysis, type CoBaselineEntry, type CoKind
 } from "../../shared/change-orders";
+import { AUTH_LABEL, AUTH_LEVELS, authLevelOf, contingencyAlert, hasTiers, levelCovers, tiersText, type AuthLevel, type ReservePolicy as ReservePolicyT } from "../../shared/reserve-policy";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -90,7 +91,7 @@ interface ChangeOrder {
    (contingencia), una ampliación del cliente (cambio de alcance, fondos adicionales)
    y trabajo imprevisto dentro del alcance (reserva de gestión, con sponsor). */
 const SAMPLE_CO: ChangeOrder[] = [
-  { id: "OC-001", desc: "Refuerzo de cimentación por hallazgo geotécnico", cause: "R-03 Suelo", cost: 180000, fund: "Contingencia", status: "Aprobada", kind: "riesgo", approver: "CCB", sponsorAuth: false, approvedOn: "2026-08-03", riskId: "rk3", riskCode: "R-03" },
+  { id: "OC-001", desc: "Refuerzo de cimentación por hallazgo geotécnico", cause: "R-03 Suelo", cost: 180000, fund: "Contingencia", status: "Aprobada", kind: "riesgo", approver: "CCB", authLevel: "ccb", sponsorAuth: false, approvedOn: "2026-08-03", riskId: "rk3", riskCode: "R-03" },
   { id: "OC-002", desc: "Ampliación de sala eléctrica solicitada por cliente", cause: "Cambio alcance", cost: 240000, fund: "Financiamiento adicional", status: "Pendiente", kind: "alcance", approver: "", sponsorAuth: false },
   { id: "OC-003", desc: "Demolición de losa existente no identificada en el levantamiento", cause: "No identificado en el RBS", cost: 90000, fund: "Reserva de gestión", status: "Pendiente", kind: "imprevisto", approver: "", sponsorAuth: false }
 ];
@@ -536,6 +537,16 @@ function riskOptions(ctx: RiskCtx, selectedId?: string, selectedCode?: string): 
   const orphan = selectedId && !th.some((r) => r.id === selectedId) ? `<option value="${escA(selectedId)}" selected>${esc((selectedCode || "?") + " (no está en el registro)")}</option>` : "";
   return `<option value="">— Vincular riesgo —</option>${opts}${orphan}`;
 }
+// Nivel de autoridad de la orden según la política de reservas del plan de riesgos: qué exige el monto y con qué nivel se
+// aprueba. Solo para órdenes con cargo a contingencia y cuando la política define límites (la reserva de gestión y los
+// fondos adicionales siempre son del sponsor: para eso está su casilla).
+function authCell(r: ChangeOrder, i: number, pol: ReservePolicyT, locked: boolean, usesReserve: boolean): string {
+  if (usesReserve || !hasTiers(pol)) return "";
+  const need = requiredAuthority(r, pol), have = authLevelOf(r), ok = levelCovers(have, need);
+  const opts = ["" as AuthLevel | "", ...AUTH_LEVELS].map((v) => `<option value="${v}" ${(have || "") === v ? "selected" : ""}>${v ? esc(AUTH_LABEL[v]) : "— Nivel de autoridad —"}</option>`).join("");
+  return `<select class="mono" style="padding:3px 5px;max-width:150px;margin-top:5px;font-size:11px" data-i="${i}" data-f="authLevel" onchange="coEdit(this)" ${locked ? "disabled" : ""} aria-label="Nivel de autoridad con que se aprueba la orden ${escA(r.id)}">${opts}</select>
+    <div class="${!locked && !ok ? "bad-txt" : "muted"}" style="font-size:11px;margin-top:3px" title="${escA(tiersText(pol, (n) => fmt2(n)))}">Política de reservas: requiere <b>${need ? esc(AUTH_LABEL[need]) : "—"}</b>${!locked && !ok ? " ⚠" : ""}</div>`;
+}
 function renderCO(): void {
   const tb = $("coBody"); tb.innerHTML = "";
   const ctx = riskCtx(), refs = riskRefs(ctx);
@@ -556,6 +567,7 @@ function renderCO(): void {
       <td><span class="pill ${r.fund === FUND_CONT ? "ok" : "warn"}">${esc(r.fund)}</span></td>
       <td class="co-appr">
         <input class="mono" style="width:120px;padding:5px 7px" placeholder="Aprobador (CCB…)" value="${escA(r.approver || "")}" data-i="${i}" data-f="approver" onchange="coEdit(this)" ${locked ? "disabled" : ""} aria-label="Quién aprueba la orden ${escA(r.id)}">
+        ${authCell(r, i, ctx.plan.reserves, locked, usesReserve)}
         ${usesReserve ? `<label style="display:block;font-size:11px;margin-top:4px"><input type="checkbox" data-i="${i}" data-f="sponsorAuth" onchange="coEdit(this)" ${r.sponsorAuth ? "checked" : ""} ${locked ? "disabled" : ""}> Sponsor autoriza</label>` : ""}
         ${r.approvedOn ? `<div class="muted" style="font-size:11px">${esc(r.approvedOn)}</div>` : ""}
       </td>
@@ -582,17 +594,33 @@ function renderCO(): void {
     ? state.baselines.map((v) => `<tr><td class="mono">${esc(v.version)}</td><td>${esc(v.date)}</td><td>${esc(v.orderIds.join(", "))}</td><td class="num">${fmt2(v.bacBefore)}</td><td class="num">${fmt2(v.bacAfter)}</td><td>${esc(v.approver || "—")}</td></tr>`).join("")
     : `<tr><td class="muted" colspan="6">Sin cambios de línea base: el BAC vigente es el inicial.</td></tr>`;
   renderDrawdown(refs, an.contingencyAvailable);
+  coPolicyHint();
   buildJSON();
+}
+// Al registrar una orden: qué instancia debe autorizarla según su monto y su fuente de fondos (política de reservas).
+function coPolicyHint(): void {
+  const box = document.getElementById("coPolicyHint"); if (!box) return;
+  const pol = riskCtx().plan.reserves, fund = ($("coFund") as HTMLSelectElement).value, cost = +($("coCost") as HTMLInputElement).value || 0;
+  let msg = "";
+  if (fund !== FUND_CONT) msg = "<b>Política de reservas:</b> " + esc(fund) + " está fuera de la línea base: la autoriza siempre el <b>Sponsor</b>, sin importar el monto.";
+  else if (hasTiers(pol)) {
+    const need = requiredAuthority({ fund, cost }, pol);
+    msg = "<b>Política de reservas:</b> " + (cost > 0 ? "una orden de " + fmt2(cost) + " con cargo a contingencia la autoriza el <b>" + esc(AUTH_LABEL[need as AuthLevel]) + "</b>" : "la contingencia la libera el nivel que corresponde al monto") + " (" + esc(tiersText(pol, (n) => fmt2(n))) + ").";
+  }
+  box.style.display = msg ? "block" : "none"; box.innerHTML = msg;
 }
 // La traza contingencia → riesgo, y la contingencia disponible frente a la exposición residual de los riesgos abiertos.
 function renderDrawdown(refs: ReturnType<typeof riskRefs>, available: number): void {
   const dd = contingencyByRisk(state.co, refs), ec = eventsCtx();
+  // Política de reservas: alerta de agotamiento (la contingencia disponible bajó del umbral del plan de riesgos).
+  const al = contingencyAlert(available, coBudget().cont, riskCtx().plan.reserves);
+  const alertHtml = al ? `<div class="note" style="margin-top:10px;${al.alert ? "border-color:#dc3546;background:#fdecef" : ""}">${al.alert ? "<b>⚠ Alerta de agotamiento:</b> la contingencia disponible (" + fmt(available) + ") es el " + al.pct.toFixed(1) + " % de la inicial, por debajo del umbral de " + al.threshold + " % del plan de riesgos: escala al sponsor según la política de reservas." : "Contingencia disponible: " + al.pct.toFixed(1) + " % de la inicial (umbral de alerta " + al.threshold + " %)."}</div>` : "";
   const rows = dd.length ? dd.map((d) => `<tr><td class="mono">${esc(d.code)}</td><td>${esc(d.title)}</td><td class="num">${fmt2(d.contingency)}</td><td class="num">${fmt2(d.other)}</td><td class="num">${fmt2(d.pending)}</td><td class="num">${d.plannedMax === null ? "—" : fmt2(d.plannedMax)}</td><td>${d.orphan ? `<span class="pill bad">Riesgo eliminado</span>` : d.over ? `<span class="pill bad" title="Lo aprobado supera el impacto máximo que el análisis del riesgo había previsto">Supera lo previsto</span>` : `<span class="pill ok">Dentro de lo previsto</span>`}</td></tr>`).join("")
     : `<tr><td class="muted" colspan="7">Ninguna orden está vinculada a un riesgo del registro.</td></tr>`;
   const expo = ec.source === "sin registro" ? "Este proyecto no tiene Registro de Riesgos: no hay exposición residual que contrastar con la contingencia."
     : ec.events.length ? `La contingencia disponible (<b>${fmt(available)}</b>) ${available >= ec.ev ? "supera" : "<b>NO alcanza</b>"} el valor esperado neto de la exposición residual de los riesgos abiertos (<b>${fmt(ec.ev)}</b>, ${ec.events.length} evento(s)). Es una media (≈ P50): una contingencia a un percentil de decisión debe superarla con holgura.`
       : "No hay riesgos abiertos con impacto en costo cuantificado en el registro.";
-  $("coDrawdown").innerHTML = `<div style="overflow-x:auto"><table><thead><tr><th>Riesgo</th><th>Descripción</th><th class="num">Aprobado con contingencia</th><th class="num">Aprobado con otras fuentes</th><th class="num">Pendiente</th><th class="num">Impacto máx. previsto</th><th>Estado</th></tr></thead><tbody>${rows}</tbody></table></div><div class="note" style="margin-top:10px">${expo}</div>`;
+  $("coDrawdown").innerHTML = `<div style="overflow-x:auto"><table><thead><tr><th>Riesgo</th><th>Descripción</th><th class="num">Aprobado con contingencia</th><th class="num">Aprobado con otras fuentes</th><th class="num">Pendiente</th><th class="num">Impacto máx. previsto</th><th>Estado</th></tr></thead><tbody>${rows}</tbody></table></div><div class="note" style="margin-top:10px">${expo}</div>${alertHtml}`;
 }
 // Muestra la guía de la naturaleza elegida al registrar la solicitud, y el selector de riesgo si es un «riesgo materializado».
 function coKindHint(): void {
@@ -609,7 +637,7 @@ function coStatus(sel: HTMLSelectElement): void {
   const r = state.co[+(sel.dataset.i as string)];
   if (r.baselined) { showToast(r.id + " ya está incorporada a la línea base " + r.baselined + ": su estado no se puede cambiar."); renderCO(); return; }
   if (sel.value === "Aprobada") {
-    const problems = validateApproval(r, state.co, coBudget(), riskRefs(riskCtx()));
+    const ctx = riskCtx(), problems = validateApproval(r, state.co, coBudget(), riskRefs(ctx), ctx.plan.reserves);
     if (problems.length) { showToast("No se puede aprobar " + r.id + ": " + problems.join("; ") + "."); renderCO(); return; }
     r.approvedOn = todayISO();
   } else { delete r.approvedOn; }
@@ -623,6 +651,7 @@ function coEdit(el: HTMLInputElement | HTMLSelectElement): void {
   const f = el.dataset.f;
   if (f === "approver") r.approver = el.value.trim();
   else if (f === "sponsorAuth") r.sponsorAuth = (el as HTMLInputElement).checked;
+  else if (f === "authLevel") { if (el.value) r.authLevel = el.value; else delete r.authLevel; renderCO(); }
   else if (f === "riskId") {   // vínculo con el Registro de Riesgos (guarda el id y una foto del código)
     const ref = riskCtx().risks.find((x) => x.id === el.value);
     if (el.value) { r.riskId = el.value; r.riskCode = ref ? ref.code : r.riskCode; } else { delete r.riskId; delete r.riskCode; }
@@ -678,7 +707,13 @@ function boeCORows(): string {
   return state.co.map((r) => `<tr>
     <td class="mono">${esc(r.id)}</td><td>${esc(r.desc)}</td><td>${esc(kindLabel(r.kind))}${r.riskCode ? " · " + esc(r.riskCode) : ""}</td><td>${esc(r.cause)}</td>
     <td style="text-align:right" class="mono">${fmt2(+r.cost)}</td><td>${esc(r.fund)}</td>
-    <td>${esc(r.status)}${r.status === "Aprobada" ? " · " + esc(r.approver || "—") + (r.sponsorAuth ? " (sponsor)" : "") : ""}${r.baselined ? " · " + esc(r.baselined) : ""}</td></tr>`).join("");
+    <td>${esc(r.status)}${r.status === "Aprobada" ? " · " + esc(r.approver || "—") + (authLevelOf(r) ? " (" + esc(AUTH_LABEL[authLevelOf(r) as AuthLevel]) + ")" : "") : ""}${r.baselined ? " · " + esc(r.baselined) : ""}</td></tr>`).join("");
+}
+// Política de reservas (plan de gestión de riesgos) que gobierna la aprobación de las órdenes de cambio.
+function policyDocHtml(): string {
+  const pol = riskCtx().plan.reserves, al = contingencyAlert((state._coTotals && state._coTotals.contingencyAvailable) || 0, coBudget().cont, pol);
+  const tiers = hasTiers(pol) ? "La <b>contingencia</b> la libera la instancia que corresponde al monto de cada orden (" + esc(tiersText(pol, (n) => fmt2(n))) + ")." : "El plan de riesgos no define límites de autoridad por monto para liberar la contingencia.";
+  return `<p style="font-size:12.5px;margin:8px 0 0"><b>Política de reservas (plan de riesgos):</b> ${tiers} La <b>reserva de gestión</b> (${esc(FUND_MGMT)}, fuera de la línea base) y el <b>financiamiento adicional</b> los autoriza siempre el sponsor.${pol.contAlertPct !== null ? " Se escala si la contingencia disponible baja del " + pol.contAlertPct + " % de la inicial" + (al ? " (hoy " + al.pct.toFixed(1) + " %)" : "") + "." : ""}</p>`;
 }
 // Base de la contingencia en el BOE cuando se determinó por rangos + Monte Carlo (RP 41R-08).
 function rangeDocHtml(): string {
@@ -789,6 +824,7 @@ function buildDoc(): void {
         <tbody>${boeCORows()}</tbody>
       </table>
       <p style="font-size:12.5px;margin:8px 0 0">Total aprobado: <b>${fmt2(t.approved || 0)}</b> — contingencia ${fmt2(t.fromContingency || 0)}, reserva de gestión ${fmt2(t.fromMgmt || 0)}, financiamiento adicional ${fmt2(t.fromExtra || 0)}. Disponible: contingencia ${fmt2(t.contingencyAvailable || 0)}, reserva de gestión ${fmt2(t.mgmtAvailable || 0)}. Aprobado pendiente de incorporar a la línea base: ${fmt2(t.pendingBaseline || 0)}.</p>
+      ${policyDocHtml()}
       ${state.baselines.length ? `<table class="dt" style="margin-top:6px"><tbody>${state.baselines.map((v) => `<tr><td class="mono">${esc(v.version)}</td><td>${esc(v.date)} · ${esc(v.orderIds.join(", "))} · aprobó ${esc(v.approver || "—")}</td><td style="text-align:right" class="mono">${fmt2(v.bacBefore)} → ${fmt2(v.bacAfter)}</td></tr>`).join("")}</tbody></table>` : ""}
     </section>
 
@@ -1113,4 +1149,4 @@ init(false);
 // archivo) que buscan estas funciones POR NOMBRE en el ámbito global.
 // Sin esto, Vite las deja encerradas en el closure del bundle y cada
 // clic tira "x is not defined".
-Object.assign(window, { save, recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc, coEdit, coBaseline, coKindHint, evalVariance, onContMethod, addRange, delRange, rangeEdit, pullRangesFromEstimate, pullRangesFromWbs, applyClassRange });
+Object.assign(window, { coPolicyHint, save, recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc, coEdit, coBaseline, coKindHint, evalVariance, onContMethod, addRange, delRange, rangeEdit, pullRangesFromEstimate, pullRangesFromWbs, applyClassRange });

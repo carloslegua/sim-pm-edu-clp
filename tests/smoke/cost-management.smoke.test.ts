@@ -141,13 +141,13 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     const dom = await abrirStandalone(), doc = dom.window.document;
     expect(kpi(doc, 0)).toBe("$ 8,075,181");                           // BAC vigente = inicial
     setStatus(dom, doc, "OC-003", "Aprobada");                          // imprevisto con reserva de gestión, sin aprobador ni sponsor
-    expect((rowOf(doc, "OC-003").querySelector("select") as HTMLSelectElement).value).toBe("Pendiente");
+    expect((estadoSel(doc, "OC-003")).value).toBe("Pendiente");
     expect(toast(doc)).toMatch(/quién aprueba/);
     expect(toast(doc)).toMatch(/autorización expresa del sponsor/);
 
     setApproval(dom, doc, "OC-003", "Comité de cambios", true);
     setStatus(dom, doc, "OC-003", "Aprobada");
-    expect((rowOf(doc, "OC-003").querySelector("select") as HTMLSelectElement).value).toBe("Aprobada");
+    expect((estadoSel(doc, "OC-003")).value).toBe("Aprobada");
     // aprobar RESERVA la reserva de gestión, pero la línea base sigue igual:
     expect(kpi(doc, 0)).toBe("$ 8,075,181");                            // BAC vigente: sin cambio (antes: nadie lo distinguía)
     expect(kpi(doc, 1)).toBe("$ 90,000");                               // aprobado, pendiente de incorporar
@@ -159,10 +159,89 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(kpi(doc, 0)).toBe("$ 8,165,181");                            // + 90,000
     expect(kpi(doc, 1)).toBe("$ 0");
     expect(doc.getElementById("blBody")!.textContent).toMatch(/LB-1.*OC-003.*8,075,181.*8,165,181.*Comité de cambios/);
-    expect((rowOf(doc, "OC-003").querySelector("select") as HTMLSelectElement).disabled).toBe(true); // ya forma parte de la línea base
+    expect((estadoSel(doc, "OC-003")).disabled).toBe(true); // ya forma parte de la línea base
     (rowOf(doc, "OC-003").querySelector('button[onclick^="delCO"]') as HTMLElement).click();
     expect(rowOf(doc, "OC-003")).toBeTruthy();                          // no se puede eliminar
     expect(toast(doc)).toMatch(/ya forma parte de la línea base LB-1/);
+  });
+
+  // ---- Política de reservas (plan de riesgos): quién libera la contingencia según el monto, y alerta de agotamiento ----
+  const registrarOrden = (dom: any, doc: Document, cost: string, kind = "imprevisto", fund = "Contingencia") => {
+    (doc.getElementById("coDesc") as HTMLInputElement).value = "Orden de prueba";
+    (doc.getElementById("coKind") as HTMLSelectElement).value = kind;
+    (doc.getElementById("coFund") as HTMLSelectElement).value = fund;
+    fijar(dom, doc, "coCost", cost, "input");
+    (doc.querySelector('button[onclick="addCO()"]') as HTMLElement).click();
+  };
+  const nivel = (dom: any, doc: Document, id: string, v: string) => { const s = rowOf(doc, id).querySelector('select[data-f="authLevel"]') as HTMLSelectElement; s.value = v; s.dispatchEvent(new dom.window.Event("change", { bubbles: true })); };
+
+  it("política de reservas: una orden a contingencia solo la aprueba el nivel de autoridad que corresponde a su monto (Director de Proyecto → CCB → Sponsor)", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    // ejemplo: hasta 50.000 el Director de Proyecto, hasta 250.000 el CCB, por encima el sponsor
+    fijar(dom, doc, "coCost", "180000", "input");
+    expect(doc.getElementById("coPolicyHint")!.textContent).toMatch(/una orden de \$ 180,000\.00 con cargo a contingencia la autoriza el CCB/);
+    expect(doc.getElementById("coPolicyHint")!.textContent).toMatch(/hasta \$ 50,000\.00: Director de Proyecto · hasta \$ 250,000\.00: CCB · por encima: Sponsor/);
+    fijar(dom, doc, "coFund", "Reserva de gestión");
+    expect(doc.getElementById("coPolicyHint")!.textContent).toMatch(/fuera de la línea base: la autoriza siempre el Sponsor/);
+    fijar(dom, doc, "coFund", "Contingencia");
+
+    registrarOrden(dom, doc, "180000");                                                 // OC-004
+    expect(rowOf(doc, "OC-004").textContent).toMatch(/Política de reservas: requiere CCB/);
+    setApproval(dom, doc, "OC-004", "Director de Proyecto", false);
+    setStatus(dom, doc, "OC-004", "Aprobada");
+    expect(estadoSel(doc, "OC-004").value).toBe("Pendiente");                          // el PM no puede liberar 180.000
+    expect(toast(doc)).toMatch(/la autoriza el CCB.*la aprobación registrada es del Director de Proyecto/);
+    nivel(dom, doc, "OC-004", "ccb");                                                   // el nivel explícito manda sobre el texto del aprobador
+    setStatus(dom, doc, "OC-004", "Aprobada");
+    expect(estadoSel(doc, "OC-004").value).toBe("Aprobada");
+    expect(kpi(doc, 2)).toBe("$ 492,000");                                              // contingencia disponible: 672.000 − 180.000
+
+    registrarOrden(dom, doc, "300000");                                                 // > 250.000: solo el sponsor
+    expect(rowOf(doc, "OC-005").textContent).toMatch(/requiere Sponsor/);
+    setApproval(dom, doc, "OC-005", "CCB", false);
+    setStatus(dom, doc, "OC-005", "Aprobada");
+    expect(estadoSel(doc, "OC-005").value).toBe("Pendiente");
+    expect(toast(doc)).toMatch(/la autoriza el Sponsor/);
+
+    registrarOrden(dom, doc, "30000");                                                  // ≤ 50.000: basta el Director de Proyecto
+    setApproval(dom, doc, "OC-006", "Director de Proyecto", false);
+    setStatus(dom, doc, "OC-006", "Aprobada");
+    expect(estadoSel(doc, "OC-006").value).toBe("Aprobada");
+  });
+
+  it("política de reservas: la orden aprobada conserva su nivel de autoridad y la ya aprobada de antes no se vuelve a juzgar", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    expect(rowOf(doc, "OC-001").textContent).toMatch(/Política de reservas: requiere CCB/);   // 180.000 aprobada por el CCB
+    expect((rowOf(doc, "OC-001").querySelector('select[data-f="authLevel"]') as HTMLSelectElement).value).toBe("ccb");
+    expect((rowOf(doc, "OC-001").querySelector('select[data-f="authLevel"]') as HTMLSelectElement).disabled).toBe(true);   // aprobada: no se edita
+    (dom.window as any).buildDoc();
+    expect(doc.getElementById("doc")!.textContent).toMatch(/Política de reservas \(plan de riesgos\)/);
+    expect(doc.getElementById("doc")!.textContent).toMatch(/hasta \$ 50,000\.00: Director de Proyecto · hasta \$ 250,000\.00: CCB · por encima: Sponsor/);
+    expect(doc.getElementById("doc")!.textContent).toMatch(/OC-001[\s\S]*Aprobada · CCB \(CCB\)/);
+  });
+
+  it("política de reservas: alerta de agotamiento cuando la contingencia disponible baja del umbral (25 % de la inicial)", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    expect(doc.getElementById("coDrawdown")!.textContent).toMatch(/Contingencia disponible: 78\.9 % de la inicial \(umbral de alerta 25 %\)/);
+    expect(doc.getElementById("coDrawdown")!.textContent).not.toMatch(/Alerta de agotamiento/);
+    registrarOrden(dom, doc, "500000");                                                 // 672.000 − 500.000 = 172.000 = 20,2 % de 852.000
+    setApproval(dom, doc, "OC-004", "Sponsor", false);
+    nivel(dom, doc, "OC-004", "sponsor");
+    setStatus(dom, doc, "OC-004", "Aprobada");
+    expect(estadoSel(doc, "OC-004").value).toBe("Aprobada");
+    expect(doc.getElementById("coDrawdown")!.textContent).toMatch(/Alerta de agotamiento.*\$ 172,000.*20\.2 % de la inicial.*umbral de 25 %/);
+  });
+
+  it("política de reservas: la define el plan de riesgos del proyecto; sin ella (o sin límites) la aprobación es la de siempre", async () => {
+    const orden = { id: "OC-001", desc: "Refuerzo", cause: "x", cost: 5000, fund: "Contingencia", status: "Pendiente", kind: "imprevisto", approver: "CCB", sponsorAuth: false };
+    const conPolitica = await abrirConectado({ ...costoConRangos([orden]), risks: { plan: { reserves: { pmLimit: 1000, ccbLimit: 2000 } }, risks: [] } });
+    setStatus(conPolitica, conPolitica.window.document, "OC-001", "Aprobada");
+    expect(estadoSel(conPolitica.window.document, "OC-001").value).toBe("Pendiente");                   // 5.000 > 2.000: solo el sponsor
+    expect(toast(conPolitica.window.document)).toMatch(/la autoriza el Sponsor \(hasta 1000: Director de Proyecto · hasta 2000: CCB · por encima: Sponsor\)/);
+    const sinPolitica = await abrirConectado({ ...costoConRangos([orden]), risks: { plan: {}, risks: [] } });
+    setStatus(sinPolitica, sinPolitica.window.document, "OC-001", "Aprobada");
+    expect(estadoSel(sinPolitica.window.document, "OC-001").value).toBe("Aprobada");                    // sin límites: como antes
+    expect(sinPolitica.window.document.querySelector('select[data-f="authLevel"]')).toBeNull();          // y no se pide un nivel que nadie exige
   });
 
   it("un cambio de alcance no se aprueba con contingencia; con fondos adicionales y sponsor sí (no exige reserva de gestión) y sube BAC y total", async () => {
@@ -170,7 +249,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     // OC-002 (ampliación del cliente = cambio de alcance) parte con Financiamiento adicional
     setApproval(dom, doc, "OC-002", "Sponsor", true);
     setStatus(dom, doc, "OC-002", "Aprobada");
-    expect((rowOf(doc, "OC-002").querySelector("select") as HTMLSelectElement).value).toBe("Aprobada");
+    expect((estadoSel(doc, "OC-002")).value).toBe("Aprobada");
     expect(kpi(doc, 3)).toBe("$ 403,759");                              // la reserva de gestión NO se tocó
     (rowOf(doc, "OC-002").querySelector('button[onclick^="coBaseline"]') as HTMLElement).click();
     expect(kpi(doc, 0)).toBe("$ 8,315,181");                            // + 240,000
@@ -183,7 +262,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     (doc.querySelector('button[onclick="addCO()"]') as HTMLElement).click();
     setApproval(dom, doc, "OC-004", "CCB", false);
     setStatus(dom, doc, "OC-004", "Aprobada");
-    expect((rowOf(doc, "OC-004").querySelector("select") as HTMLSelectElement).value).toBe("Pendiente");
+    expect((estadoSel(doc, "OC-004")).value).toBe("Pendiente");
     expect(toast(doc)).toMatch(/no se financia con contingencia/);
   });
 
@@ -230,7 +309,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
 
     setApproval(dom, doc, "OC-002", "CCB", true);
     setStatus(dom, doc, "OC-002", "Aprobada");
-    expect((rowOf(doc, "OC-002").querySelector("select") as HTMLSelectElement).value).toBe("Pendiente");
+    expect((estadoSel(doc, "OC-002")).value).toBe("Pendiente");
     expect(toast(doc)).toMatch(/clasifica la orden/);
 
     // guardado con sesión: la rebanada conserva las órdenes y nunca borra campos
@@ -332,6 +411,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
 
   // ---- Contingencia por rangos + Monte Carlo (auditoría metodológica AACE): se ofrecía
   // «Simulación Monte Carlo» pero se calculaba una tabla fija de % por clase y percentil.
+  const estadoSel = (doc: Document, id: string) => rowOf(doc, id).querySelector("select[data-i]:not([data-f])") as HTMLSelectElement;   // el de estado (el de nivel de autoridad y el de riesgo llevan data-f)
   const dinero = (s: string | null | undefined) => Number(String(s || "").replace(/[^0-9.-]/g, ""));
   const fijar = (dom: any, doc: Document, id: string, v: string, ev = "change") => { const el = doc.getElementById(id) as HTMLInputElement | HTMLSelectElement; el.value = v; el.dispatchEvent(new dom.window.Event(ev, { bubbles: true })); };
   const filaRango = (doc: Document, i: number) => doc.querySelectorAll("#rngBody tr")[i] as HTMLElement;
