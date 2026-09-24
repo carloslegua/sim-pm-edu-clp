@@ -1744,8 +1744,8 @@ Estimating»; la RP 118R-21 cubre rangos + Monte Carlo de riesgos inherentes) y
   Cronograma) referencian un paquete por su id de nodo, reconstruir el
   árbol siempre con ids nuevos habría desenlazado esos módulos en CADA
   reimportación. En cambio, un Código EDT que ya existía en el árbol antes
-  de importar RECICLA su mismo id (y sus `notes`/`orientation`/`delId`,
-  ninguno de los cuales viaja en el archivo) — solo un Código EDT
+  de importar RECICLA su mismo id (y sus `notes`/`acceptance`/`loe`/
+  `orientation`/`delId`, ninguno de los cuales viaja en el archivo) — solo un Código EDT
   genuinamente nuevo recibe un id nuevo (`uid()`, mismo contador
   compartido de toda la sesión); si el archivo mueve un nodo a otro
   Código EDT, ese nodo pierde el id anterior, mismo efecto que borrarlo y
@@ -1754,6 +1754,58 @@ Estimating»; la RP 118R-21 cubre rangos + Monte Carlo de riesgos inherentes) y
   paquete con un "R" de RACI sigue apareciendo bloqueado (prueba indirecta
   de que conservó su id — si no lo hubiera hecho, `raciLocksResource` ya
   no encontraría el assignment).
+- **Calidad de la EDT y Diccionario (auditoría metodológica PMBOK, ítem D;
+  lógica pura en `src/shared/wbs-quality.ts`, inlineada en `wbs.js`)**. La
+  EDT solo se validaba al importar un `.xlsx`; nada avisaba de una
+  descomposición mal hecha ni de paquetes sin describir. `analyzeWbs()` revisa
+  tres cosas (criterios habituales del PMI Practice Standard for WBS; los
+  UMBRALES son heurísticas didácticas, declaradas en `LIMITS`, no normas):
+  · **Estructura**: E1 nombres vacíos o de plantilla («Nuevo paquete»); E2
+  nombres repetidos entre hermanos (riesgo) y E3 en ramas distintas
+  (sugerencia); **E4 un solo hijo** (no es una descomposición; también una
+  raíz con una sola fase); E5 fase sin descomponer (solo cuando hay otras
+  fases descompuestas: una EDT plana no es un error); E6 más de 5 niveles; E7
+  más de 9 hijos; E8 nombres que empiezan con un verbo en infinitivo
+  (heurística con lista de excepciones: «Alquiler», «Dossier», «Taller»…; la
+  EDT nombra resultados, las acciones son actividades).
+  · **Diccionario** (por paquete de trabajo = hoja): D1 descripción del
+  trabajo (campo `notes` de siempre, ahora rotulado así), D2 **criterio de
+  aceptación** (campo nuevo `acceptance`), D3 responsable, D4 costo, D5
+  duración o fechas, D6 fechas incompletas o invertidas (riesgo). El
+  «diccionario completo» de un paquete = descripción + criterio +
+  responsable; el panel muestra el avance (18/18).
+  · **Tamaño**: S1 paquete de más de 60 d (días de calendario entre sus fechas,
+  o la duración numérica si no hay fechas) y S2 paquete que concentra más del
+  20 % del costo total (solo con 5 paquetes o más). Ambas eximen al **esfuerzo
+  continuo** (`loe`, casilla nueva en el paquete: gestión, seguimiento), que
+  por naturaleza dura lo que dura el proyecto.
+  Severidad: **riesgo** (E2, E1 con nombre vacío, D6) → estado rojo;
+  **aviso** → ámbar; **sugerencia** (E3, E7, E8) informa sin cambiar el estado.
+  No revisa la trazabilidad hacia requisitos y entregables (ya la cubre
+  `traceMatrix`/`scopeAudit` en el Enunciado del Alcance): evita duplicar.
+  Interfaz: sección «Calidad de la EDT» en la barra lateral (estado, avance del
+  diccionario y un grupo desplegable por regla con su explicación; cada
+  hallazgo lleva al elemento, abre las ramas colapsadas y lo centra), marca
+  con el conteo en cada nodo, hallazgos del elemento bajo sus propiedades,
+  columnas de descripción/criterio/calidad en la vista «Tabla / Diccionario» y
+  una sección «3. Calidad de la EDT» (más el criterio de aceptación) en el
+  reporte imprimible. Los grupos abiertos se conservan entre refrescos (el panel
+  se vuelve a pintar con cada tecla). **Compatibilidad**: `acceptance` y `loe`
+  son campos opcionales del nodo (el esquema ya admite claves extra y las
+  sincronizaciones con RACI/CPM/Costos clonan el nodo completo); un proyecto
+  guardado antes lee «sin criterio» y sigue abriendo igual. El `.xlsx` no los
+  transporta (se conservan por Código EDT al reimportar).
+  **Ejemplo DISTRIB+ ampliado** (`src/shared/wbs-sample.ts`, única fuente): los
+  18 paquetes traen descripción y criterio (reutilizan los riesgos R-01/R-02/
+  R-03/R-08 y los criterios del Enunciado y de Requisitos) y 1.3 «Informes de
+  seguimiento y control» es LOE. Con las fechas manuales del ejemplo el único
+  aviso es **S2** (Estructuras metálicas, 25,6 % del costo); con el proyecto
+  completo (fechas del CPM) aparece además **S1**: «Acabados y cerramientos»
+  dura 106 d porque sus tres actividades van en serie (hallazgo real de la red).
+  Pruebas: `wbs-quality.test.ts` (15), `wbs-sample.test.ts` (2), smoke
+  `wbs-quality.smoke.test.ts` (10) y e2e en Chrome real (`wbs-quality.spec.ts`:
+  el diccionario sobrevive a las sincronizaciones con Actividades/CPM y se
+  edita y guarda).
 - **Coherencia de Costo/Fechas/Responsable**: al definir la EDT es
   imposible conocer el costo, la duración o las fechas reales de un
   paquete — son estimaciones. El WBS deja explícito cuándo un valor es

@@ -26,6 +26,399 @@
 		};
 	}
 	//#endregion
+	//#region src/shared/wbs-quality.ts
+	var LIMITS = {
+		maxDepth: 5,
+		maxChildren: 9,
+		maxPackageDays: 60,
+		maxCostSharePct: 20,
+		minLeavesForShare: 5
+	};
+	var PLACEHOLDERS = [
+		"nuevo paquete",
+		"nueva fase",
+		"nueva subtarea",
+		"nuevo entregable",
+		"entregable",
+		"paquete",
+		"fase",
+		"subtarea",
+		"proyecto sin titulo"
+	];
+	var NOT_VERBS = [
+		"taller",
+		"alquiler",
+		"poder",
+		"lider",
+		"mujer",
+		"lugar",
+		"hogar",
+		"pilar",
+		"militar",
+		"dossier",
+		"container",
+		"router",
+		"caracter",
+		"deber",
+		"placer",
+		"cadaver",
+		"crater",
+		"cluster",
+		"poster",
+		"elixir"
+	];
+	var RULES = [
+		{
+			code: "E1",
+			severity: "aviso",
+			title: "Nombres vacíos o sin editar",
+			hint: "Cada elemento necesita un nombre propio; los nombres de plantilla («Nuevo paquete», «Nueva fase») no dicen qué se entrega."
+		},
+		{
+			code: "E2",
+			severity: "riesgo",
+			title: "Nombres repetidos entre hermanos",
+			hint: "Dos elementos con el mismo nombre bajo el mismo padre son ambiguos: nadie sabe cuál es cuál al asignar, costear o reportar."
+		},
+		{
+			code: "E3",
+			severity: "info",
+			title: "Mismo nombre en ramas distintas",
+			hint: "Repetir un nombre («Pruebas») en dos ramas confunde los reportes; agrega el contexto al nombre («Pruebas eléctricas»)."
+		},
+		{
+			code: "E4",
+			severity: "aviso",
+			title: "Elementos con un solo hijo",
+			hint: "Una descomposición produce al menos dos elementos: con uno solo no hay descomposición. Agrega el que falta o fusiónalo con su padre."
+		},
+		{
+			code: "E5",
+			severity: "aviso",
+			title: "Fases sin descomponer",
+			hint: "Una fase sin entregables ni paquetes no se puede planificar ni costear: descomponla hasta paquetes de trabajo."
+		},
+		{
+			code: "E6",
+			severity: "aviso",
+			title: "Más de " + LIMITS.maxDepth + " niveles",
+			hint: "Una EDT muy profunda es difícil de mantener; considera un subproyecto o replantear el criterio de descomposición."
+		},
+		{
+			code: "E7",
+			severity: "info",
+			title: "Demasiados hijos (más de " + LIMITS.maxChildren + ")",
+			hint: "Con tantos hijos conviene agrupar en un nivel intermedio (por entregable o por área)."
+		},
+		{
+			code: "E8",
+			severity: "info",
+			title: "Nombres que parecen actividades",
+			hint: "La EDT nombra resultados (sustantivos: «Diseño estructural»), no acciones (verbos: «Diseñar la estructura»); las acciones son actividades, y se definen después."
+		},
+		{
+			code: "D1",
+			severity: "aviso",
+			title: "Paquetes sin descripción del trabajo",
+			hint: "El diccionario de la EDT describe qué trabajo incluye y qué no cada paquete; sin él, cada persona interpreta el alcance a su manera."
+		},
+		{
+			code: "D2",
+			severity: "aviso",
+			title: "Paquetes sin criterio de aceptación",
+			hint: "Sin criterio de aceptación no hay forma objetiva de decir que el paquete está terminado (y de cobrarlo o ganar su valor)."
+		},
+		{
+			code: "D3",
+			severity: "aviso",
+			title: "Paquetes sin responsable",
+			hint: "Cada paquete tiene un responsable (idealmente el «R» de la Matriz RACI)."
+		},
+		{
+			code: "D4",
+			severity: "aviso",
+			title: "Paquetes sin costo",
+			hint: "Un paquete sin costo deja el presupuesto incompleto; estímalo aquí o en Estimar los Costos."
+		},
+		{
+			code: "D5",
+			severity: "aviso",
+			title: "Paquetes sin duración ni fechas",
+			hint: "Un paquete sin duración ni fechas no entra al cronograma."
+		},
+		{
+			code: "D6",
+			severity: "riesgo",
+			title: "Fechas incompletas o invertidas",
+			hint: "Un paquete con una sola fecha, o cuyo fin cae antes que su inicio, rompe el cronograma y el valor planificado."
+		},
+		{
+			code: "S1",
+			severity: "aviso",
+			title: "Paquetes demasiado largos (> " + LIMITS.maxPackageDays + " d)",
+			hint: "Un paquete tan largo no se puede controlar con avance real: descomponlo (regla del período de reporte / 8-80) o decláralo esfuerzo continuo (LOE) si es gestión o seguimiento."
+		},
+		{
+			code: "S2",
+			severity: "aviso",
+			title: "Paquetes que concentran el costo (> " + LIMITS.maxCostSharePct + " %)",
+			hint: "Un paquete que concentra tanto presupuesto es difícil de controlar (valor ganado, avance): considera dividirlo por lote, hito de pago o entrega."
+		}
+	];
+	var RULE = {};
+	RULES.forEach((r) => {
+		RULE[r.code] = r;
+	});
+	var SEV_RANK = {
+		riesgo: 0,
+		aviso: 1,
+		info: 2
+	};
+	var norm = (s) => String(s == null ? "" : s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+	var blank = (s) => !String(s == null ? "" : s).trim();
+	var num = (v) => {
+		const n = Number(v);
+		return isFinite(n) ? n : 0;
+	};
+	function calendarDays(start, end) {
+		if (!start || !end) return null;
+		const a = Date.parse(start + "T00:00:00Z"), b = Date.parse(end + "T00:00:00Z");
+		if (!isFinite(a) || !isFinite(b)) return null;
+		const d = Math.round((b - a) / 864e5);
+		return d >= 0 ? d + 1 : null;
+	}
+	function looksLikeActivity(name) {
+		const first = norm(name).split(" ")[0] || "";
+		return first.length >= 5 && /^[a-z]+(ar|er|ir)$/.test(first) && NOT_VERBS.indexOf(first) < 0;
+	}
+	function analyzeWbs(wbs) {
+		const empty = {
+			findings: [],
+			byNode: {},
+			groups: [],
+			counts: {
+				riesgo: 0,
+				aviso: 0,
+				info: 0
+			},
+			state: "vacio",
+			codes: {},
+			leaves: 0,
+			maxDepth: 0,
+			dictionary: {
+				complete: 0,
+				total: 0,
+				pct: 0
+			}
+		};
+		if (!wbs || !wbs.nodes || !wbs.rootId || !wbs.nodes[wbs.rootId]) return empty;
+		const nodes = wbs.nodes, rootId = wbs.rootId;
+		const order = [], parent = {}, depth = {}, codes = {}, kids = {};
+		const seen = {};
+		(function walk(id, par, d, code) {
+			seen[id] = true;
+			order.push(id);
+			parent[id] = par;
+			depth[id] = d;
+			codes[id] = code;
+			kids[id] = (nodes[id].children || []).filter((c) => nodes[c] && !seen[c]);
+			kids[id].forEach((c, i) => walk(c, id, d + 1, id === rootId ? String(i + 1) : code + "." + (i + 1)));
+		})(rootId, null, 0, "0");
+		const body = order.filter((id) => id !== rootId);
+		if (!body.length) return {
+			...empty,
+			codes
+		};
+		const leafIds = body.filter((id) => !kids[id].length);
+		const maxDepth = body.reduce((m, id) => Math.max(m, depth[id]), 0);
+		const findings = [];
+		const add = (code, id, text, severity) => {
+			findings.push({
+				code,
+				severity: severity || RULE[code].severity,
+				nodeId: id,
+				nodeCode: codes[id],
+				text
+			});
+		};
+		const nm = (id) => "«" + (String(nodes[id].name || "").trim() || "sin nombre") + "»";
+		body.forEach((id) => {
+			const raw = String(nodes[id].name || "");
+			if (blank(raw)) add("E1", id, "El elemento " + codes[id] + " no tiene nombre.", "riesgo");
+			else if (PLACEHOLDERS.indexOf(norm(raw)) >= 0) add("E1", id, nm(id) + " conserva un nombre de plantilla: nómbralo por lo que entrega.");
+			else if (looksLikeActivity(raw)) add("E8", id, nm(id) + " parece una actividad (empieza con un verbo): nombra el resultado, no la acción.");
+		});
+		const siblingDup = {};
+		order.forEach((pid) => {
+			const seenName = {};
+			kids[pid].forEach((c) => {
+				const k = norm(nodes[c].name);
+				if (k) (seenName[k] = seenName[k] || []).push(c);
+			});
+			Object.keys(seenName).forEach((k) => {
+				if (seenName[k].length > 1) seenName[k].forEach((c) => {
+					siblingDup[c] = true;
+					add("E2", c, nm(c) + " se repite entre los hijos de " + (pid === rootId ? "el proyecto" : codes[pid]) + ".");
+				});
+			});
+		});
+		const byName = {};
+		body.forEach((id) => {
+			const k = norm(nodes[id].name);
+			if (k && PLACEHOLDERS.indexOf(k) < 0) (byName[k] = byName[k] || []).push(id);
+		});
+		Object.keys(byName).forEach((k) => {
+			const ids = byName[k].filter((id) => !siblingDup[id]);
+			if (byName[k].length > 1 && ids.length) ids.forEach((id) => add("E3", id, nm(id) + " también aparece en otra rama de la EDT (" + byName[k].filter((o) => o !== id).map((o) => codes[o]).join(", ") + ")."));
+		});
+		order.forEach((id) => {
+			if (kids[id].length === 1) add("E4", id, (id === rootId ? "El proyecto tiene una sola fase (" + nm(kids[id][0]) + ")" : nm(id) + " tiene un solo hijo (" + nm(kids[id][0]) + ")") + ": eso no es una descomposición.");
+			if (kids[id].length > LIMITS.maxChildren) add("E7", id, (id === rootId ? "El proyecto" : nm(id)) + " tiene " + kids[id].length + " hijos: agrúpalos en un nivel intermedio.");
+		});
+		const phases = kids[rootId];
+		if (phases.some((p) => kids[p].length)) phases.filter((p) => !kids[p].length).forEach((p) => add("E5", p, nm(p) + " no tiene entregables ni paquetes: descomponla."));
+		body.filter((id) => depth[id] === LIMITS.maxDepth + 1).forEach((id) => add("E6", id, nm(id) + " está en el nivel " + depth[id] + ": la EDT supera los " + LIMITS.maxDepth + " niveles."));
+		const totalCost = leafIds.reduce((s, id) => s + Math.max(0, num(nodes[id].cost)), 0);
+		let complete = 0;
+		leafIds.forEach((id) => {
+			const n = nodes[id];
+			const okDesc = !blank(n.notes), okAcc = !blank(n.acceptance), okRes = !blank(n.resource);
+			if (!okDesc) add("D1", id, nm(id) + " no tiene descripción del trabajo.");
+			if (!okAcc) add("D2", id, nm(id) + " no tiene criterio de aceptación.");
+			if (!okRes) add("D3", id, nm(id) + " no tiene responsable.");
+			if (okDesc && okAcc && okRes) complete++;
+			const cost = num(n.cost);
+			if (cost <= 0) add("D4", id, nm(id) + " no tiene costo estimado.");
+			const days = calendarDays(n.start, n.end) ?? Math.max(0, num(n.duration));
+			const hasS = !blank(n.start), hasE = !blank(n.end);
+			if (hasS && hasE && n.start > n.end) add("D6", id, nm(id) + " termina (" + n.end + ") antes de empezar (" + n.start + ").");
+			else if (hasS !== hasE) add("D6", id, nm(id) + " tiene solo la fecha de " + (hasS ? "inicio" : "fin") + ": completa la otra o bórrala.");
+			else if (!hasS && days <= 0) add("D5", id, nm(id) + " no tiene duración ni fechas.");
+			if (!n.loe) {
+				if (days > LIMITS.maxPackageDays) add("S1", id, nm(id) + " dura " + days + " d (más de " + LIMITS.maxPackageDays + "): descomponlo o márcalo como esfuerzo continuo (LOE).");
+				if (leafIds.length >= LIMITS.minLeavesForShare && totalCost > 0 && cost / totalCost * 100 > LIMITS.maxCostSharePct) add("S2", id, nm(id) + " concentra el " + Math.round(cost / totalCost * 1e3) / 10 + " % del costo total: es difícil de controlar; considera dividirlo.");
+			}
+		});
+		const counts = {
+			riesgo: 0,
+			aviso: 0,
+			info: 0
+		};
+		findings.forEach((f) => {
+			counts[f.severity]++;
+		});
+		const byNode = {};
+		findings.forEach((f) => {
+			(byNode[f.nodeId] = byNode[f.nodeId] || []).push(f);
+		});
+		const groups = [];
+		RULES.forEach((r) => {
+			const items = findings.filter((f) => f.code === r.code);
+			if (!items.length) return;
+			const sev = items.reduce((s, f) => SEV_RANK[f.severity] < SEV_RANK[s] ? f.severity : s, items[0].severity);
+			groups.push({
+				code: r.code,
+				severity: sev,
+				title: r.title,
+				hint: r.hint,
+				items
+			});
+		});
+		groups.sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity]);
+		return {
+			findings,
+			byNode,
+			groups,
+			counts,
+			state: counts.riesgo ? "rojo" : counts.aviso ? "ambar" : "verde",
+			codes,
+			leaves: leafIds.length,
+			maxDepth,
+			dictionary: {
+				complete,
+				total: leafIds.length,
+				pct: leafIds.length ? Math.round(complete / leafIds.length * 100) : 0
+			}
+		};
+	}
+	//#endregion
+	//#region src/shared/wbs-sample.ts
+	var SAMPLE_WBS_DICTIONARY = {
+		"1.1": {
+			notes: "Documento que autoriza formalmente el proyecto, nombra al director y fija los requisitos de alto nivel (RAN.01 a RAN.04).",
+			acceptance: "Acta firmada por la Gerencia General de DISTRIB+."
+		},
+		"1.2": {
+			notes: "Plan para la dirección del proyecto con las líneas base de alcance, cronograma y costo, y los planes subsidiarios de gestión.",
+			acceptance: "Plan y líneas base aprobados por el sponsor antes de iniciar la construcción."
+		},
+		"1.3": {
+			notes: "Informes mensuales de avance, reuniones de control y seguimiento de las líneas base durante todo el proyecto.",
+			acceptance: "Informe mensual entregado y aceptado por el sponsor en cada corte.",
+			loe: true
+		},
+		"2.1": {
+			notes: "Calicatas y ensayos de laboratorio que determinan la capacidad portante del terreno; su informe alimenta el diseño de la cimentación (riesgo R-03).",
+			acceptance: "Informe geotécnico firmado por especialista colegiado y aprobado por la supervisión."
+		},
+		"2.2": {
+			notes: "Memoria de cálculo y planos estructurales de la nave, con la cobertura y la disposición de racks.",
+			acceptance: "Expediente estructural revisado y aprobado por la supervisión; planos aptos para construcción."
+		},
+		"2.3": {
+			notes: "Memoria y planos de las instalaciones eléctricas y sanitarias, dimensionadas para la operación logística proyectada.",
+			acceptance: "Cargas eléctricas y caudales sanitarios conformes a la memoria de cálculo aprobada."
+		},
+		"2.4": {
+			notes: "Licencia de edificación de la Municipalidad de Lurín y certificado ITSE de seguridad (riesgo R-01).",
+			acceptance: "Licencia y certificado ITSE emitidos por la municipalidad y vigentes."
+		},
+		"3.1": {
+			notes: "Fabricación y transporte a obra de las estructuras metálicas prefabricadas (riesgos R-02, alza del acero, y R-08, fabricación).",
+			acceptance: "Piezas recibidas en obra conforme a planos, con los certificados de calidad del fabricante."
+		},
+		"3.2": {
+			notes: "Suministro de cemento, agregados y materiales varios para la obra civil.",
+			acceptance: "Materiales recibidos con guías y certificados; cantidades conformes al metrado."
+		},
+		"3.3": {
+			notes: "Adquisición de tableros, equipos eléctricos y equipos sanitarios para las instalaciones MEP.",
+			acceptance: "Equipos entregados según la especificación técnica y con su protocolo de fábrica."
+		},
+		"4.1": {
+			notes: "Corte, relleno, eliminación de excedentes y nivelación de la plataforma del almacén.",
+			acceptance: "Plataforma nivelada y compactada según planos, con los ensayos de densidad aprobados."
+		},
+		"4.2": {
+			notes: "Zapatas y cimentación de la nave según el estudio de suelos, incluido el refuerzo por el hallazgo geotécnico (R-03).",
+			acceptance: "Cimentación conforme a planos y ensayos de resistencia del concreto aprobados."
+		},
+		"4.3": {
+			notes: "Montaje de columnas, vigas, tijerales y cobertura TR-4 de la nave.",
+			acceptance: "Altura libre y disposición de racks verificadas contra los planos aprobados."
+		},
+		"4.4": {
+			notes: "Tarrajeo, pintura y cerramiento perimétrico de la edificación.",
+			acceptance: "Pisos, señalización y anchos de pasillo aptos para montacargas según el layout operativo."
+		},
+		"4.5": {
+			notes: "Instalación de tableros, circuitos eléctricos y redes sanitarias.",
+			acceptance: "Instalaciones ejecutadas y en funcionamiento, conformes a la memoria de cálculo."
+		},
+		"5.1": {
+			notes: "Pruebas de tableros y circuitos eléctricos y pruebas hidráulicas de las redes sanitarias.",
+			acceptance: "Protocolos de prueba firmados por QA/QC y aceptados por el cliente."
+		},
+		"5.2": {
+			notes: "Capacitación operativa al personal del cliente y entrega de los manuales de operación y mantenimiento.",
+			acceptance: "Personal capacitado (registro de asistencia) y manuales entregados."
+		},
+		"5.3": {
+			notes: "Dossier de calidad, planos as-built y acta de entrega y cierre del proyecto.",
+			acceptance: "Dossier completo y acta de entrega y cierre firmada por el cliente."
+		}
+	};
+	//#endregion
 	//#region src/modules/wbs/main.ts
 	var NODE_W = 180;
 	var NODE_H = 118;
@@ -81,6 +474,7 @@
 			start: "",
 			end: "",
 			notes: "",
+			acceptance: "",
 			children: [],
 			collapsed: false,
 			orientation: "spread"
@@ -278,6 +672,15 @@
 			resource: "PM",
 			start: "2026-11-05",
 			end: "2026-11-06"
+		});
+		const codes = computeCodes();
+		Object.keys(nodes).forEach((id) => {
+			const d = SAMPLE_WBS_DICTIONARY[codes[id]];
+			if (d) {
+				nodes[id].notes = d.notes;
+				nodes[id].acceptance = d.acceptance;
+				if (d.loe) nodes[id].loe = true;
+			}
 		});
 		selectedId = root;
 	}
@@ -477,22 +880,35 @@
 	function fmtMoney(v) {
 		return "S/ " + (v || 0).toLocaleString("es-PE", { maximumFractionDigits: 0 });
 	}
+	var quality = analyzeWbs(null);
+	function computeQuality() {
+		quality = analyzeWbs({
+			rootId,
+			nodes
+		});
+	}
 	function render() {
 		const rolled = computeRollup();
 		const codes = computeCodes();
+		computeQuality();
 		if (currentView === "tree") renderTree(rolled, codes);
 		else renderTable(rolled, codes);
 		renderProps(rolled);
 		renderStats(rolled);
+		renderQuality();
 		renderLegend();
 		updateOrientationUI();
 	}
 	function refreshValues() {
 		const rolled = computeRollup();
 		const codes = computeCodes();
+		computeQuality();
 		renderStats(rolled);
+		renderQuality();
 		if (currentView === "tree") renderTree(rolled, codes);
 		else renderTable(rolled, codes);
+		const nq = document.getElementById("nodeQuality");
+		if (nq && selectedId) nq.innerHTML = nodeQualityHtml(selectedId);
 	}
 	function renderTree(rolled, codes) {
 		const canvas = document.getElementById("canvas");
@@ -575,6 +991,7 @@
       <div class="bar-track"><div class="bar-fill" style="width:${r.percent}%; background:${r.percent >= 100 ? "var(--good)" : color}"></div></div>
       <div class="add-child-btn" title="Agregar subtarea">+</div>
       ${hasKids ? `<div class="collapse-btn${isCollapsed ? " is-collapsed" : ""}" title="${isCollapsed ? "Expandir rama (" + countDescendants(id) + " ocultos)" : "Colapsar rama"}">${isCollapsed ? "+" + countDescendants(id) : "−"}</div>` : ""}
+      ${qualityBadgeHtml(id)}
     `;
 			el.addEventListener("click", (e) => {
 				e.stopPropagation();
@@ -645,6 +1062,82 @@
 		markDirty();
 		setStatus(`"${child.name}" reasignado bajo "${newParent.name}"`);
 	}
+	var SEV_LABEL = {
+		riesgo: "Riesgo",
+		aviso: "Aviso",
+		info: "Sugerencia"
+	};
+	function worstSeverity(fs) {
+		return fs.some((f) => f.severity === "riesgo") ? "riesgo" : fs.some((f) => f.severity === "aviso") ? "aviso" : "info";
+	}
+	function qualityBadgeHtml(id) {
+		const fs = quality.byNode[id];
+		if (!fs || !fs.length) return "";
+		const tip = fs.map((f) => "• " + f.text).join("\n");
+		return `<span class="q-flag q-${worstSeverity(fs)}" title="${escapeAttr(tip)}">${fs.length}</span>`;
+	}
+	function nodeQualityHtml(id) {
+		const fs = quality.byNode[id] || [];
+		if (!fs.length) return "";
+		return `<div class="q-node"><div class="q-node-h">Hallazgos de este elemento</div><ul>${fs.map((f) => `<li><span class="sv ${f.severity}" title="${SEV_LABEL[f.severity]}">${f.code}</span>${escapeHtml(f.text)}</li>`).join("")}</ul></div>`;
+	}
+	var qOpenGroups = /* @__PURE__ */ new Set();
+	function renderQuality() {
+		const box = document.getElementById("qualityBox");
+		if (!box) return;
+		const q = quality;
+		if (q.state === "vacio") {
+			box.innerHTML = `<div class="empty-hint">Agrega fases y paquetes para revisar la calidad de la EDT.</div>`;
+			return;
+		}
+		const pill = q.state === "verde" ? ["q-verde", "Sin hallazgos"] : q.state === "ambar" ? ["q-ambar", "Con avisos"] : ["q-rojo", "Con riesgos"];
+		const c = q.counts;
+		const parts = [
+			c.riesgo ? c.riesgo + (c.riesgo === 1 ? " riesgo" : " riesgos") : "",
+			c.aviso ? c.aviso + (c.aviso === 1 ? " aviso" : " avisos") : "",
+			c.info ? c.info + (c.info === 1 ? " sugerencia" : " sugerencias") : ""
+		].filter(Boolean);
+		const d = q.dictionary;
+		box.innerHTML = `
+    <div class="q-head"><span class="q-pill ${pill[0]}">${pill[1]}</span><span class="q-counts">${parts.join(" · ") || "estructura, diccionario y tamaño en regla"}</span></div>
+    <div class="q-dict" title="Un paquete tiene el diccionario completo si trae descripción del trabajo, criterio de aceptación y responsable.">
+      <div class="q-dict-l"><span>Diccionario completo</span><b>${d.complete}/${d.total} paquetes · ${d.pct} %</b></div>
+      <div class="q-dict-bar"><div style="width:${d.pct}%"></div></div>
+    </div>
+    ${q.groups.map((g) => `
+      <details class="q-group" data-code="${g.code}"${qOpenGroups.has(g.code) ? " open" : ""}>
+        <summary><span class="sv ${g.severity}" title="${SEV_LABEL[g.severity]}">${g.code}</span><span class="q-title">${escapeHtml(g.title)}</span><b class="q-n">${g.items.length}</b></summary>
+        <div class="q-why">${escapeHtml(g.hint)}</div>
+        <ul>${g.items.map((f) => `<li><button class="q-item" data-id="${escapeAttr(f.nodeId)}" title="Ir a este elemento"><span class="q-code">${escapeHtml(f.nodeCode)}</span>${escapeHtml(f.text)}</button></li>`).join("")}</ul>
+      </details>`).join("")}`;
+		box.querySelectorAll("details.q-group").forEach((det) => {
+			det.addEventListener("toggle", () => {
+				const code = det.dataset.code;
+				if (det.open) qOpenGroups.add(code);
+				else qOpenGroups.delete(code);
+			});
+		});
+		box.querySelectorAll(".q-item").forEach((b) => b.addEventListener("click", () => goToNode(b.dataset.id)));
+	}
+	function goToNode(id) {
+		if (!nodes[id]) return;
+		let p = nodes[id].parentId;
+		const seen = /* @__PURE__ */ new Set();
+		while (p && nodes[p] && !seen.has(p)) {
+			seen.add(p);
+			nodes[p].collapsed = false;
+			p = nodes[p].parentId;
+		}
+		selectedId = id;
+		render();
+		if (currentView === "tree") {
+			const el = Array.from(document.querySelectorAll("#canvas .node")).find((n) => n.dataset.id === id);
+			if (el && el.scrollIntoView) el.scrollIntoView({
+				block: "center",
+				inline: "center"
+			});
+		}
+	}
 	function renderTable(rolled, codes) {
 		const wrap = document.getElementById("tableView");
 		const rows = [];
@@ -667,6 +1160,9 @@
       <th style="width:110px;">Costo</th>
       <th style="width:120px;">Responsable</th>
       <th style="width:120px;">Avance</th>
+      <th style="width:70px;">Calidad</th>
+      <th style="min-width:200px;">Descripción del trabajo</th>
+      <th style="min-width:200px;">Criterio de aceptación</th>
     </tr></thead><tbody>`;
 		rows.forEach(({ id, depth }) => {
 			const node = nodes[id];
@@ -682,6 +1178,9 @@
       <td>${fmtMoney(r.cost)}</td>
       <td>${escapeHtml(node.resource || "—")}</td>
       <td>${r.percent}%</td>
+      <td>${qualityBadgeHtml(id) || "—"}</td>
+      <td class="dict-txt">${node.notes ? escapeHtml(node.notes) : "—"}${node.loe ? ` <span class="loe-tag" title="Esfuerzo continuo (LOE): exento de las reglas de duración y de concentración de costo">LOE</span>` : ""}</td>
+      <td class="dict-txt">${node.acceptance ? escapeHtml(node.acceptance) : "—"}</td>
     </tr>`;
 		});
 		html += "</tbody></table>";
@@ -741,12 +1240,18 @@
     </div>
     ${raciLocksResource(node) ? `<div class="empty-hint">🔗 <b>Definido en la Matriz RACI</b> a partir del "R" (Responsable) asignado a este paquete. Para cambiarlo, abre <a href="RACI_Matrix.html" style="color:var(--cyan-dark); font-weight:700;">Matriz RACI ▸</a></div>` : !obsOptions.length ? `<div class="empty-hint">⚠ <b>Aún no existe la OBS de este proyecto.</b> Créala primero en <a href="OBS_Builder.html" style="color:var(--cyan-dark); font-weight:700;">OBS Builder ▸</a> para poder asignar responsables desde una lista.</div>` : isLeaf ? `<div class="empty-hint">Sugerencia: define el responsable en la <a href="RACI_Matrix.html" style="color:var(--cyan-dark); font-weight:700;">Matriz RACI ▸</a> (rol "R") en vez de elegirlo aquí — así queda formalmente registrado en la RAM del proyecto.</div>` : ""}
     <div class="field">
-      <label>Notas / Descripción</label>
-      <textarea id="f_notes">${escapeHtml(node.notes || "")}</textarea>
+      <label>Descripción del trabajo</label>
+      <textarea id="f_notes" placeholder="${isRoot ? "" : "Qué trabajo incluye este elemento (y qué no)"}">${escapeHtml(node.notes || "")}</textarea>
     </div>
+    ${isRoot ? "" : `<div class="field">
+      <label>Criterio de aceptación</label>
+      <textarea id="f_accept" placeholder="Cómo se comprueba que está terminado">${escapeHtml(node.acceptance || "")}</textarea>
+    </div>`}
+    ${isLeaf && !isRoot ? `<label class="chk" title="Gestión, seguimiento y otro trabajo que dura lo que dura el proyecto: queda exento de las reglas de duración máxima y de concentración de costo."><input type="checkbox" id="f_loe" ${node.loe ? "checked" : ""}> Esfuerzo continuo (LOE)</label>` : ""}
     ${costLocked ? `<div class="empty-hint">🔗 <b>Tomado de Estimar los Costos</b> (suma del Subtotal de todas sus actividades). Para cambiarlo, abre <a href="Estimar_Costos.html" style="color:var(--cyan-dark); font-weight:700;">Estimar los Costos ▸</a></div>` : isLeaf ? `<div class="empty-hint">📐 <b>Estimado.</b> Este costo se ingresa aquí (bottom-up) hasta que <a href="Estimar_Costos.html" style="color:var(--cyan-dark); font-weight:700;">Estimar los Costos ▸</a> calcule uno real para este paquete.</div>` : ""}
     ${cpmLocked ? `<div class="empty-hint">🔗 <b>Tomado del Cronograma (CPM)</b> a partir de las actividades y la ruta crítica calculadas para este paquete. Para cambiarlo, abre <a href="Cronograma_CPM.html" style="color:var(--cyan-dark); font-weight:700;">Cronograma CPM ▸</a></div>` : hasDates ? `<div class="empty-hint">📐 <b>Estimado.</b> Duración calculada automáticamente a partir de las fechas (${rolled.duration} d). Borra alguna fecha para editarla manualmente.</div>` : isLeaf ? `<div class="empty-hint">📐 <b>Estimado.</b> Cuando definas las actividades de este paquete y calcules la ruta crítica en <a href="Cronograma_CPM.html" style="color:var(--cyan-dark); font-weight:700;">Cronograma CPM ▸</a>, la fecha real se toma automáticamente de ahí.</div>` : ""}
     ${!isLeaf ? `<div class="empty-hint">Este paquete agrupa subtareas: el costo se suma (estimación bottom-up), pero <b>la duración se calcula como el tramo entre el inicio más temprano y el fin más tardío</b> de sus subtareas — no la suma, porque pueden ejecutarse en paralelo.</div>` : ""}
+    <div id="nodeQuality">${nodeQualityHtml(selectedId)}</div>
     ${!isRoot ? `<div class="danger-zone"><button class="btn danger" id="f_delete" style="width:100%;">🗑 Eliminar este nodo y sus subtareas</button></div>` : ""}
   `;
 		const bind = (id, key, isNum) => {
@@ -763,6 +1268,14 @@
 		bind("f_percent", "percent", true);
 		if (!raciLocksResource(node) && obsOptions.length) bind("f_resource", "resource", false);
 		bind("f_notes", "notes", false);
+		bind("f_accept", "acceptance", false);
+		const loeEl = document.getElementById("f_loe");
+		if (loeEl) loeEl.addEventListener("change", () => {
+			if (loeEl.checked) node.loe = true;
+			else delete node.loe;
+			refreshValues();
+			markDirty();
+		});
 		if (durationEditable) bind("f_duration", "duration", true);
 		const bindDate = (id, key) => {
 			const el = document.getElementById(id);
@@ -1371,11 +1884,13 @@
 				start: leaf ? p.start.trim() : "",
 				end: leaf ? p.end.trim() : "",
 				notes: prev && prev.notes || "",
+				acceptance: prev && prev.acceptance || "",
 				children: [],
 				collapsed: false,
 				orientation: prev && prev.orientation || "spread",
 				delId: prev ? prev.delId : void 0
 			};
+			if (prev && prev.loe && leaf) nodes[id].loe = true;
 			nodes[parentId].children.push(id);
 			idByCode[p.code] = id;
 		});
@@ -1918,14 +2433,18 @@
 				leafCount++;
 				const fromCpm = scheduleLockedLeafIds.has(id);
 				const fromEstimate = costEstimateLockedLeafIds.has(id);
-				dictHtml += "<tr><td class=\"num\">" + escapeHtml(code || "—") + "</td><td><b>" + escapeHtml(n.name) + "</b></td><td>" + escapeHtml(n.resource || "—") + "</td><td class=\"num\" style=\"text-align:center\">" + (Number(n.duration) || 0) + "</td><td class=\"num\">" + repDate(n.start) + (fromCpm ? " ¹" : "") + "</td><td class=\"num\">" + repDate(n.end) + (fromCpm ? " ¹" : "") + "</td><td class=\"num\" style=\"text-align:right\">" + m(n.cost) + (fromEstimate ? " ²" : "") + "</td><td>" + escapeHtml(n.notes || "—") + "</td></tr>";
+				dictHtml += "<tr><td class=\"num\">" + escapeHtml(code || "—") + "</td><td><b>" + escapeHtml(n.name) + "</b></td><td>" + escapeHtml(n.resource || "—") + "</td><td class=\"num\" style=\"text-align:center\">" + (Number(n.duration) || 0) + "</td><td class=\"num\">" + repDate(n.start) + (fromCpm ? " ¹" : "") + "</td><td class=\"num\">" + repDate(n.end) + (fromCpm ? " ¹" : "") + "</td><td class=\"num\" style=\"text-align:right\">" + m(n.cost) + (fromEstimate ? " ²" : "") + "</td><td>" + escapeHtml(n.notes || "—") + "</td><td>" + escapeHtml(n.acceptance || "—") + (n.loe ? " <i>(esfuerzo continuo, LOE)</i>" : "") + "</td></tr>";
 			}
 			n.children.forEach((cid, i) => {
 				walk(cid, code ? code + "." + (i + 1) : String(i + 1), depth + 1);
 			});
 		})(rootId, "", 0);
 		const total = agg(rootId);
-		reportShell("EDT y Diccionario del Proyecto", "WBS Builder · Gestión del Alcance", "<h2>1. Estructura de Desglose del Trabajo (EDT)</h2><p class=\"rep-note\">Los costos y fechas de fases y del proyecto son consolidados (rollup) de sus paquetes de trabajo; las fechas de los niveles superiores reflejan el rango inicio más temprano → fin más tardío (ejecución en paralelo incluida).</p><table><tr><th style=\"width:8%\">Código EDT</th><th>Elemento</th><th style=\"width:15%\">Responsable</th><th style=\"width:9%\">Inicio</th><th style=\"width:9%\">Fin</th><th style=\"width:12%\">Costo</th><th style=\"width:8%\">Avance</th></tr>" + rowsHtml + "<tr><td colspan=\"5\" style=\"text-align:right\"><b>Costo total del proyecto (rollup de " + leafCount + " paquetes)</b></td><td class=\"num\" style=\"text-align:right\"><b>" + m(total.cost) + "</b></td><td></td></tr></table><h2>2. Diccionario de la EDT — paquetes de trabajo</h2><table><tr><th style=\"width:8%\">Código EDT</th><th style=\"width:17%\">Paquete de trabajo</th><th style=\"width:12%\">Responsable</th><th style=\"width:7%\">Dur. (d)</th><th style=\"width:9%\">Inicio</th><th style=\"width:9%\">Fin</th><th style=\"width:11%\">Costo</th><th>Descripción / notas</th></tr>" + (dictHtml || "<tr><td colspan=\"8\" class=\"rep-note\">— Sin paquetes de trabajo —</td></tr>") + "</table><p class=\"rep-note\">El responsable de cada paquete proviene de la Matriz RACI (rol marcado con \"R\") o, si aún no la tiene, de una selección manual dentro del OBS del proyecto — nunca de texto libre. Las fechas marcadas con ¹ provienen del Cronograma CPM (ruta crítica ya calculable para ese paquete); los costos marcados con ² provienen de Estimar los Costos (Cantidad × Precio unitario ya calculados para ese paquete); el resto de fechas y costos son una estimación manual bottom-up ingresada en esta EDT, sujeta a cambiar una vez calculados los valores reales en esos módulos.</p>");
+		const body = "<h2>1. Estructura de Desglose del Trabajo (EDT)</h2><p class=\"rep-note\">Los costos y fechas de fases y del proyecto son consolidados (rollup) de sus paquetes de trabajo; las fechas de los niveles superiores reflejan el rango inicio más temprano → fin más tardío (ejecución en paralelo incluida).</p><table><tr><th style=\"width:8%\">Código EDT</th><th>Elemento</th><th style=\"width:15%\">Responsable</th><th style=\"width:9%\">Inicio</th><th style=\"width:9%\">Fin</th><th style=\"width:12%\">Costo</th><th style=\"width:8%\">Avance</th></tr>" + rowsHtml + "<tr><td colspan=\"5\" style=\"text-align:right\"><b>Costo total del proyecto (rollup de " + leafCount + " paquetes)</b></td><td class=\"num\" style=\"text-align:right\"><b>" + m(total.cost) + "</b></td><td></td></tr></table><h2>2. Diccionario de la EDT — paquetes de trabajo</h2><table><tr><th style=\"width:8%\">Código EDT</th><th style=\"width:17%\">Paquete de trabajo</th><th style=\"width:12%\">Responsable</th><th style=\"width:7%\">Dur. (d)</th><th style=\"width:9%\">Inicio</th><th style=\"width:9%\">Fin</th><th style=\"width:11%\">Costo</th><th>Descripción del trabajo</th><th style=\"width:18%\">Criterio de aceptación</th></tr>" + (dictHtml || "<tr><td colspan=\"9\" class=\"rep-note\">— Sin paquetes de trabajo —</td></tr>") + "</table><p class=\"rep-note\">El responsable de cada paquete proviene de la Matriz RACI (rol marcado con \"R\") o, si aún no la tiene, de una selección manual dentro del OBS del proyecto — nunca de texto libre. Las fechas marcadas con ¹ provienen del Cronograma CPM (ruta crítica ya calculable para ese paquete); los costos marcados con ² provienen de Estimar los Costos (Cantidad × Precio unitario ya calculados para ese paquete); el resto de fechas y costos son una estimación manual bottom-up ingresada en esta EDT, sujeta a cambiar una vez calculados los valores reales en esos módulos.</p>";
+		computeQuality();
+		const qd = quality.dictionary, qc = quality.counts;
+		const qBody = quality.state === "vacio" ? "<p class=\"rep-note\">— Sin elementos que revisar —</p>" : "<p>Diccionario completo (descripción, criterio de aceptación y responsable): <b>" + qd.complete + " de " + qd.total + " paquetes (" + qd.pct + " %)</b>. Hallazgos: <b>" + qc.riesgo + "</b> riesgos · <b>" + qc.aviso + "</b> avisos · <b>" + qc.info + "</b> sugerencias.</p>" + (quality.groups.length ? "<table><tr><th style=\"width:6%\">Regla</th><th style=\"width:26%\">Revisión</th><th>Elementos</th></tr>" + quality.groups.map((g) => "<tr><td class=\"num\">" + g.code + "</td><td><b>" + escapeHtml(g.title) + "</b><br><span class=\"rep-note\">" + escapeHtml(g.hint) + "</span></td><td>" + g.items.map((f) => "<b>" + escapeHtml(f.nodeCode) + "</b> " + escapeHtml(f.text)).join("<br>") + "</td></tr>").join("") + "</table>" : "<p class=\"rep-note\">Sin hallazgos: la estructura, el diccionario y el tamaño de los paquetes cumplen los criterios revisados.</p>");
+		reportShell("EDT y Diccionario del Proyecto", "WBS Builder · Gestión del Alcance", body + "<h2>3. Calidad de la EDT</h2>" + qBody);
 	}
 	(function() {
 		const b = document.getElementById("btnReport");

@@ -17,6 +17,8 @@ import type {
   ScheduleModule, SchedulePlanModule, ScopeStatementModule, WbsModule, WbsNode
 } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
+import { analyzeWbs, type QFinding, type QSeverity, type WbsQuality } from "../../shared/wbs-quality";
+import { SAMPLE_WBS_DICTIONARY } from "../../shared/wbs-sample";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -47,6 +49,9 @@ interface WbsUiNode {
   duration: number; cost: number; resource: string; percent: number;
   start: string; end: string; notes: string; children: string[]; collapsed: boolean;
   orientation: "spread" | "stack"; delId?: string;
+  // Diccionario de la EDT (campos opcionales: los proyectos guardados antes de esta vista no los traen y se leen como vacíos).
+  // `notes` es la descripción del trabajo; `acceptance`, el criterio de aceptación; `loe`, esfuerzo continuo (gestión, seguimiento).
+  acceptance?: string; loe?: boolean;
 }
 
 let nodes: Record<string, WbsUiNode> = {};
@@ -112,7 +117,7 @@ function newNode(parentId: string | null, name?: string, overrides?: Partial<Wbs
     {
       id, parentId, name: name || "Nuevo paquete",
       duration: 0, cost: 0, resource: "", percent: 0,
-      start: "", end: "", notes: "", children: [], collapsed: false,
+      start: "", end: "", notes: "", acceptance: "", children: [], collapsed: false,
       orientation: "spread" // 'spread' = hijos en fila (horizontal) · 'stack' = hijos en columna (vertical)
     },
     overrides || {}
@@ -188,6 +193,13 @@ function loadSample(): void {
   newNode(com, "Pruebas de instalaciones", { duration: 6, cost: 145000, percent: 0, resource: "QA/QC", start: "2026-10-26", end: "2026-10-31" });
   newNode(com, "Capacitación al cliente", { duration: 3, cost: 48000, percent: 0, resource: "PM", start: "2026-11-02", end: "2026-11-04" });
   newNode(com, "Acta de entrega y cierre", { duration: 2, cost: 92000, percent: 0, resource: "PM", start: "2026-11-05", end: "2026-11-06" });
+
+  // Diccionario de la EDT del caso (descripción, criterio de aceptación y esfuerzo continuo): una sola fuente, shared/wbs-sample.ts.
+  const codes = computeCodes();
+  Object.keys(nodes).forEach((id) => {
+    const d = SAMPLE_WBS_DICTIONARY[codes[id]];
+    if (d) { nodes[id].notes = d.notes; nodes[id].acceptance = d.acceptance; if (d.loe) nodes[id].loe = true; }
+  });
 
   selectedId = root;
 }
@@ -396,12 +408,19 @@ function setOrientationForBranch(targetId: string, o: "spread" | "stack"): void 
 // ---------- RENDER: TREE ----------
 function fmtMoney(v: number | null | undefined): string { return "S/ " + (v || 0).toLocaleString("es-PE", { maximumFractionDigits: 0 }); }
 
+// Calidad de la EDT (estructura, diccionario y tamaño; lógica pura en shared/wbs-quality.ts). Se recalcula en cada
+// render: el árbol es chico y así el panel de calidad y las marcas de los nodos nunca quedan desfasados.
+let quality: WbsQuality = analyzeWbs(null);
+function computeQuality(): void { quality = analyzeWbs({ rootId, nodes }); }
+
 function render(): void {
   const rolled = computeRollup();
   const codes = computeCodes();
+  computeQuality();
   if (currentView === "tree") renderTree(rolled, codes); else renderTable(rolled, codes);
   renderProps(rolled);
   renderStats(rolled);
+  renderQuality();
   renderLegend();
   updateOrientationUI();
 }
@@ -411,8 +430,11 @@ function render(): void {
 function refreshValues(): void {
   const rolled = computeRollup();
   const codes = computeCodes();
+  computeQuality();
   renderStats(rolled);
+  renderQuality();
   if (currentView === "tree") renderTree(rolled, codes); else renderTable(rolled, codes);
+  const nq = document.getElementById("nodeQuality"); if (nq && selectedId) nq.innerHTML = nodeQualityHtml(selectedId);
 }
 
 function renderTree(rolled: Record<string, RolledNode>, codes: Record<string, string>): void {
@@ -506,6 +528,7 @@ function renderTree(rolled: Record<string, RolledNode>, codes: Record<string, st
       <div class="bar-track"><div class="bar-fill" style="width:${r.percent}%; background:${r.percent >= 100 ? "var(--good)" : color}"></div></div>
       <div class="add-child-btn" title="Agregar subtarea">+</div>
       ${hasKids ? `<div class="collapse-btn${isCollapsed ? " is-collapsed" : ""}" title="${isCollapsed ? "Expandir rama (" + countDescendants(id) + " ocultos)" : "Colapsar rama"}">${isCollapsed ? "+" + countDescendants(id) : "−"}</div>` : ""}
+      ${qualityBadgeHtml(id)}
     `;
 
     el.addEventListener("click", (e) => { e.stopPropagation(); selectNode(id); });
@@ -575,6 +598,60 @@ function reparent(childId: string, newParentId: string): void {
   setStatus(`"${child.name}" reasignado bajo "${newParent.name}"`);
 }
 
+// ---------- CALIDAD DE LA EDT: marcas, panel lateral y hallazgos por nodo ----------
+const SEV_LABEL: Record<QSeverity, string> = { riesgo: "Riesgo", aviso: "Aviso", info: "Sugerencia" };
+function worstSeverity(fs: QFinding[]): QSeverity { return fs.some((f) => f.severity === "riesgo") ? "riesgo" : fs.some((f) => f.severity === "aviso") ? "aviso" : "info"; }
+// Marca sobre el nodo: cantidad de hallazgos y color del peor; el tooltip los enumera.
+function qualityBadgeHtml(id: string): string {
+  const fs = quality.byNode[id];
+  if (!fs || !fs.length) return "";
+  const tip = fs.map((f) => "• " + f.text).join("\n");
+  return `<span class="q-flag q-${worstSeverity(fs)}" title="${escapeAttr(tip)}">${fs.length}</span>`;
+}
+function nodeQualityHtml(id: string): string {
+  const fs = quality.byNode[id] || [];
+  if (!fs.length) return "";
+  return `<div class="q-node"><div class="q-node-h">Hallazgos de este elemento</div><ul>${fs.map((f) => `<li><span class="sv ${f.severity}" title="${SEV_LABEL[f.severity]}">${f.code}</span>${escapeHtml(f.text)}</li>`).join("")}</ul></div>`;
+}
+// Grupos de hallazgos abiertos en el panel (se conservan entre refrescos: se re-pinta con cada tecla que se escribe).
+const qOpenGroups = new Set<string>();
+function renderQuality(): void {
+  const box = document.getElementById("qualityBox"); if (!box) return;
+  const q = quality;
+  if (q.state === "vacio") { box.innerHTML = `<div class="empty-hint">Agrega fases y paquetes para revisar la calidad de la EDT.</div>`; return; }
+  const pill = q.state === "verde" ? ["q-verde", "Sin hallazgos"] : q.state === "ambar" ? ["q-ambar", "Con avisos"] : ["q-rojo", "Con riesgos"];
+  const c = q.counts;
+  const parts = [c.riesgo ? c.riesgo + (c.riesgo === 1 ? " riesgo" : " riesgos") : "", c.aviso ? c.aviso + (c.aviso === 1 ? " aviso" : " avisos") : "", c.info ? c.info + (c.info === 1 ? " sugerencia" : " sugerencias") : ""].filter(Boolean);
+  const d = q.dictionary;
+  box.innerHTML = `
+    <div class="q-head"><span class="q-pill ${pill[0]}">${pill[1]}</span><span class="q-counts">${parts.join(" · ") || "estructura, diccionario y tamaño en regla"}</span></div>
+    <div class="q-dict" title="Un paquete tiene el diccionario completo si trae descripción del trabajo, criterio de aceptación y responsable.">
+      <div class="q-dict-l"><span>Diccionario completo</span><b>${d.complete}/${d.total} paquetes · ${d.pct} %</b></div>
+      <div class="q-dict-bar"><div style="width:${d.pct}%"></div></div>
+    </div>
+    ${q.groups.map((g) => `
+      <details class="q-group" data-code="${g.code}"${qOpenGroups.has(g.code) ? " open" : ""}>
+        <summary><span class="sv ${g.severity}" title="${SEV_LABEL[g.severity]}">${g.code}</span><span class="q-title">${escapeHtml(g.title)}</span><b class="q-n">${g.items.length}</b></summary>
+        <div class="q-why">${escapeHtml(g.hint)}</div>
+        <ul>${g.items.map((f) => `<li><button class="q-item" data-id="${escapeAttr(f.nodeId)}" title="Ir a este elemento"><span class="q-code">${escapeHtml(f.nodeCode)}</span>${escapeHtml(f.text)}</button></li>`).join("")}</ul>
+      </details>`).join("")}`;
+  box.querySelectorAll<HTMLDetailsElement>("details.q-group").forEach((det) => {
+    det.addEventListener("toggle", () => { const code = det.dataset.code as string; if (det.open) qOpenGroups.add(code); else qOpenGroups.delete(code); });
+  });
+  box.querySelectorAll<HTMLElement>(".q-item").forEach((b) => b.addEventListener("click", () => goToNode(b.dataset.id as string)));
+}
+// Selecciona un elemento desde el panel de calidad: abre las ramas colapsadas que lo esconden y lo centra en el diagrama.
+function goToNode(id: string): void {
+  if (!nodes[id]) return;
+  let p = nodes[id].parentId; const seen = new Set<string>();
+  while (p && nodes[p] && !seen.has(p)) { seen.add(p); nodes[p].collapsed = false; p = nodes[p].parentId; }
+  selectedId = id; render();
+  if (currentView === "tree") {
+    const el = Array.from(document.querySelectorAll<HTMLElement>("#canvas .node")).find((n) => n.dataset.id === id);
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: "center", inline: "center" });
+  }
+}
+
 // ---------- RENDER: TABLE (WBS Dictionary) ----------
 function renderTable(rolled: Record<string, RolledNode>, codes: Record<string, string>): void {
   const wrap = document.getElementById("tableView") as HTMLElement;
@@ -596,6 +673,9 @@ function renderTable(rolled: Record<string, RolledNode>, codes: Record<string, s
       <th style="width:110px;">Costo</th>
       <th style="width:120px;">Responsable</th>
       <th style="width:120px;">Avance</th>
+      <th style="width:70px;">Calidad</th>
+      <th style="min-width:200px;">Descripción del trabajo</th>
+      <th style="min-width:200px;">Criterio de aceptación</th>
     </tr></thead><tbody>`;
 
   rows.forEach(({ id, depth }) => {
@@ -612,6 +692,9 @@ function renderTable(rolled: Record<string, RolledNode>, codes: Record<string, s
       <td>${fmtMoney(r.cost)}</td>
       <td>${escapeHtml(node.resource || "—")}</td>
       <td>${r.percent}%</td>
+      <td>${qualityBadgeHtml(id) || "—"}</td>
+      <td class="dict-txt">${node.notes ? escapeHtml(node.notes) : "—"}${node.loe ? ` <span class="loe-tag" title="Esfuerzo continuo (LOE): exento de las reglas de duración y de concentración de costo">LOE</span>` : ""}</td>
+      <td class="dict-txt">${node.acceptance ? escapeHtml(node.acceptance) : "—"}</td>
     </tr>`;
   });
   html += "</tbody></table>";
@@ -682,9 +765,14 @@ function renderProps(rolledAll: Record<string, RolledNode>): void {
         ? `<div class="empty-hint">⚠ <b>Aún no existe la OBS de este proyecto.</b> Créala primero en <a href="OBS_Builder.html" style="color:var(--cyan-dark); font-weight:700;">OBS Builder ▸</a> para poder asignar responsables desde una lista.</div>`
         : (isLeaf ? `<div class="empty-hint">Sugerencia: define el responsable en la <a href="RACI_Matrix.html" style="color:var(--cyan-dark); font-weight:700;">Matriz RACI ▸</a> (rol "R") en vez de elegirlo aquí — así queda formalmente registrado en la RAM del proyecto.</div>` : ""))}
     <div class="field">
-      <label>Notas / Descripción</label>
-      <textarea id="f_notes">${escapeHtml(node.notes || "")}</textarea>
+      <label>Descripción del trabajo</label>
+      <textarea id="f_notes" placeholder="${isRoot ? "" : "Qué trabajo incluye este elemento (y qué no)"}">${escapeHtml(node.notes || "")}</textarea>
     </div>
+    ${isRoot ? "" : `<div class="field">
+      <label>Criterio de aceptación</label>
+      <textarea id="f_accept" placeholder="Cómo se comprueba que está terminado">${escapeHtml(node.acceptance || "")}</textarea>
+    </div>`}
+    ${isLeaf && !isRoot ? `<label class="chk" title="Gestión, seguimiento y otro trabajo que dura lo que dura el proyecto: queda exento de las reglas de duración máxima y de concentración de costo."><input type="checkbox" id="f_loe" ${node.loe ? "checked" : ""}> Esfuerzo continuo (LOE)</label>` : ""}
     ${costLocked
       ? `<div class="empty-hint">🔗 <b>Tomado de Estimar los Costos</b> (suma del Subtotal de todas sus actividades). Para cambiarlo, abre <a href="Estimar_Costos.html" style="color:var(--cyan-dark); font-weight:700;">Estimar los Costos ▸</a></div>`
       : (isLeaf ? `<div class="empty-hint">📐 <b>Estimado.</b> Este costo se ingresa aquí (bottom-up) hasta que <a href="Estimar_Costos.html" style="color:var(--cyan-dark); font-weight:700;">Estimar los Costos ▸</a> calcule uno real para este paquete.</div>` : "")}
@@ -694,6 +782,7 @@ function renderProps(rolledAll: Record<string, RolledNode>): void {
         ? `<div class="empty-hint">📐 <b>Estimado.</b> Duración calculada automáticamente a partir de las fechas (${rolled.duration} d). Borra alguna fecha para editarla manualmente.</div>`
         : (isLeaf ? `<div class="empty-hint">📐 <b>Estimado.</b> Cuando definas las actividades de este paquete y calcules la ruta crítica en <a href="Cronograma_CPM.html" style="color:var(--cyan-dark); font-weight:700;">Cronograma CPM ▸</a>, la fecha real se toma automáticamente de ahí.</div>` : ""))}
     ${!isLeaf ? `<div class="empty-hint">Este paquete agrupa subtareas: el costo se suma (estimación bottom-up), pero <b>la duración se calcula como el tramo entre el inicio más temprano y el fin más tardío</b> de sus subtareas — no la suma, porque pueden ejecutarse en paralelo.</div>` : ""}
+    <div id="nodeQuality">${nodeQualityHtml(selectedId)}</div>
     ${!isRoot ? `<div class="danger-zone"><button class="btn danger" id="f_delete" style="width:100%;">🗑 Eliminar este nodo y sus subtareas</button></div>` : ""}
   `;
 
@@ -711,6 +800,9 @@ function renderProps(rolledAll: Record<string, RolledNode>): void {
   bind("f_percent", "percent", true);
   if (!raciLocksResource(node) && obsOptions.length) bind("f_resource", "resource", false);
   bind("f_notes", "notes", false);
+  bind("f_accept", "acceptance", false);
+  const loeEl = document.getElementById("f_loe") as HTMLInputElement | null;
+  if (loeEl) loeEl.addEventListener("change", () => { if (loeEl.checked) node.loe = true; else delete node.loe; refreshValues(); markDirty(); });
   if (durationEditable) bind("f_duration", "duration", true);
 
   // Las fechas pueden cambiar si el campo de duración queda habilitado/deshabilitado,
@@ -1316,11 +1408,13 @@ function applyWbsRows(placed: ParsedWbsRow[]): void {
       start: leaf ? p.start.trim() : "",
       end: leaf ? p.end.trim() : "",
       notes: (prev && prev.notes) || "",
+      acceptance: (prev && prev.acceptance) || "",
       children: [],
       collapsed: false,
       orientation: (prev && prev.orientation) || "spread",
       delId: prev ? prev.delId : undefined
     };
+    if (prev && prev.loe && leaf) nodes[id].loe = true;   // el diccionario (criterio de aceptación, LOE) no viaja en el .xlsx: se conserva por código EDT
     nodes[parentId].children.push(id);
     idByCode[p.code] = id;
   });
@@ -1821,7 +1915,8 @@ function buildReport(): void {
         + '<td class="num" style="text-align:center">' + (Number(n.duration) || 0) + '</td>'
         + '<td class="num">' + repDate(n.start) + (fromCpm ? " ¹" : "") + '</td><td class="num">' + repDate(n.end) + (fromCpm ? " ¹" : "") + '</td>'
         + '<td class="num" style="text-align:right">' + m(n.cost) + (fromEstimate ? " ²" : "") + '</td>'
-        + '<td>' + escapeHtml(n.notes || "—") + '</td></tr>';
+        + '<td>' + escapeHtml(n.notes || "—") + '</td>'
+        + '<td>' + escapeHtml(n.acceptance || "—") + (n.loe ? " <i>(esfuerzo continuo, LOE)</i>" : "") + '</td></tr>';
     }
     n.children.forEach((cid, i) => { walk(cid, code ? code + "." + (i + 1) : String(i + 1), depth + 1); });
   })(rootId, "", 0);
@@ -1832,10 +1927,18 @@ function buildReport(): void {
     + rowsHtml
     + '<tr><td colspan="5" style="text-align:right"><b>Costo total del proyecto (rollup de ' + leafCount + ' paquetes)</b></td><td class="num" style="text-align:right"><b>' + m(total.cost) + '</b></td><td></td></tr></table>'
     + '<h2>2. Diccionario de la EDT — paquetes de trabajo</h2>'
-    + '<table><tr><th style="width:8%">Código EDT</th><th style="width:17%">Paquete de trabajo</th><th style="width:12%">Responsable</th><th style="width:7%">Dur. (d)</th><th style="width:9%">Inicio</th><th style="width:9%">Fin</th><th style="width:11%">Costo</th><th>Descripción / notas</th></tr>'
-    + (dictHtml || '<tr><td colspan="8" class="rep-note">— Sin paquetes de trabajo —</td></tr>') + '</table>'
+    + '<table><tr><th style="width:8%">Código EDT</th><th style="width:17%">Paquete de trabajo</th><th style="width:12%">Responsable</th><th style="width:7%">Dur. (d)</th><th style="width:9%">Inicio</th><th style="width:9%">Fin</th><th style="width:11%">Costo</th><th>Descripción del trabajo</th><th style="width:18%">Criterio de aceptación</th></tr>'
+    + (dictHtml || '<tr><td colspan="9" class="rep-note">— Sin paquetes de trabajo —</td></tr>') + '</table>'
     + '<p class="rep-note">El responsable de cada paquete proviene de la Matriz RACI (rol marcado con "R") o, si aún no la tiene, de una selección manual dentro del OBS del proyecto — nunca de texto libre. Las fechas marcadas con ¹ provienen del Cronograma CPM (ruta crítica ya calculable para ese paquete); los costos marcados con ² provienen de Estimar los Costos (Cantidad × Precio unitario ya calculados para ese paquete); el resto de fechas y costos son una estimación manual bottom-up ingresada en esta EDT, sujeta a cambiar una vez calculados los valores reales en esos módulos.</p>';
-  reportShell("EDT y Diccionario del Proyecto", "WBS Builder · Gestión del Alcance", body);
+  // Sección de calidad: mismos hallazgos que el panel lateral (reglas y umbrales de shared/wbs-quality.ts).
+  computeQuality();
+  const qd = quality.dictionary, qc = quality.counts;
+  const qBody = quality.state === "vacio" ? '<p class="rep-note">— Sin elementos que revisar —</p>'
+    : '<p>Diccionario completo (descripción, criterio de aceptación y responsable): <b>' + qd.complete + ' de ' + qd.total + ' paquetes (' + qd.pct + ' %)</b>. Hallazgos: <b>' + qc.riesgo + '</b> riesgos · <b>' + qc.aviso + '</b> avisos · <b>' + qc.info + '</b> sugerencias.</p>'
+      + (quality.groups.length ? '<table><tr><th style="width:6%">Regla</th><th style="width:26%">Revisión</th><th>Elementos</th></tr>'
+        + quality.groups.map((g) => '<tr><td class="num">' + g.code + '</td><td><b>' + escapeHtml(g.title) + '</b><br><span class="rep-note">' + escapeHtml(g.hint) + '</span></td><td>' + g.items.map((f) => '<b>' + escapeHtml(f.nodeCode) + '</b> ' + escapeHtml(f.text)).join('<br>') + '</td></tr>').join('')
+        + '</table>' : '<p class="rep-note">Sin hallazgos: la estructura, el diccionario y el tamaño de los paquetes cumplen los criterios revisados.</p>');
+  reportShell("EDT y Diccionario del Proyecto", "WBS Builder · Gestión del Alcance", body + '<h2>3. Calidad de la EDT</h2>' + qBody);
 }
 
 (function () {

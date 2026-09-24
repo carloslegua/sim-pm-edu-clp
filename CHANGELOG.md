@@ -11,6 +11,20 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **WBS Builder — calidad de la EDT y Diccionario (auditoría metodológica PMBOK, ítem D)** —
+  la EDT solo se validaba al importar un `.xlsx`. Ahora una sección «Calidad de la EDT» revisa,
+  al editar, la **estructura** (un solo hijo, nombres repetidos, nombres vacíos o de plantilla,
+  nombres que parecen actividades, fases sin descomponer, profundidad y número de hijos), el
+  **diccionario** de cada paquete (descripción del trabajo, **criterio de aceptación**,
+  responsable, costo, duración y fechas coherentes) y el **tamaño** (paquetes de más de 60 d o que
+  concentran más del 20 % del costo; el esfuerzo continuo, LOE, queda exento). Marca cada nodo
+  con su conteo de hallazgos, agrupa por regla con su explicación, lleva desde cada hallazgo al
+  elemento, muestra el avance del diccionario (18/18) y suma criterio de aceptación y calidad a la
+  vista «Tabla / Diccionario» y al reporte. Campos nuevos y opcionales del nodo: `acceptance`,
+  `loe` (proyectos guardados antes abren igual). Ejemplo DISTRIB+ ampliado con el diccionario
+  de sus 18 paquetes. Nuevos `src/shared/wbs-quality.ts` y `src/shared/wbs-sample.ts`. Pruebas:
+  `wbs-quality.test.ts` (15), `wbs-sample.test.ts` (2), smoke (10) y e2e en Chrome real.
+  Ver ARCHITECTURE.md.
 - **Nuevo módulo «Control Integrado de Cambios» (`Control_Cambios.html`, auditoría
   metodológica PMBOK B4)** — el registro de cambios vivía solo en Costos y solo medía Δ costo.
   Cada solicitud de cambio evalúa **a la vez** alcance, cronograma, costo, riesgo, calidad y

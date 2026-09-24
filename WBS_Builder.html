@@ -361,6 +361,42 @@
   .tip-box b{color:var(--cyan-dark);}
   .danger-zone{margin-top:18px; padding-top:14px; border-top:1px dashed var(--panel-border);}
 
+  /* ===== CALIDAD DE LA EDT ===== */
+  #qualityBox{margin-bottom:18px;}
+  .q-head{display:flex; align-items:center; flex-wrap:wrap; gap:6px 8px; margin-bottom:9px;}
+  .q-pill{font-family:var(--mono); font-size:10.5px; font-weight:800; padding:2px 9px; border-radius:12px; white-space:nowrap;}
+  .q-pill.q-verde{background:rgba(0,194,168,.16); color:#00806d;} .q-pill.q-ambar{background:rgba(255,159,28,.2); color:#a05a00;} .q-pill.q-rojo{background:rgba(255,84,112,.15); color:#c0203c;}
+  .q-counts{font-size:11.5px; color:var(--ink-1);}
+  .q-dict{margin-bottom:10px;}
+  .q-dict-l{display:flex; justify-content:space-between; gap:6px; font-size:11px; color:var(--ink-1); margin-bottom:4px;}
+  .q-dict-l b{font-family:var(--mono); font-size:10.5px; color:var(--ink-0); white-space:nowrap;}
+  .q-dict-bar{height:6px; background:rgba(0,0,0,.07); border-radius:3px; overflow:hidden;}
+  .q-dict-bar > div{height:100%; background:linear-gradient(90deg, var(--good), #00e0c0); border-radius:3px;}
+  .q-group{border:1px solid var(--panel-border); border-radius:9px; background:#fff; margin-bottom:6px; overflow:hidden;}
+  .q-group > summary{list-style:none; cursor:pointer; display:flex; align-items:center; gap:7px; padding:7px 9px; font-size:11.5px; font-weight:600; color:var(--ink-0);}
+  .q-group > summary::-webkit-details-marker{display:none;}
+  .q-group > summary:hover{background:var(--bg-2);}
+  .q-title{flex:1; line-height:1.3;}
+  .q-n{font-family:var(--mono); font-size:10.5px; color:var(--ink-2);}
+  .q-why{padding:0 10px 6px; font-size:11px; line-height:1.5; color:var(--ink-2);}
+  .q-group ul{list-style:none; margin:0; padding:0 6px 6px;}
+  .q-item{display:block; width:100%; text-align:left; background:none; border:none; border-radius:6px; padding:5px 6px; cursor:pointer; font-family:var(--body); font-size:11px; line-height:1.4; color:var(--ink-1);}
+  .q-item:hover{background:var(--cyan-dim); color:var(--ink-0);}
+  .q-code{font-family:var(--mono); font-weight:800; font-size:10px; color:var(--cyan-dark); margin-right:6px;}
+  .sv{font-family:var(--mono); font-size:9.5px; font-weight:800; padding:1px 6px; border-radius:5px; flex-shrink:0;}
+  .sv.riesgo{background:#fdecef; color:#c0203c;} .sv.aviso{background:#fff3d6; color:#8a5a00;} .sv.info{background:#eef1f5; color:#5b6472;}
+  .q-flag{display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 4px; border-radius:9px; font-family:var(--mono); font-size:10px; font-weight:800; color:#fff; cursor:help;}
+  .q-flag.q-riesgo{background:var(--danger);} .q-flag.q-aviso{background:#ff9f1c;} .q-flag.q-info{background:#8792a2;}
+  .node .q-flag{position:absolute; top:-8px; right:-8px; z-index:3; box-shadow:0 1px 4px rgba(20,30,60,.25); border:2px solid #fff;}
+  .q-node{margin:12px 0 4px; padding:9px 10px; background:#f8fbfe; border:1px dashed var(--panel-border); border-radius:9px;}
+  .q-node-h{font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-2); margin-bottom:5px;}
+  .q-node ul{list-style:none; margin:0; padding:0; font-size:11.5px; line-height:1.5; color:var(--ink-1);}
+  .q-node li{padding:2px 0; display:flex; gap:6px; align-items:flex-start;}
+  label.chk{display:flex; align-items:flex-start; gap:7px; font-size:12px; font-weight:600; color:var(--ink-1); margin:-4px 0 13px; cursor:pointer;}
+  label.chk input{width:auto; margin-top:2px;}
+  .loe-tag{font-family:var(--mono); font-size:9px; font-weight:800; padding:1px 5px; border-radius:4px; background:#eef1f5; color:#5b6472; cursor:help;}
+  td.dict-txt{font-size:12px; line-height:1.45; min-width:200px; max-width:320px;}
+
   /* ===== TABLE VIEW ===== */
   #tableView{display:none; padding:24px 30px; overflow:auto; flex:1; background:var(--bg-0);}
   table.wbs-table{width:100%; border-collapse:separate; border-spacing:0 6px; font-size:13px;}
@@ -509,6 +545,9 @@
   <aside class="sidebar">
     <h2>Resumen del proyecto</h2>
     <div class="stat-grid" id="statGrid"></div>
+
+    <h2>Calidad de la EDT</h2>
+    <div id="qualityBox"></div>
 
     <h2>Propiedades del paquete</h2>
     <div id="propsPanel"><div class="empty-hint">Selecciona un nodo del diagrama para editar sus propiedades, o crea uno nuevo con "+ Fase".</div></div>

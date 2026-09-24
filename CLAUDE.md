@@ -134,6 +134,10 @@ src/shared/change-control.ts     → (se inlinea en changes.js) control integrad
                                     áreas, autoridad requerida, condiciones de aprobación/implementación, hallazgos
 src/shared/change-sample.ts      → (se inlinea en changes.js) ejemplo DISTRIB+ de solicitudes de cambio (CR-001…003
                                     = OC-001…003 de Costos)
+src/shared/wbs-quality.ts        → (se inlinea en wbs.js) calidad de la EDT: estructura, diccionario de los
+                                    paquetes y tamaño, con umbrales didácticos declarados (LIMITS)
+src/shared/wbs-sample.ts         → (se inlinea en wbs.js) diccionario de los 18 paquetes del ejemplo DISTRIB+
+                                    (descripción, criterio de aceptación, LOE); coherencia en tests/unit/wbs-sample.test.ts
 src/shared/estimate-class.ts     → (se inlinea en cost.js) madurez de la definición → clase del estimado sugerida,
                                     aviso contra la clase declarada, rango de exactitud aplicado
 src/shared/reserve-policy.ts     → (se inlinea en risks.js, cost.js y gpi-core.js) política de reservas del plan de
