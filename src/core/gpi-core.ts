@@ -2576,9 +2576,48 @@ export const util = {
 // window.GPI a mano lo pisaría, perdiendo el resto de los named exports.
 export const schema = SCHEMA;
 
+// ---------------------------------------------------------------
+// Aviso persistente de «almacenamiento lleno». Con la cuota agotada el proyecto sigue LEGIBLE (available()) pero nada se guarda (canWrite()
+// falso): el alumno lo descubriría solo al primer intento de guardar, o nunca. El núcleo es lo único que cargan TODOS los módulos, así que el
+// aviso vive aquí (sin CSS externo: estilos en línea) y se revisa al abrir, al volver a la pestaña, ante cambios de almacenamiento y cada 20 s;
+// desaparece solo cuando vuelve a haber espacio. Recomienda exportar (recuperación) y liberar espacio; no carga ni oculta nada del proyecto.
+// ---------------------------------------------------------------
+const NOTICE_ID = "gpi-storage-notice";
+// `probe`: hacer la sonda de ESCRITURA (setItem/removeItem de una clave de prueba). La sonda escribe, y escribir dispara eventos `storage` en las
+// demás pestañas: por eso NO se hace en cada revisión (una versión anterior escuchaba `storage` y sondeaba, y varias pestañas abiertas se
+// provocaban sondas entre sí sin fin, retrasando los guardados). Sin sonda, «lleno» se detecta de forma PASIVA: un guardado fallido ya deja
+// cambios pendientes (`hasUnsavedChanges()`).
+export function checkStorageNotice(probe = true): boolean {
+  if (typeof document === "undefined" || !document.body) return false;
+  const shown = !!document.getElementById(NOTICE_ID);
+  const full = readable() && (hasUnsavedChanges() || ((probe || shown) && !canWrite()));   // con el aviso puesto se sondea siempre: hay que notar la recuperación
+  let el = document.getElementById(NOTICE_ID);
+  if (!full) { if (el) el.remove(); return false; }
+  if (el) return true;
+  el = document.createElement("div"); el.id = NOTICE_ID; el.setAttribute("role", "alert");
+  el.style.cssText = "position:sticky;top:0;z-index:2147483000;background:#fff3d6;color:#6b4a00;border-bottom:2px solid #ff9f1c;padding:9px 16px;font:600 12.5px/1.5 Manrope,Inter,sans-serif;display:flex;gap:12px;align-items:center;flex-wrap:wrap";
+  const enPanel = /Panel_Control/i.test(String((typeof location !== "undefined" && location.pathname) || ""));
+  el.innerHTML = "<span>⚠ <b>El almacenamiento del navegador está lleno.</b> Puedes seguir viendo tu proyecto, pero <b>los cambios no se están guardando</b>. "
+    + (enPanel ? "Exporta tu proyecto ahora (botón Exportar) " : "Exporta tu proyecto ahora desde el Panel de Control ") + "y libera espacio (elimina los proyectos que ya no uses) antes de seguir trabajando.</span>"
+    + (enPanel ? "" : '<a href="Panel_Control.html" style="color:#6b4a00;text-decoration:underline">Ir al Panel para exportar</a>');
+  document.body.insertBefore(el, document.body.firstChild);
+  return true;
+}
+export function installStorageNotice(): void {
+  if (typeof document === "undefined" || typeof window === "undefined") return;
+  const w = window as unknown as { __gpiNotice?: boolean };
+  if (w.__gpiNotice) return; w.__gpiNotice = true;
+  const run = (probe: boolean) => (): void => { try { checkStorageNotice(probe); } catch (e) { /* noop */ } };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run(true)); else run(true)();
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) run(true)(); });
+  setInterval(run(false), 20000);                         // pasiva (sin escribir): pendientes por un guardado fallido, o recuperación con el aviso puesto
+}
+installStorageNotice();
+
 export const GPI = {
   KEY,
   schema,
+  checkStorageNotice,
   available: readable,   // «legible»: hay un proyecto que mostrar (NO «se puede escribir»: ver canWrite)
   canWrite,
   storageStatus,

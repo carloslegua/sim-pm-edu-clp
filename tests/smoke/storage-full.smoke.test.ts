@@ -47,6 +47,18 @@ describe("almacenamiento lleno: el módulo muestra el proyecto real, no el ejemp
     const dom = await abrirLleno("Valor_Ganado.html"), G = (dom.window as any).GPI;
     expect(G.available()).toBe(true); expect(G.canWrite()).toBe(false); expect(G.active().meta.name).toBe("Proyecto real S/ 1.000");
   });
+  it("aviso persistente en TODOS los módulos: dice que no se está guardando y cómo recuperar (exportar desde el Panel); en el Panel no se remite a sí mismo", async () => {
+    for (const f of ["Valor_Ganado.html", "Plan_Calidad.html", "WBS_Builder.html", "Cronograma_CPM.html", "Project_Charter.html"]) {
+      const doc = (await abrirLleno(f)).window.document, n = doc.getElementById("gpi-storage-notice");
+      expect(n, f).not.toBeNull(); expect(n!.textContent, f).toMatch(/los cambios no se están guardando/); expect(n!.querySelector('a[href="Panel_Control.html"]'), f).not.toBeNull();
+    }
+    const panel = (await abrirLleno("Panel_Control.html")).window.document.getElementById("gpi-storage-notice");
+    expect(panel).not.toBeNull(); expect(panel!.querySelector("a")).toBeNull(); expect(panel!.textContent).toMatch(/botón Exportar/);
+  }, 40000);
+  it("con espacio disponible no hay aviso", async () => {
+    const dom = await JSDOM.fromURL(base + "Valor_Ganado.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(semilla)); } });
+    await esperar(700); expect(dom.window.document.getElementById("gpi-storage-notice")).toBeNull();
+  });
   it("Valor Ganado: NO carga DISTRIB+ (USD 7.100.000, 18 paquetes) sobre el proyecto de S/ 1.000", async () => {
     const doc = (await abrirLleno("Valor_Ganado.html")).window.document, cuerpo = doc.body.cloneNode(true) as HTMLElement;
     cuerpo.querySelectorAll("script,style").forEach((n) => n.remove());                              // solo lo que ve el alumno, no el código

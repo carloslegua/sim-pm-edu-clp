@@ -373,9 +373,15 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
   legible (los 73 usos de los módulos quedan bien sin tocarlos), `GPI.canWrite()` = se puede
   escribir y `GPI.storageStatus()` = ambas. Un fallo de escritura activa la recuperación que ya
   existía (aviso, cambio pendiente exportable, `hasUnsavedChanges()`) sin cambiar lo que se muestra.
-  `activeScheduleNetwork()` tenía el mismo defecto y también se corrigió. Pruebas: 3 unitarias y 4
-  smoke (Valor Ganado, Cambios, Calidad, Comunicaciones, Adquisiciones y Panel con todo `setItem`
-  fallando); fallan sin la corrección.
+  `activeScheduleNetwork()` tenía el mismo defecto y también se corrigió. **Aviso persistente:** con
+  el almacenamiento lleno el núcleo muestra en TODOS los módulos una franja arriba («los cambios no
+  se están guardando», con enlace al Panel para exportar y liberar espacio) que se revisa al abrir,
+  al volver a la pestaña y cada 20 s (esta última pasiva, sin escribir: la sonda de escritura dispara
+  eventos `storage` en las otras pestañas), y se retira sola al recuperar espacio
+  (`GPI.checkStorageNotice`).
+  Pruebas: 4 unitarias, 6 smoke (Valor Ganado, Cambios, Calidad, Comunicaciones, Adquisiciones,
+  Panel y el aviso en 5 módulos) y 1 e2e en Chrome real con todo `setItem` fallando; las de
+  «proyecto real» fallan sin la corrección.
 
 - **Panel de Control: el indicador «Cronograma / CPM» daba una duración
   equivocada con hitos** — `GPI.util.scheduleStats()` armaba la red solo con las

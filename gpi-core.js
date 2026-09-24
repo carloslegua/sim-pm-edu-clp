@@ -3201,10 +3201,49 @@ var GPI = (function(exports) {
 		activeScheduleNetwork
 	};
 	var schema = SCHEMA;
+	var NOTICE_ID = "gpi-storage-notice";
+	function checkStorageNotice(probe = true) {
+		if (typeof document === "undefined" || !document.body) return false;
+		const shown = !!document.getElementById(NOTICE_ID);
+		const full = readable() && (hasUnsavedChanges() || (probe || shown) && !canWrite());
+		let el = document.getElementById(NOTICE_ID);
+		if (!full) {
+			if (el) el.remove();
+			return false;
+		}
+		if (el) return true;
+		el = document.createElement("div");
+		el.id = NOTICE_ID;
+		el.setAttribute("role", "alert");
+		el.style.cssText = "position:sticky;top:0;z-index:2147483000;background:#fff3d6;color:#6b4a00;border-bottom:2px solid #ff9f1c;padding:9px 16px;font:600 12.5px/1.5 Manrope,Inter,sans-serif;display:flex;gap:12px;align-items:center;flex-wrap:wrap";
+		const enPanel = /Panel_Control/i.test(String(typeof location !== "undefined" && location.pathname || ""));
+		el.innerHTML = "<span>⚠ <b>El almacenamiento del navegador está lleno.</b> Puedes seguir viendo tu proyecto, pero <b>los cambios no se están guardando</b>. " + (enPanel ? "Exporta tu proyecto ahora (botón Exportar) " : "Exporta tu proyecto ahora desde el Panel de Control ") + "y libera espacio (elimina los proyectos que ya no uses) antes de seguir trabajando.</span>" + (enPanel ? "" : "<a href=\"Panel_Control.html\" style=\"color:#6b4a00;text-decoration:underline\">Ir al Panel para exportar</a>");
+		document.body.insertBefore(el, document.body.firstChild);
+		return true;
+	}
+	function installStorageNotice() {
+		if (typeof document === "undefined" || typeof window === "undefined") return;
+		const w = window;
+		if (w.__gpiNotice) return;
+		w.__gpiNotice = true;
+		const run = (probe) => () => {
+			try {
+				checkStorageNotice(probe);
+			} catch (e) {}
+		};
+		if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", run(true));
+		else run(true)();
+		document.addEventListener("visibilitychange", () => {
+			if (!document.hidden) run(true)();
+		});
+		setInterval(run(false), 2e4);
+	}
+	installStorageNotice();
 	//#endregion
 	exports.GPI = {
 		KEY,
 		schema,
+		checkStorageNotice,
 		available: readable,
 		canWrite,
 		storageStatus,
@@ -3252,6 +3291,7 @@ var GPI = (function(exports) {
 	exports.canWrite = canWrite;
 	exports.charterAudit = charterAudit;
 	exports.charterRans = charterRans;
+	exports.checkStorageNotice = checkStorageNotice;
 	exports.costEstimateRows = costEstimateRows;
 	exports.costEstimateTotal = costEstimateTotal;
 	exports.costSummary = costSummary;
@@ -3267,6 +3307,7 @@ var GPI = (function(exports) {
 	exports.hasUnsavedChanges = hasUnsavedChanges;
 	exports.importProject = importProject;
 	exports.ingestToolExport = ingestToolExport;
+	exports.installStorageNotice = installStorageNotice;
 	exports.kpi = kpi;
 	exports.lastReconcile = lastReconcile;
 	exports.listProjects = listProjects;

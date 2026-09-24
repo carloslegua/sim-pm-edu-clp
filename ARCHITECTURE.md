@@ -630,7 +630,16 @@ intacto. Regla vigente en `gpi-core.ts`:
 - `memoryMode()` (sin almacenamiento de verdad) exige **no poder leer ni escribir**.
 Un fallo de escritura **nunca** cambia lo que se muestra: `saveState()` devuelve `pending`, el
 módulo avisa, `hasUnsavedChanges()` es verdadero y el proyecto se puede exportar (recuperación);
-jamás se carga el ejemplo. **Al escribir un módulo nuevo, «hay proyecto» es
+jamás se carga el ejemplo. Además, **el núcleo muestra un aviso persistente** (`checkStorageNotice`,
+autoinstalado al cargar `gpi-core.js`, estilos en línea, sin tocar los módulos): si el
+almacenamiento es legible y no escribible, una franja arriba dice que los cambios no se están
+guardando y remite al Panel para exportar (en el Panel, al botón Exportar); se revisa **con sonda
+de escritura** solo al abrir y al volver a la pestaña, y cada 20 s **de forma pasiva** (sin escribir:
+un guardado fallido ya deja cambios pendientes; con el aviso puesto sí se sondea, para notar que
+vuelve a haber espacio), y se retira solo cuando hay espacio. **No escuchar `storage` ni sondear en
+cada revisión: la sonda escribe, y escribir dispara `storage` en las demás pestañas; una primera
+versión lo hacía y varias pestañas se provocaban sondas sin fin (el e2e de propagación de WBS lo
+detectó).** **Al escribir un módulo nuevo, «hay proyecto» es
 `GPI.available() && GPI.active()`; para saber si se puede guardar, `canWrite()` o el resultado del
 guardado, nunca `available()`.**
 
