@@ -24,6 +24,8 @@ import type { CpmNode, CpmResult, ProjectCalendar, ScheduleValidateResult } from
 import type { ActivitiesModule, EditSession, MilestoneItem, PertModule, SchedulePlanModule, ScheduleLagUnit, ScheduleLinkType, WbsModule } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
 import { probWithin, simulatePertNetwork, type PertSimResult, type SimAct } from "../../shared/pert-network";
+import { buildEvmReference } from "../../shared/evm-reference";
+import type { EvmReference } from "../../shared/schedule-control";
 import type { CpmFn, NetLink } from "../../shared/schedule-risk";
 import {
   compareBaseline, deviationPct, makeSnapshot, needsSponsor, nextVersion, normalizeBaseline, planOf, scheduleHealth,
@@ -629,6 +631,22 @@ function renderControl(R: RunCpmResult): void {
   box.innerHTML = baseHtml + healthHtml + planHtml;
   const b = document.getElementById("btnBaseline"); if (b) b.addEventListener("click", () => openBaselineDialog(runCpm()));
 }
+// Referencia de VALOR GANADO que se congela con la línea base (shared/evm-reference.ts): el presupuesto por paquete (Estimar los Costos o EDT), el
+// calendario y el inicio/fin de cada paquete. Sin paquetes con costo no hay referencia (null): EVM lo avisa. Solo con un proyecto conectado.
+function evmReferenceNow(R: RunCpmResult): EvmReference | null {
+  try {
+    if (!R.cpm.ok || !GPI!.active()) return null;
+    const wbs = wbsData(), act = actsData(), cal = calData();
+    const leaves = GPI!.util.wbsLeaves(wbs).map((l) => ({ id: l.id, code: l.code, name: l.name })), wbsCost: Record<string, number> = {};
+    leaves.forEach((l) => { const n = wbs && wbs.nodes ? wbs.nodes[l.id] : null; wbsCost[l.id] = n ? Number(n.cost) || 0 : 0; });
+    const ref = buildEvmReference({
+      leaves, wbsCost, estimateRows: GPI!.util.costEstimateRows(GPI!.getModule("costEstimate"), act, wbs).map((r) => ({ leafId: r.leafId, subtotal: r.subtotal })),
+      activityNodes: R.snap.filter((r) => r.kind === "activity").map((r) => ({ id: r.activityId as string, leafId: r.leafId || null, isMilestone: !!r.isMilestone })),
+      rows: R.cpm.rows, calendar: { workDayIdx: cal.workDayIdx, holidays: cal.holidays }
+    });
+    return ref.packages.length ? ref : null;
+  } catch (_) { return null; }
+}
 // Fijar la línea base (LB-1) o una nueva versión: exige motivo y aprobador; si la desviación de la duración supera el
 // umbral de rebaselinado del plan, exige además la autorización del sponsor. La versión queda en el historial.
 function openBaselineDialog(R: RunCpmResult): void {
@@ -652,6 +670,7 @@ function openBaselineDialog(R: RunCpmResult): void {
         if (msg) { (card.querySelector("#blMsg") as HTMLElement).textContent = msg; return; }
         const nodes = controlNodes(R), today = new Date().toISOString().slice(0, 10);
         const snapshot = makeSnapshot(nodes, R.cpm.ok ? R.cpm.rows : {}, R.cpm.ok ? R.cpm.projectDuration : 0, R.cpm.ok ? R.cpm.projectStart : "", R.cpm.ok ? R.cpm.projectFinishDate : "", plan.nearCriticalDays);
+        snapshot.evm = evmReferenceNow(R);                    // presupuesto por paquete, calendario y estructura: se congelan JUNTO con las fechas
         const entry = { version, date: today, reason, approver, sponsorAuth: sp, projectDuration: snapshot.projectDuration, finishDate: snapshot.finishDate, deviationPct: dev };
         state().baseline = { frozen: true, version, date: today, snapshot, log: (base ? base.log : []).concat([entry]) } as ScheduleBaselineData;
         (document.getElementById("modalCancel") as HTMLButtonElement).click();

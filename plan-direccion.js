@@ -70,9 +70,42 @@
 				startDate: str$7(s.startDate),
 				finishDate: str$7(s.finishDate),
 				nearCriticalDays: fin(s.nearCriticalDays, 10),
-				rows
+				rows,
+				evm: normalizeEvmReference(s.evm)
 			},
 			log
+		};
+	}
+	var optNum = (v) => v === null || v === void 0 || v === "" || !isFinite(Number(v)) ? null : Number(v);
+	function normalizeEvmReference(o) {
+		if (!o || typeof o !== "object") return null;
+		const x = o, cal = x.calendar && typeof x.calendar === "object" ? x.calendar : {};
+		if (!Array.isArray(x.packages)) return null;
+		const packages = x.packages.filter((p) => p && typeof p === "object").map((p) => {
+			const q = p;
+			return {
+				id: str$7(q.id),
+				code: str$7(q.code),
+				name: str$7(q.name),
+				bac: fin(q.bac),
+				source: str$7(q.source),
+				es: optNum(q.es),
+				ef: optNum(q.ef)
+			};
+		}).filter((p) => p.id);
+		return {
+			calendar: {
+				workDayIdx: (Array.isArray(cal.workDayIdx) ? cal.workDayIdx : [
+					1,
+					2,
+					3,
+					4,
+					5
+				]).map((d) => Number(d)).filter((d) => isFinite(d)),
+				holidays: (Array.isArray(cal.holidays) ? cal.holidays : []).map(str$7)
+			},
+			packages,
+			total: fin(x.total, packages.reduce((s, p) => s + p.bac, 0))
 		};
 	}
 	//#endregion

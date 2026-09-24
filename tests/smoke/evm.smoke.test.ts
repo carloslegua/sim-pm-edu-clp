@@ -167,6 +167,43 @@ describe("Valor_Ganado.html (Valor Ganado / EVM)", () => {
     expect(top(doc)).toMatch(/Duración planificada → pronosticada.*30 d/);                             // PD de la línea base, no la de la red actual
   });
 
+  // ---- Auditoría (alta): la línea base congela presupuesto por paquete, inicio, calendario y estructura, no solo las fechas ----
+  const lb = (evm: unknown) => ({ frozen: true, version: "LB-1", date: "2026-07-06", snapshot: { projectDuration: 15, startDate: "2026-07-06", finishDate: "2026-07-24", nearCriticalDays: 5, ...(evm ? { evm } : {}), rows: [
+    { id: "a1", code: "1.1.1", name: "Excavar", isMilestone: false, dur: 10, es: 0, ef: 10, tf: 0, critical: true }, { id: "a2", code: "1.2.1", name: "Rellenar", isMilestone: false, dur: 5, es: 10, ef: 15, tf: 0, critical: true }] },
+    log: [{ version: "LB-1", date: "2026-07-06", reason: "Inicial", approver: "Sponsor", sponsorAuth: false, projectDuration: 15, finishDate: "2026-07-24", deviationPct: null }] });
+  const REF = { calendar: { workDayIdx: [1, 2, 3, 4, 5], holidays: [] }, total: 2000, packages: [
+    { id: "w1", code: "1.1", name: "Excavación", bac: 1000, source: "Línea base", es: 0, ef: 10 }, { id: "w2", code: "1.2", name: "Relleno", bac: 1000, source: "Línea base", es: 10, ef: 15 }] };
+  const conBase = (baseline: unknown, estimate: Record<string, number>, meta: Record<string, unknown> = {}) => proyecto({
+    schedule: { linkCounter: 2, import: null, baseline, links: [{ id: "L1", from: "a1", to: "a2", type: "FS", lag: 0, lagUnit: "d" }] }, costEstimate: { byActivity: estimate },
+    evm: { statusDate: "2026-07-17", percent: { w1: 50 }, ac: { w1: 600 }, techniques: {}, reports: [] }
+  }, meta);
+  const cifras = (doc: Document) => { const t = top(doc), g = (re: RegExp) => (t.match(re) || [])[1] || "—"; return { bac: g(/BAC \(trabajo\) \S+ ([\d,]+)/), pv: g(/PV — planificado \S+ ([\d,]+)/), ev: g(/EV — ganado \S+ ([\d,]+)/), cpi: g(/CPI ([\d.]+)/) }; };
+
+  it("REPRO (alta) con la línea base CONGELADA: duplicar la estimación NO cambia el CPI (0,83 se queda en 0,83, sigue ROJO) y se avisa qué difiere", async () => {
+    const base = cifras((await abrir(conBase(lb(REF), { a1: 100, a2: 200 }))).window.document);
+    expect(base).toMatchObject({ bac: "2,000", pv: "1,000", ev: "500", cpi: "0.83" });
+    const dom = await abrir(conBase(lb(REF), { a1: 200, a2: 400 })), doc = dom.window.document;          // la estimación se DUPLICÓ (BAC vivo 4.000)
+    expect(cifras(doc)).toEqual(base);                                                                    // …y las cifras no se mueven
+    expect(doc.querySelectorAll("#evTop .kpi.rojo").length).toBeGreaterThanOrEqual(1);                   // el estado sigue rojo, no pasa a verde
+    expect(top(doc)).toMatch(/Después de fijar la línea base LB-1 cambió\(aron\): el presupuesto por paquete \(2 paquete\(s\); total vigente 4[.,]000 frente a 2[.,]000/);
+    expect(top(doc)).toMatch(/fija una nueva versión de la línea base/); expect(top(doc)).toMatch(/línea base LB-1 congelada/);
+    expect(doc.body.textContent).toMatch(/presupuesto por paquete, la fecha de inicio y el calendario congelados/);   // tarjeta «Cómo se calcula»
+  });
+  it("REPRO (alta): cambiar la fecha de inicio del proyecto NO altera el PV con la línea base congelada (y se avisa)", async () => {
+    const base = cifras((await abrir(conBase(lb(REF), { a1: 100, a2: 200 }))).window.document);
+    const doc = (await abrir(conBase(lb(REF), { a1: 100, a2: 200 }, { startDate: "2026-08-03" }))).window.document;
+    expect(cifras(doc)).toEqual(base); expect(top(doc)).toMatch(/la fecha de inicio \(2026-08-03 frente a 2026-07-06 en la línea base\)/);
+  });
+  it("una línea base ANTIGUA (sin referencia congelada) conserva el comportamiento y lo AVISA: duplicar la estimación sí mueve el CPI (0,83 → 1,67)", async () => {
+    expect(cifras((await abrir(conBase(lb(null), { a1: 100, a2: 200 }))).window.document).cpi).toBe("0.83");
+    const doc = (await abrir(conBase(lb(null), { a1: 200, a2: 400 }))).window.document;
+    expect(cifras(doc).cpi).toBe("1.67");
+    expect(top(doc)).toMatch(/La línea base LB-1 se fijó antes de que el presupuesto por paquete, la fecha de inicio y el calendario se congelaran/); expect(top(doc)).toMatch(/presupuesto sin congelar/);
+  });
+  it("sin cambios entre lo congelado y lo vigente no hay aviso de diferencias", async () => {
+    expect(top((await abrir(conBase(lb(REF), { a1: 100, a2: 200 }))).window.document)).not.toMatch(/Después de fijar la línea base/);
+  });
+
   it("traer el avance de la EDT completa los % de los paquetes que lo tienen; lo reportado se guarda con el proyecto y sobrevive a recargar", async () => {
     const dom = await abrir(proyecto()), doc = dom.window.document;
     (doc.getElementById("btnPull") as HTMLElement).click();

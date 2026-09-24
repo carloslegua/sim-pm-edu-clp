@@ -364,6 +364,20 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Valor Ganado usaba costos y fechas editables como si fueran una línea base congelada
+  (auditoría, alta)** — con una línea base LB-n solo se congelaban las fechas de las actividades;
+  el presupuesto por paquete, la fecha de inicio y el calendario salían de datos editables.
+  Reproducido: con 50 % de avance y costo real de S/ 600, duplicar la estimación llevó el CPI de
+  0,83 a 1,67 (de rojo a verde) mientras el gráfico seguía diciendo «línea base LB-1»; cambiar la
+  fecha de inicio alteraba el PV sin otra línea base. Ahora **al fijar la línea base se congela
+  junto** el presupuesto distribuido por paquete, el inicio y fin de cada paquete, el calendario
+  y el inicio (`snapshot.evm`), EVM usa solo esa referencia y **avisa** qué cambió en los datos
+  vigentes; solo una **nueva versión LB-n con motivo y aprobador** la actualiza. Las líneas base
+  guardadas antes no se pueden congelar retroactivamente: se conservan y se avisa «presupuesto sin
+  congelar». Pruebas: 10 unitarias (`evm-reference`), 4 smoke que reproducen los escenarios
+  (congelada / inicio / antigua / sin cambios) y el e2e en Chrome real (LB-1 → editar costos e
+  inicio sin efecto → LB-2 actualiza el BAC).
+
 - **Con el almacenamiento lleno, los módulos mostraban el ejemplo DISTRIB+ en vez del proyecto real
   (auditoría, alta)** — `GPI.available()` era una sonda de **escritura** (`setItem`) y los módulos la
   usaban para saber si había un proyecto que **leer**: con la cuota agotada la sonda fallaba aunque

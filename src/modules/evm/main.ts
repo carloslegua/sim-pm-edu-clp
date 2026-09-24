@@ -15,7 +15,8 @@
 import type * as GpiCore from "../../core/gpi-core";
 import type { EditSession, ProjectMeta } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
-import { normalizeBaseline } from "../../shared/schedule-control";
+import { normalizeBaseline, type EvmReference } from "../../shared/schedule-control";
+import { packageBudgets, referenceDrift } from "../../shared/evm-reference";
 import { SAMPLE_START_DATE, sampleScheduleModules } from "../../shared/schedule-sample";
 import { EVM_SAMPLE_AC, EVM_SAMPLE_COSTS, EVM_SAMPLE_PERCENT, EVM_SAMPLE_REPORTS, EVM_SAMPLE_STATUS_DATE, EVM_SAMPLE_TECHNIQUES } from "../../shared/evm-sample";
 import {
@@ -55,10 +56,12 @@ interface Ctx {
   baseline: { version: string; date: string } | null; newSinceBaseline: number;
   thresholds: EvmThresholds; defaultTech: EvTechnique; techLabel: string; techApprox: boolean;
   cont: number | null; contAvail: number | null; bacBudget: number | null; issues: string[];
+  frozen: boolean;    // el presupuesto por paquete, el inicio y el calendario vienen CONGELADOS con la línea base (no de datos editables)
+  notes: string[];    // avisos sobre la referencia (línea base antigua sin congelar, o datos vigentes que ya difieren de lo congelado)
 }
 const CUR: Record<string, string> = { USD: "$", PEN: "S/", EUR: "€" };
 function emptyCtx(connected: boolean): Ctx {
-  return { connected, sym: "$", pkgs: [], startDate: "", calendar: { workDayIdx: [1, 2, 3, 4, 5], holidays: [] }, duration: 0, baseline: null, newSinceBaseline: 0, thresholds: { ...DEFAULT_THRESHOLDS }, defaultTech: "fisico", techLabel: "% físico avanzado", techApprox: false, cont: null, contAvail: null, bacBudget: null, issues: [] };
+  return { connected, sym: "$", pkgs: [], startDate: "", calendar: { workDayIdx: [1, 2, 3, 4, 5], holidays: [] }, duration: 0, baseline: null, newSinceBaseline: 0, thresholds: { ...DEFAULT_THRESHOLDS }, defaultTech: "fisico", techLabel: "% físico avanzado", techApprox: false, cont: null, contAvail: null, bacBudget: null, issues: [], frozen: false, notes: [] };
 }
 let ctx: Ctx = emptyCtx(false), ctxDirty = true;
 function getCtx(): Ctx { if (ctxDirty) { ctx = buildCtx(); ctxDirty = false; } return ctx; }
@@ -90,13 +93,23 @@ function buildCtx(): Ctx {
       s.es = Math.min(s.es, r.es); s.ef = Math.max(s.ef, r.ef);
     });
     // BAC por paquete: el costo del TRABAJO (Estimar los Costos; si no, el costo de la EDT). Conectado: del proyecto; independiente: el ejemplo.
-    const costOf: Record<string, { bac: number; source: string }> = {};
+    let costOf: Record<string, { bac: number; source: string }> = {};
     const leaves = G.util.wbsLeaves(wbs);
     if (connected) {
-      G.util.costEstimateRows(G.getModule("costEstimate"), act, wbs).forEach((r) => { if (r.subtotal && r.subtotal > 0) { const k = costOf[r.leafId] || (costOf[r.leafId] = { bac: 0, source: "Estimar los Costos" }); k.bac += r.subtotal; } });
-      leaves.forEach((l) => { if (!costOf[l.id]) { const w = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) : 0; if (w > 0) costOf[l.id] = { bac: w, source: "EDT (WBS Builder)" }; } });
+      const wbsCost: Record<string, number> = {}; leaves.forEach((l) => { wbsCost[l.id] = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) || 0 : 0; });
+      costOf = packageBudgets({ leaves, wbsCost, estimateRows: G.util.costEstimateRows(G.getModule("costEstimate"), act, wbs).map((r) => ({ leafId: r.leafId, subtotal: r.subtotal })) });
     } else leaves.forEach((l) => { if (EVM_SAMPLE_COSTS[l.code]) costOf[l.id] = { bac: EVM_SAMPLE_COSTS[l.code], source: "Ejemplo DISTRIB+" }; });
     c.pkgs = leaves.filter((l) => costOf[l.id]).map((l) => ({ id: l.id, code: l.code, name: l.name, bac: costOf[l.id].bac, es: spans[l.id] ? spans[l.id].es : null, ef: spans[l.id] ? spans[l.id].ef : null, source: costOf[l.id].source }));
+    // REFERENCIA CONGELADA (auditoría, alta): con línea base, el presupuesto por paquete, el inicio, el calendario y las fechas de cada paquete son los que se
+    // aprobaron con ella, NO los datos editables de hoy. Duplicar una estimación o mover la fecha de inicio no cambia el CPI ni el PV sin una nueva versión LB-n.
+    const ev = bl ? bl.snapshot.evm : null;
+    if (bl && ev) {
+      const live: EvmReference = { calendar: { workDayIdx: net.calendar.workDayIdx.slice(), holidays: net.calendar.holidays.slice() }, packages: c.pkgs.map((p) => ({ id: p.id, code: p.code, name: p.name, bac: p.bac, source: p.source, es: null, ef: null })), total: c.pkgs.reduce((s, p) => s + p.bac, 0) };
+      const drift = referenceDrift(ev, bl.snapshot.startDate, net.startDate || "", live);
+      if (drift.length) c.notes.push("Después de fijar la línea base " + bl.version + " cambió(aron): " + drift.join("; ") + ". El valor ganado sigue usando lo aprobado en " + bl.version + "; para incorporar esos cambios fija una nueva versión de la línea base (con motivo y aprobación) en Cronograma/CPM.");
+      c.frozen = true; c.startDate = bl.snapshot.startDate || c.startDate; c.calendar = { workDayIdx: ev.calendar.workDayIdx.slice(), holidays: ev.calendar.holidays.slice() };
+      c.pkgs = ev.packages.map((p) => ({ id: p.id, code: p.code, name: p.name, bac: p.bac, es: p.es, ef: p.ef, source: "Línea base " + bl.version }));
+    } else if (bl) c.notes.push("La línea base " + bl.version + " se fijó antes de que el presupuesto por paquete, la fecha de inicio y el calendario se congelaran con ella: esos datos se leen de lo editable hoy y cambiarán si alguien edita la estimación o la fecha de inicio (los índices cambian sin que exista otra línea base). Fija una nueva versión de la línea base (con motivo y aprobación) en Cronograma/CPM para congelarlos.");
     if (!c.pkgs.length) c.issues.push(connected ? "Ningún paquete de trabajo tiene costo: carga la estimación en Estimar los Costos o el costo de los paquetes en WBS Builder." : "El ejemplo no tiene paquetes.");
     // Planes: técnica de valor ganado y umbrales del plan de costos; SV/SPI del plan del cronograma.
     if (connected) {
@@ -170,7 +183,7 @@ function histCard(): string {
 function notesCard(C: Ctx): string {
   return `<div class="card"><h3>Cómo se calcula (y sus límites)</h3><ul class="small" style="margin:0 0 0 18px;line-height:1.6;color:var(--ink-1)">
     <li><b>BAC</b> = el costo del <b>trabajo</b> por paquete (Estimar los Costos o EDT). No incluye contingencia ni reserva de gestión: esas se comparan con el sobrecosto pronosticado (VAC).</li>
-    <li><b>PV</b>: el costo de cada paquete se reparte <b>linealmente</b> entre el inicio más temprano y el fin más tardío de sus actividades en ${C.baseline ? "la <b>línea base " + esc(C.baseline.version) + "</b> del cronograma" : "el cronograma vigente (fija la línea base en Cronograma/CPM para congelarlo)"}.</li>
+    <li><b>PV</b>: el costo de cada paquete se reparte <b>linealmente</b> entre el inicio más temprano y el fin más tardío de sus actividades en ${C.baseline ? "la <b>línea base " + esc(C.baseline.version) + "</b> del cronograma" + (C.frozen ? " (con el presupuesto por paquete, la fecha de inicio y el calendario <b>congelados</b> en ella)" : "") : "el cronograma vigente (fija la línea base en Cronograma/CPM para congelarlo)"}.</li>
     <li><b>EV</b> según la técnica de cada paquete: 0/100, 50/50, % físico o LOE (se gana con el tiempo: no mide desempeño). «Hitos ponderados» y «Apportioned effort» del plan se aplican como % físico.</li>
     <li><b>Cronograma ganado</b> (Earned Schedule): el SPI en dinero tiende a 1 al final aunque el proyecto termine tarde; ES/AT y la duración pronosticada lo evitan.</li>
     <li>Sin datos de recursos ni de compromisos: el costo real es el que reportas. El seguimiento por paquete no reemplaza el análisis de causa raíz.</li></ul></div>`;
@@ -210,6 +223,7 @@ function topHtml(C: Ctx, R: EvmResult): string {
     <div class="muted small" style="margin-top:6px">El SV y el SPI en dinero engañan al final del proyecto (tienden a 0 y 1 aunque termine tarde); estos, en tiempo, no.</div></div>`;
   // avisos de calidad de los datos
   const warns: string[] = [];
+  C.notes.forEach((n) => warns.push(n));
   if (!C.baseline) warns.push("No hay línea base del cronograma: el PV se calcula con el cronograma vigente y cambiará cuando este cambie. Fíjala en Cronograma/CPM → Salud y línea base.");
   if (C.newSinceBaseline) warns.push(C.newSinceBaseline + " actividad(es) se agregaron después de la línea base: no tienen fechas base y no se distribuyen en el PV.");
   if (R.unscheduled.length) warns.push(R.unscheduled.length + " paquete(s) con costo no tienen actividades en el cronograma y quedan fuera de los totales (" + R.unscheduled.slice(0, 4).map((p) => p.code).join(", ") + (R.unscheduled.length > 4 ? "…" : "") + ").");
@@ -239,7 +253,7 @@ function curveSvg(C: Ctx, R: EvmResult): string {
   const cut = `<line x1="${X(Math.min(R.at, D)).toFixed(1)}" x2="${X(Math.min(R.at, D)).toFixed(1)}" y1="${t}" y2="${H - b}" stroke="#6c5ce7" stroke-dasharray="4 3"/><text x="${(X(Math.min(R.at, D)) + 4).toFixed(1)}" y="${t + 10}" font-size="9.5" fill="#6c5ce7">corte</text>`;
   const bacLine = `<line x1="${l}" x2="${W - r}" y1="${Y(R.bac).toFixed(1)}" y2="${Y(R.bac).toFixed(1)}" stroke="#b6bfc9" stroke-dasharray="2 3"/><text x="${W - r}" y="${(Y(R.bac) - 4).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#8992a3">BAC</text>`;
   return `<svg class="scurve" viewBox="0 0 ${W} ${H}" role="img" aria-label="Curva S: valor planificado, valor ganado y costo real por día laborable" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)">${yt}${xt.join("")}${bacLine}<path d="${pvPath}" fill="none" stroke="#00b6ec" stroke-width="2.4"/>${series("ev", "#00a88f")}${series("ac", "#ff5470")}${cut}<text x="${(l + W - r) / 2}" y="${H - 6}" text-anchor="middle" font-size="10" fill="#4d5768">día laborable →</text></svg>
-    <div class="lg"><span><i style="background:#00b6ec"></i>PV planificado (${C.baseline ? "línea base " + esc(C.baseline.version) : "cronograma vigente"})</span><span><i style="background:#00a88f"></i>EV ganado</span><span><i style="background:#ff5470"></i>AC costo real</span></div>`;
+    <div class="lg"><span><i style="background:#00b6ec"></i>PV planificado (${C.baseline ? "línea base " + esc(C.baseline.version) + (C.frozen ? " congelada" : " · presupuesto sin congelar") : "cronograma vigente"})</span><span><i style="background:#00a88f"></i>EV ganado</span><span><i style="background:#ff5470"></i>AC costo real</span></div>`;
 }
 // Actualiza lo calculado sin reconstruir los campos que el usuario está editando.
 function refresh(): void {

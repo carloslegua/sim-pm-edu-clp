@@ -118,6 +118,64 @@
 		}
 		return lo / res.sorted.length;
 	}
+	//#endregion
+	//#region src/shared/evm-reference.ts
+	function packageBudgets(i) {
+		const out = {};
+		i.estimateRows.forEach((r) => {
+			if (r.subtotal && r.subtotal > 0) {
+				const k = out[r.leafId] || (out[r.leafId] = {
+					bac: 0,
+					source: "Estimar los Costos"
+				});
+				k.bac += r.subtotal;
+			}
+		});
+		i.leaves.forEach((l) => {
+			if (!out[l.id]) {
+				const w = i.wbsCost[l.id] || 0;
+				if (w > 0) out[l.id] = {
+					bac: w,
+					source: "EDT (WBS Builder)"
+				};
+			}
+		});
+		return out;
+	}
+	function packageSpans(i) {
+		const spans = {};
+		i.activityNodes.filter((n) => !n.isMilestone && n.leafId).forEach((n) => {
+			const r = i.rows[n.id];
+			if (!r) return;
+			const s = spans[n.leafId] || (spans[n.leafId] = {
+				es: r.es,
+				ef: r.ef
+			});
+			s.es = Math.min(s.es, r.es);
+			s.ef = Math.max(s.ef, r.ef);
+		});
+		return spans;
+	}
+	function buildEvmReference(i) {
+		const b = packageBudgets(i), sp = packageSpans(i);
+		const packages = i.leaves.filter((l) => b[l.id]).map((l) => ({
+			id: l.id,
+			code: l.code,
+			name: l.name,
+			bac: b[l.id].bac,
+			source: b[l.id].source,
+			es: sp[l.id] ? sp[l.id].es : null,
+			ef: sp[l.id] ? sp[l.id].ef : null
+		}));
+		return {
+			calendar: {
+				workDayIdx: i.calendar.workDayIdx.slice(),
+				holidays: i.calendar.holidays.slice()
+			},
+			packages,
+			total: packages.reduce((s, p) => s + p.bac, 0)
+		};
+	}
 	function planOf(sp) {
 		const p = sp && typeof sp === "object" ? sp : {};
 		const rec = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
@@ -352,9 +410,42 @@
 				startDate: str(s.startDate),
 				finishDate: str(s.finishDate),
 				nearCriticalDays: fin(s.nearCriticalDays, 10),
-				rows
+				rows,
+				evm: normalizeEvmReference(s.evm)
 			},
 			log
+		};
+	}
+	var optNum = (v) => v === null || v === void 0 || v === "" || !isFinite(Number(v)) ? null : Number(v);
+	function normalizeEvmReference(o) {
+		if (!o || typeof o !== "object") return null;
+		const x = o, cal = x.calendar && typeof x.calendar === "object" ? x.calendar : {};
+		if (!Array.isArray(x.packages)) return null;
+		const packages = x.packages.filter((p) => p && typeof p === "object").map((p) => {
+			const q = p;
+			return {
+				id: str(q.id),
+				code: str(q.code),
+				name: str(q.name),
+				bac: fin(q.bac),
+				source: str(q.source),
+				es: optNum(q.es),
+				ef: optNum(q.ef)
+			};
+		}).filter((p) => p.id);
+		return {
+			calendar: {
+				workDayIdx: (Array.isArray(cal.workDayIdx) ? cal.workDayIdx : [
+					1,
+					2,
+					3,
+					4,
+					5
+				]).map((d) => Number(d)).filter((d) => isFinite(d)),
+				holidays: (Array.isArray(cal.holidays) ? cal.holidays : []).map(str)
+			},
+			packages,
+			total: fin(x.total, packages.reduce((s, p) => s + p.bac, 0))
 		};
 	}
 	var nextVersion = (b) => "LB-" + ((b && b.log.length || 0) + 1);
@@ -1249,6 +1340,42 @@
 		const b = document.getElementById("btnBaseline");
 		if (b) b.addEventListener("click", () => openBaselineDialog(runCpm()));
 	}
+	function evmReferenceNow(R) {
+		try {
+			if (!R.cpm.ok || !GPI.active()) return null;
+			const wbs = wbsData(), act = actsData(), cal = calData();
+			const leaves = GPI.util.wbsLeaves(wbs).map((l) => ({
+				id: l.id,
+				code: l.code,
+				name: l.name
+			})), wbsCost = {};
+			leaves.forEach((l) => {
+				const n = wbs && wbs.nodes ? wbs.nodes[l.id] : null;
+				wbsCost[l.id] = n ? Number(n.cost) || 0 : 0;
+			});
+			const ref = buildEvmReference({
+				leaves,
+				wbsCost,
+				estimateRows: GPI.util.costEstimateRows(GPI.getModule("costEstimate"), act, wbs).map((r) => ({
+					leafId: r.leafId,
+					subtotal: r.subtotal
+				})),
+				activityNodes: R.snap.filter((r) => r.kind === "activity").map((r) => ({
+					id: r.activityId,
+					leafId: r.leafId || null,
+					isMilestone: !!r.isMilestone
+				})),
+				rows: R.cpm.rows,
+				calendar: {
+					workDayIdx: cal.workDayIdx,
+					holidays: cal.holidays
+				}
+			});
+			return ref.packages.length ? ref : null;
+		} catch (_) {
+			return null;
+		}
+	}
 	function openBaselineDialog(R) {
 		if (!R.cpm.ok) {
 			showAlert("La red tiene un ciclo: corrígela antes de fijar la línea base.");
@@ -1273,6 +1400,7 @@
 					}
 					const nodes = controlNodes(R), today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
 					const snapshot = makeSnapshot(nodes, R.cpm.ok ? R.cpm.rows : {}, R.cpm.ok ? R.cpm.projectDuration : 0, R.cpm.ok ? R.cpm.projectStart : "", R.cpm.ok ? R.cpm.projectFinishDate : "", plan.nearCriticalDays);
+					snapshot.evm = evmReferenceNow(R);
 					const entry = {
 						version,
 						date: today,

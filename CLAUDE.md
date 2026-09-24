@@ -136,6 +136,8 @@ src/shared/change-sample.ts      → (se inlinea en changes.js) ejemplo DISTRIB+
                                     = OC-001…003 de Costos)
 src/shared/case-distribplus.ts   → (solo lectura) puestos del OBS y 18 paquetes de la EDT del caso DISTRIB+ para el modo
                                     independiente de los módulos nuevos; prueba contra el caso en tests/unit
+src/shared/evm-reference.ts      → (se inlinea en cronograma-cpm.js y evm.js) referencia de valor ganado que se congela con la línea base LB-n:
+                                    presupuesto por paquete, fechas por paquete, calendario; y su diferencia con lo vigente
 src/shared/plan-facts.ts         → (se inlinea en comms/quality/procurement/pmplan) lectura ÚNICA del proyecto para los tres planes
                                     subsidiarios: lo que revisa cada módulo y lo que resume el Plan para la Dirección no diverge
 src/shared/procurement-plan.ts   → (se inlinea en procurement.js) plan de adquisiciones: fecha límite de convocatoria, contrato, selección

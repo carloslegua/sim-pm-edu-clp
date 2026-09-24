@@ -116,7 +116,13 @@ export function scheduleHealth(nodes: CtlNode[], links: CtlLink[], rows: Record<
 
 // ---- línea base ----
 export interface BaselineRow { id: string; code: string; name: string; isMilestone: boolean; dur: number; es: number; ef: number; tf: number; critical: boolean; }
-export interface BaselineSnapshot { projectDuration: number; startDate: string; finishDate: string; nearCriticalDays: number; rows: BaselineRow[]; }
+// Referencia de VALOR GANADO congelada junto con la línea base (auditoría, alta): PMI define la línea base de costos como el presupuesto aprobado
+// DISTRIBUIDO EN EL TIEMPO. Congelar solo las fechas de las actividades no basta: el presupuesto por paquete, la fecha de inicio, el calendario y la
+// estructura paquete → fechas que usa EVM también deben ser los aprobados; si salen de datos editables, duplicar una estimación cambia el CPI sin
+// que exista una nueva línea base. Solo una NUEVA versión LB-n (con motivo y aprobador) actualiza esta referencia.
+export interface EvmRefPackage { id: string; code: string; name: string; bac: number; source: string; es: number | null; ef: number | null; }
+export interface EvmReference { calendar: { workDayIdx: number[]; holidays: string[] }; packages: EvmRefPackage[]; total: number; }
+export interface BaselineSnapshot { projectDuration: number; startDate: string; finishDate: string; nearCriticalDays: number; rows: BaselineRow[]; evm?: EvmReference | null; }
 export interface BaselineLogEntry { version: string; date: string; reason: string; approver: string; sponsorAuth: boolean; projectDuration: number; finishDate: string; deviationPct: number | null; }
 export interface ScheduleBaselineData { frozen: boolean; version: string; date: string; snapshot: BaselineSnapshot; log: BaselineLogEntry[]; }
 
@@ -141,7 +147,22 @@ export function normalizeBaseline(o: unknown): ScheduleBaselineData | null {
     const q = e as Record<string, unknown>;
     return { version: str(q.version), date: str(q.date), reason: str(q.reason), approver: str(q.approver), sponsorAuth: !!q.sponsorAuth, projectDuration: fin(q.projectDuration), finishDate: str(q.finishDate), deviationPct: q.deviationPct === null || q.deviationPct === undefined ? null : fin(q.deviationPct) };
   });
-  return { frozen: x.frozen !== false, version: str(x.version) || "LB-1", date: str(x.date), snapshot: { projectDuration: fin(s.projectDuration), startDate: str(s.startDate), finishDate: str(s.finishDate), nearCriticalDays: fin(s.nearCriticalDays, DEFAULT_NEAR_CRITICAL_DAYS), rows }, log };
+  return { frozen: x.frozen !== false, version: str(x.version) || "LB-1", date: str(x.date), snapshot: { projectDuration: fin(s.projectDuration), startDate: str(s.startDate), finishDate: str(s.finishDate), nearCriticalDays: fin(s.nearCriticalDays, DEFAULT_NEAR_CRITICAL_DAYS), rows, evm: normalizeEvmReference(s.evm) }, log };
+}
+const optNum = (v: unknown): number | null => (v === null || v === undefined || v === "" || !isFinite(Number(v)) ? null : Number(v));
+// Las líneas base guardadas antes de esta referencia no la traen (null): EVM lo avisa en vez de inventarla.
+export function normalizeEvmReference(o: unknown): EvmReference | null {
+  if (!o || typeof o !== "object") return null;
+  const x = o as Record<string, unknown>, cal = (x.calendar && typeof x.calendar === "object" ? x.calendar : {}) as Record<string, unknown>;
+  if (!Array.isArray(x.packages)) return null;
+  const packages: EvmRefPackage[] = (x.packages as unknown[]).filter((p) => p && typeof p === "object").map((p) => {
+    const q = p as Record<string, unknown>;
+    return { id: str(q.id), code: str(q.code), name: str(q.name), bac: fin(q.bac), source: str(q.source), es: optNum(q.es), ef: optNum(q.ef) };
+  }).filter((p) => p.id);
+  return {
+    calendar: { workDayIdx: (Array.isArray(cal.workDayIdx) ? cal.workDayIdx : [1, 2, 3, 4, 5]).map((d) => Number(d)).filter((d) => isFinite(d)), holidays: (Array.isArray(cal.holidays) ? cal.holidays : []).map(str) },
+    packages, total: fin(x.total, packages.reduce((s, p) => s + p.bac, 0))
+  };
 }
 export const nextVersion = (b: ScheduleBaselineData | null): string => "LB-" + (((b && b.log.length) || 0) + 1);
 

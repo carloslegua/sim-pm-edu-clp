@@ -70,10 +70,83 @@
 				startDate: str(s.startDate),
 				finishDate: str(s.finishDate),
 				nearCriticalDays: fin(s.nearCriticalDays, 10),
-				rows
+				rows,
+				evm: normalizeEvmReference(s.evm)
 			},
 			log
 		};
+	}
+	var optNum = (v) => v === null || v === void 0 || v === "" || !isFinite(Number(v)) ? null : Number(v);
+	function normalizeEvmReference(o) {
+		if (!o || typeof o !== "object") return null;
+		const x = o, cal = x.calendar && typeof x.calendar === "object" ? x.calendar : {};
+		if (!Array.isArray(x.packages)) return null;
+		const packages = x.packages.filter((p) => p && typeof p === "object").map((p) => {
+			const q = p;
+			return {
+				id: str(q.id),
+				code: str(q.code),
+				name: str(q.name),
+				bac: fin(q.bac),
+				source: str(q.source),
+				es: optNum(q.es),
+				ef: optNum(q.ef)
+			};
+		}).filter((p) => p.id);
+		return {
+			calendar: {
+				workDayIdx: (Array.isArray(cal.workDayIdx) ? cal.workDayIdx : [
+					1,
+					2,
+					3,
+					4,
+					5
+				]).map((d) => Number(d)).filter((d) => isFinite(d)),
+				holidays: (Array.isArray(cal.holidays) ? cal.holidays : []).map(str)
+			},
+			packages,
+			total: fin(x.total, packages.reduce((s, p) => s + p.bac, 0))
+		};
+	}
+	//#endregion
+	//#region src/shared/evm-reference.ts
+	function packageBudgets(i) {
+		const out = {};
+		i.estimateRows.forEach((r) => {
+			if (r.subtotal && r.subtotal > 0) {
+				const k = out[r.leafId] || (out[r.leafId] = {
+					bac: 0,
+					source: "Estimar los Costos"
+				});
+				k.bac += r.subtotal;
+			}
+		});
+		i.leaves.forEach((l) => {
+			if (!out[l.id]) {
+				const w = i.wbsCost[l.id] || 0;
+				if (w > 0) out[l.id] = {
+					bac: w,
+					source: "EDT (WBS Builder)"
+				};
+			}
+		});
+		return out;
+	}
+	function referenceDrift(frozen, frozenStart, liveStart, live) {
+		const out = [];
+		const bacOf = (r) => {
+			const m = {};
+			r.packages.forEach((p) => {
+				m[p.id] = p.bac;
+			});
+			return m;
+		};
+		const f = bacOf(frozen), v = bacOf(live);
+		const changed = Array.from(new Set(Object.keys(f).concat(Object.keys(v)))).filter((id) => Math.abs((f[id] || 0) - (v[id] || 0)) > .5);
+		if (changed.length) out.push("el presupuesto por paquete (" + changed.length + " paquete(s); total vigente " + Math.round(live.total).toLocaleString("es-PE") + " frente a " + Math.round(frozen.total).toLocaleString("es-PE") + " en la línea base)");
+		if (liveStart && frozenStart && liveStart !== frozenStart) out.push("la fecha de inicio (" + liveStart + " frente a " + frozenStart + " en la línea base)");
+		if (JSON.stringify(live.calendar) !== JSON.stringify(frozen.calendar)) out.push("el calendario laboral (días laborables o feriados)");
+		return out;
 	}
 	//#endregion
 	//#region src/shared/schedule-sample.ts
@@ -1271,7 +1344,9 @@
 			cont: null,
 			contAvail: null,
 			bacBudget: null,
-			issues: []
+			issues: [],
+			frozen: false,
+			notes: []
 		};
 	}
 	var ctx = emptyCtx(false);
@@ -1343,26 +1418,20 @@
 				s.es = Math.min(s.es, r.es);
 				s.ef = Math.max(s.ef, r.ef);
 			});
-			const costOf = {};
+			let costOf = {};
 			const leaves = G.util.wbsLeaves(wbs);
 			if (connected) {
-				G.util.costEstimateRows(G.getModule("costEstimate"), act, wbs).forEach((r) => {
-					if (r.subtotal && r.subtotal > 0) {
-						const k = costOf[r.leafId] || (costOf[r.leafId] = {
-							bac: 0,
-							source: "Estimar los Costos"
-						});
-						k.bac += r.subtotal;
-					}
-				});
+				const wbsCost = {};
 				leaves.forEach((l) => {
-					if (!costOf[l.id]) {
-						const w = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) : 0;
-						if (w > 0) costOf[l.id] = {
-							bac: w,
-							source: "EDT (WBS Builder)"
-						};
-					}
+					wbsCost[l.id] = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) || 0 : 0;
+				});
+				costOf = packageBudgets({
+					leaves,
+					wbsCost,
+					estimateRows: G.util.costEstimateRows(G.getModule("costEstimate"), act, wbs).map((r) => ({
+						leafId: r.leafId,
+						subtotal: r.subtotal
+					}))
 				});
 			} else leaves.forEach((l) => {
 				if (EVM_SAMPLE_COSTS[l.code]) costOf[l.id] = {
@@ -1379,6 +1448,42 @@
 				ef: spans[l.id] ? spans[l.id].ef : null,
 				source: costOf[l.id].source
 			}));
+			const ev = bl ? bl.snapshot.evm : null;
+			if (bl && ev) {
+				const live = {
+					calendar: {
+						workDayIdx: net.calendar.workDayIdx.slice(),
+						holidays: net.calendar.holidays.slice()
+					},
+					packages: c.pkgs.map((p) => ({
+						id: p.id,
+						code: p.code,
+						name: p.name,
+						bac: p.bac,
+						source: p.source,
+						es: null,
+						ef: null
+					})),
+					total: c.pkgs.reduce((s, p) => s + p.bac, 0)
+				};
+				const drift = referenceDrift(ev, bl.snapshot.startDate, net.startDate || "", live);
+				if (drift.length) c.notes.push("Después de fijar la línea base " + bl.version + " cambió(aron): " + drift.join("; ") + ". El valor ganado sigue usando lo aprobado en " + bl.version + "; para incorporar esos cambios fija una nueva versión de la línea base (con motivo y aprobación) en Cronograma/CPM.");
+				c.frozen = true;
+				c.startDate = bl.snapshot.startDate || c.startDate;
+				c.calendar = {
+					workDayIdx: ev.calendar.workDayIdx.slice(),
+					holidays: ev.calendar.holidays.slice()
+				};
+				c.pkgs = ev.packages.map((p) => ({
+					id: p.id,
+					code: p.code,
+					name: p.name,
+					bac: p.bac,
+					es: p.es,
+					ef: p.ef,
+					source: "Línea base " + bl.version
+				}));
+			} else if (bl) c.notes.push("La línea base " + bl.version + " se fijó antes de que el presupuesto por paquete, la fecha de inicio y el calendario se congelaran con ella: esos datos se leen de lo editable hoy y cambiarán si alguien edita la estimación o la fecha de inicio (los índices cambian sin que exista otra línea base). Fija una nueva versión de la línea base (con motivo y aprobación) en Cronograma/CPM para congelarlos.");
 			if (!c.pkgs.length) c.issues.push(connected ? "Ningún paquete de trabajo tiene costo: carga la estimación en Estimar los Costos o el costo de los paquetes en WBS Builder." : "El ejemplo no tiene paquetes.");
 			if (connected) {
 				const cost = rec(G.getModule("cost")), plan = rec(cost.plan), th = rec(plan.thresholds);
@@ -1471,7 +1576,7 @@
 	function notesCard(C) {
 		return `<div class="card"><h3>Cómo se calcula (y sus límites)</h3><ul class="small" style="margin:0 0 0 18px;line-height:1.6;color:var(--ink-1)">
     <li><b>BAC</b> = el costo del <b>trabajo</b> por paquete (Estimar los Costos o EDT). No incluye contingencia ni reserva de gestión: esas se comparan con el sobrecosto pronosticado (VAC).</li>
-    <li><b>PV</b>: el costo de cada paquete se reparte <b>linealmente</b> entre el inicio más temprano y el fin más tardío de sus actividades en ${C.baseline ? "la <b>línea base " + esc(C.baseline.version) + "</b> del cronograma" : "el cronograma vigente (fija la línea base en Cronograma/CPM para congelarlo)"}.</li>
+    <li><b>PV</b>: el costo de cada paquete se reparte <b>linealmente</b> entre el inicio más temprano y el fin más tardío de sus actividades en ${C.baseline ? "la <b>línea base " + esc(C.baseline.version) + "</b> del cronograma" + (C.frozen ? " (con el presupuesto por paquete, la fecha de inicio y el calendario <b>congelados</b> en ella)" : "") : "el cronograma vigente (fija la línea base en Cronograma/CPM para congelarlo)"}.</li>
     <li><b>EV</b> según la técnica de cada paquete: 0/100, 50/50, % físico o LOE (se gana con el tiempo: no mide desempeño). «Hitos ponderados» y «Apportioned effort» del plan se aplican como % físico.</li>
     <li><b>Cronograma ganado</b> (Earned Schedule): el SPI en dinero tiende a 1 al final aunque el proyecto termine tarde; ES/AT y la duración pronosticada lo evitan.</li>
     <li>Sin datos de recursos ni de compromisos: el costo real es el que reportas. El seguimiento por paquete no reemplaza el análisis de causa raíz.</li></ul></div>`;
@@ -1507,6 +1612,7 @@
     <tr><td>Fin planificado → pronosticado</td><td class="num">${esc(finPlan) || "—"} → <b>${esc(finFc) || "—"}</b></td></tr></tbody></table>
     <div class="muted small" style="margin-top:6px">El SV y el SPI en dinero engañan al final del proyecto (tienden a 0 y 1 aunque termine tarde); estos, en tiempo, no.</div></div>`;
 		const warns = [];
+		C.notes.forEach((n) => warns.push(n));
 		if (!C.baseline) warns.push("No hay línea base del cronograma: el PV se calcula con el cronograma vigente y cambiará cuando este cambie. Fíjala en Cronograma/CPM → Salud y línea base.");
 		if (C.newSinceBaseline) warns.push(C.newSinceBaseline + " actividad(es) se agregaron después de la línea base: no tienen fechas base y no se distribuyen en el PV.");
 		if (R.unscheduled.length) warns.push(R.unscheduled.length + " paquete(s) con costo no tienen actividades en el cronograma y quedan fuera de los totales (" + R.unscheduled.slice(0, 4).map((p) => p.code).join(", ") + (R.unscheduled.length > 4 ? "…" : "") + ").");
@@ -1542,7 +1648,7 @@
 		const cut = `<line x1="${X(Math.min(R.at, D)).toFixed(1)}" x2="${X(Math.min(R.at, D)).toFixed(1)}" y1="${t}" y2="238" stroke="#6c5ce7" stroke-dasharray="4 3"/><text x="${(X(Math.min(R.at, D)) + 4).toFixed(1)}" y="26" font-size="9.5" fill="#6c5ce7">corte</text>`;
 		const bacLine = `<line x1="${l}" x2="702" y1="${Y(R.bac).toFixed(1)}" y2="${Y(R.bac).toFixed(1)}" stroke="#b6bfc9" stroke-dasharray="2 3"/><text x="702" y="${(Y(R.bac) - 4).toFixed(1)}" text-anchor="end" font-size="9.5" fill="#8992a3">BAC</text>`;
 		return `<svg class="scurve" viewBox="0 0 ${W} ${H}" role="img" aria-label="Curva S: valor planificado, valor ganado y costo real por día laborable" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)">${yt}${xt.join("")}${bacLine}<path d="${pvPath}" fill="none" stroke="#00b6ec" stroke-width="2.4"/>${series("ev", "#00a88f")}${series("ac", "#ff5470")}${cut}<text x="384" y="274" text-anchor="middle" font-size="10" fill="#4d5768">día laborable →</text></svg>
-    <div class="lg"><span><i style="background:#00b6ec"></i>PV planificado (${C.baseline ? "línea base " + esc(C.baseline.version) : "cronograma vigente"})</span><span><i style="background:#00a88f"></i>EV ganado</span><span><i style="background:#ff5470"></i>AC costo real</span></div>`;
+    <div class="lg"><span><i style="background:#00b6ec"></i>PV planificado (${C.baseline ? "línea base " + esc(C.baseline.version) + (C.frozen ? " congelada" : " · presupuesto sin congelar") : "cronograma vigente"})</span><span><i style="background:#00a88f"></i>EV ganado</span><span><i style="background:#ff5470"></i>AC costo real</span></div>`;
 	}
 	function refresh() {
 		const C = getCtx(), R = compute(), top = document.getElementById("evTop");

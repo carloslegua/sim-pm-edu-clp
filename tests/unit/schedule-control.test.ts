@@ -110,7 +110,8 @@ describe("línea base", () => {
     expect(normalizeBaseline({ frozen: true, version: "v1", date: "2026-01-01" })).toBeNull();      // el tipo viejo, sin instantánea
     expect(normalizeBaseline({ snapshot: { rows: "x" } })).toBeNull();
     const b = { frozen: true, version: "LB-1", date: "2026-07-06", snapshot: snap(), log: [{ version: "LB-1", date: "2026-07-06", reason: "Línea base inicial", approver: "Sponsor", sponsorAuth: true, projectDuration: 15, finishDate: "2026-07-24", deviationPct: null }] };
-    expect(normalizeBaseline(JSON.parse(JSON.stringify(b)))).toEqual(b);
+    // una línea base sin referencia de valor ganado (anterior a congelarla) se lee con `evm: null`; el resto hace ida y vuelta idéntico
+    expect(normalizeBaseline(JSON.parse(JSON.stringify(b)))).toEqual({ ...b, snapshot: { ...b.snapshot, evm: null } });
     expect(nextVersion(normalizeBaseline(b))).toBe("LB-2"); expect(nextVersion(null)).toBe("LB-1");
   });
   it("sin cambios: no hay desplazamiento ni cambios; con actividades nuevas o quitadas se listan", () => {

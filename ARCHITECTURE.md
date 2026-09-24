@@ -1319,6 +1319,22 @@ todo texto interpolado escapado). Con un proyecto activo arranca **en blanco**
   «apportioned effort» se aplican como % físico y se avisa). **AC** y el **% de avance**
   los reporta el equipo por paquete en cada corte (módulo `evm`, campo nuevo; «Traer
   avance de la EDT» copia el % de WBS Builder).
+- **La referencia está CONGELADA con la línea base (auditoría, alta).** PMI define la línea
+  base de costos como el presupuesto aprobado **distribuido en el tiempo**. Antes solo las
+  fechas de las actividades salían de la instantánea LB-n; el BAC por paquete, la fecha de
+  inicio y el calendario salían de datos editables: duplicar la estimación llevó el CPI de
+  0,83 a 1,67 (rojo → verde) mientras el gráfico seguía diciendo «línea base LB-1». Ahora al
+  fijar una LB-n (`openBaselineDialog`) se guarda, dentro de `snapshot.evm`
+  (`EvmReference`, `shared/schedule-control.ts`), el **presupuesto por paquete** (con su
+  fuente), el **inicio y fin de cada paquete**, el **calendario** y el total
+  (`buildEvmReference`, `shared/evm-reference.ts`); la fecha de inicio ya estaba en el
+  snapshot. EVM usa **solo esa referencia** cuando existe y, si los datos vigentes ya
+  difieren (estimación, inicio, feriados), lo **avisa** sin usarlos (`referenceDrift`); solo
+  una **nueva versión LB-n con motivo y aprobador** la actualiza. Una línea base **anterior**
+  a esto (sin `evm`) no se puede congelar retroactivamente: se conserva su comportamiento y se
+  avisa que sus datos siguen siendo editables («presupuesto sin congelar») hasta fijar una nueva
+  versión. **Límite declarado:** un cambio aprobado que solo toca el costo (Control de Cambios)
+  no obliga hoy a crear una LB-n del cronograma; EVM avisa la diferencia, pero no la impone.
 - **Índices y pronósticos**: CV, SV, CPI, SPI; **EAC** típico (BAC/CPI), atípico
   (AC + BAC − EV) y combinado (AC + (BAC − EV)/(CPI × SPI)); ETC, VAC y TCPI (a BAC y a
   EAC). Sin costo real registrado no hay CPI (null, no infinito).
