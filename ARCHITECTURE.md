@@ -616,6 +616,24 @@ mezcla la EDT de A con el entregable de B, y "Promover a RAN"
 efectivamente agrega el RAN de A al Acta de B (2 requisitos en vez de
 1).
 
+## Proyecto disponible, almacenamiento legible y escritura disponible son cosas distintas
+
+Auditoría (alta): con el almacenamiento lleno, Valor Ganado mostraba el ejemplo DISTRIB+ en vez
+del proyecto real. Causa: `GPI.available()` era una sonda de **escritura** (`setItem`), y los
+módulos la combinaban con `active()` (`available() && active()`) para decidir «hay un proyecto
+conectado». Con la cuota agotada la sonda falla aunque `getItem` siga funcionando y el proyecto siga
+intacto. Regla vigente en `gpi-core.ts`:
+- `GPI.available()` = **legible** (`readable()`): hay (o puede haber) un proyecto que mostrar. Es
+  lo que significa «conectado» en los módulos.
+- `GPI.canWrite()` = se puede **escribir ahora** (sonda `setItem`). Falla con la cuota agotada.
+- `GPI.storageStatus()` = `{readable, writable}`: legible y no escribible = «lleno».
+- `memoryMode()` (sin almacenamiento de verdad) exige **no poder leer ni escribir**.
+Un fallo de escritura **nunca** cambia lo que se muestra: `saveState()` devuelve `pending`, el
+módulo avisa, `hasUnsavedChanges()` es verdadero y el proyecto se puede exportar (recuperación);
+jamás se carga el ejemplo. **Al escribir un módulo nuevo, «hay proyecto» es
+`GPI.available() && GPI.active()`; para saber si se puede guardar, `canWrite()` o el resultado del
+guardado, nunca `available()`.**
+
 ## Contrato de escritura: sesiones de edición, revisiones y resultado común
 
 Revisión externa (2026-09) señaló que la guarda por `projectId`

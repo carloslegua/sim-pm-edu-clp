@@ -54,7 +54,14 @@ let pendingUnsaved: GpiDb | null = null;
 // (aunque sea un módulo distinto) antes de reintentar.
 let pendingBase: GpiDb | null = null;
 
-function avail(): boolean {
+// Tres preguntas DISTINTAS (auditoría: con el almacenamiento lleno, módulos como Valor Ganado mostraban el ejemplo en vez del proyecto
+// real porque preguntaban «¿puedo escribir?» para saber «¿hay un proyecto que leer?»):
+//   · readable()  -- ¿se puede LEER el almacenamiento? Es lo que significa `GPI.available()`: hay (o puede haber) un proyecto que mostrar.
+//   · canWrite()  -- ¿se puede ESCRIBIR ahora? Falla con la cuota agotada aunque el proyecto siga perfectamente legible.
+//   · active()    -- ¿hay un proyecto activo? (lee, no escribe)
+// Un fallo de escritura NO cambia lo que se muestra: activa el aviso y la exportación de lo pendiente (saveState → «pending»,
+// hasUnsavedChanges()), nunca carga el ejemplo en su lugar.
+function canWrite(): boolean {
   try {
     const k = "__gpi_t";
     localStorage.setItem(k, "1");
@@ -64,7 +71,7 @@ function avail(): boolean {
     return false;
   }
 }
-export { avail as available };
+export { canWrite };
 // "No hay localStorage" de verdad (bloqueado, iframe sin permiso, file:// opaco):
 // ni siquiera se puede LEER. Distinto de "está lleno" (cuarta revisión externa,
 // P1): con la cuota agotada falla la sonda de 1 byte de avail() -- es un setItem
@@ -74,9 +81,13 @@ export { avail as available };
 function readable(): boolean {
   try { localStorage.getItem(KEY); return true; } catch (e) { return false; }
 }
+export { readable as available };
+// Estado del almacenamiento para avisar al alumno sin adivinar: {readable, writable}. Legible pero no escribible = «lleno»: se sigue
+// mostrando el proyecto real y se pide exportar.
+export function storageStatus(): { readable: boolean; writable: boolean } { return { readable: readable(), writable: canWrite() }; }
 // Modo memoria legítimo: no hay almacenamiento ni se puede leer, y tampoco hay
 // nada pendiente que deba seguir contando como "sin guardar".
-function memoryMode(): boolean { return !avail() && !readable(); }
+function memoryMode(): boolean { return !canWrite() && !readable(); }
 
 function fresh(): GpiDb { return { version: 1, activeId: null, projects: {} }; }
 function db(): GpiDb {
@@ -2533,7 +2544,7 @@ export function scheduleNetwork(
 // La red del proyecto ACTIVO (lee los módulos del proyecto); null si no hay proyecto o no tiene actividades.
 export function activeScheduleNetwork(): ScheduleNetwork | null {
   try {
-    if (!avail() || !active()) return null;
+    if (!readable() || !active()) return null;
     const m = meta();
     const net = scheduleNetwork(getModule("wbs") as WbsModule | null, getModule("activities") as ActivitiesModule | null, getModule("pert") as PertModule | null,
       getModule("schedule") as ScheduleModule | null, getModule("schedulePlan") as SchedulePlanModule | null, m ? m.startDate : "");
@@ -2568,7 +2579,9 @@ export const schema = SCHEMA;
 export const GPI = {
   KEY,
   schema,
-  available: avail,
+  available: readable,   // «legible»: hay un proyecto que mostrar (NO «se puede escribir»: ver canWrite)
+  canWrite,
+  storageStatus,
   defaultMeta,
   raw: db,
   listProjects,

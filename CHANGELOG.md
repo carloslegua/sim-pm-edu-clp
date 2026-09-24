@@ -364,6 +364,19 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Con el almacenamiento lleno, los módulos mostraban el ejemplo DISTRIB+ en vez del proyecto real
+  (auditoría, alta)** — `GPI.available()` era una sonda de **escritura** (`setItem`) y los módulos la
+  usaban para saber si había un proyecto que **leer**: con la cuota agotada la sonda fallaba aunque
+  el proyecto siguiera legible, y Valor Ganado mostraba DISTRIB+ (USD 7.100.000, 18 paquetes) sobre
+  un proyecto de S/ 1.000 (no lo sobrescribía, pero sustituía lo presentado). Ahora se distinguen
+  **proyecto disponible / almacenamiento legible / escritura disponible**: `GPI.available()` =
+  legible (los 73 usos de los módulos quedan bien sin tocarlos), `GPI.canWrite()` = se puede
+  escribir y `GPI.storageStatus()` = ambas. Un fallo de escritura activa la recuperación que ya
+  existía (aviso, cambio pendiente exportable, `hasUnsavedChanges()`) sin cambiar lo que se muestra.
+  `activeScheduleNetwork()` tenía el mismo defecto y también se corrigió. Pruebas: 3 unitarias y 4
+  smoke (Valor Ganado, Cambios, Calidad, Comunicaciones, Adquisiciones y Panel con todo `setItem`
+  fallando); fallan sin la corrección.
+
 - **Panel de Control: el indicador «Cronograma / CPM» daba una duración
   equivocada con hitos** — `GPI.util.scheduleStats()` armaba la red solo con las
   actividades: los enlaces hacia/desde un hito se perdían. Con el ejemplo

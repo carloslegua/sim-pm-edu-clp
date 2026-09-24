@@ -413,7 +413,7 @@ var GPI = (function(exports) {
 	var mem = null;
 	var pendingUnsaved = null;
 	var pendingBase = null;
-	function avail() {
+	function canWrite() {
 		try {
 			const k = "__gpi_t";
 			localStorage.setItem(k, "1");
@@ -431,8 +431,14 @@ var GPI = (function(exports) {
 			return false;
 		}
 	}
+	function storageStatus() {
+		return {
+			readable: readable(),
+			writable: canWrite()
+		};
+	}
 	function memoryMode() {
-		return !avail() && !readable();
+		return !canWrite() && !readable();
 	}
 	function fresh() {
 		return {
@@ -3143,7 +3149,7 @@ var GPI = (function(exports) {
 	}
 	function activeScheduleNetwork() {
 		try {
-			if (!avail() || !active()) return null;
+			if (!readable() || !active()) return null;
 			const m = meta();
 			const net = scheduleNetwork(getModule("wbs"), getModule("activities"), getModule("pert"), getModule("schedule"), getModule("schedulePlan"), m ? m.startDate : "");
 			return net.nodes.some((n) => !n.isMilestone) ? net : null;
@@ -3199,7 +3205,9 @@ var GPI = (function(exports) {
 	exports.GPI = {
 		KEY,
 		schema,
-		available: avail,
+		available: readable,
+		canWrite,
+		storageStatus,
 		defaultMeta,
 		raw: db,
 		listProjects,
@@ -3239,8 +3247,9 @@ var GPI = (function(exports) {
 	exports.applyCostEstimateToWbs = applyCostEstimateToWbs;
 	exports.applyRaciToWbs = applyRaciToWbs;
 	exports.applyScheduleToWbs = applyScheduleToWbs;
-	exports.available = avail;
+	exports.available = readable;
 	exports.buildScheduleLinks = buildScheduleLinks;
+	exports.canWrite = canWrite;
 	exports.charterAudit = charterAudit;
 	exports.charterRans = charterRans;
 	exports.costEstimateRows = costEstimateRows;
@@ -3294,6 +3303,7 @@ var GPI = (function(exports) {
 	exports.scopeDeliverables = scopeDeliverables;
 	exports.setActive = setActive;
 	exports.setModule = setModule;
+	exports.storageStatus = storageStatus;
 	exports.traceMatrix = traceMatrix;
 	exports.ui = ui;
 	exports.util = util;
