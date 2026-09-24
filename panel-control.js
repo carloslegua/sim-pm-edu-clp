@@ -253,10 +253,10 @@
 			key: "procurement",
 			group: "proc",
 			name: "Gestión de las Adquisiciones",
-			file: null,
+			file: "Plan_Adquisiciones.html",
 			icon: "📦",
 			color: "#8f2fd0",
-			desc: "Estrategia de contratación, tipos de contrato, criterios de selección y administración de proveedores."
+			desc: "Estrategia de contratación, hacer o comprar, tipos de contrato, criterios de selección y fecha límite de convocatoria contra el cronograma; enlaza la EDT, los riesgos y el OBS."
 		}
 	];
 	MODULES = MODULES.concat((Array.isArray(MODULOS_EXTRA) ? MODULOS_EXTRA : []).filter((m) => {

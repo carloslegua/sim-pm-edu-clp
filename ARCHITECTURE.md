@@ -1363,6 +1363,42 @@ arranca **en blanco**; en modo independiente muestra el ejemplo.
 - **Límites declarados**: no crea ni edita las órdenes de Costos, las MOD ni la LB-n (eso lo
   hace cada módulo); solo verifica que existan y sean coherentes.
 
+**Plan_Adquisiciones.html** (módulo `procurement`, PMBOK «Planificar la gestión de las
+adquisiciones») — auditoría metodológica: el Panel tenía la tarjeta sin archivo. Lógica pura en
+`src/shared/procurement-plan.ts` (inlineada en `procurement.js`, con 17 pruebas unitarias);
+patrón de Control de Cambios, una ficha desplegable por paquete de adquisición. Con un proyecto
+activo arranca **en blanco**; en modo independiente muestra el ejemplo.
+- **Estrategia** (cómo se contrata, cómo se mide al proveedor, quién autoriza y hasta qué monto) y
+  **una ficha por adquisición**: paquetes de la EDT que cubre, **hacer o comprar**, tipo de contrato
+  (FFP, FPEPA, precio unitario, T&M, CPFF, CPIF), método de selección con **criterios ponderados
+  que suman 100**, valor, fecha requerida, plazos, proveedor, estado (Planificada → Convocada →
+  Adjudicada → Contratada → Entregada), responsable y riesgos que el contrato trata.
+- **Fecha límite de convocatoria** = fecha requerida − plazo del proveedor − tiempo de selección,
+  contrastada con la **fecha de corte del plan** (guardada con él; por defecto, hoy). Si ya pasó y
+  la adquisición sigue «Planificada», es un **riesgo** (P1): el cronograma no se sostiene; dentro de
+  30 días es informativo.
+- **No duplica**: los paquetes y su costo salen de la EDT, los riesgos abiertos del Registro (un
+  contrato es una respuesta al riesgo), los responsables del OBS, los proveedores del OBS y de los
+  interesados, y la clase del estimado de Costos.
+- **Hallazgos P1–P13**: P1 convocatoria vencida o próxima; P2 ficha incompleta o paquete inexistente;
+  P3 sin fecha o plazos; P4 sin tipo de contrato o **precio fijo con un estimado de clase 4–5**
+  (definición insuficiente: el proveedor lo cotiza con sobreprecio o reclama después); P5 selección
+  sin criterios, que no suman 100, menos de tres, o adjudicación directa sin justificación; P6 valor
+  que difiere más de **10 %** del costo de la EDT (no aplica si el contrato no cubre todo el paquete);
+  P7 adjudicada sin proveedor o fecha; P8 riesgo alto que afecta los paquetes y no está citado, o cita a
+  un riesgo cerrado; P10 responsable ausente o fuera del OBS; P12 proveedor no registrado; P13 plan
+  sin estrategia, desempeño o autorizaciones. «Hacer con recursos propios» no exige contrato ni
+  selección. Los umbrales (10 %, 30 días) son criterio didáctico declarado.
+- **Ejemplo DISTRIB+** (`src/shared/procurement-sample.ts`, mismo caso, fecha de corte 2026-08-03 =
+  aprobación del plan): PR-01 estructuras metálicas (3.1, FPEPA porque el acero es volátil), PR-02
+  materiales (3.2, precio unitario), PR-03 equipos eléctricos (3.3, precio fijo), PR-04 subcontrato MEP
+  (4.5) y PR-05 ensayos de laboratorio (4.1/4.2, 95.000 = la partida de evaluación del costo de la
+  calidad). **Las fechas requeridas y los plazos son las del CPM real** (fin del paquete y
+  inicio = requerida − plazo, verificado en `tests/unit/procurement-plan.test.ts`); los valores son
+  el costo de la EDT; los riesgos altos que afectan cada paquete están citados. Conectado, el
+  ejemplo se enlaza por código EDT y por código de riesgo. e2e en Chrome real sobre EDT, OBS y
+  riesgos reales: sin hallazgos; con una fecha de corte posterior, PR-02 vence.
+
 **Plan_Calidad.html** (módulo `quality`, PMBOK «Planificar la gestión de la calidad») —
 auditoría metodológica: el Panel tenía la tarjeta sin archivo. Lógica pura en
 `src/shared/quality-plan.ts` (inlineada en `quality.js`, con 14 pruebas unitarias); patrón de
@@ -2837,6 +2873,9 @@ vez que se agrega o toca un módulo:
   Logística, Jefe de Ingeniería, Residente de Obra, Director de Proyecto).
   Cualquier módulo que hable de un riesgo del caso debe reutilizar estos
   códigos (Costos ya cita R-03).
+- **Adquisiciones** (`procurement`, `src/shared/procurement-sample.ts`): PR-01…PR-05 sobre 3.1, 3.2,
+  3.3, 4.5 y 4.1/4.2; fechas requeridas y plazos = las del CPM; valor = costo de la EDT; proveedores
+  = Proveedor A/B/C y Subcontrata MEP del OBS; fecha de corte 2026-08-03 (aprobación del plan).
 - **Calidad** (`quality`, `src/shared/quality-sample.ts`): QC-01…QC-17 (un control por paquete
   1.1…5.3 salvo 1.3 LOE, con el criterio del diccionario de `wbs-sample.ts`), QM-01…QM-05,
   responsables = puestos del OBS (nombre exacto) y costo de la calidad ilustrativo de 350.000.

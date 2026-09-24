@@ -174,8 +174,8 @@ let MODULES: ModuleDef[] = [
     desc: "Riesgo cuantitativo de costo y plazo: histograma, curva S y tornado." },
 
   // — Adquisiciones —
-  { key: "procurement", group: "proc", name: "Gestión de las Adquisiciones", file: null, icon: "📦", color: "#8f2fd0",
-    desc: "Estrategia de contratación, tipos de contrato, criterios de selección y administración de proveedores." }
+  { key: "procurement", group: "proc", name: "Gestión de las Adquisiciones", file: "Plan_Adquisiciones.html", icon: "📦", color: "#8f2fd0",
+    desc: "Estrategia de contratación, hacer o comprar, tipos de contrato, criterios de selección y fecha límite de convocatoria contra el cronograma; enlaza la EDT, los riesgos y el OBS." }
 ];
 
 // ─── Aplicación de la configuración de entrega ────────────────────────

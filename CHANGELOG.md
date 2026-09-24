@@ -11,6 +11,19 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Nuevo módulo «Gestión de las Adquisiciones» (`Plan_Adquisiciones.html`, auditoría
+  metodológica)** — la tarjeta del Panel existía sin archivo. Estrategia y una ficha por paquete de
+  adquisición: paquetes de la EDT, **hacer o comprar**, tipo de contrato, selección con **criterios
+  ponderados**, valor, fechas, proveedor y estado. Calcula la **fecha límite de convocatoria**
+  (requerida − plazo del proveedor − tiempo de selección) y la contrasta con la **fecha de corte del
+  plan**: una convocatoria vencida es un riesgo. No duplica: la EDT (paquetes y costo), el Registro de
+  Riesgos (un contrato es una respuesta al riesgo), el OBS y la clase del estimado de Costos.
+  **Hallazgos P1–P13** (precio fijo con un estimado de clase 4–5, criterios que no suman 100, valor
+  que difiere más de 10 % de la EDT, riesgo alto sin citar…). Ejemplo DISTRIB+ ampliado con **fechas
+  y plazos verificados contra el CPM real**. Nuevos `src/shared/procurement-plan.ts`,
+  `procurement-sample.ts` y rama opcional `procurement`. Pruebas: 17 unitarias, 5 smoke y 1 e2e en
+  Chrome real.
+
 - **Nuevo módulo «Gestión de la Calidad» (`Plan_Calidad.html`, auditoría metodológica)** — la
   tarjeta del Panel existía sin archivo. Política y normas, **métricas** (objetivo, tolerancia,
   método), actividades de **aseguramiento** (prevenir) y **control** (detectar) por paquete, y

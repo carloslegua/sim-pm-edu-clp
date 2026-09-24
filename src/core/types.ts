@@ -367,7 +367,14 @@ export interface QualityModule {
   policy?: string; standards?: string; metrics?: unknown[]; checks?: unknown[]; coq?: unknown[]; idCounter?: number;
 }
 
+// Plan de Adquisiciones (Plan_Adquisiciones.html): estrategia y una fila por paquete de adquisición (hacer/comprar, contrato, selección, fechas, proveedor,
+// estado). Esquema y normalización en shared/procurement-plan.ts; los paquetes, el costo, los riesgos y los responsables se enlazan por id (no se duplican).
+export interface ProcurementModule {
+  strategy?: string; performance?: string; approvals?: string; asOf?: string; items?: unknown[]; idCounter?: number;
+}
+
 export interface ProjectModules {
+  procurement?: ProcurementModule | null;
   quality?: QualityModule | null;
   comms?: CommsModule | null;
   pmplan?: PmPlanModule | null;

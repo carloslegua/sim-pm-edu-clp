@@ -8,7 +8,7 @@ fecha y evidencia puntual de cada paso, vive en [MIGRATION.md](MIGRATION.md).
 
 ## Qué es esto
 
-Suite educativa PMBOK de 20 módulos HTML (19 herramientas + el Panel) + un núcleo de datos
+Suite educativa PMBOK de 21 módulos HTML (20 herramientas + el Panel) + un núcleo de datos
 compartido (`gpi-core.js`) sobre `localStorage`. Sitio 100% estático: sin
 backend, sin servidor de build en producción. Se despliega copiando
 archivos a GitHub Pages o abriendo cualquier módulo con doble clic
@@ -136,6 +136,9 @@ src/shared/change-sample.ts      → (se inlinea en changes.js) ejemplo DISTRIB+
                                     = OC-001…003 de Costos)
 src/shared/case-distribplus.ts   → (solo lectura) puestos del OBS y 18 paquetes de la EDT del caso DISTRIB+ para el modo
                                     independiente de los módulos nuevos; prueba contra el caso en tests/unit
+src/shared/procurement-plan.ts   → (se inlinea en procurement.js) plan de adquisiciones: fecha límite de convocatoria, contrato, selección
+                                    con criterios, valor contra la EDT, riesgos, hallazgos P1–P13
+src/shared/procurement-sample.ts → (se inlinea en procurement.js) ejemplo DISTRIB+ de adquisiciones (PR-01…05; fechas = CPM real)
 src/shared/quality-plan.ts       → (se inlinea en quality.js) plan de calidad: métricas, aseguramiento/control por paquete contra el
                                     criterio de aceptación del diccionario de la EDT, costo de la calidad, hallazgos Q1–Q11
 src/shared/quality-sample.ts     → (se inlinea en quality.js) ejemplo DISTRIB+ de calidad (QC-01…17, QM-01…05, costo 350.000)
