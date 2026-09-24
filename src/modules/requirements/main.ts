@@ -765,9 +765,9 @@ function renderMods(): void {
         + '<div style="margin-top:10px;font-size:12px"><b>Requisitos afectados:</b> ' + (aff.length ? ('<span class="chips" style="display:inline-flex">' + aff.map((it) => '<span class="chip ran">' + esc(it.code) + '</span>').join("") + '</span>') : '<span class="muted">ninguno aún — actívala y edita la matriz</span>') + '</div>'
         + '<div class="row row-2" style="margin-top:10px">'
         + '<label class="f" style="margin:0"><span>Estado</span><select onchange="setModStatus(\'' + escJsAttr(m.id) + '\',this.value)">' + selOpts(MODSTATUS, m.status) + '</select></label>'
-        + '<label class="f" style="margin:0"><span>Solicitud de cambio (CCR) — Control Integrado de Cambios</span><input value="' + esc(m.ccrRef) + '" placeholder="ID de la solicitud (pendiente del módulo)" onchange="updateCcr(\'' + escJsAttr(m.id) + '\',this.value)"></label>'
+        + '<label class="f" style="margin:0"><span>Solicitud de cambio (CCR) — Control Integrado de Cambios</span><input value="' + esc(m.ccrRef) + '" placeholder="Código de la solicitud (p. ej. CR-002)" onchange="updateCcr(\'' + escJsAttr(m.id) + '\',this.value)"></label>'
         + '</div>'
-        + '<div class="note info" style="margin-top:8px;font-size:11.5px">El campo CCR quedará enlazado automáticamente cuando exista el módulo <code class="k">changes</code> (Control Integrado de Cambios): este MOD referenciará su solicitud formal y la decisión del CCB.</div>'
+        + '<div class="note info" style="margin-top:8px;font-size:11.5px">Escribe en el campo CCR el <b>código de la solicitud</b> de <b>Control Integrado de Cambios</b> a la que responde esta modificación (p. ej. CR-002): ese módulo lo usa para comprobar que la MOD corresponde a la solicitud, está <b>aprobada</b> y quedó <b>incorporada a la línea base de requisitos</b> antes de dar el cambio por implementado.</div>'
         + '</div>';
     });
   }

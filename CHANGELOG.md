@@ -364,6 +364,17 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Control de Cambios declaraba implementado un cambio de alcance sin comprobar su ejecución
+  (auditoría, media)** — para el alcance bastaba que existiera una modificación (MOD) vinculada; la
+  integración descartaba su estado: una solicitud aprobada vinculada a una MOD **rechazada** se podía
+  marcar implementada. Ahora cada MOD vinculada debe **estar aprobada y con su aprobador**,
+  **corresponder a la solicitud** (su campo CCR = el código de la SC) y **estar incorporada** al alcance
+  vigente: afecta requisitos y todos están, tal cual están hoy, en la línea base de requisitos, cuya
+  fecha no es anterior a la decisión. Cada carencia se explica en pantalla y en el rechazo del cambio de
+  estado. Nuevo `modFacts` (lectura solo de `requirements`); el texto de la MOD en Recopilar Requisitos
+  ya no dice que el módulo de cambios «no existe». Pruebas: 8 unitarias nuevas, 3 smoke que reproducen
+  el caso y 1 e2e en Chrome real (rechazada → bloqueado; corregida en Requisitos → implementada).
+
 - **El documento del plan aprobado cambiaba sin una nueva aprobación (auditoría, alta)** — la
   instantánea de aprobación guardaba versiones e importes pero no el contenido de los planes
   subsidiarios, y el documento se reconstruía siempre con datos actuales: tras aprobar y modificar

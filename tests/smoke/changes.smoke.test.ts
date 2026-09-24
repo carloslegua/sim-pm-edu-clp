@@ -147,6 +147,39 @@ describe("Control_Cambios.html (Control Integrado de Cambios)", () => {
     expect(doc2.querySelector("tr.cr-row")!.textContent).toMatch(/Ampliar el patio de maniobras/);
   });
 
+  // ---- Auditoría (media): un registro vinculado no demuestra la implementación de un cambio de alcance ----
+  const REQ_ITEM = { id: "r1", code: "REQ.07", text: "Cámara de frío para lácteos", type: "funcional", priority: "must", status: "aprobado", acceptanceCriteria: "Mantiene 4 °C", verificationMethod: "prueba", wbsNodeIds: [], sourceRanIds: [], normativeBasis: "", origin: "change", changeId: "m1" };
+  const scAlcance = { id: "cr1", code: "CR-001", title: "Agregar cámara de frío", requester: "Cliente", origin: "Solicitud del cliente", type: "Actualización de la línea base o del plan",
+    impact: { scope: { state: "con_impacto", note: "Nueva cámara de frío" }, schedule: { state: "sin_impacto", note: "" }, cost: { state: "sin_impacto", note: "" }, risk: { state: "sin_impacto", note: "" }, quality: { state: "sin_impacto", note: "" }, resources: { state: "sin_impacto", note: "" } },
+    modIds: ["m1"], status: "Aprobada", decidedOn: "2026-08-10", approver: "CCB", authLevel: "ccb", rationale: "Aprobado por el CCB" };
+  const proyectoAlcance = (mod: Record<string, unknown>, baseline: Record<string, unknown> = { frozen: true, version: "2.0", date: "2026-09-30", snapshot: [REQ_ITEM] }) => proyecto({
+    changes: { idCounter: 2, requests: [scAlcance] },
+    requirements: { items: [REQ_ITEM], baseline, changeCounter: 2, idCounter: 8, changes: [{ id: "m1", code: "MOD.01", summary: "Cámara de frío", status: "aprobado", approver: "CCB", ccrRef: "CR-001", ...mod }] }
+  });
+  it("REPRO (media): una solicitud aprobada vinculada a una modificación RECHAZADA NO se puede marcar como implementada", async () => {
+    const dom = await abrir(proyectoAlcance({ status: "rechazado" })), doc = dom.window.document;
+    abrirFila(doc, "CR-001");
+    expect(calc(doc, "CR-001")).toMatch(/Para implementarla falta.*MOD\.01 está «Rechazada»/);
+    poner(dom, campo(doc, "CR-001", "status"), "Implementada", "change");
+    expect((campo(doc, "CR-001", "status") as HTMLSelectElement).value).toBe("Aprobada");                     // el cambio de estado se rechaza
+    expect(calc(doc, "CR-001")).toMatch(/No se puede pasar a «Implementada».*MOD\.01 está «Rechazada»: no puede respaldar/);
+  });
+  it("tampoco basta que exista y esté aprobada: debe citar esta solicitud (CCR) e incorporarse a la línea base de requisitos; cada carencia se explica", async () => {
+    const t = async (mod: Record<string, unknown>, baseline?: Record<string, unknown>) => { const doc = (await abrir(proyectoAlcance(mod, baseline))).window.document; abrirFila(doc, "CR-001"); return calc(doc, "CR-001"); };
+    expect(await t({ ccrRef: "" })).toMatch(/no cita esta solicitud: escribe «CR-001»/);
+    expect(await t({ ccrRef: "CR-009" })).toMatch(/responde a la solicitud «CR-009», no a CR-001/);
+    expect(await t({ status: "propuesto" })).toMatch(/está «Propuesta»: apruébala/);
+    expect(await t({}, { frozen: true, version: "2.0", date: "2026-09-30", snapshot: [] })).toMatch(/solo 0 de 1 requisito\(s\) de MOD\.01 están tal cual en la línea base de requisitos v2\.0/);   // no está en la línea base
+    expect(await t({}, { frozen: true, version: "2.0", date: "2026-08-01", snapshot: [REQ_ITEM] })).toMatch(/es anterior a la decisión \(2026-08-10\)/);
+  });
+  it("con la MOD aprobada, que cita esta solicitud e incorporada a la línea base de requisitos posterior a la decisión, sí puede pasar a Implementada", async () => {
+    const dom = await abrir(proyectoAlcance({})), doc = dom.window.document;
+    abrirFila(doc, "CR-001");
+    expect(calc(doc, "CR-001")).not.toMatch(/Para implementarla falta/);
+    poner(dom, campo(doc, "CR-001", "status"), "Implementada", "change");
+    expect((campo(doc, "CR-001", "status") as HTMLSelectElement).value).toBe("Implementada");
+  });
+
   it("proyecto conectado: lee órdenes de cambio de Costos y la línea base del cronograma del proyecto (no las del ejemplo)", async () => {
     const seed = proyecto({
       cost: { changeOrders: [{ id: "OC-777", cost: 5000, fund: "Contingencia", status: "Aprobada", baselined: null }] },

@@ -24,7 +24,7 @@ import { normalizePlan as normalizeRiskPlan, normalizeRisk } from "../../shared/
 import { AUTH_LABEL, AUTH_LEVELS, tiersText, type ReservePolicy } from "../../shared/reserve-policy";
 import {
   AREAS, AREA_LABEL, AREA_STATE_LABEL, CR_STATUSES, CR_TYPES, FUNDS, ORIGINS, approvalProblems, blankCr, crFindings, implementationProblems, nextCode,
-  normalizeCr, portfolio, requiredAuthorityOf, summarize,
+  modFacts, normalizeCr, portfolio, requiredAuthorityOf, summarize,
   type Area, type AreaState, type ChangeFacts, type ChangeRequest, type CrStatus
 } from "../../shared/change-control";
 
@@ -62,8 +62,7 @@ function buildCtx(): Ctx {
       const meta = G.meta(); c.sym = CUR[(meta && meta.currency) || ""] || "$";
       const cost = rec(G.getModule("cost")), oc = Array.isArray(cost.changeOrders) ? cost.changeOrders.map(rec) : [];
       c.orders = oc.map((o) => ({ id: String(o.id || ""), cost: Number(o.cost) || 0, fund: String(o.fund || ""), status: String(o.status || ""), baselined: o.baselined ? String(o.baselined) : null }));
-      const rq = rec(G.getModule("requirements")), mods = Array.isArray(rq.changes) ? rq.changes.map(rec) : [];
-      c.mods = mods.map((x) => ({ id: String(x.id || ""), code: String(x.code || x.id || ""), title: String(x.summary || x.title || "") }));
+      c.mods = modFacts(G.getModule("requirements"));       // con su estado, aprobador, solicitud (CCR) y evidencia de incorporación a la línea base de requisitos
       const rk = G.getModule("risks");
       c.risks = (rk && Array.isArray(rk.risks) ? rk.risks : []).map((r, i) => normalizeRisk(r, "rk" + (i + 1))).map((r) => ({ id: r.id, code: r.code, title: r.title }));
       c.policy = normalizeRiskPlan(rk && rk.plan).reserves;

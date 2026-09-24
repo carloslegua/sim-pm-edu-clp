@@ -18,7 +18,7 @@ import { pushWithSession } from "../../shared/write-session";
 import { normalizeBaseline } from "../../shared/schedule-control";
 import { analyzeWbs } from "../../shared/wbs-quality";
 import { normalizeBoe, STATUS_LABEL as BOE_STATUS_LABEL } from "../../shared/boe";
-import { normalizeCr, portfolio as crPortfolio, type ChangeFacts, type ChangeRequest } from "../../shared/change-control";
+import { modFacts, normalizeCr, portfolio as crPortfolio, type ChangeFacts, type ChangeRequest } from "../../shared/change-control";
 import { inherentScore, levelOf, normalizePlan as normalizeRiskPlan, normalizeRisk, portfolio as riskPortfolio, rankRisks } from "../../shared/risk-analysis";
 import { QUADRANT_LABEL, levelName, quadrantOf } from "../../shared/stakeholder-engagement";
 import { gatherCommFacts, gatherProcurementFacts, gatherQualityFacts } from "../../shared/plan-facts";
@@ -122,7 +122,7 @@ function buildCtx(): Ctx {
     const crs = arr(rec(G.getModule("changes")).requests).map((o, i) => normalizeCr(o, "cr" + (i + 1)));
     const cf: ChangeFacts = {
       orders: arr(cost && cost.changeOrders).map((o) => ({ id: str(o.id), cost: num(o.cost), fund: str(o.fund), status: str(o.status), baselined: o.baselined ? str(o.baselined) : null })),
-      mods: arr(rec(req).changes).map((x) => ({ id: str(x.id), code: str(x.code || x.id), title: str(x.summary || x.title) })),
+      mods: modFacts(req),
       risks: risks.map((r) => ({ id: r.id, code: r.code, title: r.title })), scheduleLog: bl ? bl.log.map((e) => ({ version: e.version, date: e.date })) : [], policy: rplan.reserves, projectDelay: null
     };
     const cp = crPortfolio(crs, cf, todayISO());

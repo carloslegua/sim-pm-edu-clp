@@ -2,7 +2,7 @@
 // evaluación completa, e implementación solo cuando cada línea base afectada está realmente actualizada.
 import { describe, expect, it } from "vitest";
 import {
-  approvalProblems, assessmentGaps, blankCr, crFindings, implementationProblems, nextCode, normalizeCr, portfolio, requiredAuthorityOf, summarize,
+  approvalProblems, assessmentGaps, blankCr, crFindings, implementationProblems, modFacts, nextCode, normalizeCr, portfolio, requiredAuthorityOf, summarize,
   AREAS, type Area, type AreaState, type ChangeFacts, type ChangeRequest
 } from "../../src/shared/change-control";
 
@@ -92,8 +92,36 @@ describe("aprobar", () => {
 describe("implementar: cada línea base afectada debe estar realmente actualizada", () => {
   const orden = (o: Record<string, unknown> = {}) => ({ id: "OC-002", cost: 240000, fund: "Financiamiento adicional", status: "Aprobada", baselined: "LB-1", ...o });
   const base = () => cr(["scope", "schedule", "cost"], { costDelta: 240000, fund: "Financiamiento adicional", daysDelta: 10, wbsIds: ["w"], status: "Aprobada", decidedOn: "2026-08-10", orderIds: ["OC-002"], modIds: ["m1"], scheduleBaseline: "LB-2" });
-  const ok = () => facts({ orders: [orden()], mods: [{ id: "m1", code: "MOD-001", title: "Sala" }], scheduleLog: [{ version: "LB-1", date: "2026-07-06" }, { version: "LB-2", date: "2026-08-12" }] }, 10);
+  // una MOD aprobada, que responde a CR-001 y cuyos 2 requisitos están en la línea base de requisitos v2.0 (posterior a la decisión)
+  const mod = (o: Record<string, unknown> = {}, ev: Record<string, unknown> = {}) => ({ id: "m1", code: "MOD-001", title: "Sala", status: "aprobado", approver: "CCB", ccrRef: "CR-001", evidence: { baselineFrozen: true, baselineVersion: "2.0", baselineDate: "2026-09-30", affected: 2, incorporated: 2, ...ev }, ...o });
+  const ok = () => facts({ orders: [orden()], mods: [mod()], scheduleLog: [{ version: "LB-1", date: "2026-07-06" }, { version: "LB-2", date: "2026-08-12" }] }, 10);
   it("todo actualizado: puede pasar a Implementada", () => { expect(implementationProblems(base(), ok())).toEqual([]); });
+  it("REPRO (media): una solicitud aprobada vinculada a una modificación RECHAZADA ya no puede marcarse implementada", () => {
+    const p = implementationProblems(base(), { ...ok(), mods: [mod({ status: "rechazado" })] });
+    expect(p).toHaveLength(1); expect(p[0]).toMatch(/MOD-001 está «Rechazada»: no puede respaldar un cambio de alcance aprobado/);
+  });
+  it("la modificación debe estar aprobada (no propuesta ni en evaluación) y registrar quién la aprobó; «implementada» también sirve", () => {
+    expect(implementationProblems(base(), { ...ok(), mods: [mod({ status: "propuesto" })] })[0]).toMatch(/MOD-001 está «Propuesta»: apruébala en Recopilar Requisitos/);
+    expect(implementationProblems(base(), { ...ok(), mods: [mod({ status: "enEvaluacion" })] })[0]).toMatch(/«En evaluación»/);
+    expect(implementationProblems(base(), { ...ok(), mods: [mod({ approver: " " })] })[0]).toMatch(/no registra quién la aprobó/);
+    expect(implementationProblems(base(), { ...ok(), mods: [mod({ status: "implementado" })] })).toEqual([]);
+  });
+  it("correspondencia con la solicitud: la MOD debe citar ESTA solicitud (campo CCR); vacío o de otra solicitud es un impedimento", () => {
+    expect(implementationProblems(base(), { ...ok(), mods: [mod({ ccrRef: "" })] })[0]).toMatch(/no cita esta solicitud: escribe «CR-001» en su campo de solicitud de cambio \(CCR\)/);
+    expect(implementationProblems(base(), { ...ok(), mods: [mod({ ccrRef: "CR-002" })] })[0]).toMatch(/responde a la solicitud «CR-002», no a CR-001/);
+    expect(implementationProblems(base(), { ...ok(), mods: [mod({ ccrRef: " cr-001 " })] })).toEqual([]);                         // sin distinguir mayúsculas ni espacios
+  });
+  it("evidencia de incorporación: la MOD debe afectar requisitos y estar TAL CUAL en la línea base de requisitos vigente, fijada después de la decisión", () => {
+    expect(implementationProblems(base(), { ...ok(), mods: [mod({}, { baselineFrozen: false })] })[0]).toMatch(/línea base de requisitos no está congelada/);
+    expect(implementationProblems(base(), { ...ok(), mods: [mod({}, { affected: 0, incorporated: 0 })] })[0]).toMatch(/no afecta ningún requisito: no hay evidencia de que el alcance cambió/);
+    expect(implementationProblems(base(), { ...ok(), mods: [mod({}, { incorporated: 1 })] })[0]).toMatch(/solo 1 de 2 requisito\(s\) de MOD-001 están tal cual en la línea base de requisitos v2\.0/);
+    expect(implementationProblems(base(), { ...ok(), mods: [mod({}, { baselineDate: "2026-08-01" })] })[0]).toMatch(/línea base de requisitos v2\.0 \(2026-08-01\) es anterior a la decisión \(2026-08-10\)/);
+  });
+  it("una MOD vinculada que ya no existe se avisa; con varias MOD, cada una debe cumplir", () => {
+    expect(implementationProblems({ ...base(), modIds: ["m1", "m9"] }, ok())).toEqual(["vincula una modificación de alcance que ya no existe en Recopilar Requisitos"]);
+    const f = { ...ok(), mods: [mod(), mod({ id: "m2", code: "MOD-002", status: "rechazado" })] };
+    expect(implementationProblems({ ...base(), modIds: ["m1", "m2"] }, f)).toEqual([expect.stringMatching(/MOD-002 está «Rechazada»/)]);
+  });
   it("falta cada eslabón: la MOD, la OC, la incorporación a la línea base de costos y la versión del cronograma", () => {
     const sinNada = { ...base(), orderIds: [], modIds: [], scheduleBaseline: "" };
     expect(implementationProblems(sinNada, ok())).toEqual(expect.arrayContaining([
@@ -110,6 +138,26 @@ describe("implementar: cada línea base afectada debe estar realmente actualizad
     const c = cr(["cost"], { costDelta: 30000, fund: "Contingencia", orderIds: ["OC-001"], status: "Aprobada" });
     expect(implementationProblems(c, facts({ orders: [{ id: "OC-001", cost: 30000, fund: "Contingencia", status: "Aprobada", baselined: null }] }))).toEqual([]);
     expect(implementationProblems(c, facts())[0]).toMatch(/registra la orden de cambio en Costos/);
+  });
+});
+
+describe("modFacts: la evidencia sale de la rama de Requisitos", () => {
+  const item = (id: string, text: string, changeId: string | null, extra: Record<string, unknown> = {}) => ({ id, text, type: "funcional", priority: "must", status: "aprobado", acceptanceCriteria: "ok", verificationMethod: "inspeccion", wbsNodeIds: ["w2", "w1"], sourceRanIds: [], normativeBasis: "", changeId, ...extra });
+  const req = (items: unknown[], snapshot: unknown[], frozen = true) => ({ baseline: { frozen, version: "2.0", date: "2026-09-30", snapshot }, items, changes: [{ id: "m1", code: "MOD.01", summary: "Sala", status: "aprobado", approver: "CCB", ccrRef: "CR-002" }] });
+  it("requisitos de la MOD incorporados = están en la instantánea de la línea base con el mismo contenido (el orden de los vínculos no importa)", () => {
+    const a = item("r1", "Dos tableros", "m1"), b = item("r2", "Cableado", "m1");
+    const f = modFacts(req([a, b, item("r3", "Otro", null)], [{ ...a, wbsNodeIds: ["w1", "w2"] }, b]))[0];
+    expect(f).toMatchObject({ id: "m1", code: "MOD.01", title: "Sala", status: "aprobado", approver: "CCB", ccrRef: "CR-002" });
+    expect(f.evidence).toEqual({ baselineFrozen: true, baselineVersion: "2.0", baselineDate: "2026-09-30", affected: 2, incorporated: 2 });
+  });
+  it("un requisito agregado o editado DESPUÉS de congelar la línea base no cuenta como incorporado", () => {
+    const a = item("r1", "Dos tableros", "m1"), b = item("r2", "Cableado", "m1");
+    expect(modFacts(req([a, b], [a]))[0].evidence).toMatchObject({ affected: 2, incorporated: 1 });                                        // b no está en la línea base
+    expect(modFacts(req([{ ...a, text: "Dos tableros y un UPS" }, b], [a, b]))[0].evidence).toMatchObject({ affected: 2, incorporated: 1 });   // a se editó después
+  });
+  it("tolerante: sin rama de requisitos o con datos raros; la MOD sin estado es «propuesta»", () => {
+    expect(modFacts(null)).toEqual([]); expect(modFacts({ changes: [null, { id: "m" }] })).toHaveLength(1);
+    expect(modFacts({ changes: [{ id: "m" }] })[0]).toMatchObject({ status: "propuesto", approver: "", ccrRef: "", evidence: { baselineFrozen: false, affected: 0, incorporated: 0 } });
   });
 });
 

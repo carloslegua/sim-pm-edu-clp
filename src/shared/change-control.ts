@@ -58,9 +58,34 @@ export const blankCr = (id: string, code: string): ChangeRequest => normalizeCr(
 export function nextCode(crs: ChangeRequest[]): string { let max = 0; crs.forEach((c) => { const m = /(\d+)\s*$/.exec(c.code); if (m) max = Math.max(max, Number(m[1])); }); return "CR-" + String(max + 1).padStart(3, "0"); }
 
 // ---- lo que se lee de los otros módulos (solo lectura) ----
+// Evidencia de que una modificación de alcance (MOD) quedó INCORPORADA al alcance vigente (auditoría: «la existencia de un registro no demuestra
+// implementación»): sus requisitos (los que llevan su id en `changeId`) deben estar, tal cual están hoy, en la línea base de requisitos vigente.
+export interface ModEvidence { baselineFrozen: boolean; baselineVersion: string; baselineDate: string; affected: number; incorporated: number; }
+export interface ModFact {
+  id: string; code: string; title: string;
+  status: string;                 // propuesto | enEvaluacion | aprobado | rechazado | implementado (el vocabulario de Recopilar Requisitos)
+  approver: string; ccrRef: string;   // quién la aprobó y a qué solicitud de cambio responde (campo CCR de la MOD)
+  evidence: ModEvidence;
+}
+export const MOD_STATUS_LABEL: Record<string, string> = { propuesto: "Propuesta", enEvaluacion: "En evaluación", aprobado: "Aprobada", rechazado: "Rechazada", implementado: "Implementada" };
+const sigOf = (o: Record<string, unknown>): string => JSON.stringify([o.text, o.type, o.priority, o.status, o.acceptanceCriteria, o.verificationMethod, o.normativeBasis, Array.isArray(o.wbsNodeIds) ? (o.wbsNodeIds as unknown[]).map(String).sort() : [], Array.isArray(o.sourceRanIds) ? (o.sourceRanIds as unknown[]).map(String).sort() : []]);
+// Lee (solo lectura) la rama `requirements` y arma la evidencia de cada MOD. Un requisito «incorporado» está en la instantánea de la línea base con el mismo
+// contenido; si se editó después de congelarla, ya no lo está (la línea base no lo refleja).
+export function modFacts(req: unknown): ModFact[] {
+  const r = (req && typeof req === "object" ? req : {}) as Record<string, unknown>, items = (Array.isArray(r.items) ? r.items : []).filter((x) => x && typeof x === "object") as Array<Record<string, unknown>>;
+  const bl = (r.baseline && typeof r.baseline === "object" ? r.baseline : {}) as Record<string, unknown>, snap = new Map<string, string>();
+  (Array.isArray(bl.snapshot) ? bl.snapshot : []).forEach((s) => { if (s && typeof s === "object") { const o = s as Record<string, unknown>; snap.set(String(o.id), sigOf(o)); } });
+  return (Array.isArray(r.changes) ? r.changes : []).filter((x) => x && typeof x === "object").map((x) => {
+    const m = x as Record<string, unknown>, id = String(m.id || ""), aff = items.filter((it) => String(it.changeId || "") === id);
+    return {
+      id, code: String(m.code || m.id || ""), title: String(m.summary || m.title || ""), status: String(m.status || "propuesto"), approver: String(m.approver || ""), ccrRef: String(m.ccrRef || ""),
+      evidence: { baselineFrozen: !!bl.frozen, baselineVersion: String(bl.version || ""), baselineDate: String(bl.date || ""), affected: aff.length, incorporated: aff.filter((it) => snap.get(String(it.id)) === sigOf(it)).length }
+    };
+  });
+}
 export interface ChangeFacts {
   orders: Array<{ id: string; cost: number; fund: string; status: string; baselined: string | null }>;   // órdenes de cambio de Costos
-  mods: Array<{ id: string; code: string; title: string }>;                                             // modificaciones de alcance de Requisitos
+  mods: ModFact[];                                                                                      // modificaciones de alcance de Requisitos, con su estado y su evidencia
   risks: Array<{ id: string; code: string; title: string }>;
   scheduleLog: Array<{ version: string; date: string }>;                                                // versiones de la línea base del cronograma
   policy: ReservePolicy | null;
@@ -131,8 +156,25 @@ export function approvalProblems(cr: ChangeRequest, f: ChangeFacts): string[] {
 export function implementationProblems(cr: ChangeRequest, f: ChangeFacts): string[] {
   const p: string[] = [], s = summarize(cr, f);
   if (s.baselines.scope) {
-    const linked = cr.modIds.filter((id) => f.mods.some((m) => m.id === id));
-    if (!linked.length) p.push("registra la modificación de alcance en Recopilar Requisitos y vincúlala (MOD)");
+    // La existencia de un registro no demuestra implementación: cada MOD vinculada debe estar APROBADA (no rechazada ni en trámite), con quien la aprobó,
+    // responder A ESTA solicitud (campo CCR = su código) y estar INCORPORADA a la línea base de requisitos vigente, fijada después de la decisión.
+    const linked = cr.modIds.map((id) => f.mods.find((m) => m.id === id)).filter((m): m is ModFact => !!m);
+    if (cr.modIds.length > linked.length) p.push("vincula una modificación de alcance que ya no existe en Recopilar Requisitos");
+    if (!linked.length) { if (!cr.modIds.length) p.push("registra la modificación de alcance en Recopilar Requisitos y vincúlala (MOD)"); }
+    linked.forEach((m) => {
+      const st = MOD_STATUS_LABEL[m.status] || m.status;
+      if (m.status === "rechazado") p.push("la modificación " + m.code + " está «Rechazada»: no puede respaldar un cambio de alcance aprobado (corrige el vínculo o el estado de la MOD)");
+      else if (m.status !== "aprobado" && m.status !== "implementado") p.push("la modificación " + m.code + " está «" + st + "»: apruébala en Recopilar Requisitos antes de implementar el cambio");
+      else if (!m.approver.trim()) p.push("la modificación " + m.code + " no registra quién la aprobó");
+      const ccr = m.ccrRef.trim().toLowerCase();
+      if (!ccr) p.push("la modificación " + m.code + " no cita esta solicitud: escribe «" + cr.code + "» en su campo de solicitud de cambio (CCR) en Recopilar Requisitos");
+      else if (ccr !== cr.code.trim().toLowerCase()) p.push("la modificación " + m.code + " responde a la solicitud «" + m.ccrRef.trim() + "», no a " + cr.code + ": no corresponde a este cambio");
+      const e = m.evidence;
+      if (!e.baselineFrozen) p.push("la línea base de requisitos no está congelada: el cambio de alcance no tiene una línea base a la que incorporarse");
+      else if (!e.affected) p.push("la modificación " + m.code + " no afecta ningún requisito: no hay evidencia de que el alcance cambió (actívala y edita la matriz de requisitos)");
+      else if (e.incorporated < e.affected) p.push("solo " + e.incorporated + " de " + e.affected + " requisito(s) de " + m.code + " están tal cual en la línea base de requisitos v" + e.baselineVersion + ": congela una nueva versión de la línea base que incorpore la modificación");
+      else if (cr.decidedOn && e.baselineDate && e.baselineDate < cr.decidedOn) p.push("la línea base de requisitos v" + e.baselineVersion + " (" + e.baselineDate + ") es anterior a la decisión (" + cr.decidedOn + "): no puede incorporar este cambio");
+    });
   }
   if (cr.impact.cost.state === "con_impacto" && cr.costDelta) {
     const os = cr.orderIds.map((id) => f.orders.find((o) => o.id === id)).filter((o): o is NonNullable<typeof o> => !!o);

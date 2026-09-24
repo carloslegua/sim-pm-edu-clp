@@ -1379,6 +1379,20 @@ arranca **en blanco**; en modo independiente muestra el ejemplo.
   línea base pasa por el **CCB**; reserva de gestión o fondos adicionales, por el **sponsor**; la
   contingencia, por los escalones de la **política de reservas** del Plan de Riesgos (mismo
   `reserve-policy.ts` que Costos). Rechazar o diferir exige quién decide y el motivo.
+- **La MOD no se da por buena por existir (auditoría, media).** Antes bastaba que hubiera una
+  modificación vinculada: una solicitud aprobada con una MOD **rechazada** se podía marcar
+  implementada. Ahora (`implementationProblems` + `modFacts`, `shared/change-control.ts`) cada MOD
+  vinculada debe: **(1) estar aprobada** («Aprobada» o «Implementada»; «Rechazada», «Propuesta» y «En
+  evaluación» impiden) **y registrar quién la aprobó**; **(2) corresponder a la solicitud**: su campo
+  CCR debe ser el código de esta SC (sin distinguir mayúsculas ni espacios; vacío o de otra solicitud
+  impide); **(3) estar incorporada al alcance vigente**: afecta al menos un requisito y **todos sus
+  requisitos** (los que llevan su id en `changeId`) están, **tal cual están hoy** (texto, tipo,
+  prioridad, estado, criterio, método, paquetes y RAN, sin importar el orden de los vínculos), en la
+  instantánea de la línea base de requisitos vigente, cuya fecha no es anterior a la decisión (un
+  requisito editado después de congelar deja de contar). Una MOD vinculada que ya no existe también se
+  avisa. Lee la rama `requirements` en solo lectura: no la escribe; el alumno cita la solicitud en el
+  campo CCR de la MOD (Recopilar Requisitos, texto actualizado). Se comprueba la línea base de
+  **requisitos**; la del Enunciado del Alcance no se exige aparte (declarado).
 - **Implementada solo con las líneas base al día** (`implementationProblems`): la modificación
   de alcance (MOD) de Recopilar Requisitos, la orden de cambio de Costos (existe, monto
   coincide con el Δ costo, aprobada e incorporada a la línea base) y la versión **LB-n** del

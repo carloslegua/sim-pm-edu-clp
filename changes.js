@@ -1655,6 +1655,52 @@
 		});
 		return "CR-" + String(max + 1).padStart(3, "0");
 	}
+	var MOD_STATUS_LABEL = {
+		propuesto: "Propuesta",
+		enEvaluacion: "En evaluación",
+		aprobado: "Aprobada",
+		rechazado: "Rechazada",
+		implementado: "Implementada"
+	};
+	var sigOf = (o) => JSON.stringify([
+		o.text,
+		o.type,
+		o.priority,
+		o.status,
+		o.acceptanceCriteria,
+		o.verificationMethod,
+		o.normativeBasis,
+		Array.isArray(o.wbsNodeIds) ? o.wbsNodeIds.map(String).sort() : [],
+		Array.isArray(o.sourceRanIds) ? o.sourceRanIds.map(String).sort() : []
+	]);
+	function modFacts(req) {
+		const r = req && typeof req === "object" ? req : {}, items = (Array.isArray(r.items) ? r.items : []).filter((x) => x && typeof x === "object");
+		const bl = r.baseline && typeof r.baseline === "object" ? r.baseline : {}, snap = /* @__PURE__ */ new Map();
+		(Array.isArray(bl.snapshot) ? bl.snapshot : []).forEach((s) => {
+			if (s && typeof s === "object") {
+				const o = s;
+				snap.set(String(o.id), sigOf(o));
+			}
+		});
+		return (Array.isArray(r.changes) ? r.changes : []).filter((x) => x && typeof x === "object").map((x) => {
+			const m = x, id = String(m.id || ""), aff = items.filter((it) => String(it.changeId || "") === id);
+			return {
+				id,
+				code: String(m.code || m.id || ""),
+				title: String(m.summary || m.title || ""),
+				status: String(m.status || "propuesto"),
+				approver: String(m.approver || ""),
+				ccrRef: String(m.ccrRef || ""),
+				evidence: {
+					baselineFrozen: !!bl.frozen,
+					baselineVersion: String(bl.version || ""),
+					baselineDate: String(bl.date || ""),
+					affected: aff.length,
+					incorporated: aff.filter((it) => snap.get(String(it.id)) === sigOf(it)).length
+				}
+			};
+		});
+	}
 	var isCont = (fund) => fund === "Contingencia";
 	var EPS = 1e-6;
 	function summarize(cr, f) {
@@ -1733,7 +1779,25 @@
 	function implementationProblems(cr, f) {
 		const p = [], s = summarize(cr, f);
 		if (s.baselines.scope) {
-			if (!cr.modIds.filter((id) => f.mods.some((m) => m.id === id)).length) p.push("registra la modificación de alcance en Recopilar Requisitos y vincúlala (MOD)");
+			const linked = cr.modIds.map((id) => f.mods.find((m) => m.id === id)).filter((m) => !!m);
+			if (cr.modIds.length > linked.length) p.push("vincula una modificación de alcance que ya no existe en Recopilar Requisitos");
+			if (!linked.length) {
+				if (!cr.modIds.length) p.push("registra la modificación de alcance en Recopilar Requisitos y vincúlala (MOD)");
+			}
+			linked.forEach((m) => {
+				const st = MOD_STATUS_LABEL[m.status] || m.status;
+				if (m.status === "rechazado") p.push("la modificación " + m.code + " está «Rechazada»: no puede respaldar un cambio de alcance aprobado (corrige el vínculo o el estado de la MOD)");
+				else if (m.status !== "aprobado" && m.status !== "implementado") p.push("la modificación " + m.code + " está «" + st + "»: apruébala en Recopilar Requisitos antes de implementar el cambio");
+				else if (!m.approver.trim()) p.push("la modificación " + m.code + " no registra quién la aprobó");
+				const ccr = m.ccrRef.trim().toLowerCase();
+				if (!ccr) p.push("la modificación " + m.code + " no cita esta solicitud: escribe «" + cr.code + "» en su campo de solicitud de cambio (CCR) en Recopilar Requisitos");
+				else if (ccr !== cr.code.trim().toLowerCase()) p.push("la modificación " + m.code + " responde a la solicitud «" + m.ccrRef.trim() + "», no a " + cr.code + ": no corresponde a este cambio");
+				const e = m.evidence;
+				if (!e.baselineFrozen) p.push("la línea base de requisitos no está congelada: el cambio de alcance no tiene una línea base a la que incorporarse");
+				else if (!e.affected) p.push("la modificación " + m.code + " no afecta ningún requisito: no hay evidencia de que el alcance cambió (actívala y edita la matriz de requisitos)");
+				else if (e.incorporated < e.affected) p.push("solo " + e.incorporated + " de " + e.affected + " requisito(s) de " + m.code + " están tal cual en la línea base de requisitos v" + e.baselineVersion + ": congela una nueva versión de la línea base que incorpore la modificación");
+				else if (cr.decidedOn && e.baselineDate && e.baselineDate < cr.decidedOn) p.push("la línea base de requisitos v" + e.baselineVersion + " (" + e.baselineDate + ") es anterior a la decisión (" + cr.decidedOn + "): no puede incorporar este cambio");
+			});
 		}
 		if (cr.impact.cost.state === "con_impacto" && cr.costDelta) {
 			const os = cr.orderIds.map((id) => f.orders.find((o) => o.id === id)).filter((o) => !!o);
@@ -2107,12 +2171,7 @@
 					status: String(o.status || ""),
 					baselined: o.baselined ? String(o.baselined) : null
 				}));
-				const rq = rec(G.getModule("requirements"));
-				c.mods = (Array.isArray(rq.changes) ? rq.changes.map(rec) : []).map((x) => ({
-					id: String(x.id || ""),
-					code: String(x.code || x.id || ""),
-					title: String(x.summary || x.title || "")
-				}));
+				c.mods = modFacts(G.getModule("requirements"));
 				const rk = G.getModule("risks");
 				c.risks = (rk && Array.isArray(rk.risks) ? rk.risks : []).map((r, i) => normalizeRisk(r, "rk" + (i + 1))).map((r) => ({
 					id: r.id,
