@@ -37,7 +37,7 @@ import {
   type ExcludedRisk, type Risk, type RiskEvent, type RiskPlan
 } from "../../shared/risk-analysis";
 import { SAMPLE_PLAN as SAMPLE_RISK_PLAN, buildSampleRisks } from "../../shared/risk-sample";
-import { accuracyRange, classAdvisory, definitionMaturity, type EstimateClass, type MaturityInput } from "../../shared/estimate-class";
+import { ACCURACY_SOURCE, accuracyOriginText, accuracyRange, appliedAccuracy, classAdvisory, definitionMaturity, normalizeAccuracyOverride, overrideProblem, pct as pctTxt, publishedBandText, type AccuracyOverride, type EstimateClass, type MaturityInput } from "../../shared/estimate-class";
 import { SAMPLE_START_DATE, sampleScheduleModules } from "../../shared/schedule-sample";
 import { fmtDays, makeEngine, resolveTargets, type Engine, type Network } from "../../shared/schedule-risk";
 import {
@@ -66,18 +66,19 @@ declare global {
 
 const STORE_KEY = "gpi_cost_management_plan";
 
-// lo/hi: los mismos extremos del texto "range" en forma numérica (% sobre el estimado). Se usan como
-// valor INICIAL sugerido para el rango de cada partida y como referencia para avisar de un análisis
-// demasiado optimista (ver shared/range-estimating.ts); no son un resultado del análisis.
-interface EstimateClassDef { mat: string; use: string; meth: string; range: string; lo: number; hi: number; desc: string; }
+// Los extremos del rango de exactitud NO viven aquí: se resuelven con classAccuracy() (shared/estimate-class.ts), que
+// distingue la banda publicada por AACE 56R-08 (edificación), el parámetro didáctico del simulador y el ajuste
+// declarado por el proyecto. Sirven como valor INICIAL sugerido para el rango de cada partida y como referencia para
+// avisar de un análisis demasiado optimista (ver shared/range-estimating.ts); no son un resultado del análisis.
+interface EstimateClassDef { mat: string; use: string; meth: string; desc: string; }
 
-/* ---- Clases de estimado AACE RP 17R-97 (genérico) ---- */
+/* ---- Clases de estimado AACE RP 17R-97 (genérico): madurez, uso y método ---- */
 const CLASSES: Record<number, EstimateClassDef> = {
-  5: { mat: "0% – 2%", use: "Screening / evaluación conceptual", meth: "Estocástico (paramétrico, capacidad)", range: "-30% / +50% (típico)", lo: -30, hi: 50, desc: "Estimado de orden de magnitud. Mínima definición de ingeniería; se usa para descartar alternativas." },
-  4: { mat: "1% – 15%", use: "Estudio de factibilidad", meth: "Predominantemente estocástico", range: "-20% / +40%", lo: -20, hi: 40, desc: "Basado en factores y equipos mayores. Soporta decisiones de continuidad del proyecto." },
-  3: { mat: "10% – 40%", use: "Autorización de presupuesto / control base", meth: "Mixto estocástico–determinístico", range: "-15% / +30%", lo: -15, hi: 30, desc: "Semidetallado. Marca el paso de estudio a ejecución; suele ser la base del control." },
-  2: { mat: "30% – 75%", use: "Control y oferta / licitación", meth: "Predominantemente determinístico", range: "-10% / +20%", lo: -10, hi: 20, desc: "Detallado por partidas. Usado para control detallado y para ofertar." },
-  1: { mat: "65% – 100%", use: "Estimado definitivo / cierre de oferta", meth: "Determinístico (cantidades y precios)", range: "-5% / +15%", lo: -5, hi: 15, desc: "Máxima definición. Verificación final y check estimate." }
+  5: { mat: "0% – 2%", use: "Screening / evaluación conceptual", meth: "Estocástico (paramétrico, capacidad)", desc: "Estimado de orden de magnitud. Mínima definición de ingeniería; se usa para descartar alternativas." },
+  4: { mat: "1% – 15%", use: "Estudio de factibilidad", meth: "Predominantemente estocástico", desc: "Basado en factores y equipos mayores. Soporta decisiones de continuidad del proyecto." },
+  3: { mat: "10% – 40%", use: "Autorización de presupuesto / control base", meth: "Mixto estocástico–determinístico", desc: "Semidetallado. Marca el paso de estudio a ejecución; suele ser la base del control." },
+  2: { mat: "30% – 75%", use: "Control y oferta / licitación", meth: "Predominantemente determinístico", desc: "Detallado por partidas. Usado para control detallado y para ofertar." },
+  1: { mat: "65% – 100%", use: "Estimado definitivo / cierre de oferta", meth: "Determinístico (cantidades y precios)", desc: "Máxima definición. Verificación final y check estimate." }
 };
 
 const CUR: Record<string, string> = { PEN: "S/", USD: "$", EUR: "€" };
@@ -130,6 +131,7 @@ interface BudgetComputed { base: number; cont: number; esc: number; escIdx?: num
 type ChangeTotals = CoAnalysis;
 interface CostState {
   curClass: number;
+  acc: AccuracyOverride | null; // ajuste del rango de exactitud declarado por el proyecto (con su justificación); null = el didáctico
   co: ChangeOrder[];
   baselines: CoBaselineEntry[];
   ranges: RangeLine[];          // partidas del análisis de rangos (método «rangos_mc»)
@@ -143,6 +145,7 @@ interface CostState {
 
 const state: CostState = {
   curClass: 3,
+  acc: null,
   co: [],
   baselines: [],
   ranges: [],
@@ -188,12 +191,28 @@ function contingencyRate(): number {
   const v = row[key];
   return (typeof v === "number") ? v : row.P70;
 }
+// Rango de exactitud vigente de la clase declarada: ajuste del proyecto (si es válido) o parámetro didáctico.
+function classAccuracy(): ReturnType<typeof appliedAccuracy> { return appliedAccuracy(state.curClass as EstimateClass, state.acc); }
 function renderClass(): void {
-  const c = CLASSES[state.curClass];
+  const c = CLASSES[state.curClass], a = classAccuracy();
   $("classDesc").innerHTML = `<b>Clase ${state.curClass}.</b> ${c.desc}`;
-  $("cMat").textContent = c.mat; $("cUse").textContent = c.use; $("cMeth").textContent = c.meth; $("cRange").textContent = c.range;
+  $("cMat").textContent = c.mat; $("cUse").textContent = c.use; $("cMeth").textContent = c.meth;
+  $("cRange").textContent = `${pctTxt(a.lo)} / ${pctTxt(a.hi)}`; $("cRangeOrigin").textContent = accuracyOriginText(a);
+  $("cRangePub").textContent = publishedBandText(state.curClass as EstimateClass);
+  const prob = overrideProblem(state.acc);
+  $("accNotes").innerHTML = (prob ? `<div class="note" style="border-color:#dc3546;background:#fdecef"><b>⚠</b> ${esc(prob)} Mientras tanto se usa el parámetro didáctico.</div>` : "") + a.notes.filter((n) => !prob || !n.startsWith("El ajuste")).map((n) => `<div class="muted small" style="margin-top:4px">${esc(n)}</div>`).join("");
   renderMaturity();
 }
+// Los campos se rellenan SOLO al cargar datos o al volver al didáctico: si se rellenaran en cada render se borraría lo que el alumno aún está escribiendo.
+function fillAccuracyForm(): void { const ov = state.acc; ($("accLo") as HTMLInputElement).value = ov ? String(ov.lo) : ""; ($("accHi") as HTMLInputElement).value = ov ? String(ov.hi) : ""; ($("accWhy") as HTMLInputElement).value = ov ? ov.why : ""; }
+function readAccuracyForm(): void {
+  const lo = ($("accLo") as HTMLInputElement).value.trim(), hi = ($("accHi") as HTMLInputElement).value.trim(), why = ($("accWhy") as HTMLInputElement).value;
+  userEdited = true;
+  state.acc = lo === "" && hi === "" && !why.trim() ? null : normalizeAccuracyOverride({ lo: lo === "" ? null : lo, hi: hi === "" ? null : hi, why });
+  renderClass(); recalcCont(); save();
+}
+["accLo", "accHi", "accWhy"].forEach((id) => $(id).addEventListener("change", readAccuracyForm));
+$("accClear").addEventListener("click", () => { state.acc = null; userEdited = true; fillAccuracyForm(); renderClass(); recalcCont(); save(); });
 
 /* ---------- Madurez de la definición y clase del estimado (AACE 17R-97 / 56R-08) ---------- */
 // La clase RESULTA de la madurez de la definición del proyecto: se estima con lo que la suite conoce (orientativo) y se
@@ -232,20 +251,20 @@ function renderMaturity(): void {
     <div class="muted" style="font-size:11.5px;margin-top:6px">Es una estimación <b>orientativa</b> con pesos didácticos: la clase real depende de entregables de definición (ingeniería, especificaciones, cotizaciones firmes) que la suite solo ve en parte. Sirve para avisar cuando la clase declarada no se sostiene, no para decidirla.</div>`;
 }
 // Filas del BOE: madurez estimada y rango de exactitud aplicado al estimado con contingencia.
-function classDocRows(c: EstimateClassDef): string {
+function classDocRows(): string {
   const inp = maturityInputs(), b = state._budget;
   const mat = inp ? (() => { const m = definitionMaturity(inp); return `<tr><td>Madurez estimada de la definición</td><td>≈ ${Math.round(m.pct)} % (clase sugerida ${m.class}); ${esc(classAdvisory(state.curClass as EstimateClass, m.pct).text)}</td></tr>`; })() : "";
-  const acc = b && b.base > 0 ? (() => { const r = accuracyRange(b.base + b.cont, c.lo, c.hi); return `<tr><td>Rango de exactitud aplicado</td><td>Sobre el estimado con contingencia (${fmt(b.base + b.cont)}): mínimo ${fmt(r.min)} · máximo ${fmt(r.max)} (${sgn(c.lo)} % / ${sgn(c.hi)} %, típico de la clase; presupone contingencia aplicada)</td></tr>`; })() : "";
+  const acc = b && b.base > 0 ? (() => { const a = classAccuracy(), r = accuracyRange(b.base + b.cont, a.lo, a.hi); return `<tr><td>Rango de exactitud aplicado</td><td>Sobre el estimado con contingencia (${fmt(b.base + b.cont)}): mínimo ${fmt(r.min)} · máximo ${fmt(r.max)} (${pctTxt(a.lo)} / ${pctTxt(a.hi)}: ${esc(accuracyOriginText(a))}; presupone contingencia aplicada). ${esc(a.notes.join(" "))}</td></tr><tr><td>Referencia publicada</td><td>${esc(publishedBandText(state.curClass as EstimateClass))}. Práctica: ${esc(ACCURACY_SOURCE.practice)}, ${esc(ACCURACY_SOURCE.sector)}, ${esc(ACCURACY_SOURCE.revision)}.</td></tr>`; })() : "";
   return mat + acc;
 }
 // Rango de exactitud esperado, aplicado al presupuesto (antes solo se mostraba el texto «−15 % / +30 %»).
 function renderAccuracy(base: number, cont: number, res: RangeResult | null): void {
   const box = document.getElementById("accBox"); if (!box) return;
   if (!(base > 0)) { box.style.display = "none"; return; }
-  const c = CLASSES[state.curClass], est = base + cont, r = accuracyRange(est, c.lo, c.hi);
+  const a = classAccuracy(), est = base + cont, r = accuracyRange(est, a.lo, a.hi);
   const sim = res ? ` El análisis por rangos simula un costo total de <b>${fmt(res.p[10])}</b> (P10) a <b>${fmt(res.p[90])}</b> (P90).` : "";
   box.style.display = "block";
-  box.innerHTML = `<b>Rango de exactitud esperado — clase ${state.curClass} (${sgn(c.lo)} % / +${c.hi} %, típico).</b> Sobre el estimado con contingencia (<b>${fmt(est)}</b> = costo base + contingencia) el costo final esperado va de <b>${fmt(r.min)}</b> a <b>${fmt(r.max)}</b>.${sim} El rango es un valor típico de la clase: depende del proyecto y presupone la contingencia ya aplicada (AACE 56R-08); el análisis de riesgo lo afina.`;
+  box.innerHTML = `<b>Rango de exactitud — clase ${state.curClass} (${pctTxt(a.lo)} / ${pctTxt(a.hi)}): ${esc(accuracyOriginText(a))}.</b> Sobre el estimado con contingencia (<b>${fmt(est)}</b> = costo base + contingencia) el costo final va de <b>${fmt(r.min)}</b> a <b>${fmt(r.max)}</b>.${sim} Referencia publicada: ${esc(publishedBandText(state.curClass as EstimateClass))}. La exactitud real depende de los entregables de definición y del análisis de riesgo específico del proyecto; los rangos de AACE son indicativos, no metas.${a.notes.length ? "<br><b>⚠</b> " + esc(a.notes.join(" ")) : ""}`;
 }
 
 /* ---------- Helpers ---------- */
@@ -453,7 +472,7 @@ function renderEvents(res: RangeResult | null, p: number): void {
       <tr class="rng-selrow"><td>Contingencia total${showTime ? " (partidas + eventos + plazo)" : " (partidas + eventos)"}</td><td class="num">${fmt(cC)}</td></tr></tbody></table>${sched}`;
 }
 function renderRange(calc: ContCalc, base: number): void {
-  const res = calc.res, p = pctNum(), cls = CLASSES[state.curClass];
+  const res = calc.res, p = pctNum(), cls = classAccuracy();
   const lineIn = (i: number, f: string, v: unknown, w: string, type = "text", extra = ""): string =>
     `<input ${type === "number" ? 'type="number" step="0.1"' : ""} class="rng-in" style="width:${w}" value="${escA(v)}" data-i="${i}" data-f="${f}" onchange="rangeEdit(this)" ${extra}>`;
   $("rngBody").innerHTML = state.ranges.length ? state.ranges.map((l, i) => {
@@ -511,7 +530,7 @@ function addRange(): void {
   const name = ($("rngName") as HTMLInputElement), ml = +($("rngMl") as HTMLInputElement).value;
   if (!name.value.trim() || !(ml > 0)) { name.focus(); name.style.borderColor = "#dc3546"; showToast("Indica el nombre y un costo más probable mayor que cero."); return; }
   name.style.borderColor = "";
-  const cls = CLASSES[state.curClass], loI = ($("rngLo") as HTMLInputElement).value, hiI = ($("rngHi") as HTMLInputElement).value;
+  const cls = classAccuracy(), loI = ($("rngLo") as HTMLInputElement).value, hiI = ($("rngHi") as HTMLInputElement).value;
   state.ranges.push({ id: "m-" + (Date.now().toString(36) + state.ranges.length), name: name.value.trim(), ml,
     lowPct: loI === "" ? cls.lo : +loI, highPct: hiI === "" ? cls.hi : +hiI, basis: ($("rngBasis") as HTMLInputElement).value.trim() });
   name.value = ""; ($("rngMl") as HTMLInputElement).value = ""; ($("rngLo") as HTMLInputElement).value = ""; ($("rngHi") as HTMLInputElement).value = ""; ($("rngBasis") as HTMLInputElement).value = "";
@@ -529,7 +548,7 @@ function rangeEdit(el: HTMLInputElement): void {
 // Trae partidas por PAQUETE DE TRABAJO. Si la partida ya existía se conserva su rango y su fundamento
 // (solo se actualiza el costo); las partidas escritas a mano no se tocan.
 function mergePulled(items: Array<{ id: string; name: string; ml: number }>): void {
-  const cls = CLASSES[state.curClass], prev = new Map(state.ranges.map((l) => [l.id, l]));
+  const cls = classAccuracy(), prev = new Map(state.ranges.map((l) => [l.id, l]));
   const pulled: RangeLine[] = items.map((it) => { const old = prev.get(it.id); return old ? { ...old, name: it.name, ml: it.ml } : { id: it.id, name: it.name, ml: it.ml, lowPct: cls.lo, highPct: cls.hi, basis: "" }; });
   state.ranges = pulled.concat(state.ranges.filter((l) => l.id.indexOf("r-") !== 0));
   userEdited = true; recalcCont(); save(); flash();
@@ -553,7 +572,7 @@ function pullRangesFromWbs(): void {
 }
 // Aplica el rango típico de la clase SOLO a las partidas que aún no tienen fundamento (no pisa lo trabajado).
 function applyClassRange(): void {
-  const cls = CLASSES[state.curClass]; let n = 0;
+  const cls = classAccuracy(); let n = 0;
   state.ranges.forEach((l) => { if (!String(l.basis || "").trim()) { l.lowPct = cls.lo; l.highPct = cls.hi; n++; } });
   userEdited = true; recalcCont(); save();
   showToast(n ? "Rango de la clase " + state.curClass + " aplicado a " + n + " partida(s) sin fundamento." : "Todas las partidas ya tienen fundamento: no se cambió ninguna.");
@@ -1029,7 +1048,7 @@ function boeAutoHtml(k: string): string {
       const crit = Object.keys(g.rows).filter((id) => g.rows[id].critical).length, fin = finishOf(g.base);
       return `<b>Cronograma del proyecto:</b> ${fmtDays(g.base)} laborables${net && net.startDate ? ", inicio " + esc(net.startDate) : ""}${fin ? ", fin " + esc(fin) : ""} · ${crit} actividad(es) críticas${k === "planning" && ec && ec.res && ec.res.ok ? " · fecha media del gasto " + esc(ec.res.midDate || "—") : ""}.`;
     }
-    case "classification": return `<b>Clase ${state.curClass}</b> — ${esc(c.desc)} Madurez del diseño ${esc(c.mat)}; uso previsto: ${esc(c.use)}; rango de exactitud típico ${esc(c.range)}.`;
+    case "classification": return `<b>Clase ${state.curClass}</b> — ${esc(c.desc)} Madurez del diseño ${esc(c.mat)}; uso previsto: ${esc(c.use)}; rango de exactitud ${pctTxt(classAccuracy().lo)} / ${pctTxt(classAccuracy().hi)} (${esc(accuracyOriginText(classAccuracy()))}; referencia: ${esc(publishedBandText(state.curClass as EstimateClass))}).`;
     case "coding": { const n = escPackages().pkgs.length; return `<b>EDT:</b> ${n ? n + " paquete(s) de trabajo con costo" : "sin paquetes con costo"}, con Código EDT jerárquico. Cuentas de escalación: ${ACCOUNT_IDS.map((id) => esc(ACCOUNT_LABEL[id])).join(", ")}.`; }
     case "currency": return `<b>Moneda del plan:</b> ${esc(($("cur") as HTMLSelectElement).value)} (${sym()}). Componente en moneda extranjera ${esc(($("fxShare") as HTMLInputElement).value)} %, tipo de cambio ${($("fxMode") as HTMLSelectElement).value === "frozen" ? "congelado a la fecha base" : "flotante con banda ±" + esc(($("fxBand") as HTMLInputElement).value) + " %"}; su exposición (${fmt(b ? b.fx : 0)}) se cuantifica aparte de la escalación.`;
     case "risks": {
@@ -1239,8 +1258,9 @@ function buildDoc(): void {
         <tr><td>Madurez del diseño</td><td>${esc(c.mat)}</td></tr>
         <tr><td>Metodología</td><td>${esc(c.meth)}</td></tr>
         <tr><td>Uso previsto</td><td>${esc(c.use)}</td></tr>
-        <tr><td>Rango de exactitud típico</td><td>${esc(c.range)}</td></tr>
-        ${classDocRows(c)}
+        <tr><td>Rango de exactitud</td><td>${pctTxt(classAccuracy().lo)} / ${pctTxt(classAccuracy().hi)} — ${esc(accuracyOriginText(classAccuracy()))}</td></tr>
+        <tr><td>Referencia publicada</td><td>${esc(publishedBandText(state.curClass as EstimateClass))} (${esc(ACCURACY_SOURCE.practice)}, ${esc(ACCURACY_SOURCE.revision)})</td></tr>
+        ${classDocRows()}
       </table>
     </section>
 
@@ -1307,7 +1327,7 @@ function collect(): Record<string, unknown> {
       }
     },
     estimate: {
-      class: state.curClass, boe: serializeBoe(state.boe)   // 34R-05: date, source, assumptions, exclusions y productivity conservan su nombre; el resto se suma
+      class: state.curClass, accuracy: state.acc, boe: serializeBoe(state.boe)   // 34R-05: date, source, assumptions, exclusions y productivity conservan su nombre; el resto se suma
     },
     budget: {
       baseCost: +($("baseCost") as HTMLInputElement).value,
@@ -1499,6 +1519,8 @@ function applyData(d: any): void {
     if (th.cv) { ($("cvWarn") as HTMLInputElement).value = th.cv.warn; ($("cvEsc") as HTMLInputElement).value = th.cv.escalate; }
   }
   if (e.class) state.curClass = e.class;
+  state.acc = normalizeAccuracyOverride(e.accuracy);   // ajuste del rango de exactitud del proyecto (opcional: un proyecto antiguo no lo trae)
+  fillAccuracyForm();
   if (e.boe) { state.boe = normalizeBoe(e.boe); renderBoe(); }   // un proyecto guardado antes solo trae los cinco campos de siempre: el resto queda vacío y el estado en borrador
   if (b.baseCost) { ($("baseCost") as HTMLInputElement).value = b.baseCost; ($("actCostP1") as HTMLInputElement).value = b.baseCost; }
   if (b.contingency) {

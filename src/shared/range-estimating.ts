@@ -237,7 +237,7 @@ export function rangeAdvisories(
   // simulado. Sin los eventos de riesgo el rango puede quedar estrecho simplemente porque falta esa parte.
   if (classRange && res.ml > 0) {
     const simHi = (res.p[90] - res.ml) / res.ml * 100;
-    if (classRange.hi > 0 && simHi < classRange.hi * 0.4) out.push("El P90 queda a +" + simHi.toFixed(1) + " % del estimado base, mucho más estrecho que el rango típico de la clase (+" + classRange.hi + " %): revisa si los rangos por partida o la correlación son demasiado optimistas.");
+    if (classRange.hi > 0 && simHi < classRange.hi * 0.4) out.push("El P90 queda a +" + simHi.toFixed(1) + " % del estimado base, mucho más estrecho que el rango de exactitud aplicado a la clase (+" + classRange.hi + " %): revisa si los rangos por partida o la correlación son demasiado optimistas.");
   }
   return out;
 }

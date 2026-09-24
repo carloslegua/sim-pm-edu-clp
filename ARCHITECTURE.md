@@ -1617,8 +1617,20 @@ el CPM real (ver abajo).
   madura que la que respaldan los datos (rango de exactitud sin respaldo). Es
   **orientativo** (pesos didácticos; la clase real depende de entregables que la suite ve
   en parte) y en modo independiente no se inventa una madurez: se explica. El rango
-  típico de la clase se **aplica al estimado con contingencia** (mínimo y máximo, junto
-  al P10–P90 simulado si hay análisis por rangos) y aparece en el BOE. **Pendiente de
+  de exactitud se **aplica al estimado con contingencia** (mínimo y máximo, junto
+  al P10–P90 simulado si hay análisis por rangos) y aparece en el BOE. **Atribución del
+  rango (regla: nunca presentar un parámetro didáctico como «típico de AACE»):** tres
+  orígenes que la interfaz y el documento distinguen siempre — la **banda publicada**
+  (`ACCURACY_SOURCE`: RP 56R-08, edificación y construcción general; `PUBLISHED_BANDS`,
+  solo la clase 3, contrastada: inferior −5…−15 %, superior +10…+20 %; las demás
+  clases quedan «sin contrastar», no se inventan), el **parámetro didáctico**
+  (`DIDACTIC_ACCURACY`, los porcentajes de siempre) y el **ajuste del proyecto**
+  (`estimate.accuracy = {lo, hi, why}`, opcional; la justificación es obligatoria, sin
+  ella `appliedAccuracy` sigue con el didáctico). Los extremos vigentes salen de
+  `classAccuracy()` en `cost/main.ts` y alimentan también el rango inicial de las partidas
+  y el aviso de análisis demasiado optimista. Un valor fuera de la banda publicada se
+  avisa. Al ampliar `PUBLISHED_BANDS`, cargar solo bandas contrastadas con la práctica
+  vigente. **Pendiente de
   verificar**: los porcentajes de madurez por clase (0–2/1–15/10–40/30–75/65–100 %,
   17R-97 genérica) coinciden con los que la suite ya traía, pero los PDF de AACE son de
   pago y no se contrastaron en línea (la 18R-97 de proceso usa 30–70 y 50–100); y los

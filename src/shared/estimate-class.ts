@@ -58,6 +58,72 @@ export function classAdvisory(chosen: EstimateClass, pct: number): ClassAdvisory
   return { level: "ok", text: "La clase " + chosen + " es coherente con la madurez estimada de la definición (≈ " + p + " %, rango de la clase " + lo + "–" + hi + " %)." };
 }
 
+// ---- Atribución del rango de exactitud (auditoría: no presentar como «típico de AACE» lo que es un parámetro didáctico) ----
+// Tres orígenes distintos, que la interfaz y el documento nunca deben mezclar:
+//   1. TABLA OFICIAL de la práctica sectorial (AACE 56R-08, edificación): solo se cargan las bandas que se pudieron
+//      contrastar con una fuente pública. De la clase 3 se verificó la banda (extremo bajo −5…−15 %, alto +10…+20 %);
+//      de las clases 1, 2, 4 y 5 NO se verificó la tabla completa (el PDF es de pago): quedan sin banda, no inventadas.
+//   2. PARÁMETRO DIDÁCTICO del simulador (DIDACTIC_ACCURACY): valores de partida, redondos y genéricos, que NO son la
+//      tabla de AACE ni de ningún sector. Son los que la suite siempre usó (compatibilidad con proyectos guardados).
+//   3. AJUSTE DEL PROYECTO (AccuracyOverride): el alumno/equipo declara otros extremos con su justificación (AACE:
+//      el rango depende del análisis de riesgo específico del proyecto, no de la clase sola; los de la tabla son un
+//      «rango de rangos» indicativo, no metas ni métricas absolutas).
+export const ACCURACY_SOURCE = {
+  practice: "AACE International RP 56R-08",
+  title: "Cost Estimate Classification System – As Applied in EPC for the Building and General Construction Industries",
+  sector: "edificación y construcción general",
+  revision: "publicada en 2008; el listado de AACE la fecha en la revisión del 7-ago-2020",
+  generic: "AACE International RP 17R-97 (clasificación genérica, clases y madurez de la definición)"
+};
+export interface AccuracyBand { low: [number, number]; high: [number, number]; }   // rango típico de cada extremo, en %
+export const PUBLISHED_BANDS: Partial<Record<EstimateClass, AccuracyBand>> = { 3: { low: [-15, -5], high: [10, 20] } };
+export const DIDACTIC_ACCURACY: Record<EstimateClass, { lo: number; hi: number }> = {
+  5: { lo: -30, hi: 50 }, 4: { lo: -20, hi: 40 }, 3: { lo: -15, hi: 30 }, 2: { lo: -10, hi: 20 }, 1: { lo: -5, hi: 15 }
+};
+
+export interface AccuracyOverride { lo: number; hi: number; why: string; }
+export function normalizeAccuracyOverride(raw: unknown): AccuracyOverride | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>, lo = Number(r.lo), hi = Number(r.hi);
+  if (r.lo == null || r.hi == null || !isFinite(lo) || !isFinite(hi)) return null;
+  return { lo, hi, why: typeof r.why === "string" ? r.why.trim() : "" };
+}
+// Motivo por el que un ajuste no se puede aplicar (null = válido). La justificación es obligatoria: sin ella el rango
+// sigue siendo el didáctico en vez de aparentar un valor del proyecto.
+export function overrideProblem(o: AccuracyOverride | null): string | null {
+  if (!o) return null;
+  if (o.lo > 0 || o.lo < -100) return "El extremo inferior debe estar entre −100 % y 0 %.";
+  if (o.hi < 0) return "El extremo superior no puede ser negativo.";
+  if (!o.why) return "Falta la justificación del rango del proyecto (qué análisis de riesgo o dato lo respalda).";
+  return null;
+}
+
+export type AccuracyOrigin = "didactico" | "proyecto";
+export interface AppliedAccuracy { lo: number; hi: number; origin: AccuracyOrigin; band: AccuracyBand | null; why: string; notes: string[]; }
+export function appliedAccuracy(cls: EstimateClass, override: AccuracyOverride | null): AppliedAccuracy {
+  const band = PUBLISHED_BANDS[cls] || null, notes: string[] = [], problem = overrideProblem(override);
+  const usingProject = !!override && !problem;
+  const lo = usingProject ? (override as AccuracyOverride).lo : DIDACTIC_ACCURACY[cls].lo, hi = usingProject ? (override as AccuracyOverride).hi : DIDACTIC_ACCURACY[cls].hi;
+  if (override && problem) notes.push("El ajuste del proyecto no se aplica: " + problem.charAt(0).toLowerCase() + problem.slice(1));
+  if (band) {
+    if (lo < band.low[0] || lo > band.low[1]) notes.push("El extremo inferior " + pct(lo) + " queda fuera de la banda que 56R-08 publica para la clase " + cls + " en " + ACCURACY_SOURCE.sector + " (" + pct(band.low[0]) + " a " + pct(band.low[1]) + ").");
+    if (hi < band.high[0] || hi > band.high[1]) notes.push("El extremo superior " + pct(hi) + " queda fuera de la banda que 56R-08 publica para la clase " + cls + " en " + ACCURACY_SOURCE.sector + " (" + pct(band.high[0]) + " a " + pct(band.high[1]) + ").");
+  } else notes.push("Esta suite no tiene contrastada la tabla de 56R-08 para la clase " + cls + ": el valor no se puede comparar con la banda publicada.");
+  return { lo, hi, origin: usingProject ? "proyecto" : "didactico", band, why: usingProject ? (override as AccuracyOverride).why : "", notes };
+}
+export function pct(n: number): string { return (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n) + " %"; }
+// Origen en una frase, para acompañar SIEMPRE al rango mostrado.
+export function accuracyOriginText(a: AppliedAccuracy): string {
+  return a.origin === "proyecto"
+    ? "ajuste particular del proyecto (no es la tabla de AACE); justificación: " + a.why
+    : "parámetro didáctico del simulador (no es la tabla de AACE " + "56R-08 ni de otro sector)";
+}
+export function publishedBandText(cls: EstimateClass): string {
+  const b = PUBLISHED_BANDS[cls];
+  return b ? "AACE 56R-08 (" + ACCURACY_SOURCE.sector + "), clase " + cls + ": extremo inferior " + pct(b.low[0]) + " a " + pct(b.low[1]) + "; superior " + pct(b.high[0]) + " a " + pct(b.high[1]) + " (típico, indicativo)"
+    : "AACE 56R-08 (" + ACCURACY_SOURCE.sector + "): banda de la clase " + cls + " sin contrastar en esta suite; consúltala en la práctica vigente";
+}
+
 // Rango de exactitud aplicado al estimado CON contingencia (56R-08: los rangos publicados presuponen contingencia aplicada).
 export function accuracyRange(estimate: number, lowPct: number, highPct: number): { min: number; max: number } {
   return { min: estimate * (1 + lowPct / 100), max: estimate * (1 + highPct / 100) };

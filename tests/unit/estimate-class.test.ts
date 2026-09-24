@@ -1,7 +1,7 @@
 // Clase del estimado inferida de la madurez de la definición, contraste con la clase declarada y rango de exactitud
 // aplicado al presupuesto (AACE 17R-97 / 56R-08).
 import { describe, expect, it } from "vitest";
-import { CLASS_MATURITY, MATURITY_ITEMS, accuracyRange, classAdvisory, classForMaturity, definitionMaturity, type MaturityInput } from "../../src/shared/estimate-class";
+import { ACCURACY_SOURCE, CLASS_MATURITY, DIDACTIC_ACCURACY, MATURITY_ITEMS, PUBLISHED_BANDS, accuracyOriginText, appliedAccuracy, normalizeAccuracyOverride, overrideProblem, publishedBandText, accuracyRange, classAdvisory, classForMaturity, definitionMaturity, type MaturityInput } from "../../src/shared/estimate-class";
 
 const ALL = (v: number): MaturityInput => ({ charter: v, scope: v, requirements: v, wbs: v, activities: v, pricing: v, schedule: v });
 
@@ -44,5 +44,34 @@ describe("rango de exactitud aplicado al presupuesto", () => {
     const r = accuracyRange(7000000, -15, 30);
     expect(r.min).toBeCloseTo(5950000, 6); expect(r.max).toBeCloseTo(9100000, 6);
     expect(accuracyRange(100, 0, 0)).toEqual({ min: 100, max: 100 });
+  });
+});
+
+describe("atribución del rango de exactitud (56R-08 edificación / didáctico / proyecto)", () => {
+  it("identifica práctica, sector y revisión, y solo publica la banda que se pudo contrastar (clase 3)", () => {
+    expect(ACCURACY_SOURCE.practice).toMatch(/56R-08/); expect(ACCURACY_SOURCE.sector).toMatch(/edificación/); expect(ACCURACY_SOURCE.revision).toMatch(/2008.*2020/);
+    expect(PUBLISHED_BANDS[3]).toEqual({ low: [-15, -5], high: [10, 20] });
+    expect(PUBLISHED_BANDS[1]).toBeUndefined(); expect(PUBLISHED_BANDS[5]).toBeUndefined();          // no se inventa lo no verificado
+    expect(publishedBandText(3)).toMatch(/inferior −15 % a −5 %; superior \+10 % a \+20 %/); expect(publishedBandText(2)).toMatch(/sin contrastar/);
+  });
+  it("sin ajuste rige el parámetro didáctico, rotulado como tal, y avisa cuando excede la banda publicada", () => {
+    const a = appliedAccuracy(3, null);
+    expect([a.lo, a.hi, a.origin]).toEqual([DIDACTIC_ACCURACY[3].lo, DIDACTIC_ACCURACY[3].hi, "didactico"]);
+    expect(accuracyOriginText(a)).toMatch(/parámetro didáctico del simulador \(no es la tabla de AACE/);
+    expect(a.notes.join(" ")).toMatch(/extremo superior \+30 % queda fuera de la banda/); expect(a.notes.join(" ")).not.toMatch(/inferior/);
+    expect(appliedAccuracy(5, null).notes.join(" ")).toMatch(/no tiene contrastada la tabla de 56R-08 para la clase 5/);
+  });
+  it("el ajuste del proyecto exige justificación y extremos coherentes; sin ellos no se aplica", () => {
+    expect(normalizeAccuracyOverride(null)).toBeNull(); expect(normalizeAccuracyOverride({ lo: -10 })).toBeNull(); expect(normalizeAccuracyOverride({ lo: "x", hi: 5 })).toBeNull();
+    const sinWhy = normalizeAccuracyOverride({ lo: -10, hi: 20, why: "  " });
+    expect(overrideProblem(sinWhy)).toMatch(/justificación/);
+    expect(appliedAccuracy(3, sinWhy).origin).toBe("didactico"); expect(appliedAccuracy(3, sinWhy).notes[0]).toMatch(/^El ajuste del proyecto no se aplica/);
+    expect(overrideProblem(normalizeAccuracyOverride({ lo: 5, hi: 20, why: "x" }))).toMatch(/inferior/);
+    expect(overrideProblem(normalizeAccuracyOverride({ lo: -5, hi: -1, why: "x" }))).toMatch(/superior/);
+    const ok = appliedAccuracy(3, normalizeAccuracyOverride({ lo: -10, hi: 20, why: " Monte Carlo propio " }));
+    expect([ok.lo, ok.hi, ok.origin, ok.why]).toEqual([-10, 20, "proyecto", "Monte Carlo propio"]);
+    expect(ok.notes).toEqual([]);                                                                        // dentro de la banda publicada
+    expect(accuracyOriginText(ok)).toMatch(/ajuste particular del proyecto.*justificación: Monte Carlo propio/);
+    expect(appliedAccuracy(3, normalizeAccuracyOverride({ lo: -40, hi: 60, why: "x" })).notes).toHaveLength(2);   // fuera de la banda en ambos extremos
   });
 });

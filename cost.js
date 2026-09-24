@@ -274,7 +274,7 @@
 		if (res.correlation === 0) out.push("Correlación 0 %: las partidas se tratan como independientes y la dispersión del total se SUBESTIMA (los errores de estimación suelen ir en la misma dirección).");
 		if (classRange && res.ml > 0) {
 			const simHi = (res.p[90] - res.ml) / res.ml * 100;
-			if (classRange.hi > 0 && simHi < classRange.hi * .4) out.push("El P90 queda a +" + simHi.toFixed(1) + " % del estimado base, mucho más estrecho que el rango típico de la clase (+" + classRange.hi + " %): revisa si los rangos por partida o la correlación son demasiado optimistas.");
+			if (classRange.hi > 0 && simHi < classRange.hi * .4) out.push("El P90 queda a +" + simHi.toFixed(1) + " % del estimado base, mucho más estrecho que el rango de exactitud aplicado a la clase (+" + classRange.hi + " %): revisa si los rangos por partida o la correlación son demasiado optimistas.");
 		}
 		return out;
 	}
@@ -1159,6 +1159,84 @@
 			level: "ok",
 			text: "La clase " + chosen + " es coherente con la madurez estimada de la definición (≈ " + p + " %, rango de la clase " + lo + "–" + hi + " %)."
 		};
+	}
+	var ACCURACY_SOURCE = {
+		practice: "AACE International RP 56R-08",
+		title: "Cost Estimate Classification System – As Applied in EPC for the Building and General Construction Industries",
+		sector: "edificación y construcción general",
+		revision: "publicada en 2008; el listado de AACE la fecha en la revisión del 7-ago-2020",
+		generic: "AACE International RP 17R-97 (clasificación genérica, clases y madurez de la definición)"
+	};
+	var PUBLISHED_BANDS = { 3: {
+		low: [-15, -5],
+		high: [10, 20]
+	} };
+	var DIDACTIC_ACCURACY = {
+		5: {
+			lo: -30,
+			hi: 50
+		},
+		4: {
+			lo: -20,
+			hi: 40
+		},
+		3: {
+			lo: -15,
+			hi: 30
+		},
+		2: {
+			lo: -10,
+			hi: 20
+		},
+		1: {
+			lo: -5,
+			hi: 15
+		}
+	};
+	function normalizeAccuracyOverride(raw) {
+		if (!raw || typeof raw !== "object") return null;
+		const r = raw, lo = Number(r.lo), hi = Number(r.hi);
+		if (r.lo == null || r.hi == null || !isFinite(lo) || !isFinite(hi)) return null;
+		return {
+			lo,
+			hi,
+			why: typeof r.why === "string" ? r.why.trim() : ""
+		};
+	}
+	function overrideProblem(o) {
+		if (!o) return null;
+		if (o.lo > 0 || o.lo < -100) return "El extremo inferior debe estar entre −100 % y 0 %.";
+		if (o.hi < 0) return "El extremo superior no puede ser negativo.";
+		if (!o.why) return "Falta la justificación del rango del proyecto (qué análisis de riesgo o dato lo respalda).";
+		return null;
+	}
+	function appliedAccuracy(cls, override) {
+		const band = PUBLISHED_BANDS[cls] || null, notes = [], problem = overrideProblem(override);
+		const usingProject = !!override && !problem;
+		const lo = usingProject ? override.lo : DIDACTIC_ACCURACY[cls].lo, hi = usingProject ? override.hi : DIDACTIC_ACCURACY[cls].hi;
+		if (override && problem) notes.push("El ajuste del proyecto no se aplica: " + problem.charAt(0).toLowerCase() + problem.slice(1));
+		if (band) {
+			if (lo < band.low[0] || lo > band.low[1]) notes.push("El extremo inferior " + pct(lo) + " queda fuera de la banda que 56R-08 publica para la clase " + cls + " en " + ACCURACY_SOURCE.sector + " (" + pct(band.low[0]) + " a " + pct(band.low[1]) + ").");
+			if (hi < band.high[0] || hi > band.high[1]) notes.push("El extremo superior " + pct(hi) + " queda fuera de la banda que 56R-08 publica para la clase " + cls + " en " + ACCURACY_SOURCE.sector + " (" + pct(band.high[0]) + " a " + pct(band.high[1]) + ").");
+		} else notes.push("Esta suite no tiene contrastada la tabla de 56R-08 para la clase " + cls + ": el valor no se puede comparar con la banda publicada.");
+		return {
+			lo,
+			hi,
+			origin: usingProject ? "proyecto" : "didactico",
+			band,
+			why: usingProject ? override.why : "",
+			notes
+		};
+	}
+	function pct(n) {
+		return (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n) + " %";
+	}
+	function accuracyOriginText(a) {
+		return a.origin === "proyecto" ? "ajuste particular del proyecto (no es la tabla de AACE); justificación: " + a.why : "parámetro didáctico del simulador (no es la tabla de AACE 56R-08 ni de otro sector)";
+	}
+	function publishedBandText(cls) {
+		const b = PUBLISHED_BANDS[cls];
+		return b ? "AACE 56R-08 (" + ACCURACY_SOURCE.sector + "), clase " + cls + ": extremo inferior " + pct(b.low[0]) + " a " + pct(b.low[1]) + "; superior " + pct(b.high[0]) + " a " + pct(b.high[1]) + " (típico, indicativo)" : "AACE 56R-08 (" + ACCURACY_SOURCE.sector + "): banda de la clase " + cls + " sin contrastar en esta suite; consúltala en la práctica vigente";
 	}
 	function accuracyRange(estimate, lowPct, highPct) {
 		return {
@@ -3632,45 +3710,30 @@
 			mat: "0% – 2%",
 			use: "Screening / evaluación conceptual",
 			meth: "Estocástico (paramétrico, capacidad)",
-			range: "-30% / +50% (típico)",
-			lo: -30,
-			hi: 50,
 			desc: "Estimado de orden de magnitud. Mínima definición de ingeniería; se usa para descartar alternativas."
 		},
 		4: {
 			mat: "1% – 15%",
 			use: "Estudio de factibilidad",
 			meth: "Predominantemente estocástico",
-			range: "-20% / +40%",
-			lo: -20,
-			hi: 40,
 			desc: "Basado en factores y equipos mayores. Soporta decisiones de continuidad del proyecto."
 		},
 		3: {
 			mat: "10% – 40%",
 			use: "Autorización de presupuesto / control base",
 			meth: "Mixto estocástico–determinístico",
-			range: "-15% / +30%",
-			lo: -15,
-			hi: 30,
 			desc: "Semidetallado. Marca el paso de estudio a ejecución; suele ser la base del control."
 		},
 		2: {
 			mat: "30% – 75%",
 			use: "Control y oferta / licitación",
 			meth: "Predominantemente determinístico",
-			range: "-10% / +20%",
-			lo: -10,
-			hi: 20,
 			desc: "Detallado por partidas. Usado para control detallado y para ofertar."
 		},
 		1: {
 			mat: "65% – 100%",
 			use: "Estimado definitivo / cierre de oferta",
 			meth: "Determinístico (cantidades y precios)",
-			range: "-5% / +15%",
-			lo: -5,
-			hi: 15,
 			desc: "Máxima definición. Verificación final y check estimate."
 		}
 	};
@@ -3774,6 +3837,7 @@
 	var SAMPLE_TIME_BASIS = "Dirección de Proyecto y gastos generales de obra (supervisión, alquileres, seguros): ≈ 410.000, el 5,8 % del costo base, repartidos en los 273 días laborables del cronograma.";
 	var state = {
 		curClass: 3,
+		acc: null,
 		co: [],
 		baselines: [],
 		ranges: [],
@@ -3839,15 +3903,53 @@
 		const v = row[$("contPct") ? $("contPct").value : "P70"];
 		return typeof v === "number" ? v : row.P70;
 	}
+	function classAccuracy() {
+		return appliedAccuracy(state.curClass, state.acc);
+	}
 	function renderClass() {
-		const c = CLASSES[state.curClass];
+		const c = CLASSES[state.curClass], a = classAccuracy();
 		$("classDesc").innerHTML = `<b>Clase ${state.curClass}.</b> ${c.desc}`;
 		$("cMat").textContent = c.mat;
 		$("cUse").textContent = c.use;
 		$("cMeth").textContent = c.meth;
-		$("cRange").textContent = c.range;
+		$("cRange").textContent = `${pct(a.lo)} / ${pct(a.hi)}`;
+		$("cRangeOrigin").textContent = accuracyOriginText(a);
+		$("cRangePub").textContent = publishedBandText(state.curClass);
+		const prob = overrideProblem(state.acc);
+		$("accNotes").innerHTML = (prob ? `<div class="note" style="border-color:#dc3546;background:#fdecef"><b>⚠</b> ${esc(prob)} Mientras tanto se usa el parámetro didáctico.</div>` : "") + a.notes.filter((n) => !prob || !n.startsWith("El ajuste")).map((n) => `<div class="muted small" style="margin-top:4px">${esc(n)}</div>`).join("");
 		renderMaturity();
 	}
+	function fillAccuracyForm() {
+		const ov = state.acc;
+		$("accLo").value = ov ? String(ov.lo) : "";
+		$("accHi").value = ov ? String(ov.hi) : "";
+		$("accWhy").value = ov ? ov.why : "";
+	}
+	function readAccuracyForm() {
+		const lo = $("accLo").value.trim(), hi = $("accHi").value.trim(), why = $("accWhy").value;
+		userEdited = true;
+		state.acc = lo === "" && hi === "" && !why.trim() ? null : normalizeAccuracyOverride({
+			lo: lo === "" ? null : lo,
+			hi: hi === "" ? null : hi,
+			why
+		});
+		renderClass();
+		recalcCont();
+		save();
+	}
+	[
+		"accLo",
+		"accHi",
+		"accWhy"
+	].forEach((id) => $(id).addEventListener("change", readAccuracyForm));
+	$("accClear").addEventListener("click", () => {
+		state.acc = null;
+		userEdited = true;
+		fillAccuracyForm();
+		renderClass();
+		recalcCont();
+		save();
+	});
 	function maturityInputs() {
 		if (!gpiOn()) return null;
 		const G = GPI;
@@ -3889,14 +3991,14 @@
     <div class="note" style="margin-top:8px;${adv.level === "aviso" ? "border-color:#dc3546;background:#fdecef" : ""}">${adv.level === "aviso" ? "<b>⚠</b> " : ""}${esc(adv.text)}</div>
     <div class="muted" style="font-size:11.5px;margin-top:6px">Es una estimación <b>orientativa</b> con pesos didácticos: la clase real depende de entregables de definición (ingeniería, especificaciones, cotizaciones firmes) que la suite solo ve en parte. Sirve para avisar cuando la clase declarada no se sostiene, no para decidirla.</div>`;
 	}
-	function classDocRows(c) {
+	function classDocRows() {
 		const inp = maturityInputs(), b = state._budget;
 		return (inp ? (() => {
 			const m = definitionMaturity(inp);
 			return `<tr><td>Madurez estimada de la definición</td><td>≈ ${Math.round(m.pct)} % (clase sugerida ${m.class}); ${esc(classAdvisory(state.curClass, m.pct).text)}</td></tr>`;
 		})() : "") + (b && b.base > 0 ? (() => {
-			const r = accuracyRange(b.base + b.cont, c.lo, c.hi);
-			return `<tr><td>Rango de exactitud aplicado</td><td>Sobre el estimado con contingencia (${fmt(b.base + b.cont)}): mínimo ${fmt(r.min)} · máximo ${fmt(r.max)} (${sgn(c.lo)} % / ${sgn(c.hi)} %, típico de la clase; presupone contingencia aplicada)</td></tr>`;
+			const a = classAccuracy(), r = accuracyRange(b.base + b.cont, a.lo, a.hi);
+			return `<tr><td>Rango de exactitud aplicado</td><td>Sobre el estimado con contingencia (${fmt(b.base + b.cont)}): mínimo ${fmt(r.min)} · máximo ${fmt(r.max)} (${pct(a.lo)} / ${pct(a.hi)}: ${esc(accuracyOriginText(a))}; presupone contingencia aplicada). ${esc(a.notes.join(" "))}</td></tr><tr><td>Referencia publicada</td><td>${esc(publishedBandText(state.curClass))}. Práctica: ${esc(ACCURACY_SOURCE.practice)}, ${esc(ACCURACY_SOURCE.sector)}, ${esc(ACCURACY_SOURCE.revision)}.</td></tr>`;
 		})() : "");
 	}
 	function renderAccuracy(base, cont, res) {
@@ -3906,10 +4008,10 @@
 			box.style.display = "none";
 			return;
 		}
-		const c = CLASSES[state.curClass], est = base + cont, r = accuracyRange(est, c.lo, c.hi);
+		const a = classAccuracy(), est = base + cont, r = accuracyRange(est, a.lo, a.hi);
 		const sim = res ? ` El análisis por rangos simula un costo total de <b>${fmt(res.p[10])}</b> (P10) a <b>${fmt(res.p[90])}</b> (P90).` : "";
 		box.style.display = "block";
-		box.innerHTML = `<b>Rango de exactitud esperado — clase ${state.curClass} (${sgn(c.lo)} % / +${c.hi} %, típico).</b> Sobre el estimado con contingencia (<b>${fmt(est)}</b> = costo base + contingencia) el costo final esperado va de <b>${fmt(r.min)}</b> a <b>${fmt(r.max)}</b>.${sim} El rango es un valor típico de la clase: depende del proyecto y presupone la contingencia ya aplicada (AACE 56R-08); el análisis de riesgo lo afina.`;
+		box.innerHTML = `<b>Rango de exactitud — clase ${state.curClass} (${pct(a.lo)} / ${pct(a.hi)}): ${esc(accuracyOriginText(a))}.</b> Sobre el estimado con contingencia (<b>${fmt(est)}</b> = costo base + contingencia) el costo final va de <b>${fmt(r.min)}</b> a <b>${fmt(r.max)}</b>.${sim} Referencia publicada: ${esc(publishedBandText(state.curClass))}. La exactitud real depende de los entregables de definición y del análisis de riesgo específico del proyecto; los rangos de AACE son indicativos, no metas.${a.notes.length ? "<br><b>⚠</b> " + esc(a.notes.join(" ")) : ""}`;
 	}
 	var sym = () => CUR[$("cur").value] || "S/";
 	function fmt(n) {
@@ -4238,7 +4340,7 @@
       <tr class="rng-selrow"><td>Contingencia total${showTime ? " (partidas + eventos + plazo)" : " (partidas + eventos)"}</td><td class="num">${fmt(cC)}</td></tr></tbody></table>${sched}`;
 	}
 	function renderRange(calc, base) {
-		const res = calc.res, p = pctNum(), cls = CLASSES[state.curClass];
+		const res = calc.res, p = pctNum(), cls = classAccuracy();
 		const lineIn = (i, f, v, w, type = "text", extra = "") => `<input ${type === "number" ? "type=\"number\" step=\"0.1\"" : ""} class="rng-in" style="width:${w}" value="${escA(v)}" data-i="${i}" data-f="${f}" onchange="rangeEdit(this)" ${extra}>`;
 		$("rngBody").innerHTML = state.ranges.length ? state.ranges.map((l, i) => {
 			const pr = lineProblems(l), ml = Number(l.ml);
@@ -4331,7 +4433,7 @@
 			return;
 		}
 		name.style.borderColor = "";
-		const cls = CLASSES[state.curClass], loI = $("rngLo").value, hiI = $("rngHi").value;
+		const cls = classAccuracy(), loI = $("rngLo").value, hiI = $("rngHi").value;
 		state.ranges.push({
 			id: "m-" + (Date.now().toString(36) + state.ranges.length),
 			name: name.value.trim(),
@@ -4367,7 +4469,7 @@
 		save();
 	}
 	function mergePulled(items) {
-		const cls = CLASSES[state.curClass], prev = new Map(state.ranges.map((l) => [l.id, l]));
+		const cls = classAccuracy(), prev = new Map(state.ranges.map((l) => [l.id, l]));
 		const pulled = items.map((it) => {
 			const old = prev.get(it.id);
 			return old ? {
@@ -4436,7 +4538,7 @@
 		mergePulled(items);
 	}
 	function applyClassRange() {
-		const cls = CLASSES[state.curClass];
+		const cls = classAccuracy();
 		let n = 0;
 		state.ranges.forEach((l) => {
 			if (!String(l.basis || "").trim()) {
@@ -5135,7 +5237,7 @@
 				const crit = Object.keys(g.rows).filter((id) => g.rows[id].critical).length, fin = finishOf(g.base);
 				return `<b>Cronograma del proyecto:</b> ${fmtDays(g.base)} laborables${net && net.startDate ? ", inicio " + esc(net.startDate) : ""}${fin ? ", fin " + esc(fin) : ""} · ${crit} actividad(es) críticas${k === "planning" && ec && ec.res && ec.res.ok ? " · fecha media del gasto " + esc(ec.res.midDate || "—") : ""}.`;
 			}
-			case "classification": return `<b>Clase ${state.curClass}</b> — ${esc(c.desc)} Madurez del diseño ${esc(c.mat)}; uso previsto: ${esc(c.use)}; rango de exactitud típico ${esc(c.range)}.`;
+			case "classification": return `<b>Clase ${state.curClass}</b> — ${esc(c.desc)} Madurez del diseño ${esc(c.mat)}; uso previsto: ${esc(c.use)}; rango de exactitud ${pct(classAccuracy().lo)} / ${pct(classAccuracy().hi)} (${esc(accuracyOriginText(classAccuracy()))}; referencia: ${esc(publishedBandText(state.curClass))}).`;
 			case "coding": {
 				const n = escPackages().pkgs.length;
 				return `<b>EDT:</b> ${n ? n + " paquete(s) de trabajo con costo" : "sin paquetes con costo"}, con Código EDT jerárquico. Cuentas de escalación: ${ACCOUNT_IDS.map((id) => esc(ACCOUNT_LABEL[id])).join(", ")}.`;
@@ -5398,8 +5500,9 @@
         <tr><td>Madurez del diseño</td><td>${esc(c.mat)}</td></tr>
         <tr><td>Metodología</td><td>${esc(c.meth)}</td></tr>
         <tr><td>Uso previsto</td><td>${esc(c.use)}</td></tr>
-        <tr><td>Rango de exactitud típico</td><td>${esc(c.range)}</td></tr>
-        ${classDocRows(c)}
+        <tr><td>Rango de exactitud</td><td>${pct(classAccuracy().lo)} / ${pct(classAccuracy().hi)} — ${esc(accuracyOriginText(classAccuracy()))}</td></tr>
+        <tr><td>Referencia publicada</td><td>${esc(publishedBandText(state.curClass))} (${esc(ACCURACY_SOURCE.practice)}, ${esc(ACCURACY_SOURCE.revision)})</td></tr>
+        ${classDocRows()}
       </table>
     </section>
 
@@ -5476,6 +5579,7 @@
 			},
 			estimate: {
 				class: state.curClass,
+				accuracy: state.acc,
 				boe: serializeBoe(state.boe)
 			},
 			budget: {
@@ -5773,6 +5877,8 @@
 			}
 		}
 		if (e.class) state.curClass = e.class;
+		state.acc = normalizeAccuracyOverride(e.accuracy);
+		fillAccuracyForm();
 		if (e.boe) {
 			state.boe = normalizeBoe(e.boe);
 			renderBoe();

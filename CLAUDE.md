@@ -168,7 +168,8 @@ src/shared/wbs-quality.ts        → (se inlinea en wbs.js) calidad de la EDT: e
 src/shared/wbs-sample.ts         → (se inlinea en wbs.js) diccionario de los 18 paquetes del ejemplo DISTRIB+
                                     (descripción, criterio de aceptación, LOE); coherencia en tests/unit/wbs-sample.test.ts
 src/shared/estimate-class.ts     → (se inlinea en cost.js) madurez de la definición → clase del estimado sugerida,
-                                    aviso contra la clase declarada, rango de exactitud aplicado
+                                    aviso contra la clase declarada, rango de exactitud aplicado y su
+                                    atribución (banda 56R-08 / didáctico / ajuste del proyecto)
 src/shared/reserve-policy.ts     → (se inlinea en risks.js, cost.js y gpi-core.js) política de reservas del plan de
                                     riesgos: niveles de autoridad por monto, alerta de agotamiento
 src/shared/schedule-control.ts   → (se inlinea en cronograma-cpm.js y gpi-core.js) salud de la red (DCMA), línea

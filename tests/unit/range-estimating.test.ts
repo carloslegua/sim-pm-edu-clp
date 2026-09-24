@@ -136,7 +136,7 @@ describe("eventos de riesgo discretos en la simulación (AACE 40R-08: incertidum
     const ls = [L("a", 500, 0, 0, "x")];
     const chico = simulateRange(ls, { events: [E("e", 0.5, 10, 20, 40)] })!;
     expect(rangeAdvisories(ls, chico, 500, { lo: -30, hi: 50 }).join("|")).not.toMatch(/Ninguna partida tiene incertidumbre/);
-    expect(rangeAdvisories(ls, chico, 500, { lo: -30, hi: 50 }).join("|")).toMatch(/mucho más estrecho que el rango típico de la clase/);   // el total sigue siendo estrecho
+    expect(rangeAdvisories(ls, chico, 500, { lo: -30, hi: 50 }).join("|")).toMatch(/mucho más estrecho que el rango de exactitud aplicado a la clase/);   // el total sigue siendo estrecho
     const grande = simulateRange(ls, { events: [E("e", 0.9, 150, 250, 400)] })!;                                                             // eventos que sí ensanchan el total (P90 ≈ +80 %)
     expect(rangeAdvisories(ls, grande, 500, { lo: -30, hi: 50 }).join("|")).not.toMatch(/mucho más estrecho/);
   });
@@ -167,7 +167,7 @@ describe("validación y avisos", () => {
     expect(w).toMatch(/1 de 2 partida\(s\) sin fundamento/);
     expect(w).toMatch(/1 partida\(s\) sin incertidumbre/);
     expect(w).toMatch(/Correlación 0 %/);
-    expect(w).toMatch(/mucho más estrecho que el rango típico de la clase/);
+    expect(w).toMatch(/mucho más estrecho que el rango de exactitud aplicado a la clase/);
   });
   it("sin avisos molestos cuando todo está bien: cobertura completa, fundamento y correlación moderada", () => {
     const ls = [L("a", 500, -10, 40), L("b", 500, -10, 40)];

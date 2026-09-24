@@ -364,6 +364,20 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Los rangos de exactitud se presentaban como «típicos» de AACE sin atribución (auditoría, media)** —
+  Costos mostraba −15 % / +30 % para la clase 3 y citaba 56R-08, pero esos porcentajes son valores
+  redondos del simulador, no la tabla de la práctica (para edificación, la clase 3 publica un extremo
+  inferior de −5 a −15 % y uno superior de +10 a +20 %). Ahora el rango se muestra siempre con su
+  **origen**: (1) **banda publicada** (AACE RP 56R-08, edificación y construcción general, rev. 2008 /
+  listado 2020), (2) **parámetro didáctico del simulador** (los mismos números de siempre, rotulados
+  como «no es la tabla de AACE») o (3) **ajuste particular del proyecto**, con extremos y
+  **justificación obligatoria** (sin ella no se aplica y se sigue usando el didáctico). Un valor fuera
+  de la banda publicada se avisa. **Solo se cargó la banda de la clase 3, que se pudo contrastar**; la
+  tabla de las clases 1, 2, 4 y 5 no se verificó (el PDF es de pago) y se declara «sin contrastar» en
+  vez de inventarla. El texto aclara que la exactitud depende de la madurez de la definición y del
+  análisis de riesgo, y que los rangos de AACE son indicativos, no metas. Campo nuevo y opcional
+  `estimate.accuracy` (`{lo, hi, why}`; un proyecto guardado antes lo lee como «didáctico»).
+  Pruebas: `estimate-class.test.ts` (+3) y un smoke nuevo en `cost-management`.
 - **La línea base del alcance no incluía la EDT y su diccionario (auditoría, media)** — se congelaban
   el enunciado, los entregables, los supuestos, las restricciones y las exclusiones, pero la estructura
   de la EDT y su diccionario quedaban fuera: los paquetes se podían modificar mientras la línea base

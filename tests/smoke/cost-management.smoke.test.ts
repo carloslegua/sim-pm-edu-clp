@@ -170,16 +170,36 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     const dom = await abrirStandalone(), doc = dom.window.document;
     const t = () => doc.getElementById("accBox")!.textContent!.replace(/\s+/g, " ");
     // clase 3 (−15 % / +30 %) sobre 7.100.000 + 852.000 (12 % de la tabla por clase) = 7.952.000
-    expect(t()).toMatch(/clase 3 \(-15 % \/ \+30 %, típico\)/);
+    expect(t()).toMatch(/clase 3 \(−15 % \/ \+30 %\): parámetro didáctico del simulador \(no es la tabla de AACE/);
     expect(t()).toMatch(/\$ 7,952,000/); expect(t()).toMatch(/\$ 6,759,200/); expect(t()).toMatch(/\$ 10,337,600/);
-    expect(t()).toMatch(/presupone la contingencia ya aplicada/);
+    expect(t()).toMatch(/AACE 56R-08 \(edificación y construcción general\), clase 3: extremo inferior −15 % a −5 %; superior \+10 % a \+20 %/);
+    expect(t()).toMatch(/El extremo superior \+30 % queda fuera de la banda que 56R-08 publica/);   // el didáctico NO se presenta como la banda oficial
     (doc.querySelector('#classbar button[data-c="5"]') as HTMLElement).click();
-    expect(t()).toMatch(/clase 5 \(-30 % \/ \+50 %/);
+    expect(t()).toMatch(/clase 5 \(−30 % \/ \+50 %/);
+    expect(t()).toMatch(/banda de la clase 5 sin contrastar/);   // lo no verificado se declara, no se inventa
     // la contingencia de la clase 5 cambia el estimado: el rango se calcula sobre ESE estimado (−30 % / +50 %)
     const estTxt = (t().match(/\(\$ ([\d,]+) = costo base/) as RegExpMatchArray)[1], lim = t().match(/va de \$ ([\d,]+) a \$ ([\d,]+)/) as RegExpMatchArray;
     const est = dinero(estTxt), mn = dinero(lim[1]), mx = dinero(lim[2]);
     expect(est).toBeGreaterThan(7952000);
     expect(mn).toBeCloseTo(est * 0.7, -1); expect(mx).toBeCloseTo(est * 1.5, -1);
+  });
+
+  it("el rango del proyecto exige justificación: sin ella se sigue usando el didáctico; con ella se aplica, se rotula como del proyecto y se guarda", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    const t = () => doc.getElementById("accBox")!.textContent!.replace(/\s+/g, " ");
+    const set = (id: string, v: string) => { const el = doc.getElementById(id) as HTMLInputElement; el.value = v; el.dispatchEvent(new dom.window.Event("change", { bubbles: true })); };
+    set("accLo", "-10"); set("accHi", "20");
+    expect(doc.getElementById("accNotes")!.textContent).toMatch(/Falta la justificación/);
+    expect(t()).toMatch(/clase 3 \(−15 % \/ \+30 %\): parámetro didáctico/);         // sin justificación no cambia nada
+    set("accWhy", "Monte Carlo del proyecto: P10/P90 = −10 % / +20 %");
+    expect(t()).toMatch(/clase 3 \(−10 % \/ \+20 %\): ajuste particular del proyecto \(no es la tabla de AACE\); justificación: Monte Carlo del proyecto/);
+    expect(t()).not.toMatch(/queda fuera de la banda/);                                // −10 / +20 cae dentro de la banda publicada de la clase 3
+    expect(doc.getElementById("cRange")!.textContent).toBe("−10 % / +20 %");
+    await new Promise((r) => setTimeout(r, 900));                                      // el guardado es diferido
+    expect(JSON.parse(dom.window.localStorage.getItem("gpi_cost_management_plan") as string).estimate.accuracy).toEqual({ lo: -10, hi: 20, why: "Monte Carlo del proyecto: P10/P90 = −10 % / +20 %" });
+    (doc.getElementById("accClear") as HTMLElement).click();
+    expect(doc.getElementById("cRange")!.textContent).toBe("−15 % / +30 %");
+    expect(doc.getElementById("cRangeOrigin")!.textContent).toMatch(/parámetro didáctico del simulador/);
   });
 
   it("sin proyecto conectado la clase no se puede contrastar con datos: se explica en vez de inventar una madurez", async () => {
@@ -712,7 +732,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(dinero(doc.getElementById("kCont")!.textContent)).toBeCloseTo(soloPartidas, -1);
     expect(doc.getElementById("rngEvents")!.textContent).toMatch(/NO se incluyen/);
     expect(doc.getElementById("rngWarn")!.textContent).not.toMatch(/Doble conteo/);                           // sin eventos no hay aviso de doble conteo
-    expect(doc.getElementById("rngWarn")!.textContent).toMatch(/mucho más estrecho que el rango típico de la clase/);   // y el rango total queda estrecho: faltan los riesgos
+    expect(doc.getElementById("rngWarn")!.textContent).toMatch(/mucho más estrecho que el rango de exactitud aplicado a la clase/);   // y el rango total queda estrecho: faltan los riesgos
   });
 
   it("(1) la exposición de los riesgos ABIERTOS se compara con la contingencia disponible (una media, no un percentil)", async () => {
