@@ -364,6 +364,16 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Requisitos perdía la línea base anterior al crear otra versión (auditoría, media)** — el mensaje
+  prometía que la anterior quedaba como historial, pero el código reemplazaba su versión, fecha e
+  instantánea (y no actualizaba el aprobador): al pasar de v1.0 a v2.0, el requisito que solo existía
+  en la instantánea original desaparecía del módulo guardado. Ahora «Congelar nueva versión» pide
+  **versión (no repetida), fecha, aprobador y motivo del cambio** y **archiva la versión vigente
+  completa** (versión, fecha, aprobador, motivo e instantánea de los requisitos) antes de establecer la
+  siguiente; la pantalla de la línea base muestra el historial. Lo guardado antes se lee sin historial
+  (lo ya perdido no se puede reconstruir). Nuevo `src/shared/requirements-baseline.ts`. Pruebas: 8
+  unitarias, 3 smoke (incluida la reproducción y las validaciones) y 1 e2e en Chrome real con recarga.
+
 - **Control de Cambios declaraba implementado un cambio de alcance sin comprobar su ejecución
   (auditoría, media)** — para el alcance bastaba que existiera una modificación (MOD) vinculada; la
   integración descartaba su estado: una solicitud aprobada vinculada a una MOD **rechazada** se podía

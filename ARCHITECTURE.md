@@ -2106,6 +2106,17 @@ Estimating»; la RP 118R-21 cubre rangos + Monte Carlo de riesgos inherentes) y
   reescribirlo habría sido un cambio de alcance mayor a "portar a
   TypeScript".
 - Usa su propio modal (`.ov`/`.modal`), no `.modal-overlay`/`.modal-card`.
+- **La línea base archiva cada versión completa (auditoría, media).** «Congelar nueva versión»
+  prometía que la anterior quedaba como historial, pero `rebaseline()` reemplazaba `version`, `date`
+  e instantánea (y no actualizaba el aprobador): el requisito que solo existía en v1.0 desaparecía
+  del módulo guardado. Ahora (`shared/requirements-baseline.ts`, inlineada en `requirements.js`)
+  pide **versión (no repetida, vigente o archivada), fecha, aprobador y motivo** y, ANTES de
+  establecer la siguiente, **archiva la vigente completa** en `baseline.history[]`: `{version, date,
+  approver, reason, supersededOn, snapshot}` (copia profunda). La vigente lleva su propio `reason`
+  («Línea base inicial» al congelar la primera). La pantalla de la línea base muestra el historial
+  (por versión: aprobador, fecha, motivo y sus requisitos, y cuántos ya no trae la siguiente). Lo
+  guardado antes no trae `reason` ni `history` (`normalizeRBaseline`): se lee bien, sin historial —
+  **lo que ya se perdió no se puede reconstruir**. Costo: una copia de la instantánea por versión.
 - El módulo con más lecturas cruzadas: `charter` (RAN), `stakeholders`
   (origen del requisito) y `wbs` (trazabilidad), con datos de
   demostración propios (`DEMO`) para el modo suelto.

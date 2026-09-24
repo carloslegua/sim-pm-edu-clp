@@ -91,6 +91,73 @@ describe("Recopilar_Requisitos.html (migrado a requirements.js)", () => {
     expect(saved.items[0].wbsNodeIds).toEqual(["w1"]);
   });
 
+  // ---- Auditoría (media): «Congelar nueva versión» debe archivar la anterior completa, no reemplazarla ----
+  const REQ = (id: string, code: string, text: string) => ({ id, code, text, type: "funcional", priority: "must", sourceRanIds: [], stakeholderId: "", wbsNodeIds: [], acceptanceCriteria: "ok", verificationMethod: "prueba", verificationStatus: "pendiente", status: "aprobado", normativeBasis: "", origin: "baseline", changeId: null, notes: "" });
+  const semillaBase = () => ({
+    version: 1, activeId: "p1",
+    projects: { p1: { schema: "gpi.project/v1", meta: { id: "p1", name: "Proyecto Live", course: "GPI", createdAt: 1, updatedAt: 1 }, modules: { requirements: {
+      // v1.0 tenía REQ.01 y REQ.02; hoy la matriz solo tiene REQ.01 (REQ.02 se dio de baja con su modificación)
+      baseline: { frozen: true, version: "1.0", date: "2026-07-10", approver: "Sponsor", snapshot: [REQ("r1", "REQ.01", "Requisito uno"), REQ("r2", "REQ.02", "Requisito SOLO en la v1.0")] },
+      items: [REQ("r1", "REQ.01", "Requisito uno")], changes: [], idCounter: 3, changeCounter: 1
+    } } } }
+  });
+  const abrirBase = async (seed: unknown) => {
+    const dom = await JSDOM.fromURL(base + "Recopilar_Requisitos.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seed)); } });
+    await new Promise((r) => setTimeout(r, 800));
+    return dom;
+  };
+  const llenar = (doc: Document, dom: any, v: { ver?: string; date?: string; appr?: string; reason?: string }) => {
+    const set = (id: string, val: string | undefined) => { if (val !== undefined) { const el = doc.getElementById(id) as HTMLInputElement; el.value = val; el.dispatchEvent(new dom.window.Event("input", { bubbles: true })); } };
+    set("rb_ver", v.ver); set("rb_date", v.date); set("rb_appr", v.appr); set("rb_reason", v.reason);
+  };
+
+  it("REPRO (media): al pasar de v1.0 a v2.0 el requisito que solo existía en la v1.0 SIGUE en el módulo guardado (archivado con su aprobador, fecha y motivo)", async () => {
+    const dom = await abrirBase(semillaBase()), doc = dom.window.document;
+    (dom.window as any).rebaseline(); await new Promise((r) => setTimeout(r, 50));
+    expect((doc.getElementById("ovMsg") as HTMLElement).textContent).toMatch(/La v1\.0 \(aprobada 10\/07\/2026 por Sponsor\) se archiva COMPLETA en el historial/);
+    expect((doc.getElementById("rb_ver") as HTMLInputElement).value).toBe("2.0");
+    llenar(doc, dom, { date: "2026-09-30", appr: "CCB", reason: "Incorpora MOD.01 y MOD.02 aprobadas" });
+    (doc.getElementById("ovOk") as HTMLElement).click(); await new Promise((r) => setTimeout(r, 1200));
+    const b = (dom.window as any).GPI.getModule("requirements").baseline;
+    expect(b).toMatchObject({ frozen: true, version: "2.0", date: "2026-09-30", approver: "CCB", reason: "Incorpora MOD.01 y MOD.02 aprobadas" });
+    expect(b.snapshot.map((r: any) => r.code)).toEqual(["REQ.01"]);                                       // la nueva versión = el estado actual
+    expect(b.history).toHaveLength(1);
+    expect(b.history[0]).toMatchObject({ version: "1.0", date: "2026-07-10", approver: "Sponsor" });
+    expect(b.history[0].snapshot.map((r: any) => r.code)).toEqual(["REQ.01", "REQ.02"]);                  // REQ.02 NO se pierde
+    expect(b.history[0].supersededOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // …y se ve en la pantalla de la línea base
+    const txt = (doc.getElementById("lbHost") as HTMLElement).textContent as string;
+    expect(txt).toMatch(/Historial de versiones \(1\)/); expect(txt).toMatch(/v1\.0.*aprobada 10\/07\/2026 por Sponsor.*2 requisito\(s\)/); expect(txt).toMatch(/Requisito SOLO en la v1\.0/);
+    expect(txt).toMatch(/Motivo de esta versión:\s*Incorpora MOD\.01/); expect(txt).toMatch(/1 requisito\(s\) que esta versión tenía y la siguiente ya no/);
+  });
+
+  it("no deja fijar la nueva versión sin aprobador, sin motivo o con una versión repetida: lo explica y conserva lo escrito", async () => {
+    const dom = await abrirBase(semillaBase()), doc = dom.window.document;
+    (dom.window as any).rebaseline(); await new Promise((r) => setTimeout(r, 50));
+    llenar(doc, dom, { ver: "1.0", date: "2026-09-30", appr: "", reason: "Motivo escrito" });
+    (doc.getElementById("ovOk") as HTMLElement).click(); await new Promise((r) => setTimeout(r, 80));
+    expect((doc.getElementById("ovMsg") as HTMLElement).textContent).toMatch(/la versión 1\.0 ya existe.*registra quién aprueba/);
+    (doc.getElementById("ovOk") as HTMLElement).click(); await new Promise((r) => setTimeout(r, 80));          // «Entendido»: se reabre el formulario
+    expect((doc.getElementById("rb_reason") as HTMLTextAreaElement).value).toBe("Motivo escrito");           // sin perder lo tecleado
+    expect((dom.window as any).GPI.getModule("requirements").baseline).toMatchObject({ version: "1.0", approver: "Sponsor" });   // nada cambió
+    expect((dom.window as any).GPI.getModule("requirements").baseline.history || []).toHaveLength(0);
+    llenar(doc, dom, { ver: "2.0", appr: "CCB", reason: "" });
+    (doc.getElementById("ovOk") as HTMLElement).click(); await new Promise((r) => setTimeout(r, 80));
+    expect((doc.getElementById("ovMsg") as HTMLElement).textContent).toMatch(/documenta el motivo del cambio/);
+  });
+
+  it("varias versiones se acumulan en orden y una línea base guardada antes (sin historial ni motivo) se lee sin fallar", async () => {
+    const dom = await abrirBase(semillaBase()), doc = dom.window.document;
+    expect((doc.getElementById("lbHost") as HTMLElement).textContent).not.toMatch(/Historial de versiones/);   // la antigua no trae historial
+    for (const [ver, appr] of [["2.0", "CCB"], ["3.0", "Sponsor"]]) {
+      (dom.window as any).rebaseline(); await new Promise((r) => setTimeout(r, 50));
+      llenar(doc, dom, { ver, date: "2026-10-01", appr, reason: "Cambio " + ver });
+      (doc.getElementById("ovOk") as HTMLElement).click(); await new Promise((r) => setTimeout(r, 100));
+    }
+    const b = (dom.window as any).GPI.getModule("requirements").baseline, hist = b.history;
+    expect(b.version).toBe("3.0"); expect(hist.map((h: any) => h.version)).toEqual(["1.0", "2.0"]); expect(hist[1]).toMatchObject({ approver: "CCB", reason: "Cambio 2.0" });
+  });
+
   it("SEGURIDAD: un id de requisito/modificación importado con marcado HTML no puede inyectar código (XSS reportado por el usuario)", async () => {
     // Repro: un .json de requisitos manipulado (importado vía Panel de
     // Control, o un proyecto sembrado por otra herramienta) con un Id.

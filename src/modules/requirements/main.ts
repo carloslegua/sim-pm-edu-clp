@@ -15,6 +15,7 @@
    ============================================================ */
 import type * as GpiCore from "../../core/gpi-core";
 import type { CharterModule, EditSession, RequirementItem, RequirementsModule, Stakeholder, WbsModule, WriteResult } from "../../core/types";
+import { advanceBaseline, newVersionProblems, normalizeRBaseline, onlyInVersion, suggestNextVersion, type RBaseline } from "../../shared/requirements-baseline";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -50,13 +51,14 @@ interface ModUi {
   id: string; code: string; date: string; requestedBy: string; approver: string;
   status: string; summary: string; justification: string; impact: ModImpact; ccrRef: string;
 }
-interface Baseline { frozen: boolean; version: string; date: string; approver: string; snapshot: ReqUi[]; }
+// Línea base con su motivo y el HISTORIAL de versiones anteriores (shared/requirements-baseline.ts): cada versión se archiva completa antes de la siguiente.
+type Baseline = RBaseline<ReqUi>;
 interface ReqState {
   baseline: Baseline; items: ReqUi[]; changes: ModUi[];
   activeChangeId: string | null; idCounter: number; changeCounter: number;
 }
 
-let state: ReqState = { baseline: { frozen: false, version: "1.0", date: "", approver: "", snapshot: [] }, items: [], changes: [], activeChangeId: null, idCounter: 1, changeCounter: 1 };
+let state: ReqState = { baseline: normalizeRBaseline<ReqUi>(null), items: [], changes: [], activeChangeId: null, idCounter: 1, changeCounter: 1 };
 let userEdited = false;
 // Id. del proyecto activo cuando esta pestaña cargó sus datos -- se
 // compara contra GPI.activeId() antes de cada guardado (ver save()) para
@@ -178,7 +180,7 @@ function touch(): void { userEdited = true; save(); flash(); renderAll(); }
 
 function applyData(d: any): void {
   if (!d) return;
-  state.baseline = Object.assign({ frozen: false, version: "1.0", date: "", approver: "", snapshot: [] }, d.baseline || {});
+  state.baseline = normalizeRBaseline<ReqUi>(d.baseline);       // tolerante: lo guardado antes no trae motivo ni historial
   state.items = Array.isArray(d.items) ? d.items.map(normalizeItem) : [];
   state.changes = Array.isArray(d.changes) ? d.changes.map(normalizeMod) : [];
   state.activeChangeId = d.activeChangeId || null;
@@ -275,7 +277,7 @@ function resolveWbs(keywords: string[]): string[] {
   return out;
 }
 function buildSample(): void {
-  state = { baseline: { frozen: false, version: "1.0", date: "", approver: "", snapshot: [] }, items: [], changes: [], activeChangeId: null, idCounter: 1, changeCounter: 1 };
+  state = { baseline: normalizeRBaseline<ReqUi>(null), items: [], changes: [], activeChangeId: null, idCounter: 1, changeCounter: 1 };
   SAMPLE_ITEMS.forEach((s, i) => {
     state.items.push(normalizeItem({
       id: "q" + (i + 1), code: reqCode(i + 1), text: s.text, type: s.type, priority: s.priority,
@@ -706,32 +708,57 @@ function renderBaseline(): void {
       + '<div class="kpi"><div class="lab">Fecha de aprobación</div><div class="val" style="font-size:15px">' + repDate(b.date) + '</div></div>'
       + '<div class="kpi"><div class="lab">Aprobado por</div><div class="val" style="font-size:14px">' + esc(b.approver || "—") + '</div></div>'
       + '</div>'
+      + (b.reason ? '<div class="muted" style="font-size:12px;margin-top:8px"><b>Motivo de esta versión:</b> ' + esc(b.reason) + '</div>' : '')
       + '<div class="note info" style="margin-top:14px">Para modificar la línea base, ve a « Modificaciones de alcance », crea/activa una modificación y edita la matriz: cada cambio quedará atribuido a esa modificación (MOD.0X) y visible en « Trazabilidad de cambios ».</div>'
       + '<div class="divider" style="height:1px;background:var(--line);margin:16px 0"></div>'
       + '<h4 style="font-size:13px;margin-bottom:6px">Re-línea base (rebaselining)</h4>'
       + '<p class="muted" style="font-size:12.5px;margin:0 0 10px">Cuando las modificaciones aprobadas justifiquen una nueva línea base aprobada, puedes congelar el estado actual como una versión nueva. Úsalo con criterio: normalmente tras la aprobación formal de las modificaciones.</p>'
-      + '<button class="btn" onclick="rebaseline()">⟳ Congelar nueva versión (v' + esc(nextVersion(b.version)) + ')</button>'
+      + '<button class="btn" onclick="rebaseline()">⟳ Congelar nueva versión (v' + esc(suggestNextVersion(b)) + ')</button>'
       + '</div></div>';
+    if (b.history.length) {
+      h += '<div class="card"><div class="card-h"><div><h3>Historial de versiones (' + b.history.length + ')</h3>'
+        + '<div class="sub">Cada versión anterior se conserva completa: versión, fecha, aprobador, motivo y los requisitos tal como estaban.</div></div></div><div class="card-b">'
+        + b.history.slice().reverse().map((v, i) => {
+          const gone = onlyInVersion(v.snapshot, i === 0 ? b.snapshot : b.history[b.history.length - i].snapshot);   // los que la versión siguiente ya no trae
+          return '<details class="lb-hist" style="border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:8px"><summary style="cursor:pointer;font-size:12.5px"><b>v' + esc(v.version) + '</b> · aprobada ' + repDate(v.date) + ' por ' + esc(v.approver || "—") + ' · ' + v.snapshot.length + ' requisito(s) · sustituida el ' + repDate(v.supersededOn) + '</summary>'
+            + '<div class="muted" style="font-size:12px;margin:6px 0"><b>Motivo:</b> ' + esc(v.reason || "—") + (gone.length ? ' · <b>' + gone.length + '</b> requisito(s) que esta versión tenía y la siguiente ya no' : '') + '</div>'
+            + '<table class="tbl" style="width:100%;font-size:12px"><thead><tr><th>Código</th><th>Requisito</th><th>Estado</th></tr></thead><tbody>'
+            + v.snapshot.map((r) => '<tr><td class="mono">' + esc(r.code) + '</td><td>' + esc(r.text) + '</td><td>' + esc(lab(STATUS, r.status)) + '</td></tr>').join("") + '</tbody></table></details>';
+        }).join("") + '</div></div>';
+    }
   }
   host.innerHTML = h;
 }
-function nextVersion(v: string | undefined): string { const m = /^(\d+)(?:\.(\d+))?/.exec(String(v || "1.0")); const maj = m ? Number(m[1]) : 1; return (maj + 1) + ".0"; }
 function freezeBaseline(): void {
   if (!state.items.length) return;
   const ver = ($("lb_ver") as HTMLInputElement).value.trim() || "1.0", date = ($("lb_date") as HTMLInputElement).value || todayISO(), appr = ($("lb_appr") as HTMLInputElement).value.trim();
   ovConfirm("Congelar línea base", "Se guardará una copia inmutable de los " + state.items.length + " requisitos como línea base v" + ver + ". A partir de aquí los cambios se registran como modificaciones de alcance. ¿Continuar?", "Congelar").then((ok) => {
     if (!ok) return;
     state.items.forEach((it) => { if (!it.origin) it.origin = "baseline"; });
-    state.baseline = { frozen: true, version: ver, date, approver: appr, snapshot: JSON.parse(JSON.stringify(state.items)) };
+    state.baseline = { frozen: true, version: ver, date, approver: appr, reason: "Línea base inicial", snapshot: JSON.parse(JSON.stringify(state.items)), history: [] };
     touch(); showToast("Línea base v" + ver + " congelada."); (document.querySelector('.tab[data-p="p1"]') as HTMLElement).click();
   });
 }
-function rebaseline(): void {
-  const nv = nextVersion(state.baseline.version);
-  ovConfirm("Nueva línea base", "Se congelará el estado ACTUAL de la matriz como línea base v" + nv + " (la anterior queda como historial). ¿Continuar?", "Congelar v" + nv).then((ok) => {
+// Nueva versión de la línea base: pide versión, fecha, quién aprueba y el MOTIVO, y ARCHIVA la versión vigente completa (versión, fecha, aprobador,
+// motivo e instantánea de los requisitos) antes de establecer la siguiente (advanceBaseline). Antes reemplazaba versión, fecha e instantánea y la
+// anterior se perdía aunque el mensaje prometía que quedaba como historial.
+interface RbDraft { version: string; date: string; approver: string; reason: string; }
+function rebaseline(draft?: RbDraft): void {
+  const b = state.baseline, d: RbDraft = draft || { version: suggestNextVersion(b), date: todayISO(), approver: "", reason: "" };
+  const body = '<div class="row row-2">'
+    + '<label class="f"><span>Nueva versión</span><input id="rb_ver" class="mono" value="' + esc(d.version) + '"></label>'
+    + '<label class="f"><span>Fecha de aprobación</span><input id="rb_date" type="date" value="' + esc(d.date) + '"></label></div>'
+    + '<label class="f"><span>Aprobado por</span><input id="rb_appr" value="' + esc(d.approver) + '" placeholder="Patrocinador / CCB"></label>'
+    + '<label class="f"><span>Motivo del cambio</span><textarea id="rb_reason" placeholder="Ej.: incorpora las modificaciones MOD.01 y MOD.02 aprobadas por el CCB">' + esc(d.reason) + '</textarea></label>';
+  openFormModal({ title: "Nueva versión de la línea base", msg: "Se congelará el estado ACTUAL de la matriz (" + state.items.length + " requisito(s)). La v" + b.version + " (aprobada " + repDate(b.date) + (b.approver ? " por " + b.approver : "") + ") se archiva COMPLETA en el historial antes de establecer la siguiente.", bodyHTML: body, okText: "Fijar nueva versión" }).then((ok) => {
     if (!ok) return;
-    state.baseline.version = nv; state.baseline.date = todayISO(); state.baseline.snapshot = JSON.parse(JSON.stringify(state.items));
-    touch(); showToast("Nueva línea base v" + nv + " congelada.");
+    const val = (id: string): string => ($(id) as HTMLInputElement).value, input: RbDraft = { version: val("rb_ver").trim(), date: val("rb_date"), approver: val("rb_appr").trim(), reason: val("rb_reason").trim() };
+    clearOvBody();
+    const problems = newVersionProblems(state.baseline, input);
+    if (problems.length) { ovAlert("No se puede fijar la nueva versión", problems.join("; ") + ".").then(() => rebaseline(input)); return; }
+    const prev = state.baseline.version;
+    state.baseline = advanceBaseline(state.baseline, state.items, input, todayISO());
+    touch(); showToast("Nueva línea base v" + input.version + " fijada; la v" + prev + " quedó archivada en el historial.");
   });
 }
 

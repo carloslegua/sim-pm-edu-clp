@@ -209,7 +209,10 @@ export interface RequirementsBaseline {
   version?: string;
   date?: string;
   approver?: string;
+  reason?: string;        // motivo de ESTA versión (p. ej. las MOD que incorpora); opcional: lo guardado antes no lo trae
   snapshot?: unknown[];
+  // Versiones anteriores archivadas COMPLETAS (versión, fecha, aprobador, motivo, instantánea de los requisitos) al fijar cada nueva versión.
+  history?: Array<{ version: string; date: string; approver: string; reason: string; supersededOn: string; snapshot: unknown[] }>;
 }
 
 export interface RequirementsModule {
