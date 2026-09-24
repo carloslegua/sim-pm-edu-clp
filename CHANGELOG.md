@@ -11,6 +11,22 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Costos — escalación por índices y simulación (auditoría metodológica AACE RP 58R-10 y
+  68R-11)** — la escalación era `base × ((1 + i)ⁿ − 1)`: una tasa, un punto de gasto y el tipo de
+  cambio mezclado en la misma línea. Ahora, por índices: una **tasa anual por cuenta de costo**
+  (mano de obra, materiales, equipos, subcontratos) y año, la **composición** de cada paquete, el
+  gasto repartido **en el tiempo** según las fechas reales del cronograma (mensual), la fecha base
+  de precios de la BOE, el **precio fijado por contrato** (deja de escalar) y la escalación de la
+  contingencia («Escalation on Contingency»). Una **simulación Monte Carlo** mide la incertidumbre
+  de las tasas (rango por cuenta, correlacionadas) y el **retraso del cronograma** del análisis
+  integrado de riesgo; el presupuesto financia el pronóstico central o un percentil. El **tipo de
+  cambio** pasa a su propia línea (AACE recomienda segregarlo). Avisos X1–X15, incluido el
+  solapamiento con riesgos de precio del registro. Los proyectos guardados antes se leen como
+  método «simple» y **no cambian de cifras**; un proyecto nuevo arranca por índices en blanco. Las
+  tasas del ejemplo DISTRIB+ son **ilustrativas** (el BAC del ejemplo pasa de 8.075.181 a 8.124.386).
+  Nuevos `src/shared/escalation.ts` y `src/shared/escalation-sample.ts`. Pruebas:
+  `escalation.test.ts` (28), `escalation-sample.test.ts` (6), smoke (10) y e2e en Chrome real. Ver
+  ARCHITECTURE.md (con lo que se verificó de las prácticas y lo que no).
 - **WBS Builder — calidad de la EDT y Diccionario (auditoría metodológica PMBOK, ítem D)** —
   la EDT solo se validaba al importar un `.xlsx`. Ahora una sección «Calidad de la EDT» revisa,
   al editar, la **estructura** (un solo hijo, nombres repetidos, nombres vacíos o de plantilla,

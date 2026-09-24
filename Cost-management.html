@@ -95,7 +95,9 @@
   table input,table select{padding:6px 8px;font-size:12.5px}
 
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-  @media(max-width:820px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpis.k5{grid-template-columns:repeat(5,1fr)}
+  @media(max-width:980px){.kpis.k5{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:820px){.kpis,.kpis.k5{grid-template-columns:repeat(2,1fr)}}
   .kpi{border:1px solid var(--line);border-radius:12px;padding:13px 14px;background:#fff}
   .kpi .lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
   .kpi .val{font-family:var(--mono);font-size:22px;font-weight:600;margin-top:4px}
@@ -144,6 +146,21 @@
   .rng-in{font-family:var(--mono);font-size:12px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);box-sizing:border-box}
   tr.rng-bad td{background:var(--bad-bg)}
   .rng-msg{font-size:11px;color:var(--bad);margin-top:3px}
+  /* ===== Escalación por índices (58R-10 / 68R-11) ===== */
+  .esc-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+  .esc-tbl th,.esc-tbl td{padding:5px 7px;border-bottom:1px solid var(--line-2);text-align:left;vertical-align:middle}
+  .esc-tbl th{font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap}
+  .esc-tbl th.num,.esc-tbl td.num{text-align:right;font-family:var(--mono)}
+  .esc-in{font-family:var(--mono);font-size:12.5px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:#fff;width:72px;text-align:right}
+  .esc-in.wide{width:100%;text-align:left;font-family:inherit}
+  .esc-in.date{width:130px;text-align:left}
+  .esc-sec{margin:16px 0 6px}
+  .esc-adv{margin:0;padding:0;list-style:none;font-size:12.5px;line-height:1.5}
+  .esc-adv li{padding:5px 8px;border-radius:8px;margin-bottom:5px;background:#f4f8fb}
+  .esc-adv li.riesgo{background:#fdecef;color:#7d1024}.esc-adv li.aviso{background:#fff3d6;color:#6b4a00}
+  .esc-adv b.cd{font-family:var(--mono);font-size:10.5px;margin-right:6px}
+  details.esc-det{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-top:10px;background:#fff}
+  details.esc-det > summary{cursor:pointer;font-weight:700;font-size:12.5px}
   .rng-grid2{display:grid;grid-template-columns:1fr 1.1fr;gap:20px;align-items:start}
   @media(max-width:980px){.rng-grid2{grid-template-columns:1fr}}
   .rng-res{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -346,7 +363,7 @@
       <div class="card-h"><div class="eyebrow">AACE RP 34R-05</div><h3>Basis of Estimate (BOE)</h3><div class="sub">Sin BOE no hay estimado. Estos campos alimentan el documento de la pestaña 05.</div></div>
       <div class="card-b">
         <div class="row row-2">
-          <label class="f"><span>Fecha base del estimado</span><input type="date" id="boeDate" class="mono" onchange="save()"></label>
+          <label class="f"><span>Fecha base del estimado</span><input type="date" id="boeDate" class="mono" onchange="save();recalcCont()"></label>
           <label class="f"><span>Fuente de precios</span><input id="boeSource" placeholder="Ej. cotizaciones 2025, Revista Costos, base histórica" onchange="save()"></label>
         </div>
         <label class="f"><span>Supuestos</span><textarea id="boeAssum" onchange="save()">Diseño al 30% de madurez. Suministro nacional. Jornada de 8h. Sin trabajo nocturno.</textarea></label>
@@ -395,12 +412,24 @@
       </div>
 
       <div class="card">
-        <div class="card-h"><div class="eyebrow">Escalation · proyectos largos / internacionales</div><h3>Inflación y tipo de cambio</h3><div class="sub">Lleva el costo base a la fecha de ejecución.</div></div>
+        <div class="card-h"><div class="eyebrow">AACE RP 58R-10 · 68R-11 · Escalación</div><h3>Escalación y tipo de cambio</h3><div class="sub">La escalación (incluye la inflación) y el tipo de cambio se estiman aparte de la contingencia y aparte entre sí.</div></div>
         <div class="card-b">
-          <div class="row row-2">
-            <label class="f"><span>Tasa de inflación anual</span><input id="inflRate" class="mono" type="number" value="3.5" step="0.1" onchange="save();recalcCont()"><div class="hint">% compuesto anual.</div></label>
-            <label class="f"><span>Años a punto medio de ejecución</span><input id="inflYears" class="mono" type="number" value="0.5" step="0.25" onchange="save();recalcCont()"></label>
+          <label class="f"><span>Método de escalación</span>
+            <select id="escMethod" class="mono" onchange="onEscMethod()">
+              <option value="indices" selected>Por índices: por cuenta de costo y en el tiempo (AACE 58R-10)</option>
+              <option value="simple">Simple: una tasa y un punto de gasto (solo orden de magnitud)</option>
+            </select>
+          </label>
+          <div id="escSimpleWrap" style="display:none">
+            <div class="row row-2">
+              <label class="f"><span>Tasa de inflación anual</span><input id="inflRate" class="mono" type="number" value="3.5" step="0.1" onchange="save();recalcCont()"><div class="hint">% compuesto anual.</div></label>
+              <label class="f"><span>Años a punto medio de ejecución</span><input id="inflYears" class="mono" type="number" value="0.5" step="0.25" onchange="save();recalcCont()"></label>
+            </div>
+            <div class="note">Escalación elemental: <span class="mono">base × ((1 + i)ⁿ − 1)</span>, con UNA tasa y UN punto de gasto para todo el proyecto. Sirve para un pago único; para un proyecto largo o un estimado maduro usa el método por índices.</div>
           </div>
+          <div class="note" id="escSummary" style="margin-top:0"></div>
+          <div class="divider"></div>
+          <div class="eyebrow" style="margin-bottom:8px">Tipo de cambio (se cuantifica aparte de la escalación)</div>
           <div class="row row-2">
             <label class="f"><span>Componente en moneda extranjera</span><input id="fxShare" class="mono" type="number" value="30" step="1" onchange="save();recalcCont()"><div class="hint">% del costo denominado en otra moneda.</div></label>
             <label class="f"><span>Régimen de tipo de cambio</span>
@@ -411,8 +440,16 @@
             </label>
           </div>
           <label class="f" id="fxBandWrap" style="display:none"><span>Banda de fluctuación cambiaria (±%)</span><input id="fxBand" class="mono" type="number" value="8" step="1" onchange="save();recalcCont()"></label>
-          <div class="note">La escalation se calcula como <span class="mono">FV = base × (1 + i)ⁿ</span>. El régimen flotante añade una reserva por exposición cambiaria = componente FX × banda.</div>
+          <div class="note">El régimen flotante añade una reserva por exposición cambiaria = componente en moneda extranjera × banda. AACE recomienda segregarlo de la escalación para poder gestionarlos distinto (cobertura de moneda vs. de materias primas).</div>
         </div>
+      </div>
+    </div>
+
+    <div class="card" id="escCard" style="margin-top:18px">
+      <div class="card-h"><div class="eyebrow">AACE RP 58R-10 · 68R-11</div><h3>Escalación por índices</h3><div class="sub">$Escalación = costo × [índice en la fecha de gasto ÷ índice en la fecha base − 1], por cuenta de costo y por período. El pronóstico de cada cuenta es un <b>dato</b> de una fuente económica, no una extrapolación de tendencias pasadas.</div></div>
+      <div class="card-b">
+        <div id="escInputs"></div>
+        <div id="escResults" style="margin-top:14px"></div>
       </div>
     </div>
 
@@ -458,10 +495,11 @@
     <div class="card" style="margin-top:18px">
       <div class="card-h"><div class="eyebrow">Composición del presupuesto</div><h3>Del costo base al BAC</h3></div>
       <div class="card-b">
-        <div class="kpis">
+        <div class="kpis k5">
           <div class="kpi"><div class="lab">Costo base</div><div class="val neu" id="kBase">—</div><div class="cap">estimado sin reservas</div></div>
           <div class="kpi"><div class="lab">+ Contingencia</div><div class="val neu" id="kCont">—</div><div class="cap" id="kContCap">P70</div></div>
-          <div class="kpi"><div class="lab">+ Escalation / FX</div><div class="val neu" id="kEsc">—</div><div class="cap">inflación + exposición</div></div>
+          <div class="kpi"><div class="lab">+ Escalación</div><div class="val neu" id="kEsc">—</div><div class="cap" id="kEscCap">inflación y precios</div></div>
+          <div class="kpi"><div class="lab">+ Tipo de cambio</div><div class="val neu" id="kFx">—</div><div class="cap">exposición cambiaria</div></div>
           <div class="kpi"><div class="lab">BAC (línea base)</div><div class="val neu" id="kBAC">—</div><div class="cap">sin reserva de gestión</div></div>
         </div>
         <div class="divider"></div>

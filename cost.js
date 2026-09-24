@@ -102,7 +102,7 @@
 		if (!finite(l.highPct) || num$1(l.highPct) < 0) p.push("el máximo debe ser 0 % o más sobre el más probable");
 		return p;
 	}
-	function quantile(sorted, p) {
+	function quantile$1(sorted, p) {
 		const pos = (sorted.length - 1) * p / 100, lo = Math.floor(pos), hi = Math.ceil(pos);
 		return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
 	}
@@ -209,16 +209,16 @@
 		const sorted = Float64Array.from(totals).sort();
 		const p = {};
 		PERCENTILES.forEach((q) => {
-			p[q] = quantile(sorted, q);
+			p[q] = quantile$1(sorted, q);
 		});
 		const curve = [];
-		for (let q = 1; q <= 99; q++) curve.push(quantile(sorted, q));
+		for (let q = 1; q <= 99; q++) curve.push(quantile$1(sorted, q));
 		const eventsEV = evs.reduce((s, e) => s + e.sign * e.prob * (e.low + e.likely + e.high) / 3, 0);
 		let schedule = null;
 		if (sim && durs) {
 			const sd2 = Float64Array.from(durs).sort(), pd = {};
 			PERCENTILES.forEach((q) => {
-				pd[q] = quantile(sd2, q);
+				pd[q] = quantile$1(sd2, q);
 			});
 			schedule = {
 				base: sim.base,
@@ -424,23 +424,23 @@
 		const n = toNum(v);
 		return n !== null && Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
 	}
-	var str = (v) => v === null || v === void 0 ? "" : String(v);
+	var str$1 = (v) => v === null || v === void 0 ? "" : String(v);
 	var arrNum = (v, def) => Array.isArray(v) && v.length === def.length && v.every((x) => toNum(x) !== null) ? v.map((x) => toNum(x)) : def.slice();
 	function normalizePlan(p) {
 		const o = p && typeof p === "object" ? p : {};
-		const cats = Array.isArray(o.categories) ? o.categories.map(str).map((s) => s.trim()).filter(Boolean) : [];
+		const cats = Array.isArray(o.categories) ? o.categories.map(str$1).map((s) => s.trim()).filter(Boolean) : [];
 		return {
 			probPct: arrNum(o.probPct, DEFAULT_PLAN.probPct),
 			costBandsPct: arrNum(o.costBandsPct, DEFAULT_PLAN.costBandsPct),
 			timeBandsDays: arrNum(o.timeBandsDays, DEFAULT_PLAN.timeBandsDays),
-			scopeDescriptors: Array.isArray(o.scopeDescriptors) && o.scopeDescriptors.length === 5 ? o.scopeDescriptors.map(str) : DEFAULT_PLAN.scopeDescriptors.slice(),
+			scopeDescriptors: Array.isArray(o.scopeDescriptors) && o.scopeDescriptors.length === 5 ? o.scopeDescriptors.map(str$1) : DEFAULT_PLAN.scopeDescriptors.slice(),
 			thresholdMedium: toNum(o.thresholdMedium) ?? DEFAULT_PLAN.thresholdMedium,
 			thresholdHigh: toNum(o.thresholdHigh) ?? DEFAULT_PLAN.thresholdHigh,
 			reviewDays: toNum(o.reviewDays) ?? DEFAULT_PLAN.reviewDays,
 			categories: cats.length ? cats : DEFAULT_PLAN.categories.slice(),
-			methodology: str(o.methodology),
-			reservePolicy: str(o.reservePolicy),
-			roles: str(o.roles),
+			methodology: str$1(o.methodology),
+			reservePolicy: str$1(o.reservePolicy),
+			roles: str$1(o.roles),
 			reserves: normalizeReserves(o.reserves)
 		};
 	}
@@ -522,22 +522,22 @@
 		const x = o && typeof o === "object" ? o : {};
 		const type = x.type === "oportunidad" ? "oportunidad" : "amenaza";
 		const status = RISK_STATUSES.indexOf(x.status) >= 0 ? x.status : "identificado";
-		const id = str(x.id) || fallbackId;
+		const id = str$1(x.id) || fallbackId;
 		return {
 			id,
-			code: str(x.code) || id,
-			title: str(x.title),
-			cause: str(x.cause),
-			event: str(x.event),
-			effect: str(x.effect),
+			code: str$1(x.code) || id,
+			title: str$1(x.title),
+			cause: str$1(x.cause),
+			event: str$1(x.event),
+			effect: str$1(x.effect),
 			type,
-			category: str(x.category),
-			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str).filter(Boolean) : [],
-			actIds: Array.isArray(x.actIds) ? x.actIds.map(str).filter(Boolean) : [],
-			owner: str(x.owner),
-			proximity: PROXIMITY.indexOf(str(x.proximity)) >= 0 ? str(x.proximity) : "",
-			identifiedOn: str(x.identifiedOn),
-			reviewedOn: str(x.reviewedOn),
+			category: str$1(x.category),
+			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str$1).filter(Boolean) : [],
+			actIds: Array.isArray(x.actIds) ? x.actIds.map(str$1).filter(Boolean) : [],
+			owner: str$1(x.owner),
+			proximity: PROXIMITY.indexOf(str$1(x.proximity)) >= 0 ? str$1(x.proximity) : "",
+			identifiedOn: str$1(x.identifiedOn),
+			reviewedOn: str$1(x.reviewedOn),
 			status,
 			prob: toLevel(x.prob),
 			impCost: toLevel(x.impCost),
@@ -546,12 +546,12 @@
 			probPct: toNum(x.probPct),
 			costImpact: range(x.costImpact),
 			timeImpact: range(x.timeImpact),
-			strategy: str(x.strategy),
-			response: str(x.response),
-			trigger: str(x.trigger),
-			responseOwner: str(x.responseOwner),
+			strategy: str$1(x.strategy),
+			response: str$1(x.response),
+			trigger: str$1(x.trigger),
+			responseOwner: str$1(x.responseOwner),
 			responseCost: toNum(x.responseCost),
-			secondary: str(x.secondary),
+			secondary: str$1(x.secondary),
 			resProb: toLevel(x.resProb),
 			resImpCost: toLevel(x.resImpCost),
 			resImpTime: toLevel(x.resImpTime),
@@ -559,10 +559,10 @@
 			resProbPct: toNum(x.resProbPct),
 			resCostImpact: range(x.resCostImpact),
 			resTimeImpact: range(x.resTimeImpact),
-			materializedOn: str(x.materializedOn),
+			materializedOn: str$1(x.materializedOn),
 			actualCost: toNum(x.actualCost),
 			actualDelay: toNum(x.actualDelay),
-			notes: str(x.notes)
+			notes: str$1(x.notes)
 		};
 	}
 	var isOpen = (r) => r.status !== "materializado" && r.status !== "cerrado";
@@ -2235,6 +2235,751 @@
 		};
 	}
 	//#endregion
+	//#region src/shared/escalation.ts
+	var ACCOUNT_IDS = [
+		"labor",
+		"material",
+		"equipment",
+		"subcontract"
+	];
+	var ACCOUNT_LABEL = {
+		labor: "Mano de obra",
+		material: "Materiales",
+		equipment: "Equipos",
+		subcontract: "Subcontratos"
+	};
+	var PROVISIONS = [
+		"central",
+		"p50",
+		"p70",
+		"p80",
+		"p90"
+	];
+	var PROVISION_LABEL = {
+		central: "Pronóstico central (determinístico)",
+		p50: "P50 de la simulación",
+		p70: "P70 de la simulación",
+		p80: "P80 de la simulación",
+		p90: "P90 de la simulación"
+	};
+	var DEFAULT_MIX = {
+		labor: 35,
+		material: 35,
+		equipment: 15,
+		subcontract: 15
+	};
+	var WORK_TO_CALENDAR = 7 / 5;
+	var isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+	var numOr = (v, d) => {
+		if (v === null || v === void 0 || v === "" || typeof v === "boolean") return d;
+		const n = Number(v);
+		return isFinite(n) ? n : d;
+	};
+	var ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
+	var DAY = 864e5;
+	function dayNum(iso) {
+		const m = ISO.exec(String(iso || ""));
+		if (!m) return null;
+		const t = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+		return isFinite(t) && new Date(t).getUTCMonth() === +m[2] - 1 ? Math.round(t / DAY) : null;
+	}
+	var isoOfDay = (n) => (/* @__PURE__ */ new Date(n * DAY)).toISOString().slice(0, 10);
+	var cleanMix = (v) => {
+		if (!isObj(v)) return void 0;
+		const out = {};
+		let any = false;
+		ACCOUNT_IDS.forEach((id) => {
+			const n = numOr(v[id], 0);
+			if (n > 0) {
+				out[id] = n;
+				any = true;
+			}
+		});
+		return any ? out : void 0;
+	};
+	function blankEscPlan() {
+		return {
+			method: "indices",
+			baseDate: "",
+			accounts: ACCOUNT_IDS.map((id) => ({
+				id,
+				rates: {},
+				source: "",
+				low: 0,
+				high: 0
+			})),
+			defaultMix: { ...DEFAULT_MIX },
+			packages: {},
+			onContingency: true,
+			provision: "central",
+			correlation: .5
+		};
+	}
+	function normalizeEscPlan(raw, baseDate = "") {
+		const p = blankEscPlan();
+		p.baseDate = baseDate;
+		if (!isObj(raw)) return p;
+		p.method = raw.method === "indices" ? "indices" : "simple";
+		const accs = Array.isArray(raw.accounts) ? raw.accounts.filter(isObj) : [];
+		p.accounts = ACCOUNT_IDS.map((id) => {
+			const a = accs.find((x) => x.id === id) || {}, rates = {};
+			if (isObj(a.rates)) Object.keys(a.rates).forEach((y) => {
+				const n = numOr(a.rates && a.rates[y], NaN);
+				if (/^\d{4}$/.test(y) && isFinite(n) && a.rates[y] !== "") rates[y] = n;
+			});
+			const low = Math.min(0, numOr(a.low, 0)), high = Math.max(0, numOr(a.high, 0));
+			return {
+				id,
+				rates,
+				source: String(a.source == null ? "" : a.source),
+				low,
+				high
+			};
+		});
+		const dm = cleanMix(raw.defaultMix);
+		if (dm) p.defaultMix = dm;
+		if (isObj(raw.packages)) Object.keys(raw.packages).forEach((k) => {
+			const o = raw.packages && raw.packages[k];
+			if (!isObj(o)) return;
+			const ov = {}, mix = cleanMix(o.mix);
+			if (mix) ov.mix = mix;
+			if (typeof o.lock === "string" && dayNum(o.lock) !== null) ov.lock = o.lock;
+			if (ov.mix || ov.lock) p.packages[k] = ov;
+		});
+		p.onContingency = raw.onContingency !== false;
+		p.provision = PROVISIONS.indexOf(raw.provision) >= 0 ? raw.provision : "central";
+		p.correlation = Math.max(0, Math.min(1, numOr(raw.correlation, .5)));
+		return p;
+	}
+	var simpleEscalation = (base, ratePct, years) => base * (Math.pow(1 + ratePct / 100, years) - 1);
+	var fxExposure = (base, sharePct, bandPct, floating) => floating ? base * (sharePct / 100) * (bandPct / 100) : 0;
+	function yearSegs(baseDay, lastDay) {
+		const out = [], y0 = (/* @__PURE__ */ new Date(baseDay * DAY)).getUTCFullYear(), y1 = (/* @__PURE__ */ new Date(lastDay * DAY)).getUTCFullYear();
+		for (let y = y0; y <= y1; y++) {
+			const s = Date.UTC(y, 0, 1) / DAY, e = Date.UTC(y + 1, 0, 1) / DAY;
+			out.push({
+				y,
+				start: Math.max(0, s - baseDay),
+				end: e - baseDay,
+				days: e - s
+			});
+		}
+		return out;
+	}
+	function rateFor(rates, y) {
+		const ys = Object.keys(rates).map(Number).sort((a, b) => a - b);
+		if (!ys.length) return null;
+		if (rates[String(y)] !== void 0) return rates[String(y)];
+		let prev = null;
+		ys.forEach((k) => {
+			if (k < y) prev = k;
+		});
+		return rates[String(prev === null ? ys[0] : prev)];
+	}
+	var lnGrowth = (ratePct, delta) => Math.log(Math.max(.01, 1 + (ratePct + delta) / 100));
+	function lnIndex(g, segs, x) {
+		let s = 0;
+		for (let i = 0; i < segs.length; i++) {
+			const sg = segs[i];
+			if (x <= sg.start) break;
+			s += g[i] * (Math.min(x, sg.end) - sg.start) / sg.days;
+		}
+		return s;
+	}
+	var monthEnd = (day) => {
+		const d = /* @__PURE__ */ new Date(day * DAY);
+		return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) / DAY;
+	};
+	function buildKernel(plan, pkgsIn, maxShiftDays) {
+		const adv = [], pkgs = pkgsIn.filter((p) => isFinite(p.cost) && p.cost > 0);
+		const baseDay = dayNum(plan.baseDate);
+		if (baseDay === null) {
+			adv.push({
+				code: "X1",
+				severity: "riesgo",
+				text: "Falta la fecha base de precios (pestaña 02, Basis of Estimate): sin ella no se puede calcular la escalación por índices, que mide el cambio de precio DESDE esa fecha."
+			});
+			return {
+				k: null,
+				adv
+			};
+		}
+		const accs = plan.accounts.filter((a) => Object.keys(a.rates).length > 0);
+		if (!accs.length) {
+			adv.push({
+				code: "X2",
+				severity: "riesgo",
+				text: "Ninguna cuenta de costo tiene pronóstico de índice: la escalación por índices necesita la tasa anual esperada de cada cuenta (dato de un economista o de una fuente reconocida, no una extrapolación)."
+			});
+			return {
+				k: null,
+				adv
+			};
+		}
+		if (!pkgs.length) {
+			adv.push({
+				code: "X7",
+				severity: "riesgo",
+				text: "No hay paquetes con costo y fechas del cronograma: la escalación por índices reparte el costo en el tiempo y necesita saber cuándo se gasta."
+			});
+			return {
+				k: null,
+				adv
+			};
+		}
+		const datedIdx = [], span = pkgs.map((p) => {
+			const s = dayNum(p.start), e = dayNum(p.end);
+			return s !== null && e !== null && e >= s ? {
+				s,
+				e
+			} : null;
+		});
+		span.forEach((s, i) => {
+			if (s) datedIdx.push(i);
+		});
+		if (!datedIdx.length) {
+			adv.push({
+				code: "X7",
+				severity: "riesgo",
+				text: "Ningún paquete tiene fechas en el cronograma: define las actividades y sus enlaces (Cronograma/CPM) para repartir el costo en el tiempo."
+			});
+			return {
+				k: null,
+				adv
+			};
+		}
+		const totDated = datedIdx.reduce((s, i) => s + pkgs[i].cost, 0);
+		const mid = datedIdx.reduce((s, i) => s + pkgs[i].cost * (span[i].s + span[i].e) / 2, 0) / totDated;
+		const undated = pkgs.filter((_, i) => !span[i]).map((p) => p.code || p.name);
+		const buckets = [];
+		const lockOf = (p) => {
+			const o = plan.packages[p.id], d = o && o.lock ? dayNum(o.lock) : null;
+			return d === null ? Infinity : d - baseDay;
+		};
+		pkgs.forEach((p, i) => {
+			const lock = lockOf(p), sp = span[i];
+			if (!sp) {
+				buckets.push({
+					p: i,
+					x: mid - baseDay,
+					w: 1,
+					lock
+				});
+				return;
+			}
+			const len = sp.e - sp.s + 1;
+			for (let d0 = sp.s; d0 <= sp.e;) {
+				const d1 = Math.min(sp.e + 1, monthEnd(d0));
+				buckets.push({
+					p: i,
+					x: (d0 + d1) / 2 - baseDay - .5,
+					w: (d1 - d0) / len,
+					lock
+				});
+				d0 = d1;
+			}
+		});
+		const xs = buckets.map((b) => b.x);
+		const x0 = Math.min(...xs), x1 = Math.max(...xs);
+		const segs = yearSegs(baseDay, baseDay + Math.max(0, x1) + Math.max(0, maxShiftDays) + 366);
+		const mix = pkgs.map((p) => {
+			const o = plan.packages[p.id], m = o && o.mix || plan.defaultMix, tot = ACCOUNT_IDS.reduce((s, id) => s + Math.max(0, m[id] || 0), 0);
+			return accs.map((a) => tot > 0 ? Math.max(0, m[a.id] || 0) / tot : 1 / ACCOUNT_IDS.length);
+		});
+		return {
+			k: {
+				baseDay,
+				segs,
+				accs,
+				buckets,
+				cost: pkgs.map((p) => p.cost),
+				mix,
+				x0,
+				x1,
+				total: pkgs.reduce((s, p) => s + p.cost, 0),
+				pkgs,
+				undated,
+				baseYear: (/* @__PURE__ */ new Date(baseDay * DAY)).getUTCFullYear()
+			},
+			adv
+		};
+	}
+	function evalKernel(k, delta, delayCal, detail) {
+		const A = k.accs.length, g = k.accs.map((a, ai) => k.segs.map((s) => lnGrowth(rateFor(a.rates, s.y), delta ? delta[ai] : 0)));
+		const byAcc = new Array(A).fill(0), byPkg = detail ? new Array(k.pkgs.length).fill(0) : [], byYear = {};
+		let total = 0, mw = 0, mc = 0;
+		const span = k.x1 - k.x0;
+		for (let b = 0; b < k.buckets.length; b++) {
+			const bk = k.buckets[b], c = k.cost[bk.p] * bk.w;
+			let xe = bk.x;
+			if (delayCal !== 0) xe += delayCal * (span > 0 ? Math.min(1, Math.max(0, (bk.x - k.x0) / span)) : 1);
+			if (xe > bk.lock) xe = bk.lock;
+			if (xe < 0) xe = 0;
+			let e = 0;
+			for (let a = 0; a < A; a++) {
+				const w = k.mix[bk.p][a];
+				if (w > 0) {
+					const v = c * w * (Math.exp(lnIndex(g[a], k.segs, xe)) - 1);
+					byAcc[a] += v;
+					e += v;
+				}
+			}
+			total += e;
+			if (detail) {
+				byPkg[bk.p] += e;
+				const yr = (/* @__PURE__ */ new Date((k.baseDay + bk.x) * DAY)).getUTCFullYear(), y = byYear[yr] || (byYear[yr] = {
+					base: 0,
+					esc: 0
+				});
+				y.base += c;
+				y.esc += e;
+				mw += c * bk.x;
+				mc += c;
+			}
+		}
+		return {
+			total,
+			byAcc,
+			byPkg,
+			byYear,
+			midX: mc > 0 ? mw / mc : 0
+		};
+	}
+	var emptyResult = (adv, base) => ({
+		ok: false,
+		base,
+		esc: 0,
+		factor: 0,
+		advisories: adv,
+		byAccount: [],
+		byPackage: [],
+		byYear: [],
+		midDate: null,
+		horizonYears: [],
+		undated: []
+	});
+	function horizonYears(baseDate, pkgs) {
+		const b = dayNum(baseDate);
+		if (b === null) return [];
+		const y0 = (/* @__PURE__ */ new Date(b * DAY)).getUTCFullYear();
+		let y1 = y0 + 1;
+		pkgs.forEach((p) => {
+			const e = dayNum(p.end);
+			if (e !== null) y1 = Math.max(y1, (/* @__PURE__ */ new Date(e * DAY)).getUTCFullYear());
+		});
+		const out = [];
+		for (let y = y0; y <= y1 + 1; y++) out.push(y);
+		return out;
+	}
+	function escalate(plan, pkgs) {
+		const base = pkgs.reduce((s, p) => s + (isFinite(p.cost) && p.cost > 0 ? p.cost : 0), 0);
+		const { k, adv } = buildKernel(plan, pkgs, 0);
+		if (!k) return emptyResult(adv, base);
+		const r = evalKernel(k, null, 0, true), advisories = adv.slice();
+		const totalDated = k.total;
+		const accBase = k.accs.map((_, ai) => k.pkgs.reduce((s, p, pi) => s + p.cost * k.mix[pi][ai], 0));
+		const lockDay = (p) => {
+			const o = plan.packages[p.id];
+			return o && o.lock ? dayNum(o.lock) : null;
+		};
+		const byPackage = k.pkgs.map((p, i) => {
+			const l = lockDay(p), e = dayNum(p.end);
+			return {
+				id: p.id,
+				code: p.code,
+				name: p.name,
+				cost: p.cost,
+				esc: r.byPkg[i],
+				pct: p.cost > 0 ? r.byPkg[i] / p.cost * 100 : 0,
+				from: p.start,
+				to: p.end,
+				lock: l !== null ? isoOfDay(l) : null,
+				locked: l !== null && (e === null || l < e),
+				undated: k.undated.indexOf(p.code || p.name) >= 0
+			};
+		});
+		if (k.undated.length) advisories.push({
+			code: "X6",
+			severity: "aviso",
+			text: k.undated.length + " paquete(s) sin fechas en el cronograma (" + k.undated.slice(0, 4).join(", ") + (k.undated.length > 4 ? "…" : "") + "): se ubican en la fecha media del gasto del proyecto."
+		});
+		const weight = (p, id) => {
+			const o = plan.packages[p.id];
+			return (o && o.mix || plan.defaultMix)[id] || 0;
+		};
+		const noRates = plan.accounts.filter((a) => !Object.keys(a.rates).length && k.pkgs.some((p) => weight(p, a.id) > 0));
+		if (noRates.length) advisories.push({
+			code: "X3",
+			severity: "aviso",
+			text: "Con peso en la composición pero sin pronóstico de índice: " + noRates.map((a) => ACCOUNT_LABEL[a.id]).join(", ") + ". Esa parte del costo NO se escala: completa el pronóstico o ajusta la composición."
+		});
+		const noSrc = k.accs.filter((a) => !a.source.trim());
+		if (noSrc.length) advisories.push({
+			code: "X5",
+			severity: "aviso",
+			text: "Sin fuente del pronóstico: " + noSrc.map((a) => ACCOUNT_LABEL[a.id]).join(", ") + ". 58R-10 recomienda que los índices provengan de un economista o de una fuente reconocida y que se documenten; no extrapoles tendencias pasadas."
+		});
+		const lastSpendYear = (/* @__PURE__ */ new Date((k.baseDay + k.x1) * DAY)).getUTCFullYear();
+		const short = k.accs.filter((a) => Math.max(...Object.keys(a.rates).map(Number)) < lastSpendYear);
+		if (short.length) advisories.push({
+			code: "X4",
+			severity: "aviso",
+			text: "El pronóstico de " + short.map((a) => ACCOUNT_LABEL[a.id]).join(", ") + " no llega al último año de gasto (" + lastSpendYear + "): se mantiene su última tasa."
+		});
+		if (k.x0 < 0) advisories.push({
+			code: "X11",
+			severity: "aviso",
+			text: "Hay gasto anterior a la fecha base de precios: ese tramo no se escala. La fecha base debe ser la de los precios del estimado y no posterior al primer gasto."
+		});
+		const lockedEarly = byPackage.filter((p) => p.lock && dayNum(p.lock) !== null && dayNum(p.lock) < k.baseDay);
+		if (lockedEarly.length) advisories.push({
+			code: "X15",
+			severity: "info",
+			text: "Precio fijado antes de la fecha base en " + lockedEarly.map((p) => p.code).join(", ") + ": no tienen escalación."
+		});
+		return {
+			ok: true,
+			base: totalDated,
+			esc: r.total,
+			factor: totalDated > 0 ? r.total / totalDated : 0,
+			advisories,
+			byAccount: k.accs.map((a, ai) => ({
+				id: a.id,
+				label: ACCOUNT_LABEL[a.id],
+				base: accBase[ai],
+				esc: r.byAcc[ai],
+				pct: accBase[ai] > 0 ? r.byAcc[ai] / accBase[ai] * 100 : 0
+			})),
+			byPackage,
+			byYear: Object.keys(r.byYear).map(Number).sort((a, b) => a - b).map((y) => ({
+				year: y,
+				base: r.byYear[y].base,
+				esc: r.byYear[y].esc
+			})),
+			midDate: isoOfDay(Math.round(k.baseDay + r.midX)),
+			horizonYears: horizonYears(plan.baseDate, pkgs),
+			undated: k.undated
+		};
+	}
+	function quantile(sorted, p) {
+		const pos = (sorted.length - 1) * p / 100, lo = Math.floor(pos), hi = Math.ceil(pos);
+		return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+	}
+	function simulateEscalation(plan, pkgs, o = {}) {
+		const N = Math.max(1e3, Math.min(2e5, Math.floor(Number(o.iterations) || 1e4))), seed = typeof o.seed === "number" && isFinite(o.seed) ? o.seed : DEFAULT_SEED;
+		const w2c = o.workToCalendar && o.workToCalendar > 0 ? o.workToCalendar : WORK_TO_CALENDAR;
+		const dl = o.delaysWork && o.delaysWork.length === N ? o.delaysWork : null;
+		let maxDelay = 0;
+		if (dl) {
+			for (let i = 0; i < N; i++) if (dl[i] * w2c > maxDelay) maxDelay = dl[i] * w2c;
+		}
+		const { k } = buildKernel(plan, pkgs, maxDelay);
+		if (!k) return null;
+		const det = evalKernel(k, null, 0, false).total / k.total;
+		const rho = plan.correlation, sr = Math.sqrt(rho), se = Math.sqrt(1 - rho), A = k.accs.length;
+		const rand = mulberry32((seed ^ 2654435769) >>> 0);
+		let spare = null;
+		const normal = () => {
+			if (spare !== null) {
+				const s = spare;
+				spare = null;
+				return s;
+			}
+			let u = 0;
+			while (u === 0) u = rand();
+			const v = rand(), r = Math.sqrt(-2 * Math.log(u)), th = 2 * Math.PI * v;
+			spare = r * Math.sin(th);
+			return r * Math.cos(th);
+		};
+		const out = new Float64Array(N), delta = new Array(A).fill(0), delays = dl ? new Float64Array(N) : null;
+		let sum = 0, below = 0;
+		for (let i = 0; i < N; i++) {
+			const zc = normal();
+			for (let a = 0; a < A; a++) {
+				const z = normal(), acc = k.accs[a];
+				const lo = Math.min(0, acc.low), hi = Math.max(0, acc.high);
+				delta[a] = hi > lo ? triInv(normCdf(sr * zc + se * z), lo, 0, hi) : 0;
+			}
+			const d = dl ? dl[i] * w2c : 0;
+			if (delays) delays[i] = d;
+			const f = evalKernel(k, delta, d, false).total / k.total;
+			out[i] = f;
+			sum += f;
+			if (f <= det + 1e-12) below++;
+		}
+		const mean = sum / N;
+		let ss = 0;
+		for (let i = 0; i < N; i++) ss += (out[i] - mean) * (out[i] - mean);
+		const sd = Math.sqrt(ss / N);
+		const sorted = Float64Array.from(out).sort();
+		const p = {};
+		PERCENTILES.forEach((q) => {
+			p[q] = quantile(sorted, q);
+		});
+		const curve = [];
+		for (let q = 1; q <= 99; q++) curve.push(quantile(sorted, q));
+		let dMean = 0, dP80 = 0;
+		if (delays) {
+			dMean = delays.reduce((s, x) => s + x, 0) / N;
+			dP80 = quantile(Float64Array.from(delays).sort(), 80);
+		}
+		return {
+			iterations: N,
+			seed,
+			correlation: rho,
+			mean,
+			sd,
+			min: sorted[0],
+			max: sorted[N - 1],
+			p,
+			curve,
+			det,
+			probAtOrBelowDet: below / N,
+			withDelay: !!dl,
+			delayMeanCal: dMean,
+			delayP80Cal: dP80,
+			uncertainAccounts: k.accs.filter((a) => Math.max(0, a.high) > Math.min(0, a.low)).length
+		};
+	}
+	function provisionFactor(plan, res, sim) {
+		if (plan.provision === "central" || !sim) return {
+			factor: res.factor,
+			label: plan.provision === "central" ? "pronóstico central" : "pronóstico central (sin simulación)"
+		};
+		const q = Number(plan.provision.slice(1));
+		return {
+			factor: sim.p[q],
+			label: "P" + q + " de la simulación"
+		};
+	}
+	function escalationAdvisories(plan, res, sim, ctx = {}) {
+		const out = res.advisories.slice();
+		if (sim) {
+			if (!sim.uncertainAccounts) out.push({
+				code: "X9",
+				severity: "info",
+				text: "Sin incertidumbre definida en los índices (mín = máx = 0): la simulación solo refleja el retraso del cronograma. 68R-11 pide que el estimador cuantifique la incertidumbre de la escalación (una distribución o un rango P10/P90)."
+			});
+			if (!sim.withDelay) out.push({
+				code: "X10",
+				severity: "info",
+				text: "La simulación no incluye el retraso del cronograma (no hay eventos de riesgo con impacto en plazo ubicados en actividades): la escalación crece con el atraso, y esa variable queda fuera."
+			});
+		}
+		if (!plan.onContingency) out.push({
+			code: "X12",
+			severity: "info",
+			text: "La contingencia no se escala. 58R-10 trata «Escalation on Contingency» como un tema propio: la contingencia también se gasta en el futuro."
+		});
+		const rk = (ctx.riskTitles || []).filter((t) => /precio|inflaci|escalaci|costo de (los )?materiales|acero|combustible/i.test(t));
+		if (rk.length) out.push({
+			code: "X14",
+			severity: "info",
+			text: "Riesgo(s) del registro que podrían solaparse con la escalación (" + rk.slice(0, 2).join("; ") + "): la contingencia excluye la escalación (58R-10). Define en la BOE qué cubre cada cuenta: la tendencia general de precios va aquí; el evento específico (p. ej. un choque de suministro) solo por lo que exceda esa tendencia."
+		});
+		return out;
+	}
+	function simpleMethodAdvisory(classNum) {
+		return classNum !== void 0 && classNum <= 3 ? {
+			code: "X13",
+			severity: "aviso",
+			text: "El método simple usa UNA tasa y UN punto de gasto: solo es razonable en estimados de orden de magnitud (clases 4–5). Con un estimado de clase " + classNum + " usa la escalación por índices (58R-10)."
+		} : null;
+	}
+	//#endregion
+	//#region src/shared/escalation-sample.ts
+	var SAMPLE_BASE_DATE = "2026-07-01";
+	var SAMPLE_ESC_SOURCE = "Ejemplo DISTRIB+ — valores ILUSTRATIVOS (reemplazar por el pronóstico de un economista o de una fuente reconocida de índices de construcción).";
+	var SAMPLE_ESC_ACCOUNTS = {
+		labor: {
+			rates: {
+				"2026": 4,
+				"2027": 4.5,
+				"2028": 4
+			},
+			low: -1,
+			high: 2
+		},
+		material: {
+			rates: {
+				"2026": 3,
+				"2027": 3.5,
+				"2028": 3
+			},
+			low: -1.5,
+			high: 3.5
+		},
+		equipment: {
+			rates: {
+				"2026": 2.5,
+				"2027": 3,
+				"2028": 3
+			},
+			low: -1,
+			high: 2
+		},
+		subcontract: {
+			rates: {
+				"2026": 3.5,
+				"2027": 4,
+				"2028": 3.5
+			},
+			low: -1,
+			high: 2.5
+		}
+	};
+	var SAMPLE_ESC_DEFAULT_MIX = {
+		labor: 35,
+		material: 35,
+		equipment: 15,
+		subcontract: 15
+	};
+	var SAMPLE_ESC_MIX = {
+		"1.1": { labor: 100 },
+		"1.2": { labor: 100 },
+		"1.3": { labor: 100 },
+		"2.1": { labor: 100 },
+		"2.2": { labor: 100 },
+		"2.3": { labor: 100 },
+		"2.4": { labor: 100 },
+		"3.1": {
+			material: 80,
+			labor: 20
+		},
+		"3.2": { material: 100 },
+		"3.3": { equipment: 100 },
+		"4.1": {
+			labor: 35,
+			equipment: 45,
+			subcontract: 20
+		},
+		"4.2": {
+			material: 45,
+			labor: 35,
+			equipment: 10,
+			subcontract: 10
+		},
+		"4.3": {
+			labor: 30,
+			equipment: 15,
+			subcontract: 55
+		},
+		"4.4": {
+			material: 40,
+			labor: 40,
+			subcontract: 20
+		},
+		"4.5": { subcontract: 100 },
+		"5.1": { labor: 100 },
+		"5.2": { labor: 100 },
+		"5.3": { labor: 100 }
+	};
+	var SAMPLE_ESC_LOCKS = {
+		"3.1": "2026-09-15",
+		"3.3": "2026-09-28"
+	};
+	function buildSampleEscPlan(resolve) {
+		const packages = {};
+		Object.keys(SAMPLE_ESC_MIX).forEach((code) => {
+			const id = resolve(code);
+			if (id) packages[id] = { mix: SAMPLE_ESC_MIX[code] };
+		});
+		Object.keys(SAMPLE_ESC_LOCKS).forEach((code) => {
+			const id = resolve(code);
+			if (id) packages[id] = {
+				...packages[id] || {},
+				lock: SAMPLE_ESC_LOCKS[code]
+			};
+		});
+		return normalizeEscPlan({
+			method: "indices",
+			accounts: ACCOUNT_IDS.map((id) => ({
+				id,
+				rates: SAMPLE_ESC_ACCOUNTS[id].rates,
+				source: SAMPLE_ESC_SOURCE,
+				low: SAMPLE_ESC_ACCOUNTS[id].low,
+				high: SAMPLE_ESC_ACCOUNTS[id].high
+			})),
+			defaultMix: SAMPLE_ESC_DEFAULT_MIX,
+			packages,
+			onContingency: true,
+			provision: "p70",
+			correlation: .5
+		}, SAMPLE_BASE_DATE);
+	}
+	//#endregion
+	//#region src/shared/evm-sample.ts
+	var EVM_SAMPLE_COSTS = {
+		"1.1": 12e3,
+		"1.2": 38e3,
+		"1.3": 145e3,
+		"2.1": 28e3,
+		"2.2": 165e3,
+		"2.3": 98e3,
+		"2.4": 64e3,
+		"3.1": 182e4,
+		"3.2": 715e3,
+		"3.3": 415e3,
+		"4.1": 38e4,
+		"4.2": 735e3,
+		"4.3": 1165e3,
+		"4.4": 55e4,
+		"4.5": 485e3,
+		"5.1": 145e3,
+		"5.2": 48e3,
+		"5.3": 92e3
+	};
+	var str = (v) => v === null || v === void 0 ? "" : String(v);
+	var fin = (v, d = 0) => {
+		const x = Number(v);
+		return isFinite(x) ? x : d;
+	};
+	function normalizeBaseline(o) {
+		if (!o || typeof o !== "object") return null;
+		const x = o, s = x.snapshot;
+		if (!s || typeof s !== "object" || !Array.isArray(s.rows) || !isFinite(Number(s.projectDuration))) return null;
+		const rows = s.rows.filter((r) => r && typeof r === "object").map((r) => {
+			const q = r;
+			return {
+				id: str(q.id),
+				code: str(q.code),
+				name: str(q.name),
+				isMilestone: !!q.isMilestone,
+				dur: fin(q.dur),
+				es: fin(q.es),
+				ef: fin(q.ef),
+				tf: fin(q.tf),
+				critical: !!q.critical
+			};
+		}).filter((r) => r.id);
+		const log = (Array.isArray(x.log) ? x.log : []).filter((e) => e && typeof e === "object").map((e) => {
+			const q = e;
+			return {
+				version: str(q.version),
+				date: str(q.date),
+				reason: str(q.reason),
+				approver: str(q.approver),
+				sponsorAuth: !!q.sponsorAuth,
+				projectDuration: fin(q.projectDuration),
+				finishDate: str(q.finishDate),
+				deviationPct: q.deviationPct === null || q.deviationPct === void 0 ? null : fin(q.deviationPct)
+			};
+		});
+		return {
+			frozen: x.frozen !== false,
+			version: str(x.version) || "LB-1",
+			date: str(x.date),
+			snapshot: {
+				projectDuration: fin(s.projectDuration),
+				startDate: str(s.startDate),
+				finishDate: str(s.finishDate),
+				nearCriticalDays: fin(s.nearCriticalDays, 10),
+				rows
+			},
+			log
+		};
+	}
+	//#endregion
 	//#region src/modules/cost/main.ts
 	var STORE_KEY = "gpi_cost_management_plan";
 	var CLASSES = {
@@ -2387,7 +3132,8 @@
 		co: [],
 		baselines: [],
 		ranges: [],
-		legacyMethod: ""
+		legacyMethod: "",
+		esc: blankEscPlan()
 	};
 	$("tabs").addEventListener("click", (e) => {
 		const b = e.target.closest(".tab");
@@ -2551,6 +3297,8 @@
 		return isFinite(v) ? Math.max(0, Math.min(100, v)) / 100 : DEFAULT_CORRELATION;
 	}
 	var simCache = {};
+	var escCtx = null;
+	var escSimCache = {};
 	function riskCtx() {
 		if (gpiOn()) {
 			try {
@@ -2589,6 +3337,10 @@
 		netDirty = false;
 		net = null;
 		eng = null;
+		escCtx = null;
+		Object.keys(escSimCache).forEach((k) => {
+			delete escSimCache[k];
+		});
 		Object.keys(simCache).forEach((k) => {
 			delete simCache[k];
 		});
@@ -3051,37 +3803,376 @@
 		save();
 		showToast(n ? "Rango de la clase " + state.curClass + " aplicado a " + n + " partida(s) sin fundamento." : "Todas las partidas ya tienen fundamento: no se cambió ninguna.");
 	}
+	function escPackages() {
+		getEng();
+		if (escCtx) return escCtx;
+		const out = {
+			pkgs: [],
+			note: ""
+		};
+		try {
+			if (typeof GPI === "undefined" || !GPI || !GPI.util || !GPI.util.cpm) {
+				out.note = "No cargó gpi-core.js: sin el núcleo no se puede armar el cronograma.";
+				escCtx = out;
+				return out;
+			}
+			const connected = gpiOn(), m = connected ? null : sampleScheduleModules();
+			const wbs = connected ? GPI.getModule("wbs") : m.wbs;
+			const act = connected ? GPI.getModule("activities") : m.activities;
+			const sched = connected ? GPI.getModule("schedule") : m.schedule;
+			const leaves = GPI.util.wbsLeaves(wbs);
+			const costOf = {};
+			if (connected) {
+				GPI.util.costEstimateRows(GPI.getModule("costEstimate"), act, wbs).forEach((r) => {
+					if (r.subtotal && r.subtotal > 0) costOf[r.leafId] = (costOf[r.leafId] || 0) + r.subtotal;
+				});
+				leaves.forEach((l) => {
+					if (!costOf[l.id]) {
+						const w = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) : 0;
+						if (w > 0) costOf[l.id] = w;
+					}
+				});
+			} else leaves.forEach((l) => {
+				if (EVM_SAMPLE_COSTS[l.code]) costOf[l.id] = EVM_SAMPLE_COSTS[l.code];
+			});
+			const spans = {};
+			if (net && eng && net.startDate) {
+				const bl = connected && sched ? normalizeBaseline(sched.baseline) : null;
+				const rows = {};
+				if (bl) bl.snapshot.rows.forEach((r) => {
+					rows[r.id] = r;
+				});
+				else Object.keys(eng.rows).forEach((id) => {
+					rows[id] = eng ? eng.rows[id] : {
+						es: 0,
+						ef: 0
+					};
+				});
+				const cal = net.calendar, util = GPI.util, start = util.parseISO(net.startDate);
+				const dateAt = (i) => util.addWorkingDays(start, Math.max(0, Math.ceil(i - 1e-9)), cal);
+				const idx = {};
+				net.nodes.filter((n) => !n.isMilestone && n.leafId).forEach((n) => {
+					const r = rows[n.id];
+					if (!r) return;
+					const s = idx[n.leafId] || (idx[n.leafId] = {
+						es: r.es,
+						ef: r.ef
+					});
+					s.es = Math.min(s.es, r.es);
+					s.ef = Math.max(s.ef, r.ef);
+				});
+				Object.keys(idx).forEach((id) => {
+					spans[id] = {
+						start: dateAt(idx[id].es),
+						end: dateAt(idx[id].ef - 1)
+					};
+				});
+			} else out.note = connected ? "El proyecto aún no tiene actividades y enlaces (Cronograma/CPM) ni fecha de inicio: sin ellos no se sabe cuándo se gasta cada paquete." : "No se pudo armar el cronograma del ejemplo.";
+			out.pkgs = leaves.filter((l) => costOf[l.id]).map((l) => ({
+				id: l.id,
+				code: l.code,
+				name: l.name,
+				cost: costOf[l.id],
+				start: spans[l.id] ? spans[l.id].start : null,
+				end: spans[l.id] ? spans[l.id].end : null
+			}));
+			if (!out.pkgs.length && !out.note) out.note = connected ? "Ningún paquete de trabajo tiene costo: carga la estimación en Estimar los Costos o el costo de los paquetes en WBS Builder." : "El ejemplo no tiene paquetes.";
+		} catch (e) {
+			out.note = "No se pudo armar el contexto del proyecto.";
+		}
+		escCtx = out;
+		return out;
+	}
+	var ocIds = /* @__PURE__ */ new WeakMap();
+	var ocSeq = 0;
+	function escDelays() {
+		if (!includeRisksOn()) return null;
+		const g = getEng();
+		if (!g) return null;
+		const ev = eventsCtx().events;
+		const oc = ev.length ? outcomesFor(ev, g) : void 0;
+		return oc && oc.ext ? oc.ext : null;
+	}
+	function escSim(plan, pkgs) {
+		const d = escDelays();
+		if (d && !ocIds.has(d)) ocIds.set(d, ++ocSeq);
+		const key = JSON.stringify([
+			plan.baseDate,
+			plan.accounts.map((a) => [
+				a.id,
+				a.rates,
+				a.low,
+				a.high
+			]),
+			plan.defaultMix,
+			plan.packages,
+			plan.correlation,
+			pkgs.map((p) => [
+				p.id,
+				p.cost,
+				p.start,
+				p.end
+			]),
+			d ? ocIds.get(d) : 0
+		]);
+		if (!(key in escSimCache)) {
+			if (Object.keys(escSimCache).length > 12) Object.keys(escSimCache).forEach((k) => {
+				delete escSimCache[k];
+			});
+			escSimCache[key] = simulateEscalation(plan, pkgs, {
+				iterations: DEFAULT_ITERATIONS,
+				seed: DEFAULT_SEED,
+				delaysWork: d
+			});
+		}
+		return escSimCache[key];
+	}
+	var escMethodVal = () => $("escMethod").value === "simple" ? "simple" : "indices";
+	function escCalc(base, cont) {
+		const method = escMethodVal(), ctx = method === "indices" ? escPackages() : {
+			pkgs: [],
+			note: ""
+		};
+		state.esc.method = method;
+		if (method === "simple") {
+			const esc = simpleEscalation(base, +$("inflRate").value || 0, +$("inflYears").value || 0), a = simpleMethodAdvisory(state.curClass);
+			return {
+				method,
+				esc,
+				central: esc,
+				funded: base,
+				scale: 1,
+				onCont: 0,
+				res: null,
+				sim: null,
+				provLabel: "escalación simple",
+				provQ: null,
+				adv: a ? [a] : [],
+				ctx
+			};
+		}
+		const plan = state.esc;
+		plan.baseDate = $("boeDate").value || "";
+		const res = escalate(plan, ctx.pkgs), sim = res.ok ? escSim(plan, ctx.pkgs) : null, prov = provisionFactor(plan, res, sim);
+		const funded = base + (plan.onContingency ? cont : 0), scale = res.base > 0 ? base / res.base : 0;
+		const adv = escalationAdvisories(plan, res, sim, {
+			classNum: state.curClass,
+			riskTitles: riskCtx().risks.map((r) => r.title || "")
+		});
+		if (ctx.note && !res.ok) adv.unshift({
+			code: "X7",
+			severity: "riesgo",
+			text: ctx.note
+		});
+		return {
+			method,
+			esc: res.ok ? prov.factor * funded : 0,
+			central: res.ok ? res.factor * funded : 0,
+			funded,
+			scale,
+			onCont: plan.onContingency ? cont : 0,
+			res,
+			sim,
+			provLabel: prov.label,
+			provQ: plan.provision === "central" || !sim ? null : Number(plan.provision.slice(1)),
+			adv,
+			ctx
+		};
+	}
+	var pct1 = (x) => (x * 100).toFixed(1) + " %";
+	var escInputsKey = "";
+	function escYears(ctx) {
+		const ys = new Set(horizonYears($("boeDate").value, ctx.pkgs));
+		state.esc.accounts.forEach((a) => Object.keys(a.rates).forEach((y) => ys.add(Number(y))));
+		return Array.from(ys).sort((a, b) => a - b);
+	}
+	function renderEscInputs(ctx) {
+		const p = state.esc, years = escYears(ctx), bd = $("boeDate").value;
+		escInputsKey = JSON.stringify([
+			years,
+			ctx.pkgs.map((k) => k.id),
+			bd
+		]);
+		const acc = p.accounts.map((a) => `<tr><td><b>${esc(ACCOUNT_LABEL[a.id])}</b></td>
+      <td><input class="esc-in wide" data-e="src" data-acc="${a.id}" value="${escA(a.source)}" placeholder="¿De qué economista o fuente sale este pronóstico?" aria-label="Fuente del pronóstico de ${escA(ACCOUNT_LABEL[a.id])}" onchange="escEdit(this)"></td>
+      ${years.map((y) => `<td class="num"><input class="esc-in" type="number" step="0.1" data-e="rate" data-acc="${a.id}" data-year="${y}" value="${a.rates[String(y)] === void 0 ? "" : a.rates[String(y)]}" aria-label="Tasa anual ${y} de ${escA(ACCOUNT_LABEL[a.id])}" onchange="escEdit(this)"></td>`).join("")}
+      <td class="num"><input class="esc-in" type="number" step="0.1" max="0" data-e="low" data-acc="${a.id}" value="${a.low}" aria-label="Incertidumbre mínima de ${escA(ACCOUNT_LABEL[a.id])}" onchange="escEdit(this)"></td>
+      <td class="num"><input class="esc-in" type="number" step="0.1" min="0" data-e="high" data-acc="${a.id}" value="${a.high}" aria-label="Incertidumbre máxima de ${escA(ACCOUNT_LABEL[a.id])}" onchange="escEdit(this)"></td></tr>`).join("");
+		const mixIn = (id, m, ph, attrs) => `<input class="esc-in" style="width:56px" type="number" min="0" step="1" ${attrs} value="${m && m[id] ? m[id] : ""}" placeholder="${ph}" aria-label="Composición ${escA(ACCOUNT_LABEL[id])} (%)" onchange="escEdit(this)">`;
+		const pk = ctx.pkgs.map((k) => {
+			const o = p.packages[k.id] || {};
+			return `<tr><td class="mono">${esc(k.code)}</td><td>${esc(k.name)}</td>
+      ${ACCOUNT_IDS.map((id) => `<td class="num">${mixIn(id, o.mix, String(p.defaultMix[id] || 0), `data-e="pmix" data-pid="${escA(k.id)}" data-acc="${id}"`)}</td>`).join("")}
+      <td><input class="esc-in date" type="date" data-e="lock" data-pid="${escA(k.id)}" value="${escA(o.lock || "")}" aria-label="Fecha de fijación del precio de ${escA(k.name)}" onchange="escEdit(this)"></td></tr>`;
+		}).join("");
+		$("escInputs").innerHTML = `
+    <div class="note" style="margin:0 0 10px">Fecha base de precios: <b>${esc(bd) || "— (defínela en la pestaña 02, Basis of Estimate)"}</b>. El índice vale 1,00 en esa fecha. ${ctx.pkgs.length ? "<b>" + ctx.pkgs.length + " paquete(s)</b> con costo se reparten en el tiempo según sus fechas del cronograma." : ""}</div>
+    <div class="eyebrow esc-sec">Pronóstico de índices por cuenta de costo</div>
+    <div style="overflow-x:auto"><table class="esc-tbl"><thead><tr><th>Cuenta</th><th>Fuente del pronóstico</th>${years.map((y) => `<th class="num">${y} (% anual)</th>`).join("")}<th class="num" title="Cuánto puede ser MENOR la tasa que el pronóstico (puntos porcentuales, ≤ 0)">Mín (pp)</th><th class="num" title="Cuánto puede ser MAYOR la tasa que el pronóstico (puntos porcentuales, ≥ 0)">Máx (pp)</th></tr></thead><tbody>${acc}</tbody></table></div>
+    <div class="muted" style="font-size:11.5px;margin-top:6px">Tasa anual esperada de cada cuenta por año calendario (más allá del último año se mantiene la última). «Mín / Máx» es el rango de incertidumbre de la tasa para la simulación (AACE 68R-11). El pronóstico debe venir de un economista o de una fuente reconocida: <b>no extrapoles</b> la tendencia pasada.</div>
+    <div style="margin-top:14px;display:grid;grid-template-columns:minmax(300px,1.6fr) minmax(200px,1fr) minmax(160px,.7fr);gap:18px;align-items:start">
+      <div><div class="eyebrow" style="margin-bottom:6px">Composición por omisión del costo (%)</div><div style="display:flex;gap:8px;flex-wrap:wrap">${ACCOUNT_IDS.map((id) => `<label class="muted small" style="display:flex;flex-direction:column;gap:2px">${esc(ACCOUNT_LABEL[id])}<input class="esc-in" type="number" min="0" step="1" data-e="dmix" data-acc="${id}" value="${p.defaultMix[id] || 0}" onchange="escEdit(this)"></label>`).join("")}</div></div>
+      <div><label class="f"><span>Escalación que se financia en el presupuesto</span><select class="mono" data-e="prov" onchange="escEdit(this)">${PROVISIONS.map((q) => `<option value="${q}" ${p.provision === q ? "selected" : ""}>${esc(PROVISION_LABEL[q])}</option>`).join("")}</select></label></div>
+      <div><label class="f"><span>Correlación entre las cuentas (%)</span><input class="mono" type="number" min="0" max="100" step="5" data-e="corr" value="${Math.round(p.correlation * 100)}" onchange="escEdit(this)"></label></div>
+    </div>
+    <label class="rng-chk" style="margin-top:6px"><input type="checkbox" data-e="onCont" ${p.onContingency ? "checked" : ""} onchange="escEdit(this)"><span><b>Escalar también la contingencia</b> <span class="muted">(58R-10: «Escalation on Contingency»; la contingencia se gasta a lo largo del proyecto, como el costo base)</span></span></label>
+    <details class="esc-det"><summary>Paquetes: composición del costo por cuenta y fijación del precio (${ctx.pkgs.length})</summary>
+      <div class="muted" style="font-size:11.5px;margin:8px 0">Cada paquete usa la composición por omisión salvo que la cambies. Con <b>fecha de fijación del precio</b> (contrato o compra a precio fijo) el índice deja de correr desde esa fecha: la exposición a la escalación termina cuando el precio se cierra.</div>
+      <div style="overflow-x:auto"><table class="esc-tbl"><thead><tr><th>Cód.</th><th>Paquete</th>${ACCOUNT_IDS.map((id) => `<th class="num">${esc(ACCOUNT_LABEL[id])} %</th>`).join("")}<th>Precio fijado el</th></tr></thead><tbody>${pk || `<tr><td colspan="7" class="muted">${esc(ctx.note || "Sin paquetes con costo.")}</td></tr>`}</tbody></table></div>
+    </details>`;
+	}
+	function escCurveSvg(sim, funded, provQ) {
+		const W = 560, H = 220, l = 58, t = 14, cv = sim.curve.map((f) => f * funded), det = sim.det * funded;
+		const lo = Math.min(cv[0], det), hi = Math.max(cv[98], det), span = hi - lo || 1;
+		const xs = (v) => l + (v - lo) / span * 486, ys = (q) => t + (100 - q) / 100 * 166;
+		const short = (v) => Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(2) + " M" : Math.round(v).toLocaleString("es-PE");
+		const path = cv.map((v, i) => (i ? "L" : "M") + xs(v).toFixed(1) + "," + ys(i + 1).toFixed(1)).join(" ");
+		const xt = [
+			lo,
+			lo + span / 2,
+			hi
+		].map((v, i) => `<text x="${xs(v).toFixed(1)}" y="198" text-anchor="${[
+			"start",
+			"middle",
+			"end"
+		][i]}" class="rng-tick">${esc(short(v))}</text>`).join("");
+		const yt = [
+			0,
+			25,
+			50,
+			75,
+			100
+		].map((q) => `<line x1="${l}" x2="544" y1="${ys(q)}" y2="${ys(q)}" class="rng-grid"/><text x="52" y="${ys(q) + 3}" text-anchor="end" class="rng-tick">${q}%</text>`).join("");
+		const mk = provQ ? (() => {
+			const px = xs(sim.p[provQ] * funded), py = ys(provQ);
+			return `<line x1="${px}" x2="${px}" y1="${py}" y2="180" class="rng-sel"/><circle cx="${px}" cy="${py}" r="5" class="rng-dot"/><text x="${Math.min(px + 9, 520)}" y="${py + 16}" class="rng-tick" font-weight="700">P${provQ}</text>`;
+		})() : "";
+		return `<svg viewBox="0 0 ${W} ${H}" class="rng-svg" role="img" aria-label="Curva S de la escalación simulada: probabilidad acumulada de no superar cada monto. Pronóstico central ${esc(short(det))}.">
+    ${yt}${xt}<line x1="${xs(det)}" x2="${xs(det)}" y1="${t}" y2="180" class="rng-base"/><text x="${xs(det) + 4}" y="24" class="rng-tick">Central</text>
+    <path d="${path}" class="rng-line"/>${mk}
+    <text x="301" y="216" text-anchor="middle" class="rng-cap">Escalación (monto)</text>
+  </svg>`;
+	}
+	function renderEscResults(c) {
+		const box = $("escResults"), res = c.res, sim = c.sim;
+		const adv = c.adv.length ? `<div class="eyebrow esc-sec">Revisa</div><ul class="esc-adv">${c.adv.map((a) => `<li class="${a.severity}"><b class="cd">${a.code}</b>${esc(a.text)}</li>`).join("")}</ul>` : "";
+		if (!res || !res.ok) {
+			box.innerHTML = `<div class="note"><b>Escalación = 0 por ahora.</b> Completa lo que falta:</div>${adv}`;
+			return;
+		}
+		const k = c.scale;
+		const kp = (lab, v, cap) => `<div class="kpi"><div class="lab">${lab}</div><div class="val neu">${v}</div><div class="cap">${cap}</div></div>`;
+		const q = (n) => sim ? fmt(sim.p[n] * c.funded) : "—";
+		const kpis = `<div class="kpis k5">${kp("Escalación central", fmt(c.central), pct1(res.factor) + " del costo · fecha media del gasto " + esc(res.midDate || "—"))}
+    ${kp("Financiada", fmt(c.esc), esc(c.provLabel))}${kp("P50", q(50), "simulación")}${kp("P80", q(80), "simulación")}${kp("P90", q(90), "simulación")}</div>`;
+		const byAcc = res.byAccount.map((a) => `<tr><td>${esc(a.label)}</td><td class="num">${fmt(a.base * k)}</td><td class="num">${fmt(a.esc * k)}</td><td class="num">${a.pct.toFixed(2)} %</td></tr>`).join("");
+		const byYear = res.byYear.map((y) => `<tr><td>${y.year}</td><td class="num">${fmt(y.base * k)}</td><td class="num">${fmt(y.esc * k)}</td><td class="num">${fmt((y.base + y.esc) * k)}</td></tr>`).join("");
+		const top = res.byPackage.slice().sort((a, b) => b.esc - a.esc).slice(0, 8).map((p) => `<tr><td class="mono">${esc(p.code)}</td><td>${esc(p.name)}${p.undated ? ` <span class="muted small">(sin fechas)</span>` : ""}</td><td class="num">${fmt(p.cost * k)}</td><td class="num">${fmt(p.esc * k)}</td><td class="num">${p.pct.toFixed(2)} %</td><td class="muted small">${p.lock ? "precio fijado " + esc(p.lock) : ""}</td></tr>`).join("");
+		const simTxt = sim && sim.sd < 1e-12 ? `Simulación Monte Carlo (AACE 68R-11): sin incertidumbre definida en los índices ni variable de plazo, todas las iteraciones dan el pronóstico central. Define el rango de las tasas (Mín / Máx) para medir la incertidumbre de la escalación.` : sim ? `Simulación Monte Carlo (AACE 68R-11): ${sim.iterations.toLocaleString("es-PE")} iteraciones (semilla ${sim.seed}, reproducible) · tasas de ${sim.uncertainAccounts} cuenta(s) con rango, correlación ${Math.round(sim.correlation * 100)} %${sim.withDelay ? " · con el retraso del cronograma del análisis integrado de riesgo (media " + Math.round(sim.delayMeanCal) + " d de calendario, P80 " + Math.round(sim.delayP80Cal) + " d)" : " · sin variable de plazo"}. El pronóstico central equivale al <b>P${Math.round(sim.probAtOrBelowDet * 100)}</b>: hay ${Math.round(sim.probAtOrBelowDet * 100)} % de probabilidad de que la escalación no lo supere. Media ${fmt(sim.mean * c.funded)} · σ ${fmt(sim.sd * c.funded)}.` : "";
+		box.innerHTML = `${kpis}
+    <div class="rng-grid2" style="margin-top:14px">
+      <div>
+        <div class="eyebrow esc-sec" style="margin-top:0">Por cuenta de costo</div>
+        <table class="esc-tbl"><thead><tr><th>Cuenta</th><th class="num">Costo base</th><th class="num" title="Escalación del costo base (la de la contingencia se indica abajo)">Escalación</th><th class="num">% de la cuenta</th></tr></thead><tbody>${byAcc}</tbody></table>
+        <div class="eyebrow esc-sec">Por año (flujo de caja)</div>
+        <table class="esc-tbl"><thead><tr><th>Año</th><th class="num">Costo base</th><th class="num" title="Escalación del costo base (la de la contingencia se indica abajo)">Escalación</th><th class="num">Costo escalado</th></tr></thead><tbody>${byYear}</tbody></table>
+        ${c.onCont ? `<div class="muted small" style="margin-top:8px">De la escalación financiada, <b>${fmt(c.funded > 0 ? c.esc * c.onCont / c.funded : 0)}</b> corresponde a la contingencia (${fmt(c.onCont)}), que se gasta a lo largo del proyecto como el costo base (58R-10, «Escalation on Contingency»).</div>` : ""}
+      </div>
+      <div>${sim ? escCurveSvg(sim, c.funded, c.provQ) : ""}</div>
+    </div>
+    <div class="eyebrow esc-sec">Paquetes con mayor escalación</div>
+    <table class="esc-tbl"><thead><tr><th>Cód.</th><th>Paquete</th><th class="num">Costo</th><th class="num">Escalación</th><th class="num">%</th><th></th></tr></thead><tbody>${top}</tbody></table>
+    ${simTxt ? `<div class="muted" style="font-size:11.5px;margin-top:10px">${simTxt}</div>` : ""}
+    ${adv}
+    <div class="note" style="margin-top:12px"><b>Qué cubre y qué no.</b> Escalación = cambio general de precios de mercado (incluye la inflación); <b>excluye</b> la contingencia (riesgos específicos del proyecto) y el tipo de cambio, que se estiman aparte. Se calcula por cuenta de costo con su propio índice, en el momento en que se gasta cada paquete (mensual) y hasta la fecha de fijación del precio si la hay. La simulación mide la incertidumbre de las <b>tasas</b> (rango por cuenta, correlacionadas) y el <b>retraso</b> del cronograma; no simula la incertidumbre del costo (ya está en la contingencia, que se escala) ni la forma de la curva de gasto (lineal por paquete). Las tasas y la forma de la distribución de la incertidumbre son datos del equipo: AACE recomienda que los aporte un economista.</div>`;
+	}
+	function renderEsc(c) {
+		const on = c.method === "indices";
+		$("escCard").style.display = on ? "block" : "none";
+		$("escSimpleWrap").style.display = on ? "none" : "block";
+		$("escMethod").value = c.method;
+		$("escSummary").innerHTML = on ? c.res && c.res.ok ? `Escalación <b>${fmt(c.esc)}</b> (${c.res.base ? pct1(c.esc / (c.funded || 1)) : "—"} del costo ${c.onCont ? "base más contingencia" : "base"}) con <b>${esc(c.provLabel)}</b>${c.sim ? "; pronóstico central " + fmt(c.central) + "." : "."} Detalle, pronósticos por cuenta y simulación abajo.` : `<b>Sin escalación todavía:</b> ${c.adv.filter((a) => a.severity === "riesgo").map((a) => esc(a.text)).join(" ") || "completa el pronóstico de índices."}` : `Escalación simple <b>${fmt(c.esc)}</b>.${c.adv.length ? " " + c.adv.map((a) => esc(a.text)).join(" ") : ""}`;
+		if (!on) return;
+		if (escInputsKey === "" || escInputsKey !== JSON.stringify([
+			escYears(c.ctx),
+			c.ctx.pkgs.map((k) => k.id),
+			$("boeDate").value
+		])) renderEscInputs(c.ctx);
+		renderEscResults(c);
+	}
+	function onEscMethod() {
+		userEdited = true;
+		state.esc.method = escMethodVal();
+		escInputsKey = "";
+		recalcCont();
+		save();
+	}
+	function escEdit(el) {
+		userEdited = true;
+		const p = state.esc, e = el.dataset.e, acc = el.dataset.acc || "", a = p.accounts.find((x) => x.id === acc), v = el.value.trim(), n = v === "" ? NaN : Number(v);
+		if (e === "src" && a) a.source = v;
+		else if (e === "rate" && a) {
+			const y = String(el.dataset.year);
+			if (isFinite(n)) a.rates[y] = n;
+			else delete a.rates[y];
+		} else if (e === "low" && a) a.low = isFinite(n) ? Math.min(0, n) : 0;
+		else if (e === "high" && a) a.high = isFinite(n) ? Math.max(0, n) : 0;
+		else if (e === "dmix") {
+			if (isFinite(n) && n > 0) p.defaultMix[acc] = n;
+			else delete p.defaultMix[acc];
+			if (!Object.keys(p.defaultMix).length) p.defaultMix = { ...DEFAULT_MIX };
+		} else if (e === "pmix") {
+			const pid = String(el.dataset.pid), o = p.packages[pid] || (p.packages[pid] = {}), m = o.mix || (o.mix = {});
+			if (isFinite(n) && n > 0) m[acc] = n;
+			else delete m[acc];
+			if (!Object.keys(m).length) delete o.mix;
+			if (!o.mix && !o.lock) delete p.packages[pid];
+		} else if (e === "lock") {
+			const pid = String(el.dataset.pid), o = p.packages[pid] || (p.packages[pid] = {});
+			if (v) o.lock = v;
+			else delete o.lock;
+			if (!o.mix && !o.lock) delete p.packages[pid];
+		} else if (e === "prov") p.provision = PROVISIONS.indexOf(v) >= 0 ? v : "central";
+		else if (e === "corr") p.correlation = Math.max(0, Math.min(100, isFinite(n) ? n : 50)) / 100;
+		else if (e === "onCont") p.onContingency = el.checked;
+		recalcCont();
+		save();
+	}
 	function recalcCont() {
 		$("fxBandWrap").style.display = $("fxMode").value === "float" ? "block" : "none";
 		const base = +$("baseCost").value || 0;
 		const calc = contingencyCalc(base);
 		const cont = calc.cont;
-		const i = (+$("inflRate").value || 0) / 100, n = +$("inflYears").value || 0;
-		const escInfl = base * (Math.pow(1 + i, n) - 1);
-		let escFx = 0;
-		if ($("fxMode").value === "float") escFx = base * ((+$("fxShare").value || 0) / 100) * ((+$("fxBand").value || 0) / 100);
-		const escT = escInfl + escFx;
+		const ec = escCalc(base, cont), escIdx = ec.esc;
+		const fx = fxExposure(base, +$("fxShare").value || 0, +$("fxBand").value || 0, $("fxMode").value === "float");
+		const escT = escIdx + fx;
 		const bac = base + cont + escT;
 		const mgmt = bac * ((+$("mgmtPct").value || 0) / 100);
 		const total = bac + mgmt;
 		renderContUi(calc, base);
+		renderEsc(ec);
 		$("kBase").textContent = fmt(base);
 		$("kCont").textContent = fmt(cont);
 		$("kContCap").textContent = calc.method === "manual" ? "manual" : $("contPct").value;
-		$("kEsc").textContent = fmt(escT);
+		$("kEsc").textContent = fmt(escIdx);
+		$("kEscCap").textContent = ec.method === "indices" ? ec.provLabel : "escalación simple";
+		$("kFx").textContent = fmt(fx);
 		$("kBAC").textContent = fmt(bac);
 		$("kMgmt").textContent = fmt(mgmt);
 		$("kTotal").textContent = fmt(total);
 		$("kContP").textContent = base ? (cont / base * 100).toFixed(1) + "%" : "—";
-		$("kEscP").textContent = base ? (escT / base * 100).toFixed(1) + "%" : "—";
+		$("kEscP").textContent = base ? (escIdx / base * 100).toFixed(1) + "%" : "—";
 		state._budget = {
 			base,
 			cont,
 			esc: escT,
+			escIdx,
+			fx,
 			bac,
 			mgmt,
 			total
 		};
+		state._escCalc = ec;
 		renderAccuracy(base, cont, calc.res);
 		renderCO();
 	}
@@ -3341,6 +4432,22 @@
 		return `<p style="font-size:12.5px;margin:10px 0 4px"><b>Base de la contingencia — estimación por rangos y simulación Monte Carlo (AACE RP 41R-08 y 40R-08).</b> ${res ? `Distribución triangular por partida; correlación entre partidas ${Math.round(res.correlation * 100)} %; ${res.iterations.toLocaleString("es-PE")} iteraciones (semilla ${res.seed}, reproducible). Estimado base Σ más probable ${fmt(res.ml)}; P50 ${fmt(res.p[50])}, P${p} ${fmt(res.p[p])}. Contingencia = P${p} − estimado base = <b>${fmt(contingencyAt(res, p).amount)}</b>. Cubre la incertidumbre de los rangos del estimado. ${evTxt}${schedTxt}` : "Aún no hay partidas válidas."}</p>
     <table class="dt"><thead><tr><td style="font-weight:700;color:var(--muted)">Partida</td><td style="font-weight:700;color:var(--muted);text-align:right">Más probable</td><td style="font-weight:700;color:var(--muted);text-align:right">Mín / Máx</td><td style="font-weight:700;color:var(--muted)">Fundamento del rango</td></tr></thead><tbody>${lines}</tbody></table>`;
 	}
+	function escDocHtml() {
+		const c = state._escCalc;
+		if (!c || c.method !== "indices") return "";
+		const p = state.esc, bd = $("boeDate").value;
+		const years = escYears(c.ctx);
+		const head = `<thead><tr><td style="font-weight:700;color:var(--muted)">Cuenta</td>${years.map((y) => `<td style="font-weight:700;color:var(--muted);text-align:right">${y}</td>`).join("")}<td style="font-weight:700;color:var(--muted)">Fuente del pronóstico · rango de la tasa (pp)</td></tr></thead>`;
+		const rows = p.accounts.filter((a) => Object.keys(a.rates).length).map((a) => `<tr><td>${esc(ACCOUNT_LABEL[a.id])}</td>${years.map((y) => `<td style="text-align:right" class="mono">${a.rates[String(y)] === void 0 ? "—" : a.rates[String(y)] + " %"}</td>`).join("")}<td>${esc(a.source || "— (sin fuente: documentar)")} · ${a.low} / +${a.high}</td></tr>`).join("");
+		const locked = c.res ? c.res.byPackage.filter((k) => k.lock) : [];
+		const res = c.res, sim = c.sim;
+		return `<p style="font-size:12.5px;margin:10px 0 4px"><b>Base de la escalación — por índices (AACE RP 58R-10 y 68R-11).</b> Escalación = cambio general de precios de mercado, incluida la inflación; <b>excluye</b> la contingencia (riesgos específicos del proyecto) y el tipo de cambio, que se estiman aparte. Fórmula: costo del período × [índice en la fecha de gasto ÷ índice en la fecha base − 1], por cuenta de costo. Fecha base de precios: <b>${esc(bd) || "— (definir)"}</b>.${res && res.ok ? ` Los ${c.ctx.pkgs.length} paquetes se reparten en el tiempo (mensual, lineal) según sus fechas del cronograma; fecha media ponderada del gasto ${esc(res.midDate || "—")}.` : ""}</p>
+    ${rows ? `<table class="dt">${head}<tbody>${rows}</tbody></table>` : `<p class="muted" style="font-size:12.5px">Sin pronóstico de índices definido.</p>`}
+    ${res && res.ok ? `<p style="font-size:12.5px;margin:8px 0 0">Composición por omisión del costo: ${ACCOUNT_IDS.filter((id) => p.defaultMix[id]).map((id) => esc(ACCOUNT_LABEL[id]) + " " + p.defaultMix[id] + " %").join(" · ")}${Object.keys(p.packages).some((id) => p.packages[id].mix) ? "; " + Object.keys(p.packages).filter((id) => p.packages[id].mix).length + " paquete(s) con composición propia" : ""}. ${locked.length ? "<b>Precio fijado</b> por contrato: " + esc(locked.map((k) => k.code + " (" + k.lock + ")").join(", ")) + " — desde esa fecha el índice no corre." : "Ningún paquete tiene el precio fijado."}
+      Escalación del pronóstico central <b>${fmt(c.central)}</b> (${pct1(res.factor)} del costo${p.onContingency ? "; incluye la escalación de la contingencia, «Escalation on Contingency»" : "; la contingencia no se escala"}). Se financia <b>${fmt(c.esc)}</b> (${esc(c.provLabel)}).${sim ? ` Simulación Monte Carlo (68R-11; ${sim.iterations.toLocaleString("es-PE")} iteraciones, semilla ${sim.seed}, correlación entre cuentas ${Math.round(sim.correlation * 100)} %${sim.withDelay ? ", con el retraso del análisis integrado de riesgo" : ", sin variable de plazo"}): P50 ${fmt(sim.p[50] * c.funded)}, P70 ${fmt(sim.p[70] * c.funded)}, P80 ${fmt(sim.p[80] * c.funded)}, P90 ${fmt(sim.p[90] * c.funded)}; el pronóstico central equivale al P${Math.round(sim.probAtOrBelowDet * 100)}.` : ""}</p>` : ""}
+    ${c.adv.length ? `<p style="font-size:12.5px;margin:8px 0 0"><b>Revisar:</b> ${c.adv.map((a) => esc(a.code + " — " + a.text)).join(" · ")}</p>` : ""}
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Límites: no se simula la incertidumbre del costo (está en la contingencia, que se escala) ni la forma de la curva de gasto (lineal por paquete); las tasas y sus rangos son datos del equipo y deben provenir de un economista o de una fuente reconocida.</p>`;
+	}
 	function buildDoc() {
 		recalcCont();
 		const c = CLASSES[state.curClass], b = state._budget || {}, t = state._coTotals || {};
@@ -3406,13 +4513,15 @@
         <tr><td>Contingencia</td><td>${fmt(b.cont)} — ${esc(METHOD_LABEL[contMethod()])}${contMethod() === "manual" ? "" : ", " + esc($("contPct").selectedOptions[0].text.split(" ")[0])} (${b.base ? (b.cont / b.base * 100).toFixed(1) : "—"}%)</td></tr>
         ${contMethod() === "clase_tabla" ? `<tr><td></td><td class="muted">Referencia didáctica por clase y percentil: no proviene de una norma de AACE ni de un análisis de riesgo del proyecto.</td></tr>` : ""}
         ${contMethod() === "manual" ? `<tr><td>Fundamento del porcentaje</td><td>${esc($("manualBasis").value) || "— (documentar)"}</td></tr>` : ""}
-        <tr><td>Escalation / FX</td><td>${fmt(b.esc)} — inflación ${esc($("inflRate").value)}% a ${esc($("inflYears").value)} años; componente FX ${esc($("fxShare").value)}%, TC ${fxTxt}</td></tr>
+        <tr><td>Escalación</td><td>${fmt(b.escIdx)} — ${escMethodVal() === "indices" ? "por índices y en el tiempo (AACE 58R-10 / 68R-11); ver la base abajo" : "método simple: inflación " + esc($("inflRate").value) + " % a " + esc($("inflYears").value) + " años (una tasa y un punto de gasto)"}</td></tr>
+        <tr><td>Tipo de cambio (aparte)</td><td>${fmt(b.fx)} — componente en moneda extranjera ${esc($("fxShare").value)} %, TC ${fxTxt}</td></tr>
         <tr><td><b>BAC — línea base de costos${state.baselines.length ? " (inicial)" : ""}</b></td><td><b>${fmt(b.bac)}</b> (excluye reserva de gestión)</td></tr>
         <tr><td>Reserva de gestión</td><td>${fmt(b.mgmt)} — propiedad del sponsor</td></tr>
         <tr><td><b>Presupuesto total</b></td><td><b>${fmt(b.total)}</b></td></tr>
         ${state.baselines.length ? `<tr><td><b>BAC vigente</b></td><td><b>${fmt(t.bacCurrent)}</b> — ${esc(state.baselines[state.baselines.length - 1].version)} (${state.baselines.length} cambio(s) de línea base)</td></tr>` : ""}
       </table>
       ${rangeDocHtml()}
+      ${escDocHtml()}
     </section>
 
     <section class="dsec">
@@ -3499,7 +4608,16 @@
 					years: +$("inflYears").value,
 					fxShare: +$("fxShare").value,
 					fxMode: $("fxMode").value,
-					fxBand: +$("fxBand").value
+					fxBand: +$("fxBand").value,
+					method: escMethodVal(),
+					baseDate: $("boeDate").value,
+					accounts: state.esc.accounts,
+					defaultMix: state.esc.defaultMix,
+					packages: state.esc.packages,
+					onContingency: state.esc.onContingency,
+					provision: state.esc.provision,
+					correlation: state.esc.correlation,
+					results: escSummary()
 				},
 				computed: state._budget || null
 			},
@@ -3507,6 +4625,27 @@
 			changeTotals: state._coTotals || null,
 			baselineLog: state.baselines
 		};
+	}
+	function escSummary() {
+		const c = state._escCalc;
+		if (!c || c.method !== "indices" || !c.res || !c.res.ok) return null;
+		const out = {
+			funded: c.funded,
+			central: c.central,
+			financed: c.esc,
+			factor: c.res.factor,
+			provision: state.esc.provision,
+			midDate: c.res.midDate
+		};
+		if (c.sim) Object.assign(out, {
+			p50: c.sim.p[50] * c.funded,
+			p70: c.sim.p[70] * c.funded,
+			p80: c.sim.p[80] * c.funded,
+			p90: c.sim.p[90] * c.funded,
+			probAtOrBelowCentral: c.sim.probAtOrBelowDet,
+			withDelay: c.sim.withDelay
+		});
+		return out;
 	}
 	function rangeSummary() {
 		const r = simulate(corrValue());
@@ -3777,6 +4916,9 @@
 			$("fxShare").value = x.fxShare;
 			$("fxMode").value = x.fxMode;
 			$("fxBand").value = x.fxBand;
+			state.esc = normalizeEscPlan(x);
+			$("escMethod").value = state.esc.method;
+			escInputsKey = "";
 		}
 		if (b.rangeAnalysis) {
 			const ra = b.rangeAnalysis;
@@ -3813,6 +4955,10 @@
 			state.ranges = JSON.parse(JSON.stringify(SAMPLE_RANGES));
 			$("rngTimeCost").value = String(SAMPLE_TIME_COST);
 			$("rngTimeBasis").value = SAMPLE_TIME_BASIS;
+			state.esc = buildSampleEscPlan((c) => "w-" + c);
+			$("boeDate").value = SAMPLE_BASE_DATE;
+			$("escMethod").value = "indices";
+			escInputsKey = "";
 		}
 	}
 	function gpiBadge() {
@@ -3910,7 +5056,9 @@
 		rangeEdit,
 		pullRangesFromEstimate,
 		pullRangesFromWbs,
-		applyClassRange
+		applyClassRange,
+		onEscMethod,
+		escEdit
 	});
 	//#endregion
 })();

@@ -134,6 +134,10 @@ src/shared/change-control.ts     → (se inlinea en changes.js) control integrad
                                     áreas, autoridad requerida, condiciones de aprobación/implementación, hallazgos
 src/shared/change-sample.ts      → (se inlinea en changes.js) ejemplo DISTRIB+ de solicitudes de cambio (CR-001…003
                                     = OC-001…003 de Costos)
+src/shared/escalation.ts         → (se inlinea en cost.js) escalación por índices por cuenta y en el tiempo (AACE 58R-10)
+                                    + Monte Carlo con retraso del cronograma (68R-11); tipo de cambio aparte
+src/shared/escalation-sample.ts  → (se inlinea en cost.js) ejemplo DISTRIB+ de la escalación (tasas ILUSTRATIVAS, mezcla
+                                    por paquete, precios fijados); prueba de oro en tests/unit/escalation-sample.test.ts
 src/shared/wbs-quality.ts        → (se inlinea en wbs.js) calidad de la EDT: estructura, diccionario de los
                                     paquetes y tamaño, con umbrales didácticos declarados (LIMITS)
 src/shared/wbs-sample.ts         → (se inlinea en wbs.js) diccionario de los 18 paquetes del ejemplo DISTRIB+

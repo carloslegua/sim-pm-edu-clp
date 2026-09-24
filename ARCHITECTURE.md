@@ -1917,6 +1917,86 @@ Estimating»; la RP 118R-21 cubre rangos + Monte Carlo de riesgos inherentes) y
 - No usa modales — usa un toast propio. No carga `gpi-shared.css`.
 - Regla de oro propia: no crea `modules.cost` hasta la primera edición
   real del alumno (`save()` sin editar nada no persiste nada).
+- **Escalación por índices (auditoría metodológica AACE RP 58R-10 y 68R-11;
+  lógica pura en `src/shared/escalation.ts`, ejemplo en
+  `src/shared/escalation-sample.ts`, ambas inlineadas en `cost.js`)**. La
+  escalación era `base × ((1 + i)ⁿ − 1)`: UNA tasa, UN punto de gasto, sin
+  cuentas de costo, sin mirar cuándo se gasta cada paquete y con el tipo de
+  cambio mezclado en la misma línea («Escalation / FX»). **Fuentes**: se leyeron
+  las páginas públicas de muestra de AACE (los textos completos son de pago) y
+  lo verificado ahí es lo que se sigue: la relación básica `$Escalación =
+  $base · [Índice(fecha objetivo) / Índice(fecha base) − 1]`; que la
+  escalación **incluye la inflación y excluye la contingencia y el tipo de
+  cambio** (se estiman y gestionan aparte; la BOE documenta qué cubre cada
+  cuenta); índices apropiados a **cada cuenta de costo** con su mezcla ponderada;
+  el costo repartido **en el tiempo** (período a período); el pronóstico como
+  dato de un economista o fuente reconocida, no extrapolación de tendencias; y
+  en 68R-11 que la incertidumbre se cuantifica con distribuciones (P10/P90,
+  P80…), con dependencias/correlación, y que la escalación depende del
+  cronograma. **Lo que NO se pudo verificar y queda declarado**: el
+  tratamiento exacto de «Escalation on Contingency» (58R-10; se escala por
+  omisión, con casilla para apagarlo), las distribuciones concretas de 68R-11
+  (las de este módulo son una elección propia, visible) y cualquier valor de
+  índice: **las tasas del ejemplo DISTRIB+ son ILUSTRATIVAS** y así lo dice la
+  «fuente del pronóstico» de cada cuenta.
+  - **Modelo**: cuatro cuentas fijas (mano de obra, materiales, equipos,
+    subcontratos), cada una con tasa anual por año calendario (se mantiene la
+    última más allá del pronóstico) y crecimiento compuesto continuo
+    `(1 + r)^(días/año)`. Cada paquete (18 en el ejemplo) tiene una composición
+    por cuenta (la del plan por omisión o la propia) y se gasta **linealmente** a
+    lo largo de SUS fechas del cronograma (línea base LB-n si existe, como el
+    EVM); el costo se parte en **períodos mensuales** y cada uno se escala desde
+    la fecha base de precios (la de la BOE, `boeDate`) hasta su fecha media de
+    gasto. Un paquete con **precio fijado por contrato** (`lock`) deja de
+    escalar desde esa fecha. Un paquete sin fechas se ubica en la fecha media del
+    gasto y se avisa (X6). La escalación se aplica a costo base **más**
+    contingencia (casilla `onContingency`).
+  - **Simulación (68R-11)**: Monte Carlo determinista (semilla fija, 10.000
+    iteraciones) con dos variables — el **índice** (un desplazamiento de las
+    tasas de cada cuenta, en puntos porcentuales, triangular mín/0/máx,
+    correlacionado entre cuentas con un factor común, ρ 50 % por omisión) y el
+    **cronograma**: cada iteración del análisis integrado de riesgo (los MISMOS
+    eventos y semilla del Registro de Riesgos y de la contingencia) aporta su
+    extensión del plazo, que se convierte a calendario (× 7/5) y desplaza el gasto
+    de forma progresiva. **No se simulan** la incertidumbre del costo (ya está en
+    la contingencia, que se escala) ni la forma de la curva de gasto. El
+    presupuesto financia el pronóstico central o un percentil (P50–P90) de la
+    distribución del factor.
+  - **Tipo de cambio aparte**: `fxExposure` es su propia línea (KPI «+ Tipo de
+    cambio»); `budget.computed` guarda `escIdx` y `fx` además de `esc` (= suma,
+    compatibilidad). BAC = base + contingencia + escalación + tipo de cambio.
+  - **Compatibilidad (regla #3)**: `budget.escalation` conserva sus campos de
+    siempre (`inflation`, `years`, `fxShare`, `fxMode`, `fxBand`) y suma
+    `method`, `accounts`, `defaultMix`, `packages`, `onContingency`, `provision`,
+    `correlation` y `results`. **Un proyecto guardado sin `method` se lee como
+    «simple»** y sus cifras no cambian (el método simple sigue disponible, con
+    aviso X13 si el estimado es de clase 1–3). Un proyecto conectado nuevo
+    arranca por índices **en blanco** (sin fecha base ni pronósticos calcula 0 y
+    dice qué falta: regla de oro #5).
+  - **Avisos** (X1…X15): sin fecha base o sin pronósticos (riesgo); cuentas con
+    peso pero sin pronóstico (esa parte NO se escala); pronóstico que no llega al
+    último año de gasto; sin fuente del pronóstico; paquetes sin fechas; gasto
+    anterior a la fecha base; sin incertidumbre definida; sin variable de plazo;
+    contingencia sin escalar; **riesgos del registro que podrían solaparse con la
+    escalación** (p. ej. R-02 «alza del precio del acero»: la contingencia excluye
+    la escalación, la BOE debe definir la frontera).
+  - **Ejemplo DISTRIB+ ampliado** (mismos 18 paquetes y la red de 273 d): base de
+    precios 2026-07-01; composición por paquete (Dirección e Ingeniería: mano de
+    obra; Procura: materiales/equipos; MEP: subcontrato…); precios fijados en 3.1
+    Estructuras metálicas (2026-09-15) y 3.3 Equipos eléctricos (2026-09-28).
+    Cifras de oro (`escalation-sample.test.ts`): escalación central sobre el costo
+    base **112.033** (1,58 %; fecha media del gasto 2026-12-19; por año 32.356 en
+    2026 y 79.677 en 2027); con el retraso del cronograma y la contingencia
+    escalada, central 125.477, **P70 = 172.386** (financiado), P50 157.106, P80
+    182.075, P90 196.173 — el central equivale al P10: con el retraso probable del
+    caso, escalar más que el central es lo esperable. El BAC del ejemplo pasa de
+    8.075.181 (método simple) a **8.124.386**.
+  - Pruebas: `escalation.test.ts` (28, fórmulas analíticas), `escalation-sample
+    .test.ts` (6, oro), smoke `cost-escalation.smoke.test.ts` (10, incluye un
+    proyecto con red propia contra el cálculo analítico) y e2e en Chrome real
+    (`cost-escalation.spec.ts`: el proyecto armado con los botones reales tiene la
+    misma distribución del gasto que el ejemplo, se guarda tras una recarga y usa
+    el retraso del Registro de Riesgos).
 - Dos fuentes para el "costo base" de la estimación, ambas manuales
   (el alumno decide cuál traer, no hay auto-sincronización): "↧ Traer
   de la EDT" (`pullFromWBS`, rollup de costo del WBS — mezcla estimados

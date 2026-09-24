@@ -46,6 +46,13 @@ import {
   type CoAnalysis, type CoBaselineEntry, type CoKind
 } from "../../shared/change-orders";
 import { AUTH_LABEL, AUTH_LEVELS, authLevelOf, contingencyAlert, hasTiers, levelCovers, tiersText, type AuthLevel, type ReservePolicy as ReservePolicyT } from "../../shared/reserve-policy";
+import {
+  ACCOUNT_IDS, ACCOUNT_LABEL, DEFAULT_MIX, PROVISIONS, PROVISION_LABEL, blankEscPlan, escalate, escalationAdvisories, fxExposure, horizonYears, normalizeEscPlan,
+  provisionFactor, simpleEscalation, simpleMethodAdvisory, simulateEscalation, type Advisory, type EscPackage, type EscPlan, type EscResult, type EscSim
+} from "../../shared/escalation";
+import { SAMPLE_BASE_DATE, buildSampleEscPlan } from "../../shared/escalation-sample";
+import { EVM_SAMPLE_COSTS } from "../../shared/evm-sample";
+import { normalizeBaseline } from "../../shared/schedule-control";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -116,7 +123,8 @@ const SAMPLE_RANGES: RangeLine[] = [
 const SAMPLE_TIME_COST = 1500;
 const SAMPLE_TIME_BASIS = "Dirección de Proyecto y gastos generales de obra (supervisión, alquileres, seguros): ≈ 410.000, el 5,8 % del costo base, repartidos en los 273 días laborables del cronograma.";
 
-interface BudgetComputed { base: number; cont: number; esc: number; bac: number; mgmt: number; total: number; }
+// `esc` = escalación + tipo de cambio (compatibilidad con lo guardado: BAC = base + contingencia + esc); AACE los separa: `escIdx` y `fx`.
+interface BudgetComputed { base: number; cont: number; esc: number; escIdx?: number; fx?: number; bac: number; mgmt: number; total: number; }
 type ChangeTotals = CoAnalysis;
 interface CostState {
   curClass: number;
@@ -124,8 +132,10 @@ interface CostState {
   baselines: CoBaselineEntry[];
   ranges: RangeLine[];          // partidas del análisis de rangos (método «rangos_mc»)
   legacyMethod: string;         // método que declaraba un proyecto antiguo (solo para avisar), "" si no aplica
+  esc: EscPlan;                 // escalación por índices (AACE 58R-10 / 68R-11); la fecha base de precios es la de la BOE (`boeDate`)
   _budget?: BudgetComputed;
   _coTotals?: ChangeTotals;
+  _escCalc?: EscCalc;
 }
 
 const state: CostState = {
@@ -133,7 +143,8 @@ const state: CostState = {
   co: [],
   baselines: [],
   ranges: [],
-  legacyMethod: ""
+  legacyMethod: "",
+  esc: blankEscPlan()
 };
 
 /* ---------- Tabs ---------- */
@@ -260,6 +271,10 @@ const pctNum = (): number => parseInt(($("contPct") as HTMLSelectElement).value.
 function corrValue(): number { const v = parseFloat(($("corrPct") as HTMLInputElement).value); return isFinite(v) ? Math.max(0, Math.min(100, v)) / 100 : DEFAULT_CORRELATION; }
 // La simulación es determinista (semilla fija): se memoriza por partidas + correlación para no repetirla en cada tecla.
 const simCache: Record<string, RangeResult | null> = {};
+// Escalación: paquetes con su costo y fechas (se arman con la red) y la simulación de escalación (determinista: se memoriza).
+interface EscCtx { pkgs: EscPackage[]; note: string; }
+let escCtx: EscCtx | null = null;
+const escSimCache: Record<string, EscSim | null> = {};
 // ---- contexto de RIESGOS: el registro del proyecto (conectado) o el caso de ejemplo (independiente) ----
 // Costos LEE el Registro de Riesgos, nunca lo escribe: los eventos abiertos y cuantificados entran a la simulación
 // de la contingencia, y las órdenes por «riesgo materializado» se vinculan a un riesgo de ese registro.
@@ -282,7 +297,8 @@ function includeRisksOn(): boolean { const c = document.getElementById("rngRisks
 let net: Network | null = null, eng: Engine | null = null, netDirty = true;
 function getEng(): Engine | null {
   if (!netDirty) return eng;
-  netDirty = false; net = null; eng = null;
+  netDirty = false; net = null; eng = null; escCtx = null;
+  Object.keys(escSimCache).forEach((k) => { delete escSimCache[k]; });
   Object.keys(simCache).forEach((k) => { delete simCache[k]; });   // la red cambió: las simulaciones guardadas ya no valen
   Object.keys(eventOutcomes).forEach((k) => { delete eventOutcomes[k]; });
   try {
@@ -539,32 +555,235 @@ function applyClassRange(): void {
   showToast(n ? "Rango de la clase " + state.curClass + " aplicado a " + n + " partida(s) sin fundamento." : "Todas las partidas ya tienen fundamento: no se cambió ninguna.");
 }
 
-/* ---------- Contingencia / inflación ---------- */
+/* ---------- Escalación por índices (AACE RP 58R-10 / 68R-11) ---------- */
+// Costos LEE la EDT, las actividades y el cronograma (no los escribe): cada paquete con su costo y las fechas en que se gasta. Conectado: los
+// del proyecto (con la línea base del cronograma si existe, como el EVM); independiente: el caso DISTRIB+.
+function escPackages(): EscCtx {
+  getEng();                                             // reconstruye la red si cambió (y descarta este contexto)
+  if (escCtx) return escCtx;
+  const out: EscCtx = { pkgs: [], note: "" };
+  try {
+    if (typeof GPI === "undefined" || !GPI || !GPI.util || !GPI.util.cpm) { out.note = "No cargó gpi-core.js: sin el núcleo no se puede armar el cronograma."; escCtx = out; return out; }
+    const connected = gpiOn(), m = connected ? null : sampleScheduleModules();
+    const wbs = connected ? GPI.getModule("wbs") : (m as NonNullable<typeof m>).wbs;
+    const act = connected ? GPI.getModule("activities") : (m as NonNullable<typeof m>).activities;
+    const sched = connected ? GPI.getModule("schedule") : (m as NonNullable<typeof m>).schedule;
+    const leaves = GPI.util.wbsLeaves(wbs);
+    const costOf: Record<string, number> = {};
+    if (connected) {
+      GPI.util.costEstimateRows(GPI.getModule("costEstimate"), act, wbs).forEach((r) => { if (r.subtotal && r.subtotal > 0) costOf[r.leafId] = (costOf[r.leafId] || 0) + r.subtotal; });
+      leaves.forEach((l) => { if (!costOf[l.id]) { const w = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) : 0; if (w > 0) costOf[l.id] = w; } });
+    } else leaves.forEach((l) => { if ((EVM_SAMPLE_COSTS as Record<string, number>)[l.code]) costOf[l.id] = (EVM_SAMPLE_COSTS as Record<string, number>)[l.code]; });
+    const spans: Record<string, { start: string; end: string }> = {};
+    if (net && eng && net.startDate) {
+      const bl = connected && sched ? normalizeBaseline((sched as { baseline?: unknown }).baseline) : null;
+      const rows: Record<string, { es: number; ef: number }> = {};
+      if (bl) bl.snapshot.rows.forEach((r) => { rows[r.id] = r; }); else Object.keys(eng.rows).forEach((id) => { rows[id] = eng ? eng.rows[id] : { es: 0, ef: 0 }; });
+      const cal = net.calendar as { workDayIdx?: number[]; holidays?: string[] }, util = (GPI as GpiApi).util, start = util.parseISO(net.startDate);
+      const dateAt = (i: number): string => util.addWorkingDays(start, Math.max(0, Math.ceil(i - 1e-9)), cal);
+      const idx: Record<string, { es: number; ef: number }> = {};
+      net.nodes.filter((n) => !n.isMilestone && n.leafId).forEach((n) => { const r = rows[n.id]; if (!r) return; const s = idx[n.leafId as string] || (idx[n.leafId as string] = { es: r.es, ef: r.ef }); s.es = Math.min(s.es, r.es); s.ef = Math.max(s.ef, r.ef); });
+      Object.keys(idx).forEach((id) => { spans[id] = { start: dateAt(idx[id].es), end: dateAt(idx[id].ef - 1) }; });
+    } else out.note = connected ? "El proyecto aún no tiene actividades y enlaces (Cronograma/CPM) ni fecha de inicio: sin ellos no se sabe cuándo se gasta cada paquete." : "No se pudo armar el cronograma del ejemplo.";
+    out.pkgs = leaves.filter((l) => costOf[l.id]).map((l) => ({ id: l.id, code: l.code, name: l.name, cost: costOf[l.id], start: spans[l.id] ? spans[l.id].start : null, end: spans[l.id] ? spans[l.id].end : null }));
+    if (!out.pkgs.length && !out.note) out.note = connected ? "Ningún paquete de trabajo tiene costo: carga la estimación en Estimar los Costos o el costo de los paquetes en WBS Builder." : "El ejemplo no tiene paquetes.";
+  } catch (e) { out.note = "No se pudo armar el contexto del proyecto."; }
+  escCtx = out; return out;
+}
+// La escalación se simula con los MISMOS retrasos del análisis integrado de riesgo (Registro de Riesgos y contingencia): cada iteración trae
+// su extensión del plazo, que desplaza el gasto. Sin eventos con impacto en plazo ubicados en el cronograma, no hay variable de plazo.
+const ocIds = new WeakMap<object, number>(); let ocSeq = 0;
+function escDelays(): Float64Array | null {
+  if (!includeRisksOn()) return null;
+  const g = getEng(); if (!g) return null;
+  const ev = eventsCtx().events;
+  const oc = ev.length ? outcomesFor(ev, g) : undefined;
+  return oc && oc.ext ? oc.ext : null;
+}
+function escSim(plan: EscPlan, pkgs: EscPackage[]): EscSim | null {
+  const d = escDelays();
+  if (d && !ocIds.has(d)) ocIds.set(d, ++ocSeq);
+  const key = JSON.stringify([plan.baseDate, plan.accounts.map((a) => [a.id, a.rates, a.low, a.high]), plan.defaultMix, plan.packages, plan.correlation, pkgs.map((p) => [p.id, p.cost, p.start, p.end]), d ? ocIds.get(d) : 0]);
+  if (!(key in escSimCache)) {
+    if (Object.keys(escSimCache).length > 12) Object.keys(escSimCache).forEach((k) => { delete escSimCache[k]; });
+    escSimCache[key] = simulateEscalation(plan, pkgs, { iterations: DEFAULT_ITERATIONS, seed: DEFAULT_SEED, delaysWork: d });
+  }
+  return escSimCache[key];
+}
+type EscMethod = "simple" | "indices";
+const escMethodVal = (): EscMethod => (($("escMethod") as HTMLSelectElement).value === "simple" ? "simple" : "indices");
+interface EscCalc {
+  method: EscMethod; esc: number; central: number; funded: number; scale: number; onCont: number;
+  res: EscResult | null; sim: EscSim | null; provLabel: string; provQ: number | null; adv: Advisory[]; ctx: EscCtx;
+}
+// Escalación del presupuesto. Simple: base × ((1 + i)ⁿ − 1) (como siempre). Por índices: factor de escalación (central o percentil de la simulación)
+// × (costo base + contingencia si se escala): «Escalation on Contingency» — la contingencia también se gasta en el futuro.
+function escCalc(base: number, cont: number): EscCalc {
+  const method = escMethodVal(), ctx = method === "indices" ? escPackages() : { pkgs: [], note: "" } as EscCtx;
+  state.esc.method = method;
+  if (method === "simple") {
+    const i = +($("inflRate") as HTMLInputElement).value || 0, n = +($("inflYears") as HTMLInputElement).value || 0, esc = simpleEscalation(base, i, n), a = simpleMethodAdvisory(state.curClass);
+    return { method, esc, central: esc, funded: base, scale: 1, onCont: 0, res: null, sim: null, provLabel: "escalación simple", provQ: null, adv: a ? [a] : [], ctx };
+  }
+  const plan = state.esc; plan.baseDate = ($("boeDate") as HTMLInputElement).value || "";
+  const res = escalate(plan, ctx.pkgs), sim = res.ok ? escSim(plan, ctx.pkgs) : null, prov = provisionFactor(plan, res, sim);
+  const funded = base + (plan.onContingency ? cont : 0), scale = res.base > 0 ? base / res.base : 0;
+  const adv = escalationAdvisories(plan, res, sim, { classNum: state.curClass, riskTitles: riskCtx().risks.map((r) => r.title || "") });
+  if (ctx.note && !res.ok) adv.unshift({ code: "X7", severity: "riesgo", text: ctx.note });
+  return {
+    method, esc: res.ok ? prov.factor * funded : 0, central: res.ok ? res.factor * funded : 0, funded, scale, onCont: plan.onContingency ? cont : 0,
+    res, sim, provLabel: prov.label, provQ: plan.provision === "central" || !sim ? null : Number(plan.provision.slice(1)), adv, ctx
+  };
+}
+const pct1 = (x: number): string => (x * 100).toFixed(1) + " %";
+// Tablas de entrada: pronóstico de índices por cuenta y año, incertidumbre, composición por omisión, opciones y, por paquete, composición y fijación de precio.
+let escInputsKey = "";
+function escYears(ctx: EscCtx): number[] {
+  const ys = new Set<number>(horizonYears(($("boeDate") as HTMLInputElement).value, ctx.pkgs));
+  state.esc.accounts.forEach((a) => Object.keys(a.rates).forEach((y) => ys.add(Number(y))));   // nunca se oculta lo ya ingresado
+  return Array.from(ys).sort((a, b) => a - b);
+}
+function renderEscInputs(ctx: EscCtx): void {
+  const p = state.esc, years = escYears(ctx), bd = ($("boeDate") as HTMLInputElement).value;
+  escInputsKey = JSON.stringify([years, ctx.pkgs.map((k) => k.id), bd]);
+  const acc = p.accounts.map((a) => `<tr><td><b>${esc(ACCOUNT_LABEL[a.id])}</b></td>
+      <td><input class="esc-in wide" data-e="src" data-acc="${a.id}" value="${escA(a.source)}" placeholder="¿De qué economista o fuente sale este pronóstico?" aria-label="Fuente del pronóstico de ${escA(ACCOUNT_LABEL[a.id])}" onchange="escEdit(this)"></td>
+      ${years.map((y) => `<td class="num"><input class="esc-in" type="number" step="0.1" data-e="rate" data-acc="${a.id}" data-year="${y}" value="${a.rates[String(y)] === undefined ? "" : a.rates[String(y)]}" aria-label="Tasa anual ${y} de ${escA(ACCOUNT_LABEL[a.id])}" onchange="escEdit(this)"></td>`).join("")}
+      <td class="num"><input class="esc-in" type="number" step="0.1" max="0" data-e="low" data-acc="${a.id}" value="${a.low}" aria-label="Incertidumbre mínima de ${escA(ACCOUNT_LABEL[a.id])}" onchange="escEdit(this)"></td>
+      <td class="num"><input class="esc-in" type="number" step="0.1" min="0" data-e="high" data-acc="${a.id}" value="${a.high}" aria-label="Incertidumbre máxima de ${escA(ACCOUNT_LABEL[a.id])}" onchange="escEdit(this)"></td></tr>`).join("");
+  const mixIn = (id: string, m: Record<string, number> | undefined, ph: string, attrs: string): string => `<input class="esc-in" style="width:56px" type="number" min="0" step="1" ${attrs} value="${m && m[id] ? m[id] : ""}" placeholder="${ph}" aria-label="Composición ${escA(ACCOUNT_LABEL[id])} (%)" onchange="escEdit(this)">`;
+  const pk = ctx.pkgs.map((k) => { const o = p.packages[k.id] || {}; return `<tr><td class="mono">${esc(k.code)}</td><td>${esc(k.name)}</td>
+      ${ACCOUNT_IDS.map((id) => `<td class="num">${mixIn(id, o.mix, String(p.defaultMix[id] || 0), `data-e="pmix" data-pid="${escA(k.id)}" data-acc="${id}"`)}</td>`).join("")}
+      <td><input class="esc-in date" type="date" data-e="lock" data-pid="${escA(k.id)}" value="${escA(o.lock || "")}" aria-label="Fecha de fijación del precio de ${escA(k.name)}" onchange="escEdit(this)"></td></tr>`; }).join("");
+  $("escInputs").innerHTML = `
+    <div class="note" style="margin:0 0 10px">Fecha base de precios: <b>${esc(bd) || "— (defínela en la pestaña 02, Basis of Estimate)"}</b>. El índice vale 1,00 en esa fecha. ${ctx.pkgs.length ? "<b>" + ctx.pkgs.length + " paquete(s)</b> con costo se reparten en el tiempo según sus fechas del cronograma." : ""}</div>
+    <div class="eyebrow esc-sec">Pronóstico de índices por cuenta de costo</div>
+    <div style="overflow-x:auto"><table class="esc-tbl"><thead><tr><th>Cuenta</th><th>Fuente del pronóstico</th>${years.map((y) => `<th class="num">${y} (% anual)</th>`).join("")}<th class="num" title="Cuánto puede ser MENOR la tasa que el pronóstico (puntos porcentuales, ≤ 0)">Mín (pp)</th><th class="num" title="Cuánto puede ser MAYOR la tasa que el pronóstico (puntos porcentuales, ≥ 0)">Máx (pp)</th></tr></thead><tbody>${acc}</tbody></table></div>
+    <div class="muted" style="font-size:11.5px;margin-top:6px">Tasa anual esperada de cada cuenta por año calendario (más allá del último año se mantiene la última). «Mín / Máx» es el rango de incertidumbre de la tasa para la simulación (AACE 68R-11). El pronóstico debe venir de un economista o de una fuente reconocida: <b>no extrapoles</b> la tendencia pasada.</div>
+    <div style="margin-top:14px;display:grid;grid-template-columns:minmax(300px,1.6fr) minmax(200px,1fr) minmax(160px,.7fr);gap:18px;align-items:start">
+      <div><div class="eyebrow" style="margin-bottom:6px">Composición por omisión del costo (%)</div><div style="display:flex;gap:8px;flex-wrap:wrap">${ACCOUNT_IDS.map((id) => `<label class="muted small" style="display:flex;flex-direction:column;gap:2px">${esc(ACCOUNT_LABEL[id])}<input class="esc-in" type="number" min="0" step="1" data-e="dmix" data-acc="${id}" value="${p.defaultMix[id] || 0}" onchange="escEdit(this)"></label>`).join("")}</div></div>
+      <div><label class="f"><span>Escalación que se financia en el presupuesto</span><select class="mono" data-e="prov" onchange="escEdit(this)">${PROVISIONS.map((q) => `<option value="${q}" ${p.provision === q ? "selected" : ""}>${esc(PROVISION_LABEL[q])}</option>`).join("")}</select></label></div>
+      <div><label class="f"><span>Correlación entre las cuentas (%)</span><input class="mono" type="number" min="0" max="100" step="5" data-e="corr" value="${Math.round(p.correlation * 100)}" onchange="escEdit(this)"></label></div>
+    </div>
+    <label class="rng-chk" style="margin-top:6px"><input type="checkbox" data-e="onCont" ${p.onContingency ? "checked" : ""} onchange="escEdit(this)"><span><b>Escalar también la contingencia</b> <span class="muted">(58R-10: «Escalation on Contingency»; la contingencia se gasta a lo largo del proyecto, como el costo base)</span></span></label>
+    <details class="esc-det"><summary>Paquetes: composición del costo por cuenta y fijación del precio (${ctx.pkgs.length})</summary>
+      <div class="muted" style="font-size:11.5px;margin:8px 0">Cada paquete usa la composición por omisión salvo que la cambies. Con <b>fecha de fijación del precio</b> (contrato o compra a precio fijo) el índice deja de correr desde esa fecha: la exposición a la escalación termina cuando el precio se cierra.</div>
+      <div style="overflow-x:auto"><table class="esc-tbl"><thead><tr><th>Cód.</th><th>Paquete</th>${ACCOUNT_IDS.map((id) => `<th class="num">${esc(ACCOUNT_LABEL[id])} %</th>`).join("")}<th>Precio fijado el</th></tr></thead><tbody>${pk || `<tr><td colspan="7" class="muted">${esc(ctx.note || "Sin paquetes con costo.")}</td></tr>`}</tbody></table></div>
+    </details>`;
+}
+function escCurveSvg(sim: EscSim, funded: number, provQ: number | null): string {
+  const W = 560, H = 220, l = 58, r = 16, t = 14, b = 40, cv = sim.curve.map((f) => f * funded), det = sim.det * funded;
+  const lo = Math.min(cv[0], det), hi = Math.max(cv[98], det), span = hi - lo || 1;
+  const xs = (v: number): number => l + (v - lo) / span * (W - l - r), ys = (q: number): number => t + (100 - q) / 100 * (H - t - b);
+  const short = (v: number): string => Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(2) + " M" : Math.round(v).toLocaleString("es-PE");
+  const path = cv.map((v, i) => (i ? "L" : "M") + xs(v).toFixed(1) + "," + ys(i + 1).toFixed(1)).join(" ");
+  const xt = [lo, lo + span / 2, hi].map((v, i) => `<text x="${xs(v).toFixed(1)}" y="${H - 22}" text-anchor="${["start", "middle", "end"][i]}" class="rng-tick">${esc(short(v))}</text>`).join("");
+  const yt = [0, 25, 50, 75, 100].map((q) => `<line x1="${l}" x2="${W - r}" y1="${ys(q)}" y2="${ys(q)}" class="rng-grid"/><text x="${l - 6}" y="${ys(q) + 3}" text-anchor="end" class="rng-tick">${q}%</text>`).join("");
+  const mk = provQ ? (() => { const px = xs(sim.p[provQ] * funded), py = ys(provQ); return `<line x1="${px}" x2="${px}" y1="${py}" y2="${H - b}" class="rng-sel"/><circle cx="${px}" cy="${py}" r="5" class="rng-dot"/><text x="${Math.min(px + 9, W - 40)}" y="${py + 16}" class="rng-tick" font-weight="700">P${provQ}</text>`; })() : "";
+  return `<svg viewBox="0 0 ${W} ${H}" class="rng-svg" role="img" aria-label="Curva S de la escalación simulada: probabilidad acumulada de no superar cada monto. Pronóstico central ${esc(short(det))}.">
+    ${yt}${xt}<line x1="${xs(det)}" x2="${xs(det)}" y1="${t}" y2="${H - b}" class="rng-base"/><text x="${xs(det) + 4}" y="${t + 10}" class="rng-tick">Central</text>
+    <path d="${path}" class="rng-line"/>${mk}
+    <text x="${(l + W - r) / 2}" y="${H - 4}" text-anchor="middle" class="rng-cap">Escalación (monto)</text>
+  </svg>`;
+}
+function renderEscResults(c: EscCalc): void {
+  const box = $("escResults"), res = c.res, sim = c.sim;
+  const adv = c.adv.length ? `<div class="eyebrow esc-sec">Revisa</div><ul class="esc-adv">${c.adv.map((a) => `<li class="${a.severity}"><b class="cd">${a.code}</b>${esc(a.text)}</li>`).join("")}</ul>` : "";
+  if (!res || !res.ok) { box.innerHTML = `<div class="note"><b>Escalación = 0 por ahora.</b> Completa lo que falta:</div>${adv}`; return; }
+  const k = c.scale;
+  const kp =(lab: string, v: string, cap: string): string => `<div class="kpi"><div class="lab">${lab}</div><div class="val neu">${v}</div><div class="cap">${cap}</div></div>`;
+  const q = (n: number): string => (sim ? fmt(sim.p[n] * c.funded) : "—");
+  const kpis = `<div class="kpis k5">${kp("Escalación central", fmt(c.central), pct1(res.factor) + " del costo · fecha media del gasto " + esc(res.midDate || "—"))}
+    ${kp("Financiada", fmt(c.esc), esc(c.provLabel))}${kp("P50", q(50), "simulación")}${kp("P80", q(80), "simulación")}${kp("P90", q(90), "simulación")}</div>`;
+  const byAcc = res.byAccount.map((a) => `<tr><td>${esc(a.label)}</td><td class="num">${fmt(a.base * k)}</td><td class="num">${fmt(a.esc * k)}</td><td class="num">${a.pct.toFixed(2)} %</td></tr>`).join("");
+  const byYear = res.byYear.map((y) => `<tr><td>${y.year}</td><td class="num">${fmt(y.base * k)}</td><td class="num">${fmt(y.esc * k)}</td><td class="num">${fmt((y.base + y.esc) * k)}</td></tr>`).join("");
+  const top = res.byPackage.slice().sort((a, b) => b.esc - a.esc).slice(0, 8).map((p) => `<tr><td class="mono">${esc(p.code)}</td><td>${esc(p.name)}${p.undated ? ` <span class="muted small">(sin fechas)</span>` : ""}</td><td class="num">${fmt(p.cost * k)}</td><td class="num">${fmt(p.esc * k)}</td><td class="num">${p.pct.toFixed(2)} %</td><td class="muted small">${p.lock ? "precio fijado " + esc(p.lock) : ""}</td></tr>`).join("");
+  const simTxt = sim && sim.sd < 1e-12
+    ? `Simulación Monte Carlo (AACE 68R-11): sin incertidumbre definida en los índices ni variable de plazo, todas las iteraciones dan el pronóstico central. Define el rango de las tasas (Mín / Máx) para medir la incertidumbre de la escalación.`
+    : sim
+    ? `Simulación Monte Carlo (AACE 68R-11): ${sim.iterations.toLocaleString("es-PE")} iteraciones (semilla ${sim.seed}, reproducible) · tasas de ${sim.uncertainAccounts} cuenta(s) con rango, correlación ${Math.round(sim.correlation * 100)} %${sim.withDelay ? " · con el retraso del cronograma del análisis integrado de riesgo (media " + Math.round(sim.delayMeanCal) + " d de calendario, P80 " + Math.round(sim.delayP80Cal) + " d)" : " · sin variable de plazo"}. El pronóstico central equivale al <b>P${Math.round(sim.probAtOrBelowDet * 100)}</b>: hay ${Math.round(sim.probAtOrBelowDet * 100)} % de probabilidad de que la escalación no lo supere. Media ${fmt(sim.mean * c.funded)} · σ ${fmt(sim.sd * c.funded)}.`
+    : "";
+  box.innerHTML = `${kpis}
+    <div class="rng-grid2" style="margin-top:14px">
+      <div>
+        <div class="eyebrow esc-sec" style="margin-top:0">Por cuenta de costo</div>
+        <table class="esc-tbl"><thead><tr><th>Cuenta</th><th class="num">Costo base</th><th class="num" title="Escalación del costo base (la de la contingencia se indica abajo)">Escalación</th><th class="num">% de la cuenta</th></tr></thead><tbody>${byAcc}</tbody></table>
+        <div class="eyebrow esc-sec">Por año (flujo de caja)</div>
+        <table class="esc-tbl"><thead><tr><th>Año</th><th class="num">Costo base</th><th class="num" title="Escalación del costo base (la de la contingencia se indica abajo)">Escalación</th><th class="num">Costo escalado</th></tr></thead><tbody>${byYear}</tbody></table>
+        ${c.onCont ? `<div class="muted small" style="margin-top:8px">De la escalación financiada, <b>${fmt(c.funded > 0 ? c.esc * c.onCont / c.funded : 0)}</b> corresponde a la contingencia (${fmt(c.onCont)}), que se gasta a lo largo del proyecto como el costo base (58R-10, «Escalation on Contingency»).</div>` : ""}
+      </div>
+      <div>${sim ? escCurveSvg(sim, c.funded, c.provQ) : ""}</div>
+    </div>
+    <div class="eyebrow esc-sec">Paquetes con mayor escalación</div>
+    <table class="esc-tbl"><thead><tr><th>Cód.</th><th>Paquete</th><th class="num">Costo</th><th class="num">Escalación</th><th class="num">%</th><th></th></tr></thead><tbody>${top}</tbody></table>
+    ${simTxt ? `<div class="muted" style="font-size:11.5px;margin-top:10px">${simTxt}</div>` : ""}
+    ${adv}
+    <div class="note" style="margin-top:12px"><b>Qué cubre y qué no.</b> Escalación = cambio general de precios de mercado (incluye la inflación); <b>excluye</b> la contingencia (riesgos específicos del proyecto) y el tipo de cambio, que se estiman aparte. Se calcula por cuenta de costo con su propio índice, en el momento en que se gasta cada paquete (mensual) y hasta la fecha de fijación del precio si la hay. La simulación mide la incertidumbre de las <b>tasas</b> (rango por cuenta, correlacionadas) y el <b>retraso</b> del cronograma; no simula la incertidumbre del costo (ya está en la contingencia, que se escala) ni la forma de la curva de gasto (lineal por paquete). Las tasas y la forma de la distribución de la incertidumbre son datos del equipo: AACE recomienda que los aporte un economista.</div>`;
+}
+function renderEsc(c: EscCalc): void {
+  const on = c.method === "indices";
+  $("escCard").style.display = on ? "block" : "none";
+  $("escSimpleWrap").style.display = on ? "none" : "block";
+  ($("escMethod") as HTMLSelectElement).value = c.method;
+  $("escSummary").innerHTML = on
+    ? (c.res && c.res.ok
+      ? `Escalación <b>${fmt(c.esc)}</b> (${c.res.base ? pct1(c.esc / (c.funded || 1)) : "—"} del costo ${c.onCont ? "base más contingencia" : "base"}) con <b>${esc(c.provLabel)}</b>${c.sim ? "; pronóstico central " + fmt(c.central) + "." : "."} Detalle, pronósticos por cuenta y simulación abajo.`
+      : `<b>Sin escalación todavía:</b> ${c.adv.filter((a) => a.severity === "riesgo").map((a) => esc(a.text)).join(" ") || "completa el pronóstico de índices."}`)
+    : `Escalación simple <b>${fmt(c.esc)}</b>.${c.adv.length ? " " + c.adv.map((a) => esc(a.text)).join(" ") : ""}`;
+  if (!on) return;
+  if (escInputsKey === "" || escInputsKey !== JSON.stringify([escYears(c.ctx), c.ctx.pkgs.map((k) => k.id), ($("boeDate") as HTMLInputElement).value])) renderEscInputs(c.ctx);
+  renderEscResults(c);
+}
+function onEscMethod(): void { userEdited = true; state.esc.method = escMethodVal(); escInputsKey = ""; recalcCont(); save(); }
+// Edición de las entradas de la escalación (data-e = qué campo): se guarda en el plan y se recalcula sin volver a pintar las entradas (no se pierde el foco).
+function escEdit(el: HTMLInputElement | HTMLSelectElement): void {
+  userEdited = true;
+  const p = state.esc, e = el.dataset.e, acc = el.dataset.acc || "", a = p.accounts.find((x) => x.id === acc), v = el.value.trim(), n = v === "" ? NaN : Number(v);
+  if (e === "src" && a) a.source = v;
+  else if (e === "rate" && a) { const y = String(el.dataset.year); if (isFinite(n)) a.rates[y] = n; else delete a.rates[y]; }
+  else if (e === "low" && a) a.low = isFinite(n) ? Math.min(0, n) : 0;
+  else if (e === "high" && a) a.high = isFinite(n) ? Math.max(0, n) : 0;
+  else if (e === "dmix") { if (isFinite(n) && n > 0) p.defaultMix[acc] = n; else delete p.defaultMix[acc]; if (!Object.keys(p.defaultMix).length) p.defaultMix = { ...DEFAULT_MIX }; }
+  else if (e === "pmix") {
+    const pid = String(el.dataset.pid), o = p.packages[pid] || (p.packages[pid] = {}), m = o.mix || (o.mix = {});
+    if (isFinite(n) && n > 0) m[acc] = n; else delete m[acc];
+    if (!Object.keys(m).length) delete o.mix; if (!o.mix && !o.lock) delete p.packages[pid];
+  }
+  else if (e === "lock") { const pid = String(el.dataset.pid), o = p.packages[pid] || (p.packages[pid] = {}); if (v) o.lock = v; else delete o.lock; if (!o.mix && !o.lock) delete p.packages[pid]; }
+  else if (e === "prov") p.provision = (PROVISIONS.indexOf(v as never) >= 0 ? v : "central") as EscPlan["provision"];
+  else if (e === "corr") p.correlation = Math.max(0, Math.min(100, isFinite(n) ? n : 50)) / 100;
+  else if (e === "onCont") p.onContingency = (el as HTMLInputElement).checked;
+  recalcCont(); save();
+}
+
+/* ---------- Contingencia / escalación ---------- */
 function recalcCont(): void {
   $("fxBandWrap").style.display = ($("fxMode") as HTMLSelectElement).value === "float" ? "block" : "none";
   const base = +($("baseCost") as HTMLInputElement).value || 0;
   const calc = contingencyCalc(base);
   const cont = calc.cont;
-  const i = (+($("inflRate") as HTMLInputElement).value || 0) / 100, n = +($("inflYears") as HTMLInputElement).value || 0;
-  const escInfl = base * (Math.pow(1 + i, n) - 1);
-  let escFx = 0;
-  if (($("fxMode") as HTMLSelectElement).value === "float") { escFx = base * ((+($("fxShare") as HTMLInputElement).value || 0) / 100) * ((+($("fxBand") as HTMLInputElement).value || 0) / 100); }
-  const escT = escInfl + escFx;
-  // Línea base de costos (BAC) = estimado base + contingencia + escalamiento.
+  const ec = escCalc(base, cont), escIdx = ec.esc;
+  // El tipo de cambio se cuantifica APARTE de la escalación (58R-10): solo con régimen flotante.
+  const fx = fxExposure(base, +($("fxShare") as HTMLInputElement).value || 0, +($("fxBand") as HTMLInputElement).value || 0, ($("fxMode") as HTMLSelectElement).value === "float");
+  const escT = escIdx + fx;
+  // Línea base de costos (BAC) = estimado base + contingencia + escalación + tipo de cambio.
   const bac = base + cont + escT;
   // PMBOK: la reserva de gestión es un % de la LÍNEA BASE y queda FUERA de ella.
   const mgmt = bac * ((+($("mgmtPct") as HTMLInputElement).value || 0) / 100);
   const total = bac + mgmt;
   renderContUi(calc, base);
+  renderEsc(ec);
   $("kBase").textContent = fmt(base);
   $("kCont").textContent = fmt(cont); $("kContCap").textContent = calc.method === "manual" ? "manual" : ($("contPct") as HTMLSelectElement).value;
-  $("kEsc").textContent = fmt(escT);
+  $("kEsc").textContent = fmt(escIdx); $("kEscCap").textContent = ec.method === "indices" ? ec.provLabel : "escalación simple";
+  $("kFx").textContent = fmt(fx);
   $("kBAC").textContent = fmt(bac);
   $("kMgmt").textContent = fmt(mgmt);
   $("kTotal").textContent = fmt(total);
   $("kContP").textContent = base ? ((cont / base) * 100).toFixed(1) + "%" : "—";
-  $("kEscP").textContent = base ? ((escT / base) * 100).toFixed(1) + "%" : "—";
-  state._budget = { base, cont, esc: escT, bac, mgmt, total };
+  $("kEscP").textContent = base ? ((escIdx / base) * 100).toFixed(1) + "%" : "—";
+  state._budget = { base, cont, esc: escT, escIdx, fx, bac, mgmt, total };
+  state._escCalc = ec;
   renderAccuracy(base, cont, calc.res);
   renderCO(); // los saldos de las órdenes dependen del presupuesto recién calculado (y renderCO ya llama buildJSON)
 }
@@ -792,6 +1011,22 @@ function rangeDocHtml(): string {
     : "Aún no hay partidas válidas."}</p>
     <table class="dt"><thead><tr><td style="font-weight:700;color:var(--muted)">Partida</td><td style="font-weight:700;color:var(--muted);text-align:right">Más probable</td><td style="font-weight:700;color:var(--muted);text-align:right">Mín / Máx</td><td style="font-weight:700;color:var(--muted)">Fundamento del rango</td></tr></thead><tbody>${lines}</tbody></table>`;
 }
+// Base de la escalación en la BOE (AACE 34R-05 / 58R-10 / 68R-11): qué es escalación, índices, tiempo, precios fijados y simulación.
+function escDocHtml(): string {
+  const c = state._escCalc; if (!c || c.method !== "indices") return "";
+  const p = state.esc, bd = ($("boeDate") as HTMLInputElement).value;
+  const years = escYears(c.ctx);
+  const head = `<thead><tr><td style="font-weight:700;color:var(--muted)">Cuenta</td>${years.map((y) => `<td style="font-weight:700;color:var(--muted);text-align:right">${y}</td>`).join("")}<td style="font-weight:700;color:var(--muted)">Fuente del pronóstico · rango de la tasa (pp)</td></tr></thead>`;
+  const rows = p.accounts.filter((a) => Object.keys(a.rates).length).map((a) => `<tr><td>${esc(ACCOUNT_LABEL[a.id])}</td>${years.map((y) => `<td style="text-align:right" class="mono">${a.rates[String(y)] === undefined ? "—" : a.rates[String(y)] + " %"}</td>`).join("")}<td>${esc(a.source || "— (sin fuente: documentar)")} · ${a.low} / +${a.high}</td></tr>`).join("");
+  const locked = c.res ? c.res.byPackage.filter((k) => k.lock) : [];
+  const res = c.res, sim = c.sim;
+  return `<p style="font-size:12.5px;margin:10px 0 4px"><b>Base de la escalación — por índices (AACE RP 58R-10 y 68R-11).</b> Escalación = cambio general de precios de mercado, incluida la inflación; <b>excluye</b> la contingencia (riesgos específicos del proyecto) y el tipo de cambio, que se estiman aparte. Fórmula: costo del período × [índice en la fecha de gasto ÷ índice en la fecha base − 1], por cuenta de costo. Fecha base de precios: <b>${esc(bd) || "— (definir)"}</b>.${res && res.ok ? ` Los ${c.ctx.pkgs.length} paquetes se reparten en el tiempo (mensual, lineal) según sus fechas del cronograma; fecha media ponderada del gasto ${esc(res.midDate || "—")}.` : ""}</p>
+    ${rows ? `<table class="dt">${head}<tbody>${rows}</tbody></table>` : `<p class="muted" style="font-size:12.5px">Sin pronóstico de índices definido.</p>`}
+    ${res && res.ok ? `<p style="font-size:12.5px;margin:8px 0 0">Composición por omisión del costo: ${ACCOUNT_IDS.filter((id) => p.defaultMix[id]).map((id) => esc(ACCOUNT_LABEL[id]) + " " + p.defaultMix[id] + " %").join(" · ")}${Object.keys(p.packages).some((id) => p.packages[id].mix) ? "; " + Object.keys(p.packages).filter((id) => p.packages[id].mix).length + " paquete(s) con composición propia" : ""}. ${locked.length ? "<b>Precio fijado</b> por contrato: " + esc(locked.map((k) => k.code + " (" + k.lock + ")").join(", ")) + " — desde esa fecha el índice no corre." : "Ningún paquete tiene el precio fijado."}
+      Escalación del pronóstico central <b>${fmt(c.central)}</b> (${pct1(res.factor)} del costo${p.onContingency ? "; incluye la escalación de la contingencia, «Escalation on Contingency»" : "; la contingencia no se escala"}). Se financia <b>${fmt(c.esc)}</b> (${esc(c.provLabel)}).${sim ? ` Simulación Monte Carlo (68R-11; ${sim.iterations.toLocaleString("es-PE")} iteraciones, semilla ${sim.seed}, correlación entre cuentas ${Math.round(sim.correlation * 100)} %${sim.withDelay ? ", con el retraso del análisis integrado de riesgo" : ", sin variable de plazo"}): P50 ${fmt(sim.p[50] * c.funded)}, P70 ${fmt(sim.p[70] * c.funded)}, P80 ${fmt(sim.p[80] * c.funded)}, P90 ${fmt(sim.p[90] * c.funded)}; el pronóstico central equivale al P${Math.round(sim.probAtOrBelowDet * 100)}.` : ""}</p>` : ""}
+    ${c.adv.length ? `<p style="font-size:12.5px;margin:8px 0 0"><b>Revisar:</b> ${c.adv.map((a) => esc(a.code + " — " + a.text)).join(" · ")}</p>` : ""}
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Límites: no se simula la incertidumbre del costo (está en la contingencia, que se escala) ni la forma de la curva de gasto (lineal por paquete); las tasas y sus rangos son datos del equipo y deben provenir de un economista o de una fuente reconocida.</p>`;
+}
 function buildDoc(): void {
   recalcCont();
   const c = CLASSES[state.curClass], b = state._budget || ({} as Partial<BudgetComputed>), t = state._coTotals || ({} as Partial<ChangeTotals>);
@@ -857,13 +1092,15 @@ function buildDoc(): void {
         <tr><td>Contingencia</td><td>${fmt(b.cont)} — ${esc(METHOD_LABEL[contMethod()])}${contMethod() === "manual" ? "" : ", " + esc((($("contPct") as HTMLSelectElement).selectedOptions[0].text).split(" ")[0])} (${b.base ? ((b.cont as number) / b.base * 100).toFixed(1) : "—"}%)</td></tr>
         ${contMethod() === "clase_tabla" ? `<tr><td></td><td class="muted">Referencia didáctica por clase y percentil: no proviene de una norma de AACE ni de un análisis de riesgo del proyecto.</td></tr>` : ""}
         ${contMethod() === "manual" ? `<tr><td>Fundamento del porcentaje</td><td>${esc(($("manualBasis") as HTMLTextAreaElement).value) || "— (documentar)"}</td></tr>` : ""}
-        <tr><td>Escalation / FX</td><td>${fmt(b.esc)} — inflación ${esc(($("inflRate") as HTMLInputElement).value)}% a ${esc(($("inflYears") as HTMLInputElement).value)} años; componente FX ${esc(($("fxShare") as HTMLInputElement).value)}%, TC ${fxTxt}</td></tr>
+        <tr><td>Escalación</td><td>${fmt(b.escIdx)} — ${escMethodVal() === "indices" ? "por índices y en el tiempo (AACE 58R-10 / 68R-11); ver la base abajo" : "método simple: inflación " + esc(($("inflRate") as HTMLInputElement).value) + " % a " + esc(($("inflYears") as HTMLInputElement).value) + " años (una tasa y un punto de gasto)"}</td></tr>
+        <tr><td>Tipo de cambio (aparte)</td><td>${fmt(b.fx)} — componente en moneda extranjera ${esc(($("fxShare") as HTMLInputElement).value)} %, TC ${fxTxt}</td></tr>
         <tr><td><b>BAC — línea base de costos${state.baselines.length ? " (inicial)" : ""}</b></td><td><b>${fmt(b.bac)}</b> (excluye reserva de gestión)</td></tr>
         <tr><td>Reserva de gestión</td><td>${fmt(b.mgmt)} — propiedad del sponsor</td></tr>
         <tr><td><b>Presupuesto total</b></td><td><b>${fmt(b.total)}</b></td></tr>
         ${state.baselines.length ? `<tr><td><b>BAC vigente</b></td><td><b>${fmt(t.bacCurrent)}</b> — ${esc(state.baselines[state.baselines.length - 1].version)} (${state.baselines.length} cambio(s) de línea base)</td></tr>` : ""}
       </table>
       ${rangeDocHtml()}
+      ${escDocHtml()}
     </section>
 
     <section class="dsec">
@@ -925,13 +1162,26 @@ function collect(): Record<string, unknown> {
         timeCostPerDay: timeCostPerDay(), timeCostBasis: (($("rngTimeBasis") as HTMLInputElement | null) || { value: "" }).value, results: rangeSummary()
       },
       mgmtReservePct: +($("mgmtPct") as HTMLInputElement).value, escalation: {
+        // Los cuatro primeros y el tipo de cambio son los de siempre (proyectos antiguos los leen igual); lo demás es la escalación por
+        // índices (AACE 58R-10 / 68R-11). Sin `method` un proyecto guardado antes se lee como «simple».
         inflation: +($("inflRate") as HTMLInputElement).value, years: +($("inflYears") as HTMLInputElement).value,
-        fxShare: +($("fxShare") as HTMLInputElement).value, fxMode: ($("fxMode") as HTMLSelectElement).value, fxBand: +($("fxBand") as HTMLInputElement).value
+        fxShare: +($("fxShare") as HTMLInputElement).value, fxMode: ($("fxMode") as HTMLSelectElement).value, fxBand: +($("fxBand") as HTMLInputElement).value,
+        method: escMethodVal(), baseDate: ($("boeDate") as HTMLInputElement).value, accounts: state.esc.accounts, defaultMix: state.esc.defaultMix,
+        packages: state.esc.packages, onContingency: state.esc.onContingency, provision: state.esc.provision, correlation: state.esc.correlation,
+        results: escSummary()
       },
       computed: state._budget || null
     },
     changeOrders: state.co, changeTotals: state._coTotals || null, baselineLog: state.baselines
   };
+}
+// Resumen guardado de la escalación por índices (la simulación es determinista: se puede recalcular igual).
+function escSummary(): Record<string, unknown> | null {
+  const c = state._escCalc;
+  if (!c || c.method !== "indices" || !c.res || !c.res.ok) return null;
+  const out: Record<string, unknown> = { funded: c.funded, central: c.central, financed: c.esc, factor: c.res.factor, provision: state.esc.provision, midDate: c.res.midDate };
+  if (c.sim) Object.assign(out, { p50: c.sim.p[50] * c.funded, p70: c.sim.p[70] * c.funded, p80: c.sim.p[80] * c.funded, p90: c.sim.p[90] * c.funded, probAtOrBelowCentral: c.sim.probAtOrBelowDet, withDelay: c.sim.withDelay });
+  return out;
 }
 // Resumen guardado del análisis de rangos (la simulación es determinista: se puede recalcular igual).
 function rangeSummary(): Record<string, number> | null {
@@ -1110,6 +1360,8 @@ function applyData(d: any): void {
   if (b.escalation) {
     const x = b.escalation; ($("inflRate") as HTMLInputElement).value = x.inflation; ($("inflYears") as HTMLInputElement).value = x.years;
     ($("fxShare") as HTMLInputElement).value = x.fxShare; ($("fxMode") as HTMLSelectElement).value = x.fxMode; ($("fxBand") as HTMLInputElement).value = x.fxBand;
+    // Un proyecto guardado antes de la escalación por índices no trae `method`: se lee como «simple» y sus cifras no cambian.
+    state.esc = normalizeEscPlan(x); ($("escMethod") as HTMLSelectElement).value = state.esc.method; escInputsKey = "";
   }
   if (b.rangeAnalysis) {
     const ra = b.rangeAnalysis;
@@ -1138,6 +1390,8 @@ function load(): void {
   else {
     state.co = JSON.parse(JSON.stringify(SAMPLE_CO)); state.ranges = JSON.parse(JSON.stringify(SAMPLE_RANGES));
     ($("rngTimeCost") as HTMLInputElement).value = String(SAMPLE_TIME_COST); ($("rngTimeBasis") as HTMLInputElement).value = SAMPLE_TIME_BASIS;
+    // Escalación del caso: por índices, con la fecha base de precios de la BOE (los mismos 18 paquetes y las mismas fechas de la red).
+    state.esc = buildSampleEscPlan((c) => "w-" + c); ($("boeDate") as HTMLInputElement).value = SAMPLE_BASE_DATE; ($("escMethod") as HTMLSelectElement).value = "indices"; escInputsKey = "";
   }
 }
 /* ---------- Barra de proyecto (badge flotante) ---------- */
@@ -1206,4 +1460,4 @@ init(false);
 // archivo) que buscan estas funciones POR NOMBRE en el ámbito global.
 // Sin esto, Vite las deja encerradas en el closure del bundle y cada
 // clic tira "x is not defined".
-Object.assign(window, { coPolicyHint, save, recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc, coEdit, coBaseline, coKindHint, evalVariance, onContMethod, addRange, delRange, rangeEdit, pullRangesFromEstimate, pullRangesFromWbs, applyClassRange });
+Object.assign(window, { coPolicyHint, save, recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc, coEdit, coBaseline, coKindHint, evalVariance, onContMethod, addRange, delRange, rangeEdit, pullRangesFromEstimate, pullRangesFromWbs, applyClassRange, onEscMethod, escEdit });
