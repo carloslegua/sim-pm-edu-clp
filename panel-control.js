@@ -73,10 +73,10 @@
 			key: "pmplan",
 			group: "integ",
 			name: "Plan para la Dirección",
-			file: null,
+			file: "Plan_Direccion.html",
 			icon: "📘",
 			color: "#00967f",
-			desc: "Documento integrador que consolida los planes subsidiarios y las líneas base de alcance, cronograma y costo."
+			desc: "Documento integrador que consolida los planes subsidiarios y las líneas base de alcance, cronograma y costo, verifica que calcen entre sí y registra la aprobación del plan."
 		},
 		{
 			key: "changes",

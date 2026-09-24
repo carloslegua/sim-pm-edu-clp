@@ -11,6 +11,24 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Nuevo módulo «Plan para la Dirección» (`Plan_Direccion.html`, auditoría metodológica)** — la
+  tarjeta del Panel existía sin archivo y nada integraba las líneas base. Es el integrador: lee
+  (solo lectura) los demás módulos, muestra el **estado de cada área** (las 11 con módulo y, como
+  «sin módulo en la suite», Calidad, Comunicaciones y Adquisiciones, que no se inventan), cruza las
+  líneas base con **14 hallazgos de integración** (alcance cambiado después de las líneas base del
+  cronograma y del costo, cronograma que termina después de la fecha contractual, presupuesto
+  sobre el CAPEX, cambios aprobados sin implementar, BOE sin aprobar…), **registra la aprobación
+  del plan** (versión, quién, cuándo) con una **instantánea de las líneas base**: si cambian
+  después, avisa que el plan aprobado quedó desactualizado y ofrece «Nueva versión» conservando el
+  historial. Genera el **documento del plan** (portada, contenido, diez secciones con matriz de
+  trazabilidad de requisitos, Enunciado con responsables R/A, EDT con diccionario, cronograma,
+  costos con BOE, riesgos, interesados, equipo, cambios, valor ganado y firmas), exportable a
+  **PDF (imprimir)** y **Word (.doc)**. No tiene «Cargar ejemplo»: refleja el caso DISTRIB+ ya
+  cargado en los demás módulos y sin proyecto no inventa nada. Nuevos `src/shared/pm-plan.ts`,
+  módulo `pmplan` (rama opcional `pmplan` en el proyecto: solo la aprobación) y `PmPlanModule`.
+  El Panel activa su tarjeta (17 módulos activos, 5 próximos). Pruebas: 15 unitarias, 6 smoke y 2
+  e2e en Chrome real.
+
 - **Costos — Basis of Estimate conforme a AACE RP 34R-05** — la BOE tenía cinco campos; 34R-05 la
   define como el entregable que define el alcance del estimado y es la base del control de
   cambios. Ahora sigue el índice de la práctica en **32 campos y 8 grupos** (propósito, objetivos,

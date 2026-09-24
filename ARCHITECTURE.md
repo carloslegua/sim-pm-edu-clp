@@ -1343,6 +1343,52 @@ arranca **en blanco**; en modo independiente muestra el ejemplo.
 - **Límites declarados**: no crea ni edita las órdenes de Costos, las MOD ni la LB-n (eso lo
   hace cada módulo); solo verifica que existan y sean coherentes.
 
+**Plan_Direccion.html** (módulo `pmplan`, PMBOK «Desarrollar el plan para la dirección del
+proyecto») — auditoría metodológica: el Panel tenía la tarjeta «Plan para la Dirección» sin
+archivo y nada integraba las líneas base. Lógica pura en `src/shared/pm-plan.ts` (inlineada en
+`plan-direccion.js`, con 15 pruebas unitarias); el módulo es solo interfaz (patrón de Control de
+Cambios: `window.GPI` explícito, `pushWithSession`, todo texto escapado). Es el **integrador**:
+NO captura datos propios ni tiene «Cargar ejemplo» (regla #6: no hay un ejemplo aparte que
+mantener coherente; refleja el caso que ya cargaron los demás módulos) y sin proyecto activo solo
+avisa, sin inventar nada (regla #5).
+- **Estado por área** (`areaRows`): Acta, Requisitos, Alcance, EDT, Cronograma, Costos y BOE,
+  Riesgos, Interesados, Equipo/RACI, Cambios y Valor Ganado, cada una con el estado que ya
+  calculan las auditorías del núcleo (`charterAudit`, `requirementsAudit`, `scopeAudit`,
+  `analyzeWbs`, `scheduleStats`, `costSummary`, `portfolio` de riesgos y de cambios…). Los planes
+  de **Calidad, Comunicaciones y Adquisiciones** aún no tienen módulo: se listan como «sin módulo
+  en la suite», no se inventa su contenido.
+- **Hallazgos de integración P1–P14** (`integrationFindings`), lo que ningún módulo ve solo:
+  falta de Acta, líneas base de alcance/requisitos/cronograma ausentes, BOE sin aprobar, **alcance
+  cambiado después de las líneas base del cronograma y del costo**, cambios aprobados sin
+  implementar, **cronograma que termina después de la fecha contractual/del proyecto**,
+  **presupuesto sobre el CAPEX**, cambios pendientes más de 14 d, sin Registro de Riesgos,
+  pronóstico desviado más del 10 %, y los del plan aprobado (P12 desactualizado, P13 listo para
+  aprobar, P14 aprobado sin quién ni cuándo). Los umbrales (14 d, 10 %) son criterio didáctico
+  declarado.
+- **Aprobación como conjunto**: se aprueba con las tres líneas base (alcance, cronograma,
+  presupuesto: `approvalBlockers`) y con quién aprueba. Al aprobar se guarda una **instantánea**
+  (`snapshotOf`: versiones de línea base, fin del cronograma, BAC vigente, estado de la BOE); si
+  algo cambia después, `snapshotDiff` dice qué y el plan aprobado queda **desactualizado** hasta
+  crear una «Nueva versión» (versión mayor +1, historial conservado): PMBOK, un plan aprobado
+  solo cambia por control integrado de cambios.
+- **Rama propia `pmplan`** (opcional, aditiva; ProjectModules tiene firma de índice): `{version,
+  status, preparedBy, approvedBy, approvedOn, notes, snapshot, history[]}`. Solo esto se escribe;
+  el resto son lecturas.
+- **Documento** siguiendo el formato del PDF de la cátedra: portada, contenido con anclas y diez
+  secciones (descripción del proyecto del Acta; alcance con **matriz de trazabilidad** de
+  requisitos —identificación, requisito, fuente, prioridad, categoría, objetivo de negocio,
+  entregable, verificación, validación—, Enunciado con entregables y sus responsables de
+  elaboración (R) y aceptación (A) tomados de la RACI de los paquetes que los componen, EDT con
+  diccionario; cronograma, costos con BOE, riesgos top 10, interesados, equipo, cambios, valor
+  ganado, líneas base y firmas). Se exporta por **Imprimir/PDF** (CSS de impresión que oculta todo
+  salvo el documento) y a **Word (.doc)** (HTML con `application/msword`: Word lo abre y lo
+  conserva editable, sin dependencias). Sin datos en una sección se escribe «sin datos» en vez de
+  omitirla.
+- **Límites declarados**: no sustituye el contenido de los planes subsidiarios (los muestra
+  resumidos); el «Objetivo de negocio» de la matriz es el RAN del Acta al que responde el
+  requisito. Smoke (6) y e2e (2) en Chrome real: sobre el proyecto armado con los botones reales lee
+  la misma red que Cronograma/CPM (273 d, fin 2027-07-21).
+
 **Risk_Register.html** (módulo `risks`, PMBOK + AACE) — primer módulo
 **nuevo** posterior a la migración (no es un port): patrón de Stakeholder
 Studio (`addEventListener` exclusivo, `window.GPI` explícito, sesión de

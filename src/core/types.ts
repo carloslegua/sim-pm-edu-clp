@@ -348,7 +348,15 @@ export interface ChangesModule {
   idCounter?: number;
 }
 
+// Plan para la Dirección (Plan_Direccion.html): solo el registro de aprobación del plan (versión, quién y cuándo) y la instantánea de las
+// líneas base al aprobarlo; el resto del plan lo derivan de las demás herramientas. Esquema y normalización en shared/pm-plan.ts.
+export interface PmPlanModule {
+  version?: string; status?: string; preparedBy?: string; approvedBy?: string; approvedOn?: string; notes?: string;
+  snapshot?: Record<string, unknown> | null; history?: unknown[];
+}
+
 export interface ProjectModules {
+  pmplan?: PmPlanModule | null;
   changes?: ChangesModule | null;
   evm?: EvmModule | null;
   charter?: CharterModule | null;

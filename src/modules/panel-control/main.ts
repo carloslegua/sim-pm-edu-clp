@@ -116,8 +116,8 @@ let MODULES: ModuleDef[] = [
   // — Integración —
   { key: "charter", group: "integ", name: "Acta de Constitución", file: "Project_Charter.html", icon: "📜", color: "#00967f",
     desc: "Project Charter (PMBOK): propósito, objetivos y criterios de éxito, hitos, presupuesto, supuestos, restricciones, exclusiones y aprobación formal del proyecto." },
-  { key: "pmplan", group: "integ", name: "Plan para la Dirección", file: null, icon: "📘", color: "#00967f",
-    desc: "Documento integrador que consolida los planes subsidiarios y las líneas base de alcance, cronograma y costo." },
+  { key: "pmplan", group: "integ", name: "Plan para la Dirección", file: "Plan_Direccion.html", icon: "📘", color: "#00967f",
+    desc: "Documento integrador que consolida los planes subsidiarios y las líneas base de alcance, cronograma y costo, verifica que calcen entre sí y registra la aprobación del plan." },
   { key: "changes", group: "integ", name: "Control Integrado de Cambios", file: "Control_Cambios.html", icon: "🔁", color: "#00967f",
     desc: "Solicitudes de cambio que evalúan a la vez alcance, cronograma, costo, riesgo, calidad y recursos; decisión del CCB con la autoridad que exige (línea base, reservas); y trazabilidad hasta las órdenes de cambio de Costos, las modificaciones de alcance y la línea base del cronograma." },
   { key: "closeout", group: "integ", name: "Cierre del Proyecto", file: null, icon: "🏁", color: "#00967f",

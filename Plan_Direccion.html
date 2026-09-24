@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan para la Dirección del Proyecto — PMBOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#eef4f9; --bg-1:#ffffff; --bg-2:#f3f8fc;
+    --panel:#ffffff; --panel-border:#e0e8f0;
+    --ink-0:#1a2027; --ink-1:#4d5768; --ink-2:#5b6472;
+    --cyan:#00b6ec; --cyan-dark:#0090c2; --black:#1a1a1c;
+    --violet:#6c5ce7; --danger:#ff5470; --good:#00c2a8; --warn:#ff9f1c;
+    --mono:'JetBrains Mono',monospace; --display:'Manrope',sans-serif; --body:'Manrope','Inter',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0; background:radial-gradient(circle, rgba(0,182,236,0.06) 1px, transparent 1px) 0 0/26px 26px, var(--bg-0); color:var(--ink-0); font-family:var(--body); display:flex; flex-direction:column; min-height:100vh;}
+
+  header{border-bottom:1px solid var(--panel-border); background:linear-gradient(180deg,#fff,#fbfdff); padding:12px 22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; position:relative;}
+  header::after{content:''; position:absolute; left:0; right:0; bottom:-1px; height:3px; background:linear-gradient(90deg, var(--cyan), var(--violet) 45%, var(--warn) 75%, #ff6b8b);}
+  .brand{display:flex; align-items:center; gap:12px;}
+  .brand .logo{width:34px; height:34px; border-radius:9px; flex-shrink:0; background:linear-gradient(135deg,var(--cyan),var(--cyan-dark)); display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,182,236,.35); font-size:18px;}
+  .brand h1{font-family:var(--display); font-size:19px; font-weight:800; margin:0; color:var(--black);}
+  .brand .tag{font-family:var(--mono); font-size:11px; font-weight:600; color:#fff; background:linear-gradient(135deg,var(--cyan),var(--cyan-dark)); padding:3px 9px; border-radius:20px;}
+  .brand .sub{font-size:12px; color:var(--ink-2); font-weight:600;}
+
+  .toolbar{display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:10px 22px; background:var(--bg-1); border-bottom:1px solid var(--panel-border);}
+  .btn{font-family:var(--body); font-size:12.5px; font-weight:600; color:var(--ink-1); background:var(--bg-2); border:1px solid var(--panel-border); padding:7px 13px; border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; transition:border-color .12s,color .12s,background .12s;}
+  .btn:hover{border-color:var(--cyan); color:var(--cyan-dark); background:#fff;}
+  .btn.primary{background:linear-gradient(135deg,var(--cyan),var(--cyan-dark)); border-color:transparent; color:#fff;}
+  .btn.primary:hover{filter:brightness(1.06); color:#fff;} .btn:disabled{opacity:.4; cursor:not-allowed;} .btn.danger{color:var(--danger);}
+  .sep{width:1px; height:22px; background:var(--panel-border); margin:0 4px;}
+  .tabs{display:flex; gap:4px; padding:0 22px; background:var(--bg-1); border-bottom:1px solid var(--panel-border);}
+  .tab{font-family:var(--display); font-weight:700; font-size:13px; color:var(--ink-2); background:none; border:none; border-bottom:3px solid transparent; padding:11px 14px; cursor:pointer;}
+  .tab.active{color:var(--cyan-dark); border-bottom-color:var(--cyan);}
+
+  .main-area{flex:1; padding:22px 30px 60px;}
+  .view-head h2{font-family:var(--display); font-size:20px; font-weight:800; margin:0 0 4px;}
+  .view-head p{font-size:13px; color:var(--ink-1); margin:0 0 16px; max-width:900px; line-height:1.55;}
+  .muted{color:var(--ink-2);} .small{font-size:11.5px;} .mono{font-family:var(--mono);}
+  .card{background:var(--panel); border:1px solid var(--panel-border); border-radius:14px; padding:14px 16px; margin-bottom:14px; overflow-x:auto;}
+  .card h3{font-family:var(--display); font-size:14px; font-weight:800; margin:0 0 8px;}
+  table.an{border-collapse:collapse; width:100%; font-size:12.5px;}
+  table.an th{font-family:var(--mono); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-2); padding:6px; border-bottom:2px solid var(--panel-border); text-align:left; white-space:nowrap;}
+  table.an td{padding:6px; border-bottom:1px solid var(--panel-border); vertical-align:top;}
+  .pill{font-family:var(--mono); font-size:10.5px; font-weight:800; padding:2px 9px; border-radius:12px; white-space:nowrap;}
+  .st-verde{background:rgba(0,194,168,.16); color:#00806d;} .st-ambar{background:rgba(255,159,28,.2); color:#a05a00;} .st-rojo{background:rgba(255,84,112,.15); color:#c0203c;} .st-vacio{background:#eef1f5; color:#5b6472;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px;} @media(max-width:1000px){.grid2{grid-template-columns:1fr;}}
+  .fd{display:flex; flex-direction:column; gap:3px; margin-bottom:8px;} .fd label{font-size:11px; font-weight:700; color:var(--ink-1);}
+  .fd input,.fd textarea{font-family:var(--body); font-size:12.5px; padding:6px 8px; border:1px solid var(--panel-border); border-radius:7px; background:#fff; color:var(--ink-0); width:100%;}
+  .finds{list-style:none; margin:6px 0 0; padding:0; font-size:12.5px; line-height:1.5;} .finds li{padding:6px 8px; border-radius:8px; margin-bottom:5px; background:#f4f8fb;}
+  .finds li.riesgo{background:#fdecef; color:#7d1024;} .finds li.aviso{background:#fff3d6; color:#6b4a00;}
+  .finds b.cd{font-family:var(--mono); font-size:10.5px; margin-right:6px;}
+  .empty-hint{background:#f4fafd; border:1px dashed var(--cyan); border-radius:12px; padding:22px; color:var(--ink-1); font-size:13px; line-height:1.6;}
+  .banner{display:none; background:#fff3d6; border-bottom:1px solid #ffd58a; color:#6b4a00; padding:9px 22px; font-size:12.5px;} .banner.show{display:block;}
+  .statusbar{border-top:1px solid var(--panel-border); background:var(--bg-1); padding:7px 22px; font-size:11px; color:var(--ink-2); display:flex; justify-content:space-between; font-family:var(--mono);}
+
+  /* ===== El documento (formato del PDF «Plan para la dirección del proyecto») ===== */
+  #docView{display:none;}
+  .paper{background:#fff; border:1px solid var(--panel-border); border-radius:6px; box-shadow:0 6px 24px rgba(20,30,60,.08); max-width:1100px; margin:0 auto; padding:56px 64px; font-family:'Calibri','Segoe UI',var(--body); color:#1a1a1a; font-size:12.5px; line-height:1.5;}
+  .paper .cover{min-height:820px; display:flex; flex-direction:column; justify-content:space-between; text-align:center; page-break-after:always; break-after:page;}
+  .paper .cover .ttl{margin-top:150px; border-top:1px solid #a6a6a6; border-bottom:1px solid #a6a6a6; padding:18px 0;}
+  .paper .cover .ttl h1{font-family:'Calibri Light','Segoe UI Light',var(--body); font-weight:300; font-size:38px; color:#5b9bd5; margin:0; letter-spacing:.01em; line-height:1.2;}
+  .paper .cover .pn{font-size:18px; color:#5b9bd5; margin-top:16px;}
+  .paper .cover .ft{color:#5b9bd5; font-size:13px;} .paper .cover .ft .dt{font-size:18px; margin-bottom:4px;}
+  .paper h2.d1{font-family:'Calibri Light','Segoe UI Light',var(--body); font-weight:300; font-size:28px; color:#262626; border-bottom:3px solid #2f5496; padding-bottom:4px; margin:34px 0 12px; break-after:avoid;}
+  .paper h3.d2{font-family:'Calibri Light','Segoe UI Light',var(--body); font-weight:300; font-size:18px; color:#2e74b5; margin:20px 0 6px; break-after:avoid;}
+  .paper h4.d3{font-family:'Calibri Light','Segoe UI Light',var(--body); font-weight:300; font-size:14.5px; color:#2e74b5; margin:14px 0 4px; break-after:avoid;}
+  .paper .toc h2{margin-top:0;} .paper .toc a{color:#1a1a1a; text-decoration:none;} .paper .toc .l1{margin:5px 0 2px; font-weight:600;} .paper .toc .l2{margin:2px 0 2px 18px;}
+  .paper table{border-collapse:collapse; width:100%; margin:6px 0 10px; font-size:11.5px;}
+  .paper th{background:#f2f2f2; border:1px solid #000; padding:4px 6px; text-align:left; font-weight:700; vertical-align:top;}
+  .paper td{border:1px solid #000; padding:4px 6px; vertical-align:top;}
+  .paper td.num,.paper th.num{text-align:right; font-variant-numeric:tabular-nums;}
+  .paper .kv td:first-child{width:28%; background:#f2f2f2; font-weight:700;}
+  .paper .note{font-size:11px; color:#595959; font-style:italic; margin:2px 0 8px;}
+  .paper .nodata{color:#7f7f7f; font-style:italic;}
+  .paper .grpH th{background:#fff; text-align:center;}
+  .paper tr{break-inside:avoid;}
+  .paper section.sec{break-before:page;}
+  @page{margin:15mm 13mm;}
+  @media print{
+    body{background:#fff !important; display:block;}
+    header,.toolbar,.tabs,.statusbar,.banner,.gpi-badge,#stateView{display:none !important;}
+    .main-area{padding:0 !important;} #docView{display:block !important;}
+    .paper{border:none; box-shadow:none; padding:0; max-width:none;}
+  }
+</style>
+<link rel="stylesheet" href="gpi-shared.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">📘</div>
+    <div>
+      <h1>Plan para la Dirección del Proyecto <span class="tag">PMBOK</span></h1>
+      <div class="sub" id="projectSub">Integra los planes subsidiarios y las líneas base de alcance, cronograma y costo</div>
+    </div>
+  </div>
+</header>
+
+<div class="banner" id="banner" role="alert"></div>
+
+<div class="toolbar">
+  <button class="btn" id="btnRefresh">↻ Actualizar</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnWord">⭳ Exportar a Word (.doc)</button>
+  <button class="btn" id="btnPrint">🖨 Imprimir / PDF</button>
+</div>
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-view="state">Estado del plan</button>
+  <button class="tab" data-view="doc">Documento</button>
+</nav>
+
+<div class="main-area">
+  <div id="stateView"></div>
+  <div id="docView"></div>
+</div>
+
+<div class="statusbar">
+  <span id="statusLeft">Listo</span>
+  <span>Este módulo no captura datos: consolida y cruza los de las demás herramientas; solo registra la aprobación del plan</span>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h3 id="modalTitle">Confirmar</h3>
+    <p id="modalMessage"></p>
+    <div class="modal-actions">
+      <button class="btn" id="modalCancelBtn">Cancelar</button>
+      <button class="btn primary" id="modalConfirmBtn">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<script src="gpi-core.js"></script>
+<script src="plan-direccion.js"></script>
+</body>
+</html>
