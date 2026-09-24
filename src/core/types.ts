@@ -355,7 +355,14 @@ export interface PmPlanModule {
   snapshot?: Record<string, unknown> | null; history?: unknown[];
 }
 
+// Plan de Comunicaciones (Plan_Comunicaciones.html): la matriz de comunicaciones y las reglas del plan. Esquema y normalización en shared/comms-plan.ts;
+// los destinatarios se enlazan por id con los interesados (no se duplican).
+export interface CommsModule {
+  items?: unknown[]; plan?: Record<string, unknown> | null; idCounter?: number;
+}
+
 export interface ProjectModules {
+  comms?: CommsModule | null;
   pmplan?: PmPlanModule | null;
   changes?: ChangesModule | null;
   evm?: EvmModule | null;

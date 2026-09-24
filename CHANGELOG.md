@@ -11,6 +11,18 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Nuevo módulo «Gestión de las Comunicaciones» (`Plan_Comunicaciones.html`, auditoría
+  metodológica)** — la tarjeta del Panel existía sin archivo. Matriz de comunicaciones (qué, para
+  qué, a quién, quién la emite, frecuencia, medio, canal y registro) más las reglas del plan
+  (escalamiento, restricciones y confidencialidad, actualización). Los destinatarios se eligen de
+  **Stakeholder Studio por id** y los emisores del **OBS**: no duplica datos. Revisa la matriz
+  contra los interesados con **hallazgos M1–M12** (a quien hay que gestionar de cerca o subir de
+  compromiso no le puede faltar una comunicación; sobrecomunicación; filas incompletas; plan sin
+  escalamiento) y muestra la cobertura por interesado. Ejemplo DISTRIB+ ampliado (11
+  comunicaciones para los 12 interesados, con las frecuencias de sus estrategias). Nuevos
+  `src/shared/comms-plan.ts`, `comms-sample.ts`, `case-distribplus.ts` y rama opcional `comms`.
+  Pruebas: 11 unitarias + 2 del caso compartido, 5 smoke y 1 e2e en Chrome real.
+
 - **PERT y Cronograma/CPM — probabilidad de plazo sobre la red completa (ramas paralelas)** —
   con ramas paralelas o convergentes ambos módulos decían «no aplicable». Ahora **simulan la red
   completa** (Monte Carlo sobre el CPM del núcleo, duraciones Beta-PERT independientes, 2 000

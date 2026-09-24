@@ -164,8 +164,8 @@ let MODULES: ModuleDef[] = [
     desc: "Intersección EDT × OBS a nivel de paquete de trabajo: asigna R/A/C/I y sincroniza el responsable con el WBS." },
 
   // — Comunicaciones —
-  { key: "comms", group: "comm", name: "Gestión de las Comunicaciones", file: null, icon: "📣", color: "#3a86ff",
-    desc: "Matriz de comunicaciones: qué información, a quién, cuándo, por qué medio y con qué frecuencia." },
+  { key: "comms", group: "comm", name: "Gestión de las Comunicaciones", file: "Plan_Comunicaciones.html", icon: "📣", color: "#3a86ff",
+    desc: "Matriz de comunicaciones: qué información, a quién (interesados de Stakeholder Studio), quién la emite, cuándo, por qué medio y con qué frecuencia; revisa que a cada interesado le llegue lo que su estrategia exige." },
 
   // — Riesgos —
   { key: "risks", group: "risk", name: "Gestión de Riesgos", file: "Risk_Register.html", icon: "⚠", color: "#ff9f1c",

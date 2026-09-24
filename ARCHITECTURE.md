@@ -1358,6 +1358,34 @@ arranca **en blanco**; en modo independiente muestra el ejemplo.
 - **Límites declarados**: no crea ni edita las órdenes de Costos, las MOD ni la LB-n (eso lo
   hace cada módulo); solo verifica que existan y sean coherentes.
 
+**Plan_Comunicaciones.html** (módulo `comms`, PMBOK «Planificar la gestión de las
+comunicaciones») — auditoría metodológica: el Panel tenía la tarjeta sin archivo. Lógica pura en
+`src/shared/comms-plan.ts` (inlineada en `comms.js`, con 11 pruebas unitarias); patrón de Control
+de Cambios (`window.GPI` explícito, `pushWithSession`, todo texto escapado). Con un proyecto
+activo arranca **en blanco**; en modo independiente muestra el ejemplo.
+- **Matriz**: qué información, para qué, destinatarios, emisor, frecuencia, medio, canal/formato y
+  dónde queda el registro; más tres reglas del plan (escalamiento, restricciones y
+  confidencialidad, actualización). **No duplica**: los destinatarios se eligen de Stakeholder
+  Studio **por id** (`stkIds`, más una audiencia libre) y los emisores son puestos del OBS.
+- **Cobertura de interesados** (`coverage`): cuántas comunicaciones recibe cada uno, su cuadrante
+  (`quadrantOf`, mismo umbral 50 de Stakeholder Studio) y su compromiso actual → deseado.
+- **Hallazgos M1–M12**: M1 (riesgo) interesado a gestionar de cerca sin ninguna comunicación; M2
+  con brecha de compromiso sin comunicación dirigida (o con brecha ≥ 2 atendida solo con
+  comunicaciones puntuales); M3 interesado sin comunicación; M4–M9 fila incompleta (sin
+  información/propósito, sin destinatarios, interesado inexistente, sin emisor o emisor fuera del
+  OBS, sin frecuencia/medio, sin registro); M10 sobrecomunicación (semanal o diaria) a quien solo
+  se monitorea; M11/M12 plan sin escalamiento ni revisión. Los criterios son didácticos declarados.
+  KPI informativo: canales potenciales n(n−1)/2.
+- **Ejemplo DISTRIB+** (`src/shared/comms-sample.ts`, mismo caso): 11 comunicaciones que cubren los
+  12 interesados s1…s12 con las frecuencias que ya dicen sus estrategias de compromiso (sponsor
+  quincenal, informe mensual al banco, licencia 2.4 semanal, mesas vecinales, sindicato quincenal,
+  fabricación 3.1 semanal…) y emisores con el nombre exacto del OBS. En modo independiente el
+  cuadrante no se repite (depende de los pesos de Stakeholder Studio): M1/M10 solo corren con el
+  proyecto conectado. e2e en Chrome real sobre los interesados y el OBS reales: 12/12 cubiertos,
+  sin hallazgos (detectó un nombre de puesto incoherente, corregido).
+- Los puestos y paquetes del caso que usan los módulos nuevos en modo independiente viven en
+  `src/shared/case-distribplus.ts` (con su prueba contra el caso).
+
 **Plan_Direccion.html** (módulo `pmplan`, PMBOK «Desarrollar el plan para la dirección del
 proyecto») — auditoría metodológica: el Panel tenía la tarjeta «Plan para la Dirección» sin
 archivo y nada integraba las líneas base. Lógica pura en `src/shared/pm-plan.ts` (inlineada en
@@ -2774,6 +2802,10 @@ vez que se agrega o toca un módulo:
   Logística, Jefe de Ingeniería, Residente de Obra, Director de Proyecto).
   Cualquier módulo que hable de un riesgo del caso debe reutilizar estos
   códigos (Costos ya cita R-03).
+- **Comunicaciones** (`comms`, `src/shared/comms-sample.ts`): CM-01…CM-11, destinatarios = los
+  interesados s1…s12 (por id), emisores = puestos del OBS (nombre exacto), frecuencias las de sus
+  estrategias de compromiso. Los puestos y paquetes que usan los módulos nuevos sin proyecto
+  están en `src/shared/case-distribplus.ts`.
 - **Requisitos/Alcance** (`project-charter` RAN.01–RAN.04 →
   `requirements` `ran1`-`ran4`/`q#` → `scope-statement` deliverables):
   encadenados por id, no por texto — cualquier módulo nuevo que agregue

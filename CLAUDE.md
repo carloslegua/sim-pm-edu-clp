@@ -8,7 +8,7 @@ fecha y evidencia puntual de cada paso, vive en [MIGRATION.md](MIGRATION.md).
 
 ## Qué es esto
 
-Suite educativa PMBOK de 18 módulos HTML (17 herramientas + el Panel) + un núcleo de datos
+Suite educativa PMBOK de 19 módulos HTML (18 herramientas + el Panel) + un núcleo de datos
 compartido (`gpi-core.js`) sobre `localStorage`. Sitio 100% estático: sin
 backend, sin servidor de build en producción. Se despliega copiando
 archivos a GitHub Pages o abriendo cualquier módulo con doble clic
@@ -134,6 +134,10 @@ src/shared/change-control.ts     → (se inlinea en changes.js) control integrad
                                     áreas, autoridad requerida, condiciones de aprobación/implementación, hallazgos
 src/shared/change-sample.ts      → (se inlinea en changes.js) ejemplo DISTRIB+ de solicitudes de cambio (CR-001…003
                                     = OC-001…003 de Costos)
+src/shared/case-distribplus.ts   → (solo lectura) puestos del OBS y 18 paquetes de la EDT del caso DISTRIB+ para el modo
+                                    independiente de los módulos nuevos; prueba contra el caso en tests/unit
+src/shared/comms-plan.ts         → (se inlinea en comms.js) matriz de comunicaciones: cobertura de interesados, hallazgos M1–M12
+src/shared/comms-sample.ts       → (se inlinea en comms.js) ejemplo DISTRIB+ de comunicaciones (CM-01…11, interesados s1…s12)
 src/shared/pm-plan.ts            → (se inlinea en plan-direccion.js) Plan para la Dirección: estado por área, hallazgos de
                                     integración entre líneas base, instantánea del plan aprobado y su desactualización
 src/shared/pert-network.ts       → (se inlinea en pert.js y cronograma-cpm.js) PERT sobre la red completa: Monte Carlo

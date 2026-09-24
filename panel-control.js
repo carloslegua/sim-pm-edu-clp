@@ -226,10 +226,10 @@
 			key: "comms",
 			group: "comm",
 			name: "Gestión de las Comunicaciones",
-			file: null,
+			file: "Plan_Comunicaciones.html",
 			icon: "📣",
 			color: "#3a86ff",
-			desc: "Matriz de comunicaciones: qué información, a quién, cuándo, por qué medio y con qué frecuencia."
+			desc: "Matriz de comunicaciones: qué información, a quién (interesados de Stakeholder Studio), quién la emite, cuándo, por qué medio y con qué frecuencia; revisa que a cada interesado le llegue lo que su estrategia exige."
 		},
 		{
 			key: "risks",
