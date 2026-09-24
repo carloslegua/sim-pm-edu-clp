@@ -136,6 +136,8 @@ src/shared/change-sample.ts      → (se inlinea en changes.js) ejemplo DISTRIB+
                                     = OC-001…003 de Costos)
 src/shared/pm-plan.ts            → (se inlinea en plan-direccion.js) Plan para la Dirección: estado por área, hallazgos de
                                     integración entre líneas base, instantánea del plan aprobado y su desactualización
+src/shared/pert-network.ts       → (se inlinea en pert.js y cronograma-cpm.js) PERT sobre la red completa: Monte Carlo
+                                    Beta-PERT sobre el CPM del núcleo (ramas paralelas), criticidad por actividad
 src/shared/escalation.ts         → (se inlinea en cost.js) escalación por índices por cuenta y en el tiempo (AACE 58R-10)
                                     + Monte Carlo con retraso del cronograma (68R-11); tipo de cambio aparte
 src/shared/escalation-sample.ts  → (se inlinea en cost.js) ejemplo DISTRIB+ de la escalación (tasas ILUSTRATIVAS, mezcla

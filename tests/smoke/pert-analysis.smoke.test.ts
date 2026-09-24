@@ -103,12 +103,20 @@ describe("Pert_Analysis.html (migrado a pert.js)", () => {
     return doc;
   }
 
-  it("REPRO (alta): dos ramas paralelas de 10 d hacia un hito -- la probabilidad PERT NO se calcula (antes: media 20 d y ~0 % de terminar en 10 d)", async () => {
+  it("REPRO (alta): dos ramas paralelas de 10 d hacia un hito -- no se suma (antes: media 20 d y ~0 %) ni se usa una sola rama (50 %): se simula la red completa (~25 %)", async () => {
     const doc = await abrirRamas([fsLink("L1", "a1", "m1"), fsLink("L2", "a2", "m1")], "10");
-    expect(doc.getElementById("sbCpProb")!.textContent).toBe("—");     // antes: "0.0%"
-    expect(doc.getElementById("sbCpTe")!.textContent).toBe("—");
-    expect(doc.getElementById("sbCpPath")!.textContent).toMatch(/No aplicable/);
-    expect(doc.getElementById("sbCpPath")!.textContent).toMatch(/paralelas/);
+    const p = parseFloat(doc.getElementById("sbCpProb")!.textContent as string);
+    expect(p).toBeGreaterThan(21); expect(p).toBeLessThan(29);          // dos ramas independientes con 50 % cada una: 25 % (sesgo de convergencia)
+    expect(parseFloat(doc.getElementById("sbCpTe")!.textContent as string)).toBeGreaterThan(10.3);   // E[máx] > máx de las medias
+    expect(doc.getElementById("sbCpPath")!.textContent).toMatch(/Ramas paralelas o convergentes/);
+    const sim = doc.getElementById("sbSim")!.textContent as string;
+    expect(sim).toMatch(/Simulación de la red completa/); expect(sim).toMatch(/P10 .* P50 .* P80 .* P90/); expect(sim).toMatch(/Índice de criticidad/);
+  });
+
+  it("una cadena válida se contrasta con la red completa: coincide y lo dice", async () => {
+    const doc = await abrirRamas([fsLink("L1", "a1", "a2", 3)], "23");
+    expect(doc.getElementById("sbSim")!.textContent).toMatch(/Simulación de la red completa/);
+    expect(doc.getElementById("sbSim")!.textContent).not.toMatch(/sobrestima/);
   });
 
   it("una cadena válida sí da probabilidad y la media incluye el desfase: a1 -FS+3d-> a2 = 23 d (antes: 20 d, sin el desfase)", async () => {

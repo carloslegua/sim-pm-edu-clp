@@ -14,6 +14,8 @@
 import type * as GpiCore from "../../core/gpi-core";
 import type { ActivitiesModule, ActivityItem, EditSession, PertEntry, PertModule, ProjectMeta, ScheduleLink, WbsModule } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
+import { probWithin, simulatePertNetwork, type PertSimResult, type SimAct } from "../../shared/pert-network";
+import type { CpmFn, NetLink } from "../../shared/schedule-risk";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global { interface Window { GPI?: GpiApi; } }
@@ -335,8 +337,17 @@ function scheduleLinks(): ScheduleLink[] {
 type CriticalPathStats =
   | null
   | { reason: "no-links" | "no-te" | "cycle" | "no-path" | "inconsistent" | "elapsed" }
-  | { reason: "parallel"; count: number }
-  | { ids: string[]; names: string[]; te: number; va: number; duration: number; anyInvalid: number; missing: number; cpNoTe: number; elapsedApprox: boolean };
+  | { reason: "parallel"; count: number; sim: PertSimResult | null }
+  | { ids: string[]; names: string[]; te: number; va: number; duration: number; anyInvalid: number; missing: number; cpNoTe: number; elapsedApprox: boolean; sim: PertSimResult | null };
+
+// Simulación Monte Carlo de la RED COMPLETA (ver shared/pert-network.ts): cubre las ramas paralelas y las casi críticas que la
+// probabilidad de una sola ruta no ve. Se guarda por huella de los datos: cambiar solo el plazo objetivo no la vuelve a correr.
+let simKey = "", simVal: PertSimResult | null = null;
+function simFor(acts: SimAct[], links: ScheduleLink[], cal: unknown, startDate: string): PertSimResult | null {
+  const key = JSON.stringify([acts, links.map((l) => [l.from, l.to, l.type, l.lag, l.lagUnit]), startDate]);
+  if (key !== simKey) { simKey = key; try { simVal = simulatePertNetwork(acts, links as unknown as NetLink[], cal, window.GPI!.util.cpm as unknown as CpmFn, { startDate }); } catch (e) { simVal = null; } }
+  return simVal;
+}
 
 function criticalPathStats(): CriticalPathStats {
   if (!window.GPI || !window.GPI.util || !window.GPI.util.cpm) return null;
@@ -347,7 +358,7 @@ function criticalPathStats(): CriticalPathStats {
   // determinística y su varianza cuenta como 0: se avisa al alumno, pero la
   // ruta crítica sigue siendo la del cronograma real.
   const byId: Record<string, { te: number; va: number; est: boolean }> = {};
-  const nodes: { id: string; dur: number }[] = [];
+  const nodes: { id: string; dur: number }[] = [], simActs: SimAct[] = [];
   let anyInvalid = 0, missing = 0, teCount = 0;
   actsCache.forEach((r) => {
     const c = r.c as CalcResult, useTe = c.complete && c.valid;
@@ -357,6 +368,7 @@ function criticalPathStats(): CriticalPathStats {
     byId[(r.a as ActivityItem).id] = { te: d, va: useTe ? (c.va as number) : 0, est: useTe };
     if (useTe) teCount++;
     nodes.push({ id: (r.a as ActivityItem).id, dur: d });
+    simActs.push({ id: (r.a as ActivityItem).id, dur: d, o: useTe ? c.oDays : null, m: useTe ? c.m : null, p: useTe ? c.pDays : null });
   });
   if (!teCount) return { reason: "no-te" };
   let cal = null;
@@ -370,7 +382,8 @@ function criticalPathStats(): CriticalPathStats {
   if (!(res.criticalIds || []).length) return { reason: "no-path" };
   const vars: Record<string, number> = {}; Object.keys(byId).forEach((id) => { vars[id] = byId[id].va; });
   const ch = window.GPI.util.pertCriticalChain(res, links, cal, vars);
-  if (!ch.ok) return ch.reason === "parallel" ? { reason: "parallel", count: res.criticalIds.length } : ch.reason === "empty" ? { reason: "no-path" } : ch.reason === "elapsed" ? { reason: "elapsed" } : { reason: "inconsistent" };
+  const sim = simFor(simActs, links, cal, startDate);
+  if (!ch.ok) return ch.reason === "parallel" ? { reason: "parallel", count: res.criticalIds.length, sim } : ch.reason === "empty" ? { reason: "no-path" } : ch.reason === "elapsed" ? { reason: "elapsed" } : { reason: "inconsistent" };
   // Media = duración del proyecto con TE (incluye desfases); varianza = la de las
   // actividades que de verdad deciden el fin (ver pertCriticalChain).
   const ids = ch.ids, te = ch.mean, va = ch.variance;
@@ -381,9 +394,21 @@ function criticalPathStats(): CriticalPathStats {
     const row = actsCache.filter((r) => (r.a as ActivityItem).id === id)[0];
     names.push((row ? (row.a as ActivityItem).name || id : id) + (c.est ? "" : " *"));
   });
-  return { ids, names, te, va, duration: res.projectDuration, anyInvalid, missing, cpNoTe, elapsedApprox: res.elapsedApprox };
+  return { ids, names, te, va, duration: res.projectDuration, anyInvalid, missing, cpNoTe, elapsedApprox: res.elapsedApprox, sim };
 }
-
+// Texto de la simulación de la red completa: probabilidad de cumplir el plazo, percentiles e índice de criticidad.
+function simHtml(sm: PertSimResult | null, target: number, cross: number | null): string {
+  if (!sm) return "";
+  const nameOf = (id: string): string => { const row = actsCache.filter((r) => (r.a as ActivityItem).id === id)[0]; return row ? (row.a as ActivityItem).name || id : id; };
+  const top = Object.keys(sm.criticality).filter((id) => sm.criticality[id] >= 0.1 && sm.criticality[id] < 0.9995).sort((a, b) => sm.criticality[b] - sm.criticality[a]).slice(0, 6);
+  const p = probWithin(sm, target) * 100, pc = p >= 80 ? "var(--good)" : p >= 50 ? "var(--warn)" : "var(--danger)";
+  const gap = cross !== null && Math.abs(cross - p) >= 3 ? "<br>⚠ La aproximación de una sola ruta (" + cross.toFixed(1) + " %) " + (cross > p ? "<b>sobrestima</b>" : "subestima") + " la probabilidad frente a la red completa: hay rutas casi críticas que compiten." : "";
+  return "<b>Simulación de la red completa</b> (" + sm.iterations.toLocaleString("es-PE") + " iteraciones, Beta-PERT, duraciones independientes, semilla fija)<br>"
+    + "P(fin ≤ " + fmt(target, 0) + " d) = <b style=\"color:" + pc + "\">" + p.toFixed(1) + " %</b> · media " + fmt(sm.mean, 1) + " d · σ " + fmt(sm.sd, 1) + " d<br>"
+    + "P10 " + fmt(sm.percentiles[10], 1) + " · P50 " + fmt(sm.percentiles[50], 1) + " · P80 " + fmt(sm.percentiles[80], 1) + " · P90 " + fmt(sm.percentiles[90], 1) + " d" + gap
+    + (top.length ? "<br><b>Índice de criticidad</b> (fracción de iteraciones en la ruta crítica): " + top.map((id) => esc(nameOf(id)) + " " + Math.round(sm.criticality[id] * 100) + " %").join(" · ") : "")
+    + (sm.stochastic < actsCache.length ? "<br>ℹ " + (actsCache.length - sm.stochastic) + " actividad(es) sin terna válida se simulan con su duración fija." : "");
+}
 let targetTouched = false;
 function renderProbability(): void {
   const elTe = document.getElementById("sbCpTe"), elSd = document.getElementById("sbCpSd"),
@@ -392,8 +417,9 @@ function renderProbability(): void {
   if (!elTe) return;
   function clear(msg: string): void {
     elTe!.textContent = elSd!.textContent = elZ!.textContent = elP!.textContent = "—";
-    elPath!.innerHTML = msg;
+    elPath!.innerHTML = msg; if (elSim) elSim.innerHTML = "";
   }
+  const elSim = document.getElementById("sbSim");
   const cp = criticalPathStats();
   if (!cp) { clear("Requiere <code>gpi-core.js</code>."); return; }
   if ("reason" in cp) {
@@ -402,7 +428,16 @@ function renderProbability(): void {
     if (cp.reason === "cycle") { clear("La red tiene un <b>ciclo</b>: el CPM no puede resolverse. Corrígelo en Cronograma / CPM."); return; }
     if (cp.reason === "elapsed") { clear("<b>No aplicable:</b> la ruta crítica tiene desfases en <b>días transcurridos</b>, que se calculan sobre fechas reales (fines de semana y feriados) y no son un tiempo fijo que sumar a la media PERT. Exprésalos en días laborables para obtener la probabilidad."); return; }
     if (cp.reason === "no-path" || cp.reason === "inconsistent") { clear("No se pudo determinar una ruta crítica única."); return; }
-    if (cp.reason === "parallel") { clear("<b>No aplicable:</b> hay " + cp.count + " actividades críticas en ramas <b>paralelas o convergentes</b>. La probabilidad PERT de una sola ruta no vale ahí (subestima el riesgo: el fin depende de que <b>todas</b> las ramas terminen a tiempo); haría falta simular la red completa."); return; }
+    if (cp.reason === "parallel") {
+      const sm = cp.sim, msg = "<b>Ramas paralelas o convergentes:</b> hay " + cp.count + " actividades críticas fuera de una sola cadena. La probabilidad PERT de una sola ruta no vale ahí (sobrestima: el fin depende de que <b>todas</b> las ramas terminen a tiempo), así que se calcula simulando la red completa.";
+      if (!sm) { clear(msg + " <b>No se pudo simular</b> (completa las ternas O–M–P)."); return; }
+      if (!targetTouched && (!elT.value || +elT.value <= 0)) elT.value = String(Math.ceil(sm.base) + 3);
+      const target = +elT.value || Math.ceil(sm.base), pc = probWithin(sm, target) * 100;
+      elTe!.textContent = fmt(sm.mean, 1) + " d"; elSd!.textContent = fmt(sm.sd, 2) + " d"; elZ!.textContent = "—";
+      elP!.textContent = pc.toFixed(1) + "%"; (elP as HTMLElement).style.color = pc >= 80 ? "var(--good)" : (pc >= 50 ? "var(--warn)" : "var(--danger)");
+      elPath!.innerHTML = msg; if (elSim) elSim.innerHTML = simHtml(sm, target, null);
+      return;
+    }
     return;
   }
   if (!targetTouched && (!elT.value || +elT.value <= 0)) elT.value = String(Math.ceil(cp.te) + 3);
@@ -424,6 +459,8 @@ function renderProbability(): void {
   if (cp.elapsedApprox) warn += "<br>⚠ Hay desfases en días transcurridos y el proyecto no tiene fecha de inicio: se aproximan con una proporción semanal. Define la fecha de inicio en el Panel para calcularlos sobre fechas reales.";
   if (cp.cpNoTe) warn += "<br>⚠ " + cp.cpNoTe + " actividad(es) de la ruta crítica (marcadas con *) entraron con su duración base y aportan σ² = 0: la probabilidad está <b>sobrestimada</b> hasta que completes su terna.";
   elPath!.innerHTML = "<b>Ruta crítica (" + cp.ids.length + " act.):</b> " + cp.names.map(esc).join(" → ") + warn;
+  // Contraste con la red completa: detecta las rutas casi críticas que la aproximación de una sola ruta ignora.
+  if (elSim) elSim.innerHTML = simHtml(cp.sim, target, r ? r.prob * 100 : null);
 }
 
 function renderOrphans(): void {

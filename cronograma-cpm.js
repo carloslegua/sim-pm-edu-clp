@@ -25,6 +25,97 @@
 			session: next
 		};
 	}
+	//#endregion
+	//#region src/shared/range-estimating.ts
+	function mulberry32(seed) {
+		let a = seed >>> 0;
+		return () => {
+			a = a + 1831565813 >>> 0;
+			let t = a;
+			t = Math.imul(t ^ t >>> 15, t | 1);
+			t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+			return ((t ^ t >>> 14) >>> 0) / 4294967296;
+		};
+	}
+	var PERT_SIM_PERCENTILES = [
+		10,
+		50,
+		80,
+		90
+	];
+	var normal = (rnd) => {
+		const u = Math.max(rnd(), 1e-12), v = rnd();
+		return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+	};
+	function gamma(k, rnd) {
+		const d = k - 1 / 3, c = 1 / Math.sqrt(9 * d);
+		for (;;) {
+			const x = normal(rnd), t = 1 + c * x;
+			if (t <= 0) continue;
+			const v = t * t * t, u = rnd();
+			if (Math.log(Math.max(u, 1e-300)) < .5 * x * x + d - d * v + d * Math.log(v)) return d * v;
+		}
+	}
+	function samplePert(o, m, p, rnd) {
+		if (!(p > o)) return m;
+		const a = 1 + 4 * (m - o) / (p - o), b = 1 + 4 * (p - m) / (p - o), ga = gamma(a, rnd);
+		return o + ga / (ga + gamma(b, rnd)) * (p - o);
+	}
+	var isTriple = (a) => a.o != null && a.m != null && a.p != null && isFinite(a.o) && isFinite(a.m) && isFinite(a.p) && a.o > 0 && a.o <= a.m && a.m <= a.p && a.p > a.o;
+	function simulatePertNetwork(acts, links, calendar, cpm, opts = {}) {
+		const n = Math.max(200, Math.round(opts.iterations || 2e3)), rnd = mulberry32(opts.seed || 20260713), startDate = opts.startDate || "";
+		const run = (durs) => cpm(durs, links, calendar, { startDate });
+		const base = run(acts.map((a) => ({
+			id: a.id,
+			dur: a.dur
+		})));
+		if (!base.ok) return null;
+		const stoch = acts.filter(isTriple);
+		if (!stoch.length) return null;
+		const hits = {}, fins = [];
+		for (let i = 0; i < n; i++) {
+			const r = run(acts.map((a) => ({
+				id: a.id,
+				dur: isTriple(a) ? samplePert(a.o, a.m, a.p, rnd) : a.dur
+			})));
+			if (!r.ok) return null;
+			fins.push(r.projectDuration);
+			r.criticalIds.forEach((id) => {
+				hits[id] = (hits[id] || 0) + 1;
+			});
+		}
+		fins.sort((x, y) => x - y);
+		const mean = fins.reduce((s, x) => s + x, 0) / n, sd = Math.sqrt(fins.reduce((s, x) => s + (x - mean) * (x - mean), 0) / n);
+		const percentiles = {};
+		PERT_SIM_PERCENTILES.forEach((q) => {
+			percentiles[q] = fins[Math.min(n - 1, Math.floor(q / 100 * n))];
+		});
+		const criticality = {};
+		Object.keys(hits).forEach((id) => {
+			criticality[id] = hits[id] / n;
+		});
+		return {
+			iterations: n,
+			base: base.projectDuration,
+			mean,
+			sd,
+			min: fins[0],
+			max: fins[n - 1],
+			percentiles,
+			criticality,
+			sorted: fins,
+			stochastic: stoch.length
+		};
+	}
+	function probWithin(res, target) {
+		let lo = 0, hi = res.sorted.length;
+		while (lo < hi) {
+			const mid = lo + hi >> 1;
+			if (res.sorted[mid] <= target + 1e-9) lo = mid + 1;
+			else hi = mid;
+		}
+		return lo / res.sorted.length;
+	}
 	function planOf(sp) {
 		const p = sp && typeof sp === "object" ? sp : {};
 		const rec = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
@@ -508,7 +599,10 @@
 					dur: r.dur,
 					te: r.te,
 					variance: r.variance,
-					valid: r.valid
+					valid: r.valid,
+					o: r.o,
+					m: r.m,
+					p: r.p
 				};
 			});
 		} catch (_) {}
@@ -595,7 +689,10 @@
 						det: info.dur,
 						te: info.te,
 						variance: info.variance,
-						pertValid: info.valid
+						pertValid: info.valid,
+						po: info.o,
+						pm: info.m,
+						pp: info.p
 					});
 				});
 				milestones.filter((m) => m.leafId === r.id).forEach((m) => pushMilestone(m, r.id));
@@ -802,6 +899,30 @@
 		});
 		box.innerHTML = out.map((i) => "<div class='issue " + i.c + "'><span class='ic'>" + i.ic + "</span><span>" + i.t + "</span></div>").join("");
 	}
+	var simKey = "";
+	var simVal = null;
+	function simFor(acts, links, cal) {
+		const key = JSON.stringify([
+			acts,
+			links.map((l) => [
+				l.from,
+				l.to,
+				l.type,
+				l.lag,
+				l.lagUnit
+			]),
+			metaStart()
+		]);
+		if (key !== simKey) {
+			simKey = key;
+			try {
+				simVal = simulatePertNetwork(acts, links, cal, GPI.util.cpm, { startDate: metaStart() });
+			} catch (_) {
+				simVal = null;
+			}
+		}
+		return simVal;
+	}
 	function criticalPertSums(R) {
 		if (!R.cpm.ok) return {
 			mean: 0,
@@ -830,12 +951,24 @@
 			if (usable(idx[i])) vars[i] = idx[i].variance;
 		});
 		const ch = GPI.util.pertCriticalChain(res, links, calData(), vars);
+		const simActs = R.nodes.map((n) => {
+			const r = idx[n.id], u = usable(r);
+			return {
+				id: n.id,
+				dur: nodes.find((q) => q.id === n.id).dur,
+				o: u ? r.po : null,
+				m: u ? r.pm : null,
+				p: u ? r.pp : null
+			};
+		});
+		const sim = ch.ok || ch.reason === "parallel" ? simFor(simActs, links, calData()) : null;
 		if (!ch.ok) return {
 			mean: 0,
 			sumVar: 0,
 			allValid: false,
 			count: res.ok ? res.criticalIds.length : 0,
-			reason: ch.reason
+			reason: ch.reason,
+			sim
 		};
 		const allValid = Object.keys(ch.weights).every((id) => {
 			const r = idx[id];
@@ -845,9 +978,11 @@
 			mean: ch.mean,
 			sumVar: ch.variance,
 			allValid,
-			count: ch.ids.length
+			count: ch.ids.length,
+			sim
 		};
 	}
+	var simLine = (sm) => "P10 " + fmt(sm.percentiles[10]) + " · P50 " + fmt(sm.percentiles[50]) + " · P80 " + fmt(sm.percentiles[80]) + " · P90 " + fmt(sm.percentiles[90]) + " d";
 	function renderProbability(R) {
 		const out = document.getElementById("probOut");
 		const t = parseFloat(document.getElementById("probTarget").value);
@@ -857,7 +992,16 @@
 		}
 		const s = criticalPertSums(R);
 		if (s.reason === "parallel") {
-			out.innerHTML = "<div class='p'>—</div><div class='z'>no aplicable: hay <b>" + s.count + "</b> actividades críticas en ramas paralelas o convergentes. PERT de una sola ruta no vale ahí (subestima el riesgo: el fin depende de que TODAS las ramas terminen a tiempo) — requiere simular la red completa</div>";
+			const sm = s.sim, why = "hay <b>" + s.count + "</b> actividades críticas en ramas paralelas o convergentes: PERT de una sola ruta no vale ahí (sobrestima: el fin depende de que TODAS las ramas terminen a tiempo)";
+			if (!sm) {
+				out.innerHTML = "<div class='p'>—</div><div class='z'>no aplicable: " + why + ". Completa las ternas O/M/P en PERT para simular la red completa</div>";
+				return;
+			}
+			if (!isFinite(t) || t <= 0) {
+				out.innerHTML = "<div class='p'>—</div><div class='z'>" + why + "; se simula la red completa (E[T]=" + fmt(sm.mean) + " d, " + simLine(sm) + "). Ingresa un plazo objetivo</div>";
+				return;
+			}
+			out.innerHTML = "<div class='p'>" + Math.round(probWithin(sm, t) * 1e3) / 10 + "%</div><div class='z'>P(fin ≤ " + fmt(t) + " d) por <b>simulación de la red completa</b> (" + sm.iterations.toLocaleString("es-PE") + " iter., Beta-PERT) · E[T]=" + fmt(sm.mean) + " σ=" + fmt(sm.sd) + " · " + simLine(sm) + "<br>Motivo: " + why + "</div>";
 			return;
 		}
 		if (s.reason === "elapsed") {
@@ -881,7 +1025,9 @@
 			out.innerHTML = "<div class='p'>—</div><div class='z'>E[T]=" + fmt(s.mean) + " d · sin varianza en la ruta crítica (σ=0): no hay incertidumbre que evaluar</div>";
 			return;
 		}
-		out.innerHTML = "<div class='p'>" + Math.round(pr.prob * 1e3) / 10 + "%</div><div class='z'>P(fin ≤ " + fmt(t) + " d) · Z=" + fmt(pr.z) + " · E[T]=" + fmt(s.mean) + " σ=" + fmt(pr.sigma) + "</div>";
+		const pct = Math.round(pr.prob * 1e3) / 10;
+		const cross = s.sim ? Math.round(probWithin(s.sim, t) * 1e3) / 10 : null;
+		out.innerHTML = "<div class='p'>" + pct + "%</div><div class='z'>P(fin ≤ " + fmt(t) + " d) · Z=" + fmt(pr.z) + " · E[T]=" + fmt(s.mean) + " σ=" + fmt(pr.sigma) + "</div>" + (cross !== null ? "<div class='z'>Red completa (simulación): <b>" + cross + "%</b>" + (Math.abs(cross - pct) >= 3 ? " — " + (pct > cross ? "la ruta única <b>sobrestima</b>: hay rutas casi críticas" : "difiere de la ruta única") : " — coincide con la ruta única") + "</div>" : "");
 	}
 	function renderCalNote() {
 		const el = document.getElementById("calNote"), cal = calData(), start = metaStart();

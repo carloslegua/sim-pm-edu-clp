@@ -350,12 +350,13 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
     return doc;
   }
 
-  it("REPRO (alta): dos ramas paralelas de 10 d hacia un hito -- el CPM da 10 d y la probabilidad PERT NO se calcula (antes: media 20 d y ~0 %)", async () => {
+  it("REPRO (alta): dos ramas paralelas de 10 d hacia un hito -- el CPM da 10 d y la probabilidad se simula sobre la red completa (~25 %; antes: media 20 d y ~0 %)", async () => {
     const doc = await abrirConPlazo(seedPert([fs("L1", "a1", "m1"), fs("L2", "a2", "m1")]), "10");
     expect(doc.getElementById("kpiDur")!.textContent).toBe("10");      // el CPM ya era correcto
     const out = doc.getElementById("probOut")!;
-    expect(out.querySelector(".p")!.textContent).toBe("—");            // antes: "0%"
-    expect(out.querySelector(".z")!.textContent).toMatch(/no aplicable/);
+    const p = parseFloat(out.querySelector(".p")!.textContent as string);
+    expect(p).toBeGreaterThan(21); expect(p).toBeLessThan(29);         // dos ramas independientes con 50 % cada una: 25 %
+    expect(out.querySelector(".z")!.textContent).toMatch(/simulación de la red completa/);
     expect(out.querySelector(".z")!.textContent).toMatch(/paralelas/);
   });
 

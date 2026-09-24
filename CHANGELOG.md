@@ -11,6 +11,15 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **PERT y Cronograma/CPM — probabilidad de plazo sobre la red completa (ramas paralelas)** —
+  con ramas paralelas o convergentes ambos módulos decían «no aplicable». Ahora **simulan la red
+  completa** (Monte Carlo sobre el CPM del núcleo, duraciones Beta-PERT independientes, 2 000
+  iteraciones, semilla fija): P(fin ≤ plazo), media, σ, P10/P50/P80/P90 e **índice de criticidad**
+  por actividad. Dos ramas de 10 d dan ≈ 25 % (no el 50 % de una sola rama: sesgo de
+  convergencia). Con una cadena única la simulación se muestra como contraste y avisa si la
+  aproximación de una ruta difiere ≥ 3 puntos. Nuevo `src/shared/pert-network.ts`; 7 pruebas
+  unitarias y 2 smoke actualizados. Supuestos declarados: independencia y Beta-PERT.
+
 - **Nuevo módulo «Plan para la Dirección» (`Plan_Direccion.html`, auditoría metodológica)** — la
   tarjeta del Panel existía sin archivo y nada integraba las líneas base. Es el integrador: lee
   (solo lectura) los demás módulos, muestra el **estado de cada área** (las 11 con módulo y, como

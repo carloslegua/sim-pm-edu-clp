@@ -26,6 +26,97 @@
 		};
 	}
 	//#endregion
+	//#region src/shared/range-estimating.ts
+	function mulberry32(seed) {
+		let a = seed >>> 0;
+		return () => {
+			a = a + 1831565813 >>> 0;
+			let t = a;
+			t = Math.imul(t ^ t >>> 15, t | 1);
+			t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+			return ((t ^ t >>> 14) >>> 0) / 4294967296;
+		};
+	}
+	var PERT_SIM_PERCENTILES = [
+		10,
+		50,
+		80,
+		90
+	];
+	var normal = (rnd) => {
+		const u = Math.max(rnd(), 1e-12), v = rnd();
+		return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+	};
+	function gamma(k, rnd) {
+		const d = k - 1 / 3, c = 1 / Math.sqrt(9 * d);
+		for (;;) {
+			const x = normal(rnd), t = 1 + c * x;
+			if (t <= 0) continue;
+			const v = t * t * t, u = rnd();
+			if (Math.log(Math.max(u, 1e-300)) < .5 * x * x + d - d * v + d * Math.log(v)) return d * v;
+		}
+	}
+	function samplePert$1(o, m, p, rnd) {
+		if (!(p > o)) return m;
+		const a = 1 + 4 * (m - o) / (p - o), b = 1 + 4 * (p - m) / (p - o), ga = gamma(a, rnd);
+		return o + ga / (ga + gamma(b, rnd)) * (p - o);
+	}
+	var isTriple = (a) => a.o != null && a.m != null && a.p != null && isFinite(a.o) && isFinite(a.m) && isFinite(a.p) && a.o > 0 && a.o <= a.m && a.m <= a.p && a.p > a.o;
+	function simulatePertNetwork(acts, links, calendar, cpm, opts = {}) {
+		const n = Math.max(200, Math.round(opts.iterations || 2e3)), rnd = mulberry32(opts.seed || 20260713), startDate = opts.startDate || "";
+		const run = (durs) => cpm(durs, links, calendar, { startDate });
+		const base = run(acts.map((a) => ({
+			id: a.id,
+			dur: a.dur
+		})));
+		if (!base.ok) return null;
+		const stoch = acts.filter(isTriple);
+		if (!stoch.length) return null;
+		const hits = {}, fins = [];
+		for (let i = 0; i < n; i++) {
+			const r = run(acts.map((a) => ({
+				id: a.id,
+				dur: isTriple(a) ? samplePert$1(a.o, a.m, a.p, rnd) : a.dur
+			})));
+			if (!r.ok) return null;
+			fins.push(r.projectDuration);
+			r.criticalIds.forEach((id) => {
+				hits[id] = (hits[id] || 0) + 1;
+			});
+		}
+		fins.sort((x, y) => x - y);
+		const mean = fins.reduce((s, x) => s + x, 0) / n, sd = Math.sqrt(fins.reduce((s, x) => s + (x - mean) * (x - mean), 0) / n);
+		const percentiles = {};
+		PERT_SIM_PERCENTILES.forEach((q) => {
+			percentiles[q] = fins[Math.min(n - 1, Math.floor(q / 100 * n))];
+		});
+		const criticality = {};
+		Object.keys(hits).forEach((id) => {
+			criticality[id] = hits[id] / n;
+		});
+		return {
+			iterations: n,
+			base: base.projectDuration,
+			mean,
+			sd,
+			min: fins[0],
+			max: fins[n - 1],
+			percentiles,
+			criticality,
+			sorted: fins,
+			stochastic: stoch.length
+		};
+	}
+	function probWithin(res, target) {
+		let lo = 0, hi = res.sorted.length;
+		while (lo < hi) {
+			const mid = lo + hi >> 1;
+			if (res.sorted[mid] <= target + 1e-9) lo = mid + 1;
+			else hi = mid;
+		}
+		return lo / res.sorted.length;
+	}
+	//#endregion
 	//#region src/modules/pert/main.ts
 	var mode = "live";
 	var stateLive = {
@@ -425,12 +516,36 @@
 			return [];
 		}
 	}
+	var simKey = "";
+	var simVal = null;
+	function simFor(acts, links, cal, startDate) {
+		const key = JSON.stringify([
+			acts,
+			links.map((l) => [
+				l.from,
+				l.to,
+				l.type,
+				l.lag,
+				l.lagUnit
+			]),
+			startDate
+		]);
+		if (key !== simKey) {
+			simKey = key;
+			try {
+				simVal = simulatePertNetwork(acts, links, cal, window.GPI.util.cpm, { startDate });
+			} catch (e) {
+				simVal = null;
+			}
+		}
+		return simVal;
+	}
 	function criticalPathStats() {
 		if (!window.GPI || !window.GPI.util || !window.GPI.util.cpm) return null;
 		const links = scheduleLinks();
 		if (!links.length) return { reason: "no-links" };
 		const byId = {};
-		const nodes = [];
+		const nodes = [], simActs = [];
 		let anyInvalid = 0, missing = 0, teCount = 0;
 		actsCache.forEach((r) => {
 			const c = r.c, useTe = c.complete && c.valid;
@@ -446,6 +561,13 @@
 			nodes.push({
 				id: r.a.id,
 				dur: d
+			});
+			simActs.push({
+				id: r.a.id,
+				dur: d,
+				o: useTe ? c.oDays : null,
+				m: useTe ? c.m : null,
+				p: useTe ? c.pDays : null
 			});
 		});
 		if (!teCount) return { reason: "no-te" };
@@ -466,9 +588,11 @@
 			vars[id] = byId[id].va;
 		});
 		const ch = window.GPI.util.pertCriticalChain(res, links, cal, vars);
+		const sim = simFor(simActs, links, cal, startDate);
 		if (!ch.ok) return ch.reason === "parallel" ? {
 			reason: "parallel",
-			count: res.criticalIds.length
+			count: res.criticalIds.length,
+			sim
 		} : ch.reason === "empty" ? { reason: "no-path" } : ch.reason === "elapsed" ? { reason: "elapsed" } : { reason: "inconsistent" };
 		const ids = ch.ids, te = ch.mean, va = ch.variance;
 		let cpNoTe = 0;
@@ -489,8 +613,20 @@
 			anyInvalid,
 			missing,
 			cpNoTe,
-			elapsedApprox: res.elapsedApprox
+			elapsedApprox: res.elapsedApprox,
+			sim
 		};
+	}
+	function simHtml(sm, target, cross) {
+		if (!sm) return "";
+		const nameOf = (id) => {
+			const row = actsCache.filter((r) => r.a.id === id)[0];
+			return row ? row.a.name || id : id;
+		};
+		const top = Object.keys(sm.criticality).filter((id) => sm.criticality[id] >= .1 && sm.criticality[id] < .9995).sort((a, b) => sm.criticality[b] - sm.criticality[a]).slice(0, 6);
+		const p = probWithin(sm, target) * 100, pc = p >= 80 ? "var(--good)" : p >= 50 ? "var(--warn)" : "var(--danger)";
+		const gap = cross !== null && Math.abs(cross - p) >= 3 ? "<br>⚠ La aproximación de una sola ruta (" + cross.toFixed(1) + " %) " + (cross > p ? "<b>sobrestima</b>" : "subestima") + " la probabilidad frente a la red completa: hay rutas casi críticas que compiten." : "";
+		return "<b>Simulación de la red completa</b> (" + sm.iterations.toLocaleString("es-PE") + " iteraciones, Beta-PERT, duraciones independientes, semilla fija)<br>P(fin ≤ " + fmt(target, 0) + " d) = <b style=\"color:" + pc + "\">" + p.toFixed(1) + " %</b> · media " + fmt(sm.mean, 1) + " d · σ " + fmt(sm.sd, 1) + " d<br>P10 " + fmt(sm.percentiles[10], 1) + " · P50 " + fmt(sm.percentiles[50], 1) + " · P80 " + fmt(sm.percentiles[80], 1) + " · P90 " + fmt(sm.percentiles[90], 1) + " d" + gap + (top.length ? "<br><b>Índice de criticidad</b> (fracción de iteraciones en la ruta crítica): " + top.map((id) => esc(nameOf(id)) + " " + Math.round(sm.criticality[id] * 100) + " %").join(" · ") : "") + (sm.stochastic < actsCache.length ? "<br>ℹ " + (actsCache.length - sm.stochastic) + " actividad(es) sin terna válida se simulan con su duración fija." : "");
 	}
 	var targetTouched = false;
 	function renderProbability() {
@@ -499,7 +635,9 @@
 		function clear(msg) {
 			elTe.textContent = elSd.textContent = elZ.textContent = elP.textContent = "—";
 			elPath.innerHTML = msg;
+			if (elSim) elSim.innerHTML = "";
 		}
+		const elSim = document.getElementById("sbSim");
 		const cp = criticalPathStats();
 		if (!cp) {
 			clear("Requiere <code>gpi-core.js</code>.");
@@ -527,7 +665,20 @@
 				return;
 			}
 			if (cp.reason === "parallel") {
-				clear("<b>No aplicable:</b> hay " + cp.count + " actividades críticas en ramas <b>paralelas o convergentes</b>. La probabilidad PERT de una sola ruta no vale ahí (subestima el riesgo: el fin depende de que <b>todas</b> las ramas terminen a tiempo); haría falta simular la red completa.");
+				const sm = cp.sim, msg = "<b>Ramas paralelas o convergentes:</b> hay " + cp.count + " actividades críticas fuera de una sola cadena. La probabilidad PERT de una sola ruta no vale ahí (sobrestima: el fin depende de que <b>todas</b> las ramas terminen a tiempo), así que se calcula simulando la red completa.";
+				if (!sm) {
+					clear(msg + " <b>No se pudo simular</b> (completa las ternas O–M–P).");
+					return;
+				}
+				if (!targetTouched && (!elT.value || +elT.value <= 0)) elT.value = String(Math.ceil(sm.base) + 3);
+				const target = +elT.value || Math.ceil(sm.base), pc = probWithin(sm, target) * 100;
+				elTe.textContent = fmt(sm.mean, 1) + " d";
+				elSd.textContent = fmt(sm.sd, 2) + " d";
+				elZ.textContent = "—";
+				elP.textContent = pc.toFixed(1) + "%";
+				elP.style.color = pc >= 80 ? "var(--good)" : pc >= 50 ? "var(--warn)" : "var(--danger)";
+				elPath.innerHTML = msg;
+				if (elSim) elSim.innerHTML = simHtml(sm, target, null);
 				return;
 			}
 			return;
@@ -553,6 +704,7 @@
 		if (cp.elapsedApprox) warn += "<br>⚠ Hay desfases en días transcurridos y el proyecto no tiene fecha de inicio: se aproximan con una proporción semanal. Define la fecha de inicio en el Panel para calcularlos sobre fechas reales.";
 		if (cp.cpNoTe) warn += "<br>⚠ " + cp.cpNoTe + " actividad(es) de la ruta crítica (marcadas con *) entraron con su duración base y aportan σ² = 0: la probabilidad está <b>sobrestimada</b> hasta que completes su terna.";
 		elPath.innerHTML = "<b>Ruta crítica (" + cp.ids.length + " act.):</b> " + cp.names.map(esc).join(" → ") + warn;
+		if (elSim) elSim.innerHTML = simHtml(cp.sim, target, r ? r.prob * 100 : null);
 	}
 	function renderOrphans() {
 		const st = state(), ids = {};

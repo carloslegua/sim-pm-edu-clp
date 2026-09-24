@@ -1178,6 +1178,21 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
   definido en su propio `SAMPLE.acts` — su regresión dorada (53 días, 9
   críticas) no se toca.
 
+**PERT sobre la red completa (ramas paralelas)** — `src/shared/pert-network.ts`
+(inlineada en `pert.js` y `cronograma-cpm.js`, 7 pruebas unitarias con el CPM real).
+Con ramas paralelas o convergentes el fin es el **máximo** de las rutas: usar una
+sola rama sobrestima la probabilidad (dos ramas de 10 d con 50 % cada una dan
+25 %, no 50 % — *merge bias*). Monte Carlo (2 000 iteraciones, semilla fija) sobre
+el `cpm()` del núcleo: cada actividad con terna O–M–P válida toma una duración
+**Beta-PERT** (α = 1 + 4(M−O)/(P−O), β = 1 + 4(P−M)/(P−O), escalada a [O, P]; la
+que respalda TE y σ del PERT clásico); las demás quedan fijas. Devuelve media, σ,
+P10/P50/P80/P90, **P(fin ≤ plazo)** y el **índice de criticidad** por actividad.
+Con ramas paralelas es el resultado principal; con una cadena única se muestra
+además como contraste (avisa si la aproximación de una ruta difiere ≥ 3 puntos:
+rutas casi críticas). **Supuestos declarados:** duraciones independientes (sin
+correlación), distribución Beta-PERT, ±1 punto de error típico. Se cachea por
+huella de los datos (cambiar solo el plazo no vuelve a simular).
+
 **Probabilidad de plazo PERT: solo sobre una ruta crítica única**
 (`GPI.util.pertCriticalChain`, usada por Cronograma/CPM y por PERT).
 Revisión externa (severidad alta): `criticalPertSums()` /
@@ -1191,10 +1206,10 @@ ruta". Ahora:
   (FS `ES(j)=EF(i)+lag`, SS `ES(j)=ES(i)+lag`, FF `EF(j)=EF(i)+lag`, SF
   `EF(j)=ES(i)+lag`) entre actividades críticas. Es una **cadena** si
   tiene una sola fuente y cada actividad un único enlace entrante y
-  saliente; si no, el resultado es `reason:"parallel"` y la pantalla dice
-  "no aplicable" (ramas paralelas o convergentes: haría falta simular la
-  red completa, PMBOK «análisis de riesgos del cronograma») en vez de
-  inventar un número.
+  saliente; si no, el resultado es `reason:"parallel"` (ramas paralelas o
+  convergentes) y la fórmula de una sola ruta NO se aplica. **Para ese
+  caso la probabilidad se simula sobre la red completa** (ver
+  «PERT sobre la red completa» abajo) en vez de inventar un número.
 - En una cadena el fin del proyecto es lineal en las duraciones,
   `T = k + Σ cᵢ·dᵢ`, que se sigue enlace por enlace: **media** = duración
   del proyecto (ya incluye desfases y calendario, con la misma conversión
@@ -1552,7 +1567,7 @@ Estimating»; la RP 118R-21 cubre rangos + Monte Carlo de riesgos inherentes) y
   clásico del método PERT — a diferencia de Cronograma/CPM
   (determinístico). La probabilidad de plazo sigue la regla de
   "Probabilidad de plazo PERT: solo sobre una ruta crítica única" (más
-  abajo): con ramas paralelas o convergentes no da número.
+  abajo): con ramas paralelas o convergentes se simula la red completa.
 - La M (más probable) tiene un modo "automático" que sigue en vivo la
   duración `Dur = Met/(#Eq×R)` de Definir Actividades; escribir un
   valor la fija manualmente, borrarlo la regresa a automático.

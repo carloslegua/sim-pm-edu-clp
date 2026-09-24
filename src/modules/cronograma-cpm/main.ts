@@ -23,6 +23,8 @@ import type * as GpiCore from "../../core/gpi-core";
 import type { CpmNode, CpmResult, ProjectCalendar, ScheduleValidateResult } from "../../core/gpi-core";
 import type { ActivitiesModule, EditSession, MilestoneItem, PertModule, SchedulePlanModule, ScheduleLagUnit, ScheduleLinkType, WbsModule } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
+import { probWithin, simulatePertNetwork, type PertSimResult, type SimAct } from "../../shared/pert-network";
+import type { CpmFn, NetLink } from "../../shared/schedule-risk";
 import {
   compareBaseline, deviationPct, makeSnapshot, needsSponsor, nextVersion, normalizeBaseline, planOf, scheduleHealth,
   type CtlLink, type CtlNode, type CtlPlan, type ScheduleBaselineData
@@ -148,13 +150,13 @@ function treeRows(): TreeRow[] {
   return out;
 }
 
-interface PertIdxEntry { dur: number | null; te: number | null; variance: number | null; valid: boolean; }
+interface PertIdxEntry { dur: number | null; te: number | null; variance: number | null; valid: boolean; o: number | null; m: number | null; p: number | null; }
 // Índice PERT por actividad: {dur (determinística), te, variance}
 function pertIndex(): Record<string, PertIdxEntry> {
   const idx: Record<string, PertIdxEntry> = {};
   try {
     const st = GPI!.util.pertStats(pertData(), actsData(), wbsData());
-    (st.rows || []).forEach((r) => { idx[r.id] = { dur: r.dur, te: r.te, variance: r.variance, valid: r.valid }; });
+    (st.rows || []).forEach((r) => { idx[r.id] = { dur: r.dur, te: r.te, variance: r.variance, valid: r.valid, o: r.o, m: r.m, p: r.p }; });
   } catch (_) { /* noop */ }
   return idx;
 }
@@ -163,6 +165,7 @@ interface Row {
   netId: number; kind: "project" | "summary" | "activity"; subkind?: "phase" | "package";
   code: string; name: string; depth?: number; activityId: string | null; leafId?: string;
   det?: number | null; te?: number | null; variance?: number | null; pertValid?: boolean;
+  po?: number | null; pm?: number | null; pp?: number | null;   // terna O–M–P en días (para simular la red completa)
   isMilestone?: boolean;
 }
 
@@ -216,7 +219,7 @@ function fullRowsSnapshot(): Row[] {
       out.push({ netId: n++, kind: "summary", subkind: "package", code: r.code, name: r.name, depth: r.depth, activityId: null });
       ((act.byLeaf || {})[r.id] || []).forEach((a, i) => {
         const info = idx[a.id] || ({} as Partial<PertIdxEntry>);
-        out.push({ netId: n++, kind: "activity", code: r.code + "." + (i + 1), name: a.name || "", activityId: a.id, leafId: r.id, det: info.dur, te: info.te, variance: info.variance, pertValid: info.valid });
+        out.push({ netId: n++, kind: "activity", code: r.code + "." + (i + 1), name: a.name || "", activityId: a.id, leafId: r.id, det: info.dur, te: info.te, variance: info.variance, pertValid: info.valid, po: info.o, pm: info.m, pp: info.p });
       });
       milestones.filter((m) => m.leafId === r.id).forEach((m) => pushMilestone(m, r.id));
       (loose.afterLeaf[r.id] || []).forEach((m) => pushMilestone(m));
@@ -384,7 +387,15 @@ function renderValidation(R: RunCpmResult): void {
 // recalcula con las duraciones ESPERADAS (TE) -- el modo "Duración" de la
 // pantalla no cambia el resultado -- y solo se calcula si las críticas forman
 // UNA cadena (GPI.util.pertCriticalChain); si no, `reason` dice por qué.
-interface CriticalPertSums { mean: number; sumVar: number; allValid: boolean; count: number; reason?: "empty" | "parallel" | "inconsistent" | "elapsed"; }
+interface CriticalPertSums { mean: number; sumVar: number; allValid: boolean; count: number; reason?: "empty" | "parallel" | "inconsistent" | "elapsed"; sim?: PertSimResult | null; }
+// Simulación Monte Carlo de la RED COMPLETA (shared/pert-network.ts) para las ramas paralelas/convergentes y como contraste de las casi
+// críticas. Se guarda por huella de los datos: cambiar solo el plazo objetivo no la vuelve a correr.
+let simKey = "", simVal: PertSimResult | null = null;
+function simFor(acts: SimAct[], links: Link[], cal: unknown): PertSimResult | null {
+  const key = JSON.stringify([acts, links.map((l) => [l.from, l.to, l.type, l.lag, l.lagUnit]), metaStart()]);
+  if (key !== simKey) { simKey = key; try { simVal = simulatePertNetwork(acts, links as unknown as NetLink[], cal, GPI!.util.cpm as unknown as CpmFn, { startDate: metaStart() }); } catch (_) { simVal = null; } }
+  return simVal;
+}
 function criticalPertSums(R: RunCpmResult): CriticalPertSums {
   if (!R.cpm.ok) return { mean: 0, sumVar: 0, allValid: false, count: 0, reason: "empty" };
   const idx: Record<string, Row> = {}; R.snap.forEach((r) => { if (r.kind === "activity") idx[r.activityId as string] = r; });
@@ -395,21 +406,30 @@ function criticalPertSums(R: RunCpmResult): CriticalPertSums {
   const res = GPI!.util.cpm(nodes as CpmNode[], links, calData(), {});
   const vars: Record<string, number> = {}; ids.forEach((i) => { if (usable(idx[i])) vars[i] = idx[i].variance as number; });
   const ch = GPI!.util.pertCriticalChain(res, links, calData(), vars);
-  if (!ch.ok) return { mean: 0, sumVar: 0, allValid: false, count: res.ok ? res.criticalIds.length : 0, reason: ch.reason };
+  const simActs: SimAct[] = R.nodes.map((n) => { const r = idx[n.id], u = usable(r); return { id: n.id, dur: (nodes.find((q) => q.id === n.id) as { dur: number }).dur, o: u ? r.po : null, m: u ? r.pm : null, p: u ? r.pp : null }; });
+  const sim = ch.ok || ch.reason === "parallel" ? simFor(simActs, links, calData()) : null;
+  if (!ch.ok) return { mean: 0, sumVar: 0, allValid: false, count: res.ok ? res.criticalIds.length : 0, reason: ch.reason, sim };
   // Un hito nunca tiene terna O/M/P -- duración cero por definición, no dato
   // faltante -- así que no invalida la probabilidad solo porque cayó en la
   // ruta; y una actividad que no decide el fin (peso 0, p. ej. la predecesora
   // de un SS) tampoco necesita terna.
   const allValid = Object.keys(ch.weights).every((id) => { const r = idx[id]; return !!r && (r.isMilestone || usable(r)); });
-  return { mean: ch.mean, sumVar: ch.variance, allValid, count: ch.ids.length };
+  return { mean: ch.mean, sumVar: ch.variance, allValid, count: ch.ids.length, sim };
 }
+const simLine = (sm: PertSimResult): string => "P10 " + fmt(sm.percentiles[10]) + " · P50 " + fmt(sm.percentiles[50]) + " · P80 " + fmt(sm.percentiles[80]) + " · P90 " + fmt(sm.percentiles[90]) + " d";
 
 function renderProbability(R: RunCpmResult): void {
   const out = document.getElementById("probOut") as HTMLElement;
   const t = parseFloat((document.getElementById("probTarget") as HTMLInputElement).value);
   if (!R.cpm.ok) { out.innerHTML = "<div class='p'>—</div><div class='z'>red con ciclo</div>"; return; }
   const s = criticalPertSums(R);
-  if (s.reason === "parallel") { out.innerHTML = "<div class='p'>—</div><div class='z'>no aplicable: hay <b>" + s.count + "</b> actividades críticas en ramas paralelas o convergentes. PERT de una sola ruta no vale ahí (subestima el riesgo: el fin depende de que TODAS las ramas terminen a tiempo) — requiere simular la red completa</div>"; return; }
+  if (s.reason === "parallel") {
+    const sm = s.sim, why = "hay <b>" + s.count + "</b> actividades críticas en ramas paralelas o convergentes: PERT de una sola ruta no vale ahí (sobrestima: el fin depende de que TODAS las ramas terminen a tiempo)";
+    if (!sm) { out.innerHTML = "<div class='p'>—</div><div class='z'>no aplicable: " + why + ". Completa las ternas O/M/P en PERT para simular la red completa</div>"; return; }
+    if (!isFinite(t) || t <= 0) { out.innerHTML = "<div class='p'>—</div><div class='z'>" + why + "; se simula la red completa (E[T]=" + fmt(sm.mean) + " d, " + simLine(sm) + "). Ingresa un plazo objetivo</div>"; return; }
+    const pc = Math.round(probWithin(sm, t) * 1000) / 10;
+    out.innerHTML = "<div class='p'>" + pc + "%</div><div class='z'>P(fin ≤ " + fmt(t) + " d) por <b>simulación de la red completa</b> (" + sm.iterations.toLocaleString("es-PE") + " iter., Beta-PERT) · E[T]=" + fmt(sm.mean) + " σ=" + fmt(sm.sd) + " · " + simLine(sm) + "<br>Motivo: " + why + "</div>"; return;
+  }
   if (s.reason === "elapsed") { out.innerHTML = "<div class='p'>—</div><div class='z'>no aplicable: la ruta crítica tiene desfases en <b>días transcurridos</b>, que se calculan sobre fechas reales (fines de semana y feriados) y no son un tiempo fijo que sumar a la media PERT. Exprésalos en días laborables para obtener la probabilidad</div>"; return; }
   if (s.reason) { out.innerHTML = "<div class='p'>—</div><div class='z'>no aplicable: no se pudo aislar una ruta crítica única</div>"; return; }
   if (!s.allValid) { out.innerHTML = "<div class='p'>—</div><div class='z'>completa O/M/P en PERT para la ruta crítica</div>"; return; }
@@ -417,7 +437,9 @@ function renderProbability(R: RunCpmResult): void {
   const pr = GPI!.util.pertProbability(s.mean, s.sumVar, t);
   if (!pr) { out.innerHTML = "<div class='p'>—</div><div class='z'>E[T]=" + fmt(s.mean) + " d · sin varianza en la ruta crítica (σ=0): no hay incertidumbre que evaluar</div>"; return; }
   const pct = Math.round(pr.prob * 1000) / 10;
-  out.innerHTML = "<div class='p'>" + pct + "%</div><div class='z'>P(fin ≤ " + fmt(t) + " d) · Z=" + fmt(pr.z) + " · E[T]=" + fmt(s.mean) + " σ=" + fmt(pr.sigma) + "</div>";
+  const cross = s.sim ? Math.round(probWithin(s.sim, t) * 1000) / 10 : null;
+  out.innerHTML = "<div class='p'>" + pct + "%</div><div class='z'>P(fin ≤ " + fmt(t) + " d) · Z=" + fmt(pr.z) + " · E[T]=" + fmt(s.mean) + " σ=" + fmt(pr.sigma) + "</div>"
+    + (cross !== null ? "<div class='z'>Red completa (simulación): <b>" + cross + "%</b>" + (Math.abs(cross - pct) >= 3 ? " — " + (pct > cross ? "la ruta única <b>sobrestima</b>: hay rutas casi críticas" : "difiere de la ruta única") : " — coincide con la ruta única") + "</div>" : "");
 }
 
 function renderCalNote(): void {
