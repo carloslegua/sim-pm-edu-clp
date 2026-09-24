@@ -1,6 +1,6 @@
 // Plan para la Dirección (integrador): src/shared/pm-plan.ts. Lógica pura.
 import { describe, expect, it } from "vitest";
-import { STATE_LABEL, approvalBlockers, areaRows, emptyFacts, integrationFindings, snapshotDiff, snapshotOf, worstState, type PlanFacts } from "../../src/shared/pm-plan";
+import { PLAN_COMPONENTS, STATE_LABEL, approvalBlockers, areaRows, digestOf, emptyFacts, integrationFindings, snapshotDiff, snapshotOf, stableStringify, worstState, type PlanFacts } from "../../src/shared/pm-plan";
 
 const base = (version: string, date: string, approver = "CCB") => ({ has: true, version, date, approver });
 // Un proyecto completo y coherente (todo en orden).
@@ -96,19 +96,43 @@ describe("integrationFindings — el cruce entre líneas base", () => {
 });
 
 describe("plan aprobado: instantánea y desactualización", () => {
-  const aprobar = (f: PlanFacts) => { f.plan = { status: "aprobado", version: "1.0", approvedBy: "Sponsor", approvedOn: "2026-07-15", snapshot: snapshotOf(f) }; return f; };
-  it("la instantánea guarda las líneas base y un plan recién aprobado queda limpio", () => {
-    const f = aprobar(completo());
-    expect(f.plan.snapshot).toEqual({ scopeVersion: "1.0", scopeDate: "2026-07-10", requirementsVersion: "1.0", scheduleVersion: "LB-1", scheduleDate: "2026-07-12", scheduleFinish: "2027-07-21", bacCurrent: 8000000, costBaseline: "", boeStatus: "aprobada" });
+  const aprobar = (f: PlanFacts) => { f.plan = { status: "aprobado", version: "1.0", approvedBy: "Sponsor", approvedOn: "2026-07-15", snapshot: snapshotOf(f), docPreserved: true }; return f; };
+  it("la instantánea guarda las líneas base y las huellas de cada componente; un plan recién aprobado queda limpio", () => {
+    const f = completo(); f.digests = { charter: "a1", quality: "q1" }; aprobar(f);
+    expect(f.plan.snapshot).toEqual({ scopeVersion: "1.0", scopeDate: "2026-07-10", requirementsVersion: "1.0", scheduleVersion: "LB-1", scheduleDate: "2026-07-12", scheduleFinish: "2027-07-21", bacCurrent: 8000000, costBaseline: "", boeStatus: "aprobada", digests: { charter: "a1", quality: "q1" } });
     expect(codes(f)).toEqual([]);
   });
   it("P12: si cambian las líneas base después de aprobar, el plan queda desactualizado y dice qué cambió", () => {
     const f = aprobar(completo());
     f.cost.bacCurrent = 8090000; f.cost.baselineVersion = "LB-1"; f.schedule.base = base("LB-2", "2026-09-30"); f.schedule.finish = "2027-08-10";
     const p = integrationFindings(f).find((x) => x.code === "P12")!;
-    expect(p.text).toMatch(/desde la aprobación del plan \(v1\.0, 2026-07-15\)/);
+    expect(p.severity).toBe("riesgo"); expect(p.text).toMatch(/plan aprobado \(v1\.0, 2026-07-15\) tiene CAMBIOS SIN APROBAR desde su aprobación/);
     expect(p.text).toMatch(/Línea base del cronograma LB-1 → LB-2/); expect(p.text).toMatch(/Fin del cronograma 2027-07-21 → 2027-08-10/); expect(p.text).toMatch(/BAC vigente 8[.,]000[.,]000 → 8[.,]090[.,]000/); expect(p.text).toMatch(/nueva versión/);
     expect(snapshotDiff(f.plan.snapshot!, snapshotOf(f)).map((d) => d.label)).toEqual(["Línea base del cronograma", "Fin del cronograma", "BAC vigente", "Línea base de costos"]);
+  });
+  it("REPRO (alta): si cambia el CONTENIDO de un plan subsidiario (p. ej. la política de calidad) después de aprobar, el plan queda con cambios sin aprobar y dice cuál", () => {
+    const f = completo(); f.digests = { charter: digestOf({ p: "a" }), quality: digestOf({ policy: "Política aprobada" }), comms: digestOf(null) }; aprobar(f);
+    expect(codes(f)).toEqual([]);                                                              // sin cambios: limpio
+    f.digests = { ...f.digests, quality: digestOf({ policy: "Política MODIFICADA después de aprobar" }) };
+    const p = integrationFindings(f).find((x) => x.code === "P12")!;
+    expect(p.severity).toBe("riesgo"); expect(p.text).toMatch(/Plan de Calidad aprobado → modificado/); expect(p.text).not.toMatch(/Acta de Constitución/);
+    expect(snapshotDiff(f.plan.snapshot!, snapshotOf(f)).map((d) => d.label)).toEqual(["Plan de Calidad"]);
+    f.digests = { ...f.digests, comms: digestOf({ items: [1] }) };                             // un plan que no existía y se creó después también cuenta
+    expect(snapshotDiff(f.plan.snapshot!, snapshotOf(f)).map((d) => d.label)).toEqual(["Plan de Calidad", "Plan de Comunicaciones"]);
+  });
+  it("P20: aprobado antes de conservar el contenido (sin huellas o sin documento) no se puede demostrar y se avisa; los registros vivos no cuentan como cambio", () => {
+    const f = completo(); f.digests = { quality: "q1" }; aprobar(f); f.plan.docPreserved = false;
+    expect(integrationFindings(f).find((x) => x.code === "P20")!.text).toMatch(/antes de conservar su contenido/);
+    const g = completo(); g.plan = { status: "aprobado", version: "1.0", approvedBy: "S", approvedOn: "2026-07-15", snapshot: (() => { const s = snapshotOf(g); delete s.digests; return s; })(), docPreserved: true };
+    expect(codes(g)).toContain("P20");
+    expect(PLAN_COMPONENTS.map((c) => c.key)).not.toContain("evm"); expect(PLAN_COMPONENTS.map((c) => c.key)).not.toContain("changes"); expect(PLAN_COMPONENTS.map((c) => c.key)).not.toContain("stakeholders");
+    expect(PLAN_COMPONENTS.map((c) => c.key)).toContain("riskPlan");
+  });
+  it("digestOf: estable (no depende del orden de las claves), sensible a cualquier cambio de contenido y distingue tipos", () => {
+    expect(stableStringify({ b: 1, a: [2, { d: 1, c: 2 }] })).toBe(stableStringify({ a: [2, { c: 2, d: 1 }], b: 1 }));
+    expect(digestOf({ a: 1, b: 2 })).toBe(digestOf({ b: 2, a: 1 })); expect(digestOf({ p: "x" })).not.toBe(digestOf({ p: "y" })); expect(digestOf({ a: 1 })).not.toBe(digestOf({ a: "1" }));
+    expect(digestOf(null)).toBe(digestOf(undefined)); expect(digestOf([1, 2])).not.toBe(digestOf([2, 1])); expect(digestOf({ a: undefined, b: 1 })).toBe(digestOf({ b: 1 }));
+    const seen = new Set<string>(); for (let i = 0; i < 2000; i++) seen.add(digestOf({ i, t: "texto " + i })); expect(seen.size).toBe(2000);   // sin colisiones en una muestra
   });
   it("P14: aprobado sin quién ni cuándo es un riesgo", () => {
     const f = aprobar(completo()); f.plan.approvedBy = ""; expect(integrationFindings(f).find((x) => x.code === "P14")!.severity).toBe("riesgo");

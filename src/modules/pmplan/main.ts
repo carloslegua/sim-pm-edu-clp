@@ -26,7 +26,7 @@ import { commState, coverage as commCoverage, normalizeComms, type CommData } fr
 import { COQ_CATS, COQ_LABEL, coqSummary, coverage as qualityCoverage, normalizeQuality, qualityState, type QualityData } from "../../shared/quality-plan";
 import { launchBy, normalizeProcurement, procurementState, summary as procSummary, type ProcData } from "../../shared/procurement-plan";
 import {
-  STATE_LABEL, approvalBlockers, areaRows, emptyBase, emptyFacts, integrationFindings, snapshotDiff, snapshotOf,
+  PLAN_COMPONENTS, STATE_LABEL, approvalBlockers, areaRows, digestOf, emptyBase, emptyFacts, integrationFindings, snapshotDiff, snapshotOf,
   type AreaState, type BaselineFact, type PlanFacts, type PlanSnapshot
 } from "../../shared/pm-plan";
 
@@ -46,19 +46,23 @@ const money = (n: number): string => Math.round(n).toLocaleString("es-PE");
 const nl = (s: unknown): string => esc(s).replace(/\n/g, "<br>");
 
 // ---------- registro de aprobación (lo único que este módulo guarda) ----------
-interface HistoryEntry { version: string; approvedBy: string; approvedOn: string; snapshot: PlanSnapshot | null; }
-interface PlanRecord { version: string; status: "borrador" | "aprobado"; preparedBy: string; approvedBy: string; approvedOn: string; notes: string; snapshot: PlanSnapshot | null; history: HistoryEntry[]; }
-const blankPlan = (): PlanRecord => ({ version: "1.0", status: "borrador", preparedBy: "", approvedBy: "", approvedOn: "", notes: "", snapshot: null, history: [] });
+// Lo aprobado se CONSERVA (auditoría, alta): `approvedDoc` es el documento tal como se aprobó (HTML inmutable) y `snapshot.digests` la huella de cada
+// componente del plan en ese momento. El documento vigente se reconstruye con datos actuales, pero NUNCA reemplaza al aprobado: si algo cambia
+// después, el aprobado sigue intacto y lo vigente es un borrador que necesita una nueva versión aprobada. Cada versión anterior conserva el suyo.
+interface HistoryEntry { version: string; approvedBy: string; approvedOn: string; snapshot: PlanSnapshot | null; doc: string; }
+interface PlanRecord { version: string; status: "borrador" | "aprobado"; preparedBy: string; approvedBy: string; approvedOn: string; notes: string; snapshot: PlanSnapshot | null; approvedDoc: string; history: HistoryEntry[]; }
+const blankPlan = (): PlanRecord => ({ version: "1.0", status: "borrador", preparedBy: "", approvedBy: "", approvedOn: "", notes: "", snapshot: null, approvedDoc: "", history: [] });
 function normSnapshot(o: unknown): PlanSnapshot | null {
   if (!o || typeof o !== "object") return null;
-  const x = rec(o);
-  return { scopeVersion: str(x.scopeVersion), scopeDate: str(x.scopeDate), requirementsVersion: str(x.requirementsVersion), scheduleVersion: str(x.scheduleVersion), scheduleDate: str(x.scheduleDate), scheduleFinish: str(x.scheduleFinish), bacCurrent: num(x.bacCurrent), costBaseline: str(x.costBaseline), boeStatus: str(x.boeStatus) };
+  const x = rec(o), s: PlanSnapshot = { scopeVersion: str(x.scopeVersion), scopeDate: str(x.scopeDate), requirementsVersion: str(x.requirementsVersion), scheduleVersion: str(x.scheduleVersion), scheduleDate: str(x.scheduleDate), scheduleFinish: str(x.scheduleFinish), bacCurrent: num(x.bacCurrent), costBaseline: str(x.costBaseline), boeStatus: str(x.boeStatus) };
+  if (x.digests && typeof x.digests === "object") { const d: Record<string, string> = {}; Object.keys(rec(x.digests)).forEach((k) => { d[k] = str(rec(x.digests)[k]); }); s.digests = d; }   // sin huellas = aprobado antes de conservarlas
+  return s;
 }
 function normPlan(o: unknown): PlanRecord {
   const x = rec(o), p = blankPlan();
   p.version = str(x.version) || "1.0"; p.status = x.status === "aprobado" ? "aprobado" : "borrador"; p.preparedBy = str(x.preparedBy); p.approvedBy = str(x.approvedBy); p.approvedOn = str(x.approvedOn); p.notes = str(x.notes);
-  p.snapshot = normSnapshot(x.snapshot);
-  p.history = arr(x.history).map((h) => ({ version: str(h.version), approvedBy: str(h.approvedBy), approvedOn: str(h.approvedOn), snapshot: normSnapshot(h.snapshot) }));
+  p.snapshot = normSnapshot(x.snapshot); p.approvedDoc = str(x.approvedDoc);
+  p.history = arr(x.history).map((h) => ({ version: str(h.version), approvedBy: str(h.approvedBy), approvedOn: str(h.approvedOn), snapshot: normSnapshot(h.snapshot), doc: str(h.doc) }));
   return p;
 }
 let plan: PlanRecord = blankPlan();
@@ -137,11 +141,18 @@ function buildCtx(): Ctx {
     f.projectEnd = str(meta.endDate) || f.charter.end;
     const contr = arr(sp && sp.milestones).filter((x) => /contractual/i.test(str(x.type))).map((x) => str(x.date)).filter(Boolean).sort();
     f.contractualEnd = contr.length ? contr[contr.length - 1] : "";
-    f.plan = { status: plan.status, version: plan.version, approvedBy: plan.approvedBy, approvedOn: plan.approvedOn, snapshot: plan.snapshot };
+    // Huella de cada componente del plan (contenido, no solo versiones): la ficha del proyecto, el plan de riesgos (no cada riesgo: es un registro vivo)
+    // y el resto de los módulos que componen el plan. Ver PLAN_COMPONENTS en shared/pm-plan.ts.
+    const METAKEYS = ["name", "code", "client", "location", "sponsor", "manager", "startDate", "endDate", "currency", "capex", "description"], mm: Record<string, unknown> = {};
+    METAKEYS.forEach((k) => { mm[k] = meta[k]; });
+    PLAN_COMPONENTS.forEach((c) => { f.digests[c.key] = digestOf(c.key === "meta" ? mm : c.key === "riskPlan" ? rec(G.getModule("risks")).plan : G.getModule(c.key as never)); });
+    f.plan = { status: plan.status, version: plan.version, approvedBy: plan.approvedBy, approvedOn: plan.approvedOn, snapshot: plan.snapshot, docPreserved: !!plan.approvedDoc };
   } catch (e) { /* noop: cada tarjeta del plan queda "sin datos" */ }
   return { connected, name: str(meta.name), meta, mods, facts: f };
 }
-const factsNow = (): PlanFacts => { const c = getCtx(); c.facts.plan = { status: plan.status, version: plan.version, approvedBy: plan.approvedBy, approvedOn: plan.approvedOn, snapshot: plan.snapshot }; return c.facts; };
+const factsNow = (): PlanFacts => { const c = getCtx(); c.facts.plan = { status: plan.status, version: plan.version, approvedBy: plan.approvedBy, approvedOn: plan.approvedOn, snapshot: plan.snapshot, docPreserved: !!plan.approvedDoc }; return c.facts; };
+// ¿El proyecto cambió desde la aprobación? (versiones/importes de las líneas base y contenido de cada componente del plan)
+const changesSinceApproval = (): Array<{ label: string; from: string; to: string }> => (plan.status === "aprobado" && plan.snapshot ? snapshotDiff(plan.snapshot, snapshotOf(factsNow())) : []);
 
 // ---------- vista «Estado del plan» ----------
 const pill = (s: AreaState): string => `<span class="pill st-${s}">${STATE_LABEL[s]}</span>`;
@@ -153,7 +164,7 @@ function renderState(): void {
     return;
   }
   const rows = areaRows(f), finds = integrationFindings(f), blockers = approvalBlockers(f), approved = plan.status === "aprobado";
-  const stale = finds.some((x) => x.code === "P12");
+  const changed = changesSinceApproval(), stale = changed.length > 0;
   const bl: Array<[string, BaselineFact, string]> = [
     ["Requisitos", f.requirements.base, f.requirements.base.has ? "v" + f.requirements.base.version : ""], ["Alcance", f.scope.base, f.scope.base.has ? "v" + f.scope.base.version : ""],
     ["Cronograma", f.schedule.base, f.schedule.base.has ? f.schedule.base.version : ""],
@@ -176,9 +187,9 @@ function renderState(): void {
         ${fd("pfDate", "Fecha de aprobación", plan.approvedOn || todayISO(), "date", approved)}
         <div class="fd"><label for="pfNotes">Notas</label><textarea id="pfNotes" rows="2">${esc(plan.notes)}</textarea></div>
         ${approved
-          ? `<p class="small">${stale ? "⚠ <b>Plan aprobado desactualizado</b>: cambió una línea base después de la aprobación." : "✔ <b>Plan aprobado</b> v" + esc(plan.version) + " por " + esc(plan.approvedBy) + " el " + esc(plan.approvedOn) + "."}</p><button class="btn" id="btnNewVersion">＋ Nueva versión del plan</button>`
+          ? `<p class="small">${stale ? "⚠ <b>Plan aprobado con CAMBIOS SIN APROBAR</b> desde el " + esc(plan.approvedOn) + ": " + esc(changed.map((d) => d.label + " (" + d.from + " → " + d.to + ")").join("; ")) + ". El documento aprobado se conserva tal como se aprobó; lo vigente es un <b>borrador</b>. Crea una nueva versión para aprobar los cambios." : "✔ <b>Plan aprobado</b> v" + esc(plan.version) + " por " + esc(plan.approvedBy) + " el " + esc(plan.approvedOn) + " (sin cambios desde la aprobación)."}</p><button class="btn${stale ? " primary" : ""}" id="btnNewVersion">＋ Nueva versión del plan${stale ? " con los cambios" : ""}</button>`
           : `${blockers.length ? `<p class="small" style="color:#a05a00">No se puede aprobar todavía: ${esc(blockers.join("; "))}.</p>` : ""}<button class="btn primary" id="btnApprove"${blockers.length ? " disabled" : ""}>✔ Aprobar el plan</button>`}
-        ${plan.history.length ? `<p class="small muted" style="margin-top:8px">Versiones anteriores: ${plan.history.map((h) => "v" + esc(h.version) + " (" + esc(h.approvedOn || "—") + ")").join(", ")}</p>` : ""}
+        ${plan.history.length ? `<p class="small muted" style="margin-top:8px">Versiones anteriores: ${plan.history.map((h, i) => "v" + esc(h.version) + " (" + esc(h.approvedOn || "—") + ")" + (h.doc ? ` <button class="btn sm" data-histdoc="${i}">Ver documento</button>` : " <span title=\"aprobada antes de conservar su contenido\">sin contenido conservado</span>")).join(" · ")}</p>` : ""}
       </div>
     </div>
     <div class="card"><h3>Áreas del plan</h3>
@@ -195,6 +206,7 @@ function wireState(): void {
   bind("pfVersion", "version"); bind("pfPrepared", "preparedBy"); bind("pfApprover", "approvedBy"); bind("pfDate", "approvedOn"); bind("pfNotes", "notes");
   const ap = document.getElementById("btnApprove"); if (ap) ap.addEventListener("click", approve);
   const nv = document.getElementById("btnNewVersion"); if (nv) nv.addEventListener("click", newVersion);
+  document.querySelectorAll<HTMLElement>("[data-histdoc]").forEach((b) => b.addEventListener("click", () => { docMode = Number(b.dataset.histdoc); setView("doc"); }));
 }
 function approve(): void {
   const f = factsNow(), b = approvalBlockers(f);
@@ -204,16 +216,18 @@ function approve(): void {
   const finds = integrationFindings(f).filter((x) => x.severity === "aviso" || x.severity === "riesgo");
   showConfirm("Se aprobará el plan v" + plan.version + " con las líneas base actuales" + (finds.length ? " (quedan " + finds.length + " aviso(s) de integración sin resolver)" : "") + ". Si luego cambian, quedará desactualizado. ¿Continuar?", "Aprobar el plan", "Aprobar").then((ok) => {
     if (!ok) return;
-    plan.status = "aprobado"; plan.snapshot = snapshotOf(f); ctxDirty = true; save(); renderState(); renderDoc(); setStatus("Plan v" + plan.version + " aprobado.");
+    // Se conserva lo aprobado: la huella de cada componente y el DOCUMENTO tal como queda aprobado (con el aprobador y la fecha ya registrados).
+    plan.status = "aprobado"; ctxDirty = true; const f2 = factsNow(); plan.snapshot = snapshotOf(f2); docMode = "auto"; plan.approvedDoc = liveDocHtml();
+    save(); renderState(); renderDoc(); setStatus("Plan v" + plan.version + " aprobado: el documento aprobado queda conservado (" + Math.round(plan.approvedDoc.length / 1024) + " KB).");
   });
 }
 function newVersion(): void {
-  showConfirm("Se conserva la versión aprobada en el historial y se abre un borrador nuevo con las líneas base vigentes. ¿Continuar?", "Nueva versión del plan", "Crear versión").then((ok) => {
+  showConfirm("Se conserva la versión aprobada (con su documento) en el historial y se abre un borrador nuevo con lo vigente. ¿Continuar?", "Nueva versión del plan", "Crear versión").then((ok) => {
     if (!ok) return;
-    plan.history.push({ version: plan.version, approvedBy: plan.approvedBy, approvedOn: plan.approvedOn, snapshot: plan.snapshot });
+    plan.history.push({ version: plan.version, approvedBy: plan.approvedBy, approvedOn: plan.approvedOn, snapshot: plan.snapshot, doc: plan.approvedDoc });
     const major = Number(String(plan.version).split(".")[0]);
     plan.version = isFinite(major) && major > 0 ? String(major + 1) + ".0" : plan.version + "b";
-    plan.status = "borrador"; plan.approvedBy = ""; plan.approvedOn = ""; plan.snapshot = null; ctxDirty = true; save(); renderState(); renderDoc(); setStatus("Nueva versión v" + plan.version + " en borrador.");
+    plan.status = "borrador"; plan.approvedBy = ""; plan.approvedOn = ""; plan.snapshot = null; plan.approvedDoc = ""; docMode = "auto"; ctxDirty = true; save(); renderState(); renderDoc(); setStatus("Nueva versión v" + plan.version + " en borrador.");
   });
 }
 
@@ -372,10 +386,10 @@ function buildSections(): Sect[] {
 
   // 10. Líneas base y aprobación
   {
-    const snap = plan.snapshot, diff = snap ? snapshotDiff(snap, snapshotOf(f)) : [];
+    const diff = changesSinceApproval();
     let h = tbl(["Línea base", "Versión", "Fecha"], [["Requisitos", f.requirements.base.has ? "v" + esc(f.requirements.base.version) : "—", esc(f.requirements.base.date)], ["Alcance", f.scope.base.has ? "v" + esc(f.scope.base.version) : "—", esc(f.scope.base.date)], ["Cronograma", f.schedule.base.has ? esc(f.schedule.base.version) : "—", esc(f.schedule.base.date)], ["Costos (BAC vigente " + m(f.cost.bacCurrent || f.cost.bac) + ")", esc(f.cost.baselineVersion || "inicial"), esc(f.cost.baselineDate)]]);
-    h += `<h3 class="d2" id="s10-ap">Aprobación del plan</h3>` + kv([["Versión", esc(plan.version)], ["Estado", plan.status === "aprobado" ? "Aprobado" : "Borrador"], ["Preparó", esc(plan.preparedBy)], ["Aprobó", esc(plan.approvedBy)], ["Fecha de aprobación", esc(plan.approvedOn)], ["Notas", nl(plan.notes)]]);
-    if (diff.length) h += `<p class="note"><b>Plan desactualizado:</b> desde la aprobación cambió ${esc(diff.map((d) => d.label + " " + d.from + " → " + d.to).join("; "))}.</p>`;
+    h += `<h3 class="d2" id="s10-ap">Aprobación del plan</h3>` + kv([["Versión", esc(plan.version)], ["Estado", esc(coverStatus())], ["Preparó", esc(plan.preparedBy)], ["Aprobó", esc(plan.approvedBy)], ["Fecha de aprobación", esc(plan.approvedOn)], ["Notas", nl(plan.notes)]]);
+    if (diff.length) h += `<p class="note"><b>Borrador con cambios sin aprobar:</b> desde la aprobación de la v${esc(plan.version)} cambió ${esc(diff.map((d) => d.label + " " + d.from + " → " + d.to).join("; "))}. Este documento NO es el aprobado.</p>`;
     if (plan.history.length) h += `<h4 class="d3">Versiones anteriores</h4>` + tbl(["Versión", "Aprobó", "Fecha"], plan.history.map((x) => [esc(x.version), esc(x.approvedBy), esc(x.approvedOn)]));
     h += `<h3 class="d2">Firmas</h3><table><tbody><tr><td style="height:60px;width:50%">Preparó:<br>${esc(plan.preparedBy)}</td><td>Aprobó:<br>${esc(plan.approvedBy)}</td></tr></tbody></table>`;
     out.push({ id: "s10", title: "10. Líneas base y aprobación del plan", subs: [{ id: "s10-ap", title: "Aprobación del plan" }], html: h });
@@ -385,26 +399,57 @@ function buildSections(): Sect[] {
 // Orden del documento (áreas de conocimiento): alcance, cronograma, costos, calidad, recursos, comunicaciones, riesgos, adquisiciones, interesados;
 // luego cambios, valor ganado y líneas base. La numeración se asigna aquí, en ese orden.
 const SECTION_ORDER = ["s1", "s2", "s3", "s4", "sq", "s7", "sc", "s5", "sp", "s6", "s8", "s9", "s10"];
-function docHtml(): string {
+// Estado que declara la portada: «Aprobado» solo si NADA cambió desde la aprobación; con cambios, «Borrador» (no se hace pasar por el aprobado).
+function coverStatus(): string { return plan.status !== "aprobado" ? "Borrador" : changesSinceApproval().length ? "Borrador con cambios sin aprobar (sobre la v" + plan.version + " aprobada)" : "Aprobado"; }
+// Documento reconstruido con los datos VIGENTES (nunca sustituye al aprobado: ver `shownDoc`).
+function liveDocHtml(): string {
   const C = getCtx(), secs = buildSections().sort((a, b) => SECTION_ORDER.indexOf(a.id) - SECTION_ORDER.indexOf(b.id));
   secs.forEach((s, i) => { s.title = (i + 1) + ". " + s.title.replace(/^\d+\.\s*/, ""); });
   const toc = secs.map((s) => `<div class="l1"><a href="#${s.id}">${esc(s.title)}</a></div>` + s.subs.map((x) => `<div class="l2"><a href="#${x.id}">${esc(x.title)}</a></div>`).join("")).join("");
   return `<div class="paper">
     <div class="cover"><div class="ttl"><h1>Plan para la dirección del proyecto</h1><div class="pn">${esc(C.name || "Proyecto")}</div></div>
-      <div class="ft"><div class="dt">${esc(todayISO())}</div><div>Versión ${esc(plan.version)} · ${plan.status === "aprobado" ? "Aprobado" : "Borrador"}${plan.preparedBy ? " · Preparó: " + esc(plan.preparedBy) : ""}</div></div></div>
+      <div class="ft"><div class="dt">${esc(todayISO())}</div><div>Versión ${esc(plan.version)} · ${esc(coverStatus())}${plan.preparedBy ? " · Preparó: " + esc(plan.preparedBy) : ""}</div></div></div>
     <div class="toc"><h2 class="d1">Contenido</h2>${toc}</div>
     ${secs.map((s) => `<section class="sec" id="${s.id}"><h2 class="d1">${esc(s.title)}</h2>${s.html}</section>`).join("")}
   </div>`;
 }
-function renderDoc(): void { const C = getCtx(); $("docView").innerHTML = C.connected ? docHtml() : '<div class="empty-hint">Sin proyecto activo: no hay nada que documentar.</div>'; }
+// Qué documento se muestra (y exporta): por omisión, el APROBADO conservado si el plan está aprobado; el borrador vigente solo a pedido (o si no hay aprobado);
+// una versión anterior del historial a pedido. Con cambios sin aprobar el aprobado sigue intacto y se avisa qué cambió.
+let docMode: "auto" | "current" | number = "auto";
+interface Shown { html: string; bar: string; label: string; }
+function shownDoc(): Shown {
+  const changed = changesSinceApproval();
+  if (typeof docMode === "number") {
+    const h = plan.history[docMode];
+    if (h && h.doc) return { html: h.doc, bar: `<b>Versión anterior v${esc(h.version)}</b> (aprobada el ${esc(h.approvedOn || "—")} por ${esc(h.approvedBy || "—")}): documento tal como se aprobó. <button class="btn sm" id="docBack">Volver</button>`, label: "v" + h.version + "_aprobada" };
+    docMode = "auto";
+  }
+  if (plan.status === "aprobado" && plan.approvedDoc && docMode !== "current")
+    return { html: plan.approvedDoc, label: "v" + plan.version + "_aprobada", bar: changed.length
+      ? `⚠ <b>Documento APROBADO v${esc(plan.version)}</b> (${esc(plan.approvedOn)}, ${esc(plan.approvedBy)}). El proyecto tiene <b>cambios sin aprobar</b>: ${esc(changed.map((d) => d.label).join(", "))}. Lo que ves es lo aprobado, sin esos cambios. <button class="btn sm" id="docCurrent">Ver borrador con los datos actuales</button>`
+      : `✔ <b>Documento aprobado v${esc(plan.version)}</b> (${esc(plan.approvedOn)}, ${esc(plan.approvedBy)}): sin cambios desde la aprobación. <button class="btn sm" id="docCurrent">Ver con los datos actuales</button>` };
+  const legacy = plan.status === "aprobado" && !plan.approvedDoc;
+  return { html: liveDocHtml(), label: plan.status === "aprobado" ? "v" + plan.version + "_borrador" : "borrador", bar: legacy
+    ? "⚠ Este plan se aprobó antes de conservar su contenido: <b>no se puede demostrar que este documento sea el aprobado</b>. Crea una nueva versión y apruébala para conservar su contenido."
+    : plan.status === "aprobado" ? `📝 <b>BORRADOR con los datos actuales</b>, no es el documento aprobado v${esc(plan.version)}. <button class="btn sm" id="docBack">Volver al documento aprobado</button>` : "" };
+}
+function renderDoc(): void {
+  const C = getCtx(), el = $("docView");
+  if (!C.connected) { el.innerHTML = '<div class="empty-hint">Sin proyecto activo: no hay nada que documentar.</div>'; return; }
+  const s = shownDoc();
+  el.innerHTML = (s.bar ? `<div class="docbar" id="docBar">${s.bar}</div>` : "") + s.html;
+  const cur = document.getElementById("docCurrent"), back = document.getElementById("docBack");
+  if (cur) cur.addEventListener("click", () => { docMode = "current"; renderDoc(); });
+  if (back) back.addEventListener("click", () => { docMode = "auto"; renderDoc(); });
+}
 
 // ---------- exportación ----------
 const WORD_CSS = "body{font-family:Calibri,Arial,sans-serif;font-size:11pt} h1{font-size:26pt;color:#5b9bd5;font-weight:normal} h2.d1{font-size:20pt;font-weight:normal;border-bottom:2px solid #2f5496;margin-top:24pt} h3.d2{font-size:14pt;color:#2e74b5;font-weight:normal} h4.d3{font-size:12pt;color:#2e74b5;font-weight:normal} table{border-collapse:collapse;width:100%;margin:6pt 0} th{background:#f2f2f2;border:1px solid #000;padding:3pt 5pt;text-align:left;font-size:9.5pt} td{border:1px solid #000;padding:3pt 5pt;vertical-align:top;font-size:9.5pt} .cover{text-align:center;page-break-after:always} .sec{page-break-before:always} .note,.nodata{color:#595959;font-style:italic;font-size:9pt}";
 function exportWord(): void {
   const C = getCtx(); if (!C.connected) { setStatus("No hay un proyecto activo que exportar."); return; }
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Plan para la dirección del proyecto</title><style>${WORD_CSS}</style></head><body>${docHtml()}</body></html>`;
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Plan para la dirección del proyecto</title><style>${WORD_CSS}</style></head><body>${shownDoc().html}</body></html>`;   // exporta lo que se muestra: el aprobado (nunca uno reconstruido que se haga pasar por él)
   const blob = new Blob(["﻿", html], { type: "application/msword" }), url = URL.createObjectURL(blob), a = document.createElement("a");
-  a.href = url; a.download = "plan_para_la_direccion_v" + plan.version + ".doc"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); setStatus("Plan exportado a Word (.doc).");
+  a.href = url; a.download = "plan_para_la_direccion_" + shownDoc().label + ".doc"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); setStatus("Plan exportado a Word (.doc).");
 }
 function printDoc(): void { renderDoc(); setStatus("Abriendo el diálogo de impresión: elige «Guardar como PDF»."); window.print(); }
 
@@ -442,7 +487,7 @@ function save(): void { saveFn(); }
     const b = document.getElementById("banner");
     if (b) { b.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar la aprobación del plan aquí: recárgala, o vuelve a activar el proyecto original desde el Panel de Control."; b.classList.add("show"); }
   }
-  const payload = () => ({ version: plan.version, status: plan.status, preparedBy: plan.preparedBy, approvedBy: plan.approvedBy, approvedOn: plan.approvedOn, notes: plan.notes, snapshot: plan.snapshot, history: plan.history });
+  const payload = () => ({ version: plan.version, status: plan.status, preparedBy: plan.preparedBy, approvedBy: plan.approvedBy, approvedOn: plan.approvedOn, notes: plan.notes, snapshot: plan.snapshot, approvedDoc: plan.approvedDoc, history: plan.history });
   function pull(): void {
     const p = window.GPI!.active(); if (!p) return;
     loadedProjectId = window.GPI!.activeId(); session = window.GPI!.openSession("pmplan"); ctxDirty = true;

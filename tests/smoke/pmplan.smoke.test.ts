@@ -130,13 +130,75 @@ describe("Plan_Direccion.html (Plan para la Dirección del Proyecto)", () => {
     const seed = conLineasBase() as any;
     seed.projects.p1.modules.pmplan = { version: "1.0", status: "aprobado", approvedBy: "Rosa Paredes", approvedOn: "2026-07-15", snapshot: { scopeVersion: "1.0", scopeDate: "2026-07-10", requirementsVersion: "", scheduleVersion: "LB-1", scheduleDate: "2026-07-12", scheduleFinish: "2026-07-24", bacCurrent: 4200, costBaseline: "", boeStatus: "borrador" }, history: [] };
     const dom = await abrir(seed), doc = dom.window.document;
-    expect(estado(doc)).toMatch(/Plan aprobado desactualizado/);                              // el BAC vigente ya no es el aprobado (4.200 → 4.400)
+    expect(estado(doc)).toMatch(/Plan aprobado con CAMBIOS SIN APROBAR/);                    // el BAC vigente ya no es el aprobado (4.200 → 4.400)
     expect(estado(doc)).toMatch(/P12 .*BAC vigente/);
+    expect(estado(doc)).toMatch(/P20 .*antes de conservar su contenido/);                     // este plan se aprobó sin huellas ni documento: no se puede demostrar
     (doc.getElementById("btnNewVersion") as HTMLElement).click(); await esperar(50);
     (doc.getElementById("modalConfirmBtn") as HTMLElement).click(); await esperar(1100);
     expect(estado(doc)).toMatch(/Versiones anteriores: v1\.0 \(2026-07-15\)/);
     const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string).projects.p1.modules.pmplan;
     expect(saved.status).toBe("borrador"); expect(saved.version).toBe("2.0"); expect(saved.history).toHaveLength(1); expect(saved.snapshot).toBeNull();
+  });
+
+  // ---- Auditoría (alta): el documento del plan aprobado NO puede cambiar sin una nueva aprobación ----
+  const aprobarPlan = async (seed: unknown) => {
+    const dom = await abrir(seed), doc = dom.window.document, w = dom.window as any;
+    const ap = doc.getElementById("pfApprover") as HTMLInputElement; ap.value = "Rosa Paredes, Sponsor"; ap.dispatchEvent(new w.Event("input", { bubbles: true }));
+    (doc.getElementById("btnApprove") as HTMLElement).click(); await esperar(50);
+    (doc.getElementById("modalConfirmBtn") as HTMLElement).click(); await esperar(1100);
+    return JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
+  };
+  const conCalidad = (politica: string) => { const s = conLineasBase() as any; s.projects.p1.modules.quality = { idCounter: 2, policy: politica, standards: "RNE", metrics: [], checks: [], coq: [{ id: "cq1", cat: "prevencion", description: "Revisiones", amount: 1000 }] }; return s; };
+
+  it("REPRO (alta): aprobar y luego modificar la política de calidad — el documento sigue siendo el APROBADO (con la política aprobada), se avisa el cambio y lo vigente es un borrador", async () => {
+    const db = await aprobarPlan(conCalidad("Política aprobada por el sponsor")), mod = db.projects.p1.modules.pmplan;
+    expect(mod.status).toBe("aprobado"); expect(mod.approvedDoc).toMatch(/Política aprobada por el sponsor/); expect(mod.approvedDoc).toMatch(/Aprobado/);
+    expect(Object.keys(mod.snapshot.digests)).toEqual(expect.arrayContaining(["quality", "comms", "procurement", "charter", "wbs", "schedule", "cost", "meta"]));
+    // …el alumno edita después la política de calidad (otro módulo) y vuelve a abrir el plan
+    db.projects.p1.modules.quality.policy = "Política MODIFICADA después de aprobar";
+    const dom = await abrir(db), doc = dom.window.document;
+    expect(estado(doc)).toMatch(/Plan aprobado con CAMBIOS SIN APROBAR .*Plan de Calidad \(aprobado → modificado\)/); expect(estado(doc)).toMatch(/P12 /);
+    expect((doc.getElementById("btnNewVersion") as HTMLElement).textContent).toMatch(/con los cambios/);
+    pestana(doc, "doc");
+    let d = documento(doc);
+    expect(d).toMatch(/Documento APROBADO v1\.0/); expect(d).toMatch(/cambios sin aprobar\s*:\s*Plan de Calidad/);
+    expect(d).toMatch(/Política aprobada por el sponsor/); expect(d).not.toMatch(/MODIFICADA/);                  // lo aprobado, intacto
+    // el borrador vigente se ve solo a pedido y se declara como tal
+    (doc.getElementById("docCurrent") as HTMLElement).click(); d = documento(doc);
+    expect(d).toMatch(/BORRADOR con los datos actuales\s*, no es el documento aprobado v1\.0/); expect(d).toMatch(/Política MODIFICADA después de aprobar/); expect(d).toMatch(/Borrador con cambios sin aprobar \(sobre la v1\.0 aprobada\)/);
+    (doc.getElementById("docBack") as HTMLElement).click(); expect(documento(doc)).toMatch(/Política aprobada por el sponsor/);
+  });
+
+  it("exportar a Word con cambios sin aprobar exporta el documento APROBADO (nunca uno reconstruido que se haga pasar por él)", async () => {
+    const db = await aprobarPlan(conCalidad("Política aprobada por el sponsor"));
+    db.projects.p1.modules.quality.policy = "Política MODIFICADA después de aprobar";
+    const dom = await abrir(db), doc = dom.window.document, w = dom.window as any;
+    let parts: string[] = [], name = ""; w.Blob = function (p: string[]) { parts = p; }; w.URL.createObjectURL = () => "blob:x"; w.URL.revokeObjectURL = () => {}; w.HTMLAnchorElement.prototype.click = function () { name = this.download; };
+    (doc.getElementById("btnWord") as HTMLElement).click();
+    expect(name).toBe("plan_para_la_direccion_v1.0_aprobada.doc"); expect(parts.join("")).toMatch(/Política aprobada por el sponsor/); expect(parts.join("")).not.toMatch(/MODIFICADA/);
+  });
+
+  it("los registros VIVOS (valor ganado, riesgos individuales, interesados, cambios) siguen cambiando durante la ejecución sin invalidar el plan aprobado", async () => {
+    const db = await aprobarPlan(conCalidad("Política aprobada"));
+    db.projects.p1.modules.evm = { statusDate: "2026-09-01", percent: { w1: 50 }, ac: { w1: 600 }, techniques: {}, reports: [{ date: "2026-09-01", offset: 5, pv: 1, ev: 1, ac: 1, cpi: 1, spi: 1 }] };
+    db.projects.p1.modules.stakeholders = { idCounter: 2, stakeholders: [{ id: "s1", name: "Nuevo interesado", power: 50, interest: 50 }] };
+    db.projects.p1.modules.changes = { idCounter: 2, requests: [{ id: "cr1", code: "CR-001", title: "Cambio nuevo", status: "Pendiente" }] };
+    const doc = (await abrir(db)).window.document;
+    expect(estado(doc)).not.toMatch(/CAMBIOS SIN APROBAR/); expect(estado(doc)).toMatch(/Plan aprobado v1\.0 por Rosa Paredes, Sponsor .*sin cambios desde la aprobación/);
+    pestana(doc, "doc"); expect(documento(doc)).toMatch(/Documento aprobado v1\.0.*sin cambios desde la aprobación/); expect(documento(doc)).not.toMatch(/Nuevo interesado/);   // el aprobado los conserva como estaban
+  });
+
+  it("«Nueva versión» conserva el documento de la versión anterior (verlo desde el historial) y el borrador nuevo usa lo vigente", async () => {
+    const db = await aprobarPlan(conCalidad("Política aprobada por el sponsor"));
+    db.projects.p1.modules.quality.policy = "Política MODIFICADA después de aprobar";
+    const dom = await abrir(db), doc = dom.window.document;
+    (doc.getElementById("btnNewVersion") as HTMLElement).click(); await esperar(50);
+    (doc.getElementById("modalConfirmBtn") as HTMLElement).click(); await esperar(1100);
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string).projects.p1.modules.pmplan;
+    expect(saved.status).toBe("borrador"); expect(saved.version).toBe("2.0"); expect(saved.approvedDoc).toBe(""); expect(saved.history).toHaveLength(1); expect(saved.history[0].doc).toMatch(/Política aprobada por el sponsor/);
+    pestana(doc, "doc"); expect(documento(doc)).toMatch(/Política MODIFICADA después de aprobar/); expect(documento(doc)).not.toMatch(/Documento APROBADO/);   // el borrador v2.0 refleja lo vigente
+    pestana(doc, "state"); (doc.querySelector("[data-histdoc]") as HTMLElement).click();
+    expect(documento(doc)).toMatch(/Versión anterior v1\.0/); expect(documento(doc)).toMatch(/Política aprobada por el sponsor/); expect(documento(doc)).not.toMatch(/MODIFICADA/);
   });
 
   it("Exportar a Word genera un .doc HTML y no toca el proyecto", async () => {
@@ -146,7 +208,7 @@ describe("Plan_Direccion.html (Plan para la Dirección del Proyecto)", () => {
     w.URL.createObjectURL = () => "blob:x"; w.URL.revokeObjectURL = () => {};
     w.HTMLAnchorElement.prototype.click = function () { name = this.download; };
     (doc.getElementById("btnWord") as HTMLElement).click();
-    expect(name).toBe("plan_para_la_direccion_v1.0.doc");
+    expect(name).toBe("plan_para_la_direccion_borrador.doc");                                // aún sin aprobar: el archivo lo dice
     expect(type).toBe("application/msword");
     const txt = parts.join("");
     expect(txt).toMatch(/xmlns:w="urn:schemas-microsoft-com:office:word"/); expect(txt).toMatch(/Plan para la dirección del proyecto/); expect(txt).toMatch(/Terreno nivelado/);

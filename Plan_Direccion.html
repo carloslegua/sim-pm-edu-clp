@@ -61,6 +61,7 @@
 
   /* ===== El documento (formato del PDF «Plan para la dirección del proyecto») ===== */
   #docView{display:none;}
+  .docbar{max-width:1100px; margin:0 auto 12px; background:#fff3d6; border:1px solid #ffd58a; color:#6b4a00; border-radius:10px; padding:10px 16px; font-size:12.5px; line-height:1.5;}
   .paper{background:#fff; border:1px solid var(--panel-border); border-radius:6px; box-shadow:0 6px 24px rgba(20,30,60,.08); max-width:1100px; margin:0 auto; padding:56px 64px; font-family:'Calibri','Segoe UI',var(--body); color:#1a1a1a; font-size:12.5px; line-height:1.5;}
   .paper .cover{min-height:820px; display:flex; flex-direction:column; justify-content:space-between; text-align:center; page-break-after:always; break-after:page;}
   .paper .cover .ttl{margin-top:150px; border-top:1px solid #a6a6a6; border-bottom:1px solid #a6a6a6; padding:18px 0;}
@@ -84,7 +85,7 @@
   @page{margin:15mm 13mm;}
   @media print{
     body{background:#fff !important; display:block;}
-    header,.toolbar,.tabs,.statusbar,.banner,.gpi-badge,#stateView{display:none !important;}
+    header,.toolbar,.tabs,.statusbar,.banner,.gpi-badge,#stateView,.docbar{display:none !important;}
     .main-area{padding:0 !important;} #docView{display:block !important;}
     .paper{border:none; box-shadow:none; padding:0; max-width:none;}
   }

@@ -353,6 +353,7 @@ export interface ChangesModule {
 export interface PmPlanModule {
   version?: string; status?: string; preparedBy?: string; approvedBy?: string; approvedOn?: string; notes?: string;
   snapshot?: Record<string, unknown> | null; history?: unknown[];
+  approvedDoc?: string;   // el documento tal como se aprobó (HTML inmutable); cada versión anterior del historial conserva el suyo en `doc`
 }
 
 // Plan de Comunicaciones (Plan_Comunicaciones.html): la matriz de comunicaciones y las reglas del plan. Esquema y normalización en shared/comms-plan.ts;

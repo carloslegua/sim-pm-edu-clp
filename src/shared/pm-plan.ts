@@ -16,6 +16,34 @@ export interface BaselineFact { has: boolean; version: string; date: string; app
 export interface PlanSnapshot {
   scopeVersion: string; scopeDate: string; requirementsVersion: string; scheduleVersion: string; scheduleDate: string; scheduleFinish: string;
   bacCurrent: number; costBaseline: string; boeStatus: string;
+  // Huella de CADA componente del plan (auditoría, alta): la instantánea de versiones e importes no basta para saber si el CONTENIDO cambió (la política
+  // de calidad, la matriz de comunicaciones, un contrato…). Al aprobar se guarda el hash de cada componente; si después difiere, el plan aprobado
+  // quedó desactualizado y el cambio necesita una nueva versión aprobada. Los planes aprobados antes de esto no la traen (se avisa).
+  digests?: Record<string, string>;
+}
+// Componentes del plan cuya modificación exige una nueva aprobación. NO están los REGISTROS VIVOS (los riesgos individuales, los interesados, las
+// solicitudes de cambio y los cortes de valor ganado): siguen cambiando durante la ejecución sin que el plan para la dirección deba re-aprobarse;
+// eso sí, el documento aprobado los conserva tal como estaban. Del Registro de Riesgos sí cuenta su PLAN (escalas y política de reservas).
+export const PLAN_COMPONENTS: Array<{ key: string; label: string }> = [
+  { key: "meta", label: "Ficha del proyecto" }, { key: "charter", label: "Acta de Constitución" }, { key: "requirements", label: "Requisitos" }, { key: "scopeStatement", label: "Enunciado del Alcance" },
+  { key: "wbs", label: "EDT y diccionario" }, { key: "activities", label: "Actividades" }, { key: "pert", label: "Estimación PERT" }, { key: "costEstimate", label: "Estimación de costos" },
+  { key: "schedulePlan", label: "Plan del Cronograma" }, { key: "schedule", label: "Cronograma y línea base" }, { key: "cost", label: "Plan de Costos y BOE" }, { key: "riskPlan", label: "Plan de Riesgos" },
+  { key: "obs", label: "Organización (OBS)" }, { key: "raci", label: "Matriz RACI" }, { key: "quality", label: "Plan de Calidad" }, { key: "comms", label: "Plan de Comunicaciones" }, { key: "procurement", label: "Plan de Adquisiciones" }
+];
+// JSON estable (claves ordenadas): el mismo contenido da siempre la misma cadena, sin importar el orden en que se guardó.
+export function stableStringify(v: unknown): string {
+  if (v === null || v === undefined) return "null";
+  if (typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(stableStringify).join(",") + "]";
+  const o = v as Record<string, unknown>;
+  return "{" + Object.keys(o).sort().filter((k) => o[k] !== undefined).map((k) => JSON.stringify(k) + ":" + stableStringify(o[k])).join(",") + "}";
+}
+// Hash no criptográfico de 53 bits (cyrb53): detecta cambios de contenido (no protege contra manipulación deliberada; para eso haría falta firma).
+export function digestOf(v: unknown): string {
+  const s = stableStringify(v); let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909); h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 export interface PlanFacts {
   charter: { has: boolean; pct: number; end: string };
@@ -33,7 +61,8 @@ export interface PlanFacts {
   procurement: { has: boolean; state: AreaState; items: number; total: number; late: number; soon: number; asOf: string };
   evm: { reports: number; lastCut: string };
   projectEnd: string; contractualEnd: string; today: string;
-  plan: { status: "borrador" | "aprobado"; version: string; approvedBy: string; approvedOn: string; snapshot: PlanSnapshot | null };
+  digests: Record<string, string>;   // huella actual de cada componente del plan (ver PLAN_COMPONENTS)
+  plan: { status: "borrador" | "aprobado"; version: string; approvedBy: string; approvedOn: string; snapshot: PlanSnapshot | null; docPreserved?: boolean };
 }
 export interface PFinding { code: string; severity: "riesgo" | "aviso" | "info"; area: string; text: string; }
 export interface AreaRow { key: string; label: string; file: string | null; state: AreaState; metric: string; note: string; unavailable?: boolean; }
@@ -49,7 +78,7 @@ export function emptyFacts(today = ""): PlanFacts {
     changes: { total: 0, pending: 0, approvedOpen: 0, oldestPending: null }, evm: { reports: 0, lastCut: "" },
     quality: { has: false, state: "vacio", needing: 0, verified: 0, checks: 0, coqTotal: 0 }, comms: { has: false, state: "vacio", items: 0, covered: 0, stakeholders: 0, closeUncovered: 0 },
     procurement: { has: false, state: "vacio", items: 0, total: 0, late: 0, soon: 0, asOf: "" },
-    projectEnd: "", contractualEnd: "", today, plan: { status: "borrador", version: "1.0", approvedBy: "", approvedOn: "", snapshot: null }
+    projectEnd: "", contractualEnd: "", today, digests: {}, plan: { status: "borrador", version: "1.0", approvedBy: "", approvedOn: "", snapshot: null }
   };
 }
 const RANK: Record<AreaState, number> = { vacio: 0, verde: 1, ambar: 2, rojo: 3 };
@@ -92,7 +121,8 @@ export function snapshotOf(f: PlanFacts): PlanSnapshot {
   return {
     scopeVersion: f.scope.base.has ? f.scope.base.version : "", scopeDate: f.scope.base.date, requirementsVersion: f.requirements.base.has ? f.requirements.base.version : "",
     scheduleVersion: f.schedule.base.has ? f.schedule.base.version : "", scheduleDate: f.schedule.base.date, scheduleFinish: f.schedule.finish,
-    bacCurrent: Math.round((f.cost.bacCurrent || f.cost.bac) * 100) / 100, costBaseline: f.cost.baselineVersion, boeStatus: f.cost.boeStatus
+    bacCurrent: Math.round((f.cost.bacCurrent || f.cost.bac) * 100) / 100, costBaseline: f.cost.baselineVersion, boeStatus: f.cost.boeStatus,
+    digests: { ...f.digests }
   };
 }
 export function snapshotDiff(a: PlanSnapshot, b: PlanSnapshot): Array<{ label: string; from: string; to: string }> {
@@ -100,6 +130,8 @@ export function snapshotDiff(a: PlanSnapshot, b: PlanSnapshot): Array<{ label: s
   d("Línea base del alcance", a.scopeVersion, b.scopeVersion); d("Línea base de requisitos", a.requirementsVersion, b.requirementsVersion);
   d("Línea base del cronograma", a.scheduleVersion, b.scheduleVersion); d("Fin del cronograma", a.scheduleFinish, b.scheduleFinish);
   d("BAC vigente", money(a.bacCurrent), money(b.bacCurrent)); d("Línea base de costos", a.costBaseline, b.costBaseline); d("Estado de la BOE", a.boeStatus, b.boeStatus);
+  // contenido de cada componente del plan (solo si el plan aprobado guardó sus huellas)
+  if (a.digests) PLAN_COMPONENTS.forEach((c) => { if (a.digests![c.key] !== undefined && a.digests![c.key] !== (b.digests || {})[c.key]) out.push({ label: c.label, from: "aprobado", to: "modificado" }); });
   return out;
 }
 
@@ -133,7 +165,9 @@ export function integrationFindings(f: PlanFacts): PFinding[] {
     if (!f.plan.approvedBy.trim() || !f.plan.approvedOn) F("P14", "riesgo", "Plan", "El plan figura «aprobado» sin registrar quién lo aprueba y en qué fecha.");
     if (f.plan.snapshot) {
       const diff = snapshotDiff(f.plan.snapshot, snapshotOf(f));
-      if (diff.length) F("P12", "aviso", "Plan", "Las líneas base cambiaron desde la aprobación del plan (v" + f.plan.version + (f.plan.approvedOn ? ", " + f.plan.approvedOn : "") + "): " + diff.map((x) => x.label + " " + x.from + " → " + x.to).join("; ") + ". El plan aprobado quedó desactualizado: crea una nueva versión.");
+      if (diff.length) F("P12", "riesgo", "Plan", "El plan aprobado (v" + f.plan.version + (f.plan.approvedOn ? ", " + f.plan.approvedOn : "") + ") tiene CAMBIOS SIN APROBAR desde su aprobación: " + diff.map((x) => x.label + " " + x.from + " → " + x.to).join("; ") + ". El documento aprobado se conserva tal como se aprobó; los cambios vigentes forman un borrador que necesita una nueva versión aprobada.");
+      // aprobado antes de conservar el contenido: no hay con qué comparar ni qué conservar (no se puede reconstruir lo que se aprobó)
+      if (!f.plan.snapshot.digests || !f.plan.docPreserved) F("P20", "aviso", "Plan", "El plan v" + f.plan.version + " se aprobó antes de conservar su contenido (huellas de cada plan y documento aprobado): no se puede demostrar que el documento actual sea el aprobado. Crea una nueva versión y apruébala para conservar su contenido.");
     }
   } else if (s.base.has && f.scope.base.has && k.boeStatus === "aprobada") F("P13", "info", "Plan", "Las líneas base de alcance, cronograma y costo existen y la BOE está aprobada: el plan puede aprobarse como un conjunto.");
   return out;

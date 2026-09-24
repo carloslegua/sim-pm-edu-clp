@@ -364,6 +364,22 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **El documento del plan aprobado cambiaba sin una nueva aprobación (auditoría, alta)** — la
+  instantánea de aprobación guardaba versiones e importes pero no el contenido de los planes
+  subsidiarios, y el documento se reconstruía siempre con datos actuales: tras aprobar y modificar
+  la política de calidad, el documento mostraba la política modificada bajo la misma versión
+  «Aprobado», sin advertencia. Ahora al aprobar se **conserva el documento aprobado** (inmutable) y la
+  **huella de cada componente del plan**; si algo cambia después, el plan queda «**aprobado con cambios
+  sin aprobar**» (P12, riesgo), la pestaña Documento y las exportaciones a Word/PDF muestran **el
+  documento aprobado** con un aviso de qué cambió, y lo vigente se ve solo a pedido como **borrador**
+  (su portada dice «Borrador con cambios sin aprobar»). «Nueva versión» conserva el documento anterior
+  en el historial (con «Ver documento»). Los registros vivos (riesgos individuales, interesados, cambios,
+  valor ganado) no invalidan el plan. Los planes aprobados antes no tienen contenido que conservar:
+  nuevo hallazgo P20 y se corrige con una nueva versión aprobada. Costo: ≈ 41 KB por versión aprobada
+  con DISTRIB+ completo. Pruebas: 3 unitarias nuevas (huellas, P12/P20), 4 smoke que reproducen el
+  escenario (aprobado intacto, exportación del aprobado, registros vivos, nueva versión con historial) y
+  1 e2e en Chrome real editando la política en la pantalla de Calidad.
+
 - **Valor Ganado usaba costos y fechas editables como si fueran una línea base congelada
   (auditoría, alta)** — con una línea base LB-n solo se congelaban las fechas de las actividades;
   el presupuesto por paquete, la fecha de inicio y el calendario salían de datos editables.

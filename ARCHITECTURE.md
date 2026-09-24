@@ -1535,6 +1535,27 @@ avisa, sin inventar nada (regla #5).
   algo cambia después, `snapshotDiff` dice qué y el plan aprobado queda **desactualizado** hasta
   crear una «Nueva versión» (versión mayor +1, historial conservado): PMBOK, un plan aprobado
   solo cambia por control integrado de cambios.
+- **Lo aprobado no cambia sin una nueva aprobación (auditoría, alta).** La instantánea de
+  versiones e importes no bastaba: el documento se reconstruía siempre con datos actuales y, tras
+  aprobar y editar (p. ej.) la política de calidad, mostraba la política modificada bajo el mismo
+  «Aprobado». Ahora, al aprobar, se conservan **(1) el documento tal como se aprobó** (`approvedDoc`,
+  HTML inmutable, ≈ 41 KB con DISTRIB+ completo) y **(2) la huella (hash de 53 bits sobre JSON
+  estable, `digestOf`) de cada componente del plan** (`PLAN_COMPONENTS`: ficha del proyecto, Acta,
+  requisitos, alcance, EDT, actividades, PERT, estimación, plan y línea base del cronograma, costos y
+  BOE, **plan de riesgos**, OBS, RACI, calidad, comunicaciones, adquisiciones) dentro de
+  `snapshot.digests`. Si algún componente cambia después, `snapshotDiff` dice cuál (P12, ahora un
+  **riesgo**: «aprobado con cambios sin aprobar»), la portada de lo vigente dice «Borrador con cambios
+  sin aprobar (sobre la vX aprobada)» y **la pestaña Documento y las exportaciones (Word/PDF) muestran
+  por omisión el documento APROBADO**, con una barra que avisa qué cambió; el borrador vigente se ve
+  solo a pedido («Ver borrador con los datos actuales») y se declara como borrador. «Nueva versión» (que
+  ofrece «con los cambios») conserva el documento de la versión anterior en el historial (`history[].doc`,
+  «Ver documento»). **Los registros vivos no cuentan como cambio** (riesgos individuales, interesados,
+  solicitudes de cambio y cortes de valor ganado siguen cambiando en la ejecución sin re-aprobar el plan;
+  el aprobado los conserva como estaban). **P20**: un plan aprobado antes de conservar su contenido no se
+  puede demostrar (ni tiene huellas ni documento): se avisa y se corrige con una nueva versión aprobada.
+  **Límites declarados:** el hash detecta cambios, no protege contra una manipulación deliberada del
+  `.json` (haría falta una firma); y si un módulo antiguo normaliza y reescribe su rama al abrirla por
+  primera vez tras aprobar, puede marcar un cambio que el alumno no hizo.
 - **Rama propia `pmplan`** (opcional, aditiva; ProjectModules tiene firma de índice): `{version,
   status, preparedBy, approvedBy, approvedOn, notes, snapshot, history[]}`. Solo esto se escribe;
   el resto son lecturas.
