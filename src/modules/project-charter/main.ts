@@ -119,7 +119,7 @@ function sampleState(): CharterState {
     boundaries: "El proyecto abarca desde la aprobación de esta acta hasta la firma del acta de entrega final (dossier de calidad incluido). Incluye la obtención de permisos y licencias municipales de construcción. No incluye la operación logística posterior, la contratación del personal de operación, ni la implementación del sistema de gestión de almacenes (WMS), que corresponden a la organización funcional de DISTRIB+ S.A.",
     objectives: [
       { dim: "Alcance", objective: "Entregar el almacén logístico completo y operativo según la ingeniería aprobada", criteria: "100% de los entregables de la EDT aceptados; dossier de calidad sin observaciones mayores" },
-      { dim: "Cronograma", objective: "Concluir el proyecto en 4 meses (julio–noviembre 2026)", criteria: "Entrega final a más tardar el 06/11/2026; SPI ≥ 0.95 en los cortes de control" },
+      { dim: "Cronograma", objective: "Concluir el proyecto en 13 meses (julio de 2026 – julio de 2027)", criteria: "Entrega final a más tardar el 21/07/2027 (273 días laborables); SPI ≥ 0.95 en los cortes de control" },
       { dim: "Costo", objective: "Ejecutar el proyecto dentro del CAPEX autorizado de USD 8.5 millones", criteria: "Costo final ≤ 100% del presupuesto (contingencia incluida); CPI ≥ 0.95" },
       { dim: "Calidad", objective: "Construir conforme al Reglamento Nacional de Edificaciones y a las especificaciones técnicas", criteria: "Pruebas de instalaciones conformes; cero no conformidades abiertas al cierre" }
     ],
@@ -138,11 +138,11 @@ function sampleState(): CharterState {
     ],
     milestones: [
       { name: "Acta de constitución aprobada", date: "2026-07-08" },
-      { name: "Fin de Ingeniería y Diseño", date: "2026-08-14" },
-      { name: "Permisos y licencias municipales aprobados", date: "2026-08-21" },
-      { name: "Fin de Procura (estructuras metálicas en obra)", date: "2026-08-26" },
-      { name: "Fin de Construcción", date: "2026-10-23" },
-      { name: "Entrega final y acta de cierre", date: "2026-11-06" }
+      { name: "Fin de Ingeniería y Diseño", date: "2026-09-28" },
+      { name: "Fin de Procura (estructuras metálicas en obra)", date: "2026-10-15" },
+      { name: "Permisos y licencias municipales aprobados", date: "2026-11-09" },
+      { name: "Fin de Construcción", date: "2027-06-28" },
+      { name: "Entrega final y acta de cierre", date: "2027-07-21" }
     ],
     budget: {
       amount: "8500000",
@@ -171,7 +171,7 @@ function sampleState(): CharterState {
     ],
     constraints: [
       "CAPEX máximo autorizado: USD 8.5 millones (incluida contingencia).",
-      "Fecha límite de entrega: 06/11/2026, antes de la campaña logística de fin de año.",
+      "Fecha límite de entrega: 21/07/2027, antes de la campaña logística de fin de año de 2027.",
       "La obra debe ejecutarse sin interrumpir la operación del local vecino de DISTRIB+ S.A.",
       "Cumplimiento obligatorio de la normativa ambiental (OEFA) y laboral (SUNAFIL)."
     ],
@@ -181,7 +181,7 @@ function sampleState(): CharterState {
       "Proyectos paralelos de DISTRIB+ S.A. fuera del almacén de Lurín."
     ],
     stakeholders: [
-      { name: "Gerencia General DISTRIB+", role: "Patrocinador (Sponsor)", expectation: "Proyecto dentro del CAPEX y operativo antes de la campaña de fin de año." },
+      { name: "Gerencia General DISTRIB+", role: "Patrocinador (Sponsor)", expectation: "Proyecto dentro del CAPEX y operativo antes de la campaña de fin de año de 2027." },
       { name: "Banco financista (BCP)", role: "Financiamiento del proyecto", expectation: "Desembolsos contra avance verificable y control de costos riguroso." },
       { name: "Constructora principal (Contratista EPC)", role: "Ejecución de obra", expectation: "Ingeniería aprobada a tiempo y frente de obra liberado según cronograma." },
       { name: "Municipalidad de Lurín", role: "Licencias y permisos", expectation: "Expediente técnico completo y cumplimiento de la normativa municipal." },

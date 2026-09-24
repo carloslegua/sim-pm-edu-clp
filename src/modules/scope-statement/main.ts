@@ -514,7 +514,7 @@ const SAMPLE_ASSUM: string[] = [
 ];
 const SAMPLE_CONS: string[] = [
   "El presupuesto (CAPEX) del proyecto no debe exceder USD 8.5 millones.",
-  "El plazo de ejecución va del 6 de julio al 6 de noviembre de 2026.",
+  "El plazo de ejecución va del 6 de julio de 2026 al 21 de julio de 2027 (273 días laborables).",
   "El diseño y la construcción deben cumplir el RNE, INDECI y la normativa de SST (Ley 29783)."
 ];
 const SAMPLE_EXCL: string[] = [

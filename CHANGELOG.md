@@ -182,6 +182,15 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Changed
 
+- **Caso DISTRIB+ — fechas contractuales alineadas con el cronograma CPM real** — el Acta decía
+  «concluir en 4 meses (julio–noviembre 2026), entrega el 06/11/2026» y los hitos del Plan del
+  Cronograma, el cierre del Panel y la restricción de plazo del Enunciado repetían esa fecha, mientras la
+  red de 43 actividades y 51 enlaces (que usan Cronograma, Riesgos, Costos, EVM y la escalación) da
+  **273 días laborables y fin el 2027-07-21**. Los hitos ahora son el fin del paquete que los cierra
+  (ingeniería 2026-09-28, procura 2026-11-02, permisos 2026-11-09, cimentaciones 2027-02-02,
+  construcción 2027-06-28, entrega 2027-07-21), y el Acta dice «13 meses (julio de 2026 – julio de 2027)».
+  La documentación ya reconocía que no estaban reconciliadas; un integrador que cruce el Acta con el
+  cronograma las habría marcado como error del ejemplo. Cambio de datos de ejemplo: no toca el esquema.
 - **Cronograma/CPM — "📋 Pegar cronograma" reemplazado por "⇩ Exportar a
   Excel" / "⇧ Importar desde Excel", uniforme con el resto de la suite**
   — el usuario señaló que el pegado no seguía la misma lógica que WBS

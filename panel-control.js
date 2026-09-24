@@ -383,7 +383,7 @@
 			sponsor: "Gerencia General DISTRIB+",
 			manager: "",
 			startDate: "2026-07-06",
-			endDate: "2026-11-06",
+			endDate: "2027-07-21",
 			currency: "USD",
 			capex: "8500000",
 			description: "Construcción de un almacén logístico para DISTRIB+ S.A. en Lurín. Caso pedagógico compartido por todas las herramientas del curso."

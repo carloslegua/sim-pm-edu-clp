@@ -145,12 +145,12 @@ function sampleState(): ScheduleState {
       updateFrequency: "Corte semanal, todos los viernes a las 17:00 (hora Lima); consolidación quincenal para el Comité de Obra."
     },
     milestones: [
-      { name: "Aprobación del Plan de Gestión del Proyecto", date: "2026-07-20", type: "interno", constraint: "FNLT", notes: "Cierra la fase de Dirección de Proyecto (línea base inicial)." },
-      { name: "Permisos y licencias municipales aprobados", date: "2026-08-21", type: "regulatorio", constraint: "FNET", notes: "Habilita el inicio de movimiento de tierras." },
-      { name: "Fin de Ingeniería y Diseño", date: "2026-08-14", type: "interno", constraint: "FNLT", notes: "" },
-      { name: "Fin de Procura (entrega de equipos eléctricos e instalaciones)", date: "2026-08-26", type: "contractual", constraint: "FNLT", notes: "Paquete que cierra la fase (Proveedor C); las estructuras metálicas (Proveedor A) ya se entregaron el 19/08." },
-      { name: "Fin de cimentaciones", date: "2026-09-04", type: "interno", constraint: "FNLT", notes: "" },
-      { name: "Entrega final y acta de cierre", date: "2026-11-06", type: "contractual", constraint: "FNLT", notes: "Fin de Pruebas y Puesta en Marcha; cierre contractual con el cliente." }
+      { name: "Aprobación del Plan de Gestión del Proyecto", date: "2026-08-03", type: "interno", constraint: "FNLT", notes: "Cierra el paquete del Plan de gestión (1.2): línea base inicial." },
+      { name: "Fin de Ingeniería y Diseño", date: "2026-09-28", type: "interno", constraint: "FNLT", notes: "" },
+      { name: "Fin de Procura (entrega de estructuras, materiales y equipos)", date: "2026-11-02", type: "contractual", constraint: "FNLT", notes: "Lo cierra el paquete de materiales de construcción (Proveedor B, 3.2); las estructuras metálicas (Proveedor A) se entregan el 15/10 y los equipos eléctricos (Proveedor C) el 09/10." },
+      { name: "Permisos y licencias municipales aprobados", date: "2026-11-09", type: "regulatorio", constraint: "FNET", notes: "Habilita el inicio de movimiento de tierras (4.1)." },
+      { name: "Fin de cimentaciones", date: "2027-02-02", type: "interno", constraint: "FNLT", notes: "Hito H2 de la red del cronograma." },
+      { name: "Entrega final y acta de cierre", date: "2027-07-21", type: "contractual", constraint: "FNLT", notes: "Fin de Pruebas y Puesta en Marcha (5.3); cierre contractual con el cliente. Es el fin de la ruta crítica del cronograma CPM (273 días laborables)." }
     ],
     scheduleReserve: {
       pct: 8,

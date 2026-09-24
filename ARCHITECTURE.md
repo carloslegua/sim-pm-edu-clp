@@ -2622,7 +2622,7 @@ vez que se agrega o toca un módulo:
 
 - **Proyecto**: "DISTRIB+ S.A. — Almacén Lurín" (Lima), 12.000 m² en
   Lurín. Código de manager `DPLU-2026`. Inicio **2026-07-06**, cierre
-  **2026-11-06**. CAPEX **USD 8.500.000** (moneda del proyecto: USD en
+  **2027-07-21** (fin de la ruta crítica del CPM: 273 días laborables). CAPEX **USD 8.500.000** (moneda del proyecto: USD en
   todos los módulos que la mencionan — `cost` debe arrancar en USD por
   defecto también, no en PEN, aunque su monto base 7.100.000 numérico
   coincida con el total del WBS).
@@ -2718,11 +2718,19 @@ vez que se agrega o toca un módulo:
   encadenados por id, no por texto — cualquier módulo nuevo que agregue
   un requisito o entregable del caso debe seguir esa misma cadena de
   ids en vez de inventar los suyos.
-- **Hitos/fechas clave** (`schedule-plan`, calzan con `wbs`/`charter`):
-  aprobación del plan 2026-07-20, fin Ingeniería 2026-08-14, permisos
-  2026-08-21, fin Procura 2026-08-26 (lo cierra 3.3, no 3.1 — 3.1
-  termina antes, el 08-19), fin cimentaciones 2026-09-04, entrega final
-  2026-11-06. Feriados de ejemplo: 2026-07-28/29, 2026-08-30.
+- **Hitos/fechas clave** (`schedule-plan`, `charter`, Panel, Enunciado del
+  Alcance: **alineados con el CPM real**, fecha de cada hito = el fin del
+  paquete que lo cierra): aprobación del plan 2026-08-03 (1.2), fin
+  Ingeniería 2026-09-28 (2.2), estructuras metálicas en obra 2026-10-15 (3.1),
+  fin Procura 2026-11-02 (lo cierra 3.2), permisos 2026-11-09 (2.4; habilita el
+  inicio de 4.1), fin cimentaciones 2027-02-02 (4.2, hito H2), fin Construcción
+  2027-06-28 (4.4), entrega final **2027-07-21** (5.3, hito H3). Feriados de
+  ejemplo: 2026-07-28/29, 2026-08-30. *Antes* estos hitos usaban las fechas
+  ilustrativas del WBS Builder manual (cierre 2026-11-06, «4 meses») y NO
+  coincidían con el CPM; un integrador (Plan para la Dirección) lo dejó en
+  evidencia y se alinearon. Las fechas manuales de los 18 paquetes del WBS
+  Builder independiente siguen siendo un estimado manual (con actividades y
+  Cronograma/CPM el proyecto real las reemplaza por las del CPM).
 - **Cronograma / CPM del proyecto real** (`cronograma-cpm`,
   `SAMPLE_LINK_PLAN` — ver su sección más arriba): 51 enlaces que cubren
   las 43 actividades reales sembradas por "Cargar ejemplo en el proyecto"
@@ -2733,11 +2741,9 @@ vez que se agrega o toca un módulo:
   tres cayeron en la ruta crítica), fin 2027-07-21** — la duración y la
   fecha de fin no cambian al agregar los hitos (duración 0 no suma
   tiempo), solo crece el conteo de "críticas". Estas fechas son las que
-  realmente calcula el CPM sobre la red completa — distintas de las
-  fechas ILUSTRATIVAS de `schedule-plan` (más arriba), que no están
-  calibradas contra un CPM real de 43 actividades y cubren solo hitos de
-  alto nivel hasta 2026-11-06; no se reconciliaron entre sí en este
-  cambio.
+  realmente calcula el CPM sobre la red completa; los hitos de
+  `schedule-plan`/`charter`, la fecha de cierre del Panel y la restricción de
+  plazo del Enunciado se **alinearon con ellas** (ver «Hitos/fechas clave»).
 
 **Regla para trabajo futuro**: al agregar un módulo o una función
 nueva que necesite datos de ejemplo, el ejemplo se **AMPLÍA** a partir
