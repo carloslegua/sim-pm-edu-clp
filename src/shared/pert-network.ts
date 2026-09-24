@@ -23,6 +23,7 @@ export interface SimAct { id: string; dur: number; o?: number | null; m?: number
 export interface PertSimResult {
   iterations: number; base: number; mean: number; sd: number; min: number; max: number;
   percentiles: Record<number, number>; criticality: Record<string, number>; sorted: number[]; stochastic: number;
+  elapsedApprox: boolean;   // hay desfases en días transcurridos: se aproximaron (ver simulatePertNetwork)
 }
 
 const normal = (rnd: () => number): number => { const u = Math.max(rnd(), 1e-12), v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
@@ -43,11 +44,16 @@ export function samplePert(o: number, m: number, p: number, rnd: () => number): 
 }
 export const isTriple = (a: SimAct): boolean => a.o != null && a.m != null && a.p != null && isFinite(a.o) && isFinite(a.m) && isFinite(a.p) && a.o > 0 && a.o <= a.m && a.m <= a.p && a.p > a.o;
 
+// La simulación trabaja en DÍAS LABORABLES y NO pasa fecha de inicio al CPM: con fechas cada corrida cuesta ~150 veces más (convierte cada
+// actividad a fecha de calendario; 43 actividades × 2 000 iteraciones tardaban ~20 s y congelaban la pantalla) y la duración del proyecto
+// en días laborables no depende de las fechas. Solo los desfases en días TRANSCURRIDOS («ed») dependen del calendario real: sin fecha el
+// CPM los aproxima con una proporción semanal, y se avisa en `elapsedApprox`.
 export function simulatePertNetwork(
-  acts: SimAct[], links: NetLink[], calendar: unknown, cpm: CpmFn, opts: { iterations?: number; seed?: number; startDate?: string } = {}
+  acts: SimAct[], links: NetLink[], calendar: unknown, cpm: CpmFn, opts: { iterations?: number; seed?: number } = {}
 ): PertSimResult | null {
-  const n = Math.max(200, Math.round(opts.iterations || PERT_SIM_ITERATIONS)), rnd = mulberry32(opts.seed || PERT_SIM_SEED), startDate = opts.startDate || "";
-  const run = (durs: Array<{ id: string; dur: number }>) => cpm(durs, links, calendar as never, { startDate });
+  const n = Math.max(200, Math.round(opts.iterations || PERT_SIM_ITERATIONS)), rnd = mulberry32(opts.seed || PERT_SIM_SEED);
+  const elapsedApprox = links.some((l) => (l.lagUnit || "d") === "ed" && Number(l.lag) !== 0);
+  const run = (durs: Array<{ id: string; dur: number }>) => cpm(durs, links, calendar as never, {});
   const base = run(acts.map((a) => ({ id: a.id, dur: a.dur })));
   if (!base.ok) return null;
   const stoch = acts.filter(isTriple);
@@ -62,7 +68,7 @@ export function simulatePertNetwork(
   const mean = fins.reduce((s, x) => s + x, 0) / n, sd = Math.sqrt(fins.reduce((s, x) => s + (x - mean) * (x - mean), 0) / n);
   const percentiles: Record<number, number> = {}; PERT_SIM_PERCENTILES.forEach((q) => { percentiles[q] = fins[Math.min(n - 1, Math.floor(q / 100 * n))]; });
   const criticality: Record<string, number> = {}; Object.keys(hits).forEach((id) => { criticality[id] = hits[id] / n; });
-  return { iterations: n, base: base.projectDuration, mean, sd, min: fins[0], max: fins[n - 1], percentiles, criticality, sorted: fins, stochastic: stoch.length };
+  return { iterations: n, base: base.projectDuration, mean, sd, min: fins[0], max: fins[n - 1], percentiles, criticality, sorted: fins, stochastic: stoch.length, elapsedApprox };
 }
 // P(fin ≤ plazo): fracción de iteraciones que terminan a tiempo (por búsqueda binaria sobre las muestras ordenadas).
 export function probWithin(res: PertSimResult, target: number): number {

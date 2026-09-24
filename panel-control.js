@@ -199,10 +199,10 @@
 			key: "quality",
 			group: "qual",
 			name: "Gestión de la Calidad",
-			file: null,
+			file: "Plan_Calidad.html",
 			icon: "✔",
 			color: "#00c2a8",
-			desc: "Métricas de calidad, plan de aseguramiento y control, y costo de la calidad (conformidad vs. no conformidad)."
+			desc: "Métricas de calidad, aseguramiento y control por paquete (verifica el criterio de aceptación del diccionario de la EDT) y costo de la calidad (conformidad vs. no conformidad)."
 		},
 		{
 			key: "obs",

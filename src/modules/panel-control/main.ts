@@ -154,8 +154,8 @@ let MODULES: ModuleDef[] = [
     desc: "Seguimiento del valor ganado: PV sobre la línea base del cronograma, EV con técnica por paquete, AC, CV, SV, CPI, SPI, pronósticos (EAC/ETC/VAC/TCPI) y cronograma ganado (Earned Schedule), con los umbrales de los planes de Costos y del Cronograma." },
 
   // — Calidad —
-  { key: "quality", group: "qual", name: "Gestión de la Calidad", file: null, icon: "✔", color: "#00c2a8",
-    desc: "Métricas de calidad, plan de aseguramiento y control, y costo de la calidad (conformidad vs. no conformidad)." },
+  { key: "quality", group: "qual", name: "Gestión de la Calidad", file: "Plan_Calidad.html", icon: "✔", color: "#00c2a8",
+    desc: "Métricas de calidad, aseguramiento y control por paquete (verifica el criterio de aceptación del diccionario de la EDT) y costo de la calidad (conformidad vs. no conformidad)." },
 
   // — Recursos —
   { key: "obs", group: "res", name: "Equipo del Proyecto", file: "OBS_Builder.html", icon: "🗂", color: "#2e4374",

@@ -392,8 +392,8 @@ interface CriticalPertSums { mean: number; sumVar: number; allValid: boolean; co
 // críticas. Se guarda por huella de los datos: cambiar solo el plazo objetivo no la vuelve a correr.
 let simKey = "", simVal: PertSimResult | null = null;
 function simFor(acts: SimAct[], links: Link[], cal: unknown): PertSimResult | null {
-  const key = JSON.stringify([acts, links.map((l) => [l.from, l.to, l.type, l.lag, l.lagUnit]), metaStart()]);
-  if (key !== simKey) { simKey = key; try { simVal = simulatePertNetwork(acts, links as unknown as NetLink[], cal, GPI!.util.cpm as unknown as CpmFn, { startDate: metaStart() }); } catch (_) { simVal = null; } }
+  const key = JSON.stringify([acts, links.map((l) => [l.from, l.to, l.type, l.lag, l.lagUnit])]);
+  if (key !== simKey) { simKey = key; try { simVal = simulatePertNetwork(acts, links as unknown as NetLink[], cal, GPI!.util.cpm as unknown as CpmFn); } catch (_) { simVal = null; } }
   return simVal;
 }
 function criticalPertSums(R: RunCpmResult): CriticalPertSums {
@@ -416,7 +416,7 @@ function criticalPertSums(R: RunCpmResult): CriticalPertSums {
   const allValid = Object.keys(ch.weights).every((id) => { const r = idx[id]; return !!r && (r.isMilestone || usable(r)); });
   return { mean: ch.mean, sumVar: ch.variance, allValid, count: ch.ids.length, sim };
 }
-const simLine = (sm: PertSimResult): string => "P10 " + fmt(sm.percentiles[10]) + " · P50 " + fmt(sm.percentiles[50]) + " · P80 " + fmt(sm.percentiles[80]) + " · P90 " + fmt(sm.percentiles[90]) + " d";
+const simLine = (sm: PertSimResult): string => "P10 " + fmt(sm.percentiles[10]) + " · P50 " + fmt(sm.percentiles[50]) + " · P80 " + fmt(sm.percentiles[80]) + " · P90 " + fmt(sm.percentiles[90]) + " d" + (sm.elapsedApprox ? " (⚠ desfases en días transcurridos aproximados)" : "");
 
 function renderProbability(R: RunCpmResult): void {
   const out = document.getElementById("probOut") as HTMLElement;

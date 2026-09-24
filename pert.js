@@ -63,8 +63,9 @@
 	}
 	var isTriple = (a) => a.o != null && a.m != null && a.p != null && isFinite(a.o) && isFinite(a.m) && isFinite(a.p) && a.o > 0 && a.o <= a.m && a.m <= a.p && a.p > a.o;
 	function simulatePertNetwork(acts, links, calendar, cpm, opts = {}) {
-		const n = Math.max(200, Math.round(opts.iterations || 2e3)), rnd = mulberry32(opts.seed || 20260713), startDate = opts.startDate || "";
-		const run = (durs) => cpm(durs, links, calendar, { startDate });
+		const n = Math.max(200, Math.round(opts.iterations || 2e3)), rnd = mulberry32(opts.seed || 20260713);
+		const elapsedApprox = links.some((l) => (l.lagUnit || "d") === "ed" && Number(l.lag) !== 0);
+		const run = (durs) => cpm(durs, links, calendar, {});
 		const base = run(acts.map((a) => ({
 			id: a.id,
 			dur: a.dur
@@ -104,7 +105,8 @@
 			percentiles,
 			criticality,
 			sorted: fins,
-			stochastic: stoch.length
+			stochastic: stoch.length,
+			elapsedApprox
 		};
 	}
 	function probWithin(res, target) {
@@ -518,22 +520,18 @@
 	}
 	var simKey = "";
 	var simVal = null;
-	function simFor(acts, links, cal, startDate) {
-		const key = JSON.stringify([
-			acts,
-			links.map((l) => [
-				l.from,
-				l.to,
-				l.type,
-				l.lag,
-				l.lagUnit
-			]),
-			startDate
-		]);
+	function simFor(acts, links, cal) {
+		const key = JSON.stringify([acts, links.map((l) => [
+			l.from,
+			l.to,
+			l.type,
+			l.lag,
+			l.lagUnit
+		])]);
 		if (key !== simKey) {
 			simKey = key;
 			try {
-				simVal = simulatePertNetwork(acts, links, cal, window.GPI.util.cpm, { startDate });
+				simVal = simulatePertNetwork(acts, links, cal, window.GPI.util.cpm);
 			} catch (e) {
 				simVal = null;
 			}
@@ -588,7 +586,7 @@
 			vars[id] = byId[id].va;
 		});
 		const ch = window.GPI.util.pertCriticalChain(res, links, cal, vars);
-		const sim = simFor(simActs, links, cal, startDate);
+		const sim = simFor(simActs, links, cal);
 		if (!ch.ok) return ch.reason === "parallel" ? {
 			reason: "parallel",
 			count: res.criticalIds.length,
@@ -626,7 +624,7 @@
 		const top = Object.keys(sm.criticality).filter((id) => sm.criticality[id] >= .1 && sm.criticality[id] < .9995).sort((a, b) => sm.criticality[b] - sm.criticality[a]).slice(0, 6);
 		const p = probWithin(sm, target) * 100, pc = p >= 80 ? "var(--good)" : p >= 50 ? "var(--warn)" : "var(--danger)";
 		const gap = cross !== null && Math.abs(cross - p) >= 3 ? "<br>⚠ La aproximación de una sola ruta (" + cross.toFixed(1) + " %) " + (cross > p ? "<b>sobrestima</b>" : "subestima") + " la probabilidad frente a la red completa: hay rutas casi críticas que compiten." : "";
-		return "<b>Simulación de la red completa</b> (" + sm.iterations.toLocaleString("es-PE") + " iteraciones, Beta-PERT, duraciones independientes, semilla fija)<br>P(fin ≤ " + fmt(target, 0) + " d) = <b style=\"color:" + pc + "\">" + p.toFixed(1) + " %</b> · media " + fmt(sm.mean, 1) + " d · σ " + fmt(sm.sd, 1) + " d<br>P10 " + fmt(sm.percentiles[10], 1) + " · P50 " + fmt(sm.percentiles[50], 1) + " · P80 " + fmt(sm.percentiles[80], 1) + " · P90 " + fmt(sm.percentiles[90], 1) + " d" + gap + (top.length ? "<br><b>Índice de criticidad</b> (fracción de iteraciones en la ruta crítica): " + top.map((id) => esc(nameOf(id)) + " " + Math.round(sm.criticality[id] * 100) + " %").join(" · ") : "") + (sm.stochastic < actsCache.length ? "<br>ℹ " + (actsCache.length - sm.stochastic) + " actividad(es) sin terna válida se simulan con su duración fija." : "");
+		return "<b>Simulación de la red completa</b> (" + sm.iterations.toLocaleString("es-PE") + " iteraciones, Beta-PERT, duraciones independientes, semilla fija)<br>P(fin ≤ " + fmt(target, 0) + " d) = <b style=\"color:" + pc + "\">" + p.toFixed(1) + " %</b> · media " + fmt(sm.mean, 1) + " d · σ " + fmt(sm.sd, 1) + " d<br>P10 " + fmt(sm.percentiles[10], 1) + " · P50 " + fmt(sm.percentiles[50], 1) + " · P80 " + fmt(sm.percentiles[80], 1) + " · P90 " + fmt(sm.percentiles[90], 1) + " d" + gap + (top.length ? "<br><b>Índice de criticidad</b> (fracción de iteraciones en la ruta crítica): " + top.map((id) => esc(nameOf(id)) + " " + Math.round(sm.criticality[id] * 100) + " %").join(" · ") : "") + (sm.elapsedApprox ? "<br>⚠ Hay desfases en días transcurridos: la simulación trabaja en días laborables y los aproxima con una proporción semanal." : "") + (sm.stochastic < actsCache.length ? "<br>ℹ " + (actsCache.length - sm.stochastic) + " actividad(es) sin terna válida se simulan con su duración fija." : "");
 	}
 	var targetTouched = false;
 	function renderProbability() {

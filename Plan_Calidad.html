@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan de Gestión de la Calidad — PMBOK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#eef4f9; --bg-1:#ffffff; --bg-2:#f3f8fc; --panel:#ffffff; --panel-border:#e0e8f0;
+    --ink-0:#1a2027; --ink-1:#4d5768; --ink-2:#5b6472;
+    --cyan:#00c2a8; --cyan-dark:#00937f; --black:#1a1a1c; --violet:#6c5ce7; --danger:#ff5470; --good:#00c2a8; --warn:#ff9f1c;
+    --mono:'JetBrains Mono',monospace; --display:'Manrope',sans-serif; --body:'Manrope',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0; background:radial-gradient(circle, rgba(0,194,168,0.07) 1px, transparent 1px) 0 0/26px 26px, var(--bg-0); color:var(--ink-0); font-family:var(--body); display:flex; flex-direction:column; min-height:100vh;}
+  header{border-bottom:1px solid var(--panel-border); background:linear-gradient(180deg,#fff,#fbfdff); padding:12px 22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; position:relative;}
+  header::after{content:''; position:absolute; left:0; right:0; bottom:-1px; height:3px; background:linear-gradient(90deg, var(--cyan), var(--violet) 45%, var(--warn) 75%, #ff6b8b);}
+  .brand{display:flex; align-items:center; gap:12px;}
+  .brand .logo{width:34px; height:34px; border-radius:9px; flex-shrink:0; background:linear-gradient(135deg,var(--cyan),var(--cyan-dark)); display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,194,168,.35); font-size:18px; color:#fff;}
+  .brand h1{font-family:var(--display); font-size:19px; font-weight:800; margin:0; color:var(--black);}
+  .brand .tag{font-family:var(--mono); font-size:11px; font-weight:600; color:#fff; background:linear-gradient(135deg,var(--cyan),var(--cyan-dark)); padding:3px 9px; border-radius:20px;}
+  .brand .sub{font-size:12px; color:var(--ink-2); font-weight:600;}
+  .toolbar{display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:10px 22px; background:var(--bg-1); border-bottom:1px solid var(--panel-border);}
+  .btn{font-family:var(--body); font-size:12.5px; font-weight:600; color:var(--ink-1); background:var(--bg-2); border:1px solid var(--panel-border); padding:7px 13px; border-radius:8px; cursor:pointer; white-space:nowrap;}
+  .btn:hover{border-color:var(--cyan); color:var(--cyan-dark); background:#fff;}
+  .btn.primary{background:linear-gradient(135deg,var(--cyan),var(--cyan-dark)); border-color:transparent; color:#fff;} .btn.primary:hover{filter:brightness(1.06); color:#fff;}
+  .btn.danger{color:var(--danger);} .btn.sm{padding:3px 8px; font-size:11px;}
+  .sep{width:1px; height:22px; background:var(--panel-border); margin:0 4px;}
+  .main-area{flex:1; padding:22px 30px 60px;}
+  .view-head h2{font-family:var(--display); font-size:20px; font-weight:800; margin:0 0 4px;}
+  .view-head p{font-size:13px; color:var(--ink-1); margin:0 0 16px; max-width:940px; line-height:1.55;}
+  .muted{color:var(--ink-2);} .small{font-size:11.5px;} .mono{font-family:var(--mono);}
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin-bottom:14px;}
+  .kpi{background:var(--panel); border:1px solid var(--panel-border); border-radius:12px; padding:10px 14px;} .kpi b{display:block; font-family:var(--mono); font-size:20px;} .kpi span{font-size:11px; color:var(--ink-2); font-weight:600;}
+  .card{background:var(--panel); border:1px solid var(--panel-border); border-radius:14px; padding:14px 16px; margin-bottom:14px; overflow-x:auto;}
+  .card h3{font-family:var(--display); font-size:14px; font-weight:800; margin:0 0 4px;} .card .hint{font-size:11.5px; color:var(--ink-2); margin:0 0 8px;}
+  table.an{border-collapse:collapse; width:100%; font-size:12.5px;}
+  table.an th{font-family:var(--mono); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-2); padding:6px; border-bottom:2px solid var(--panel-border); text-align:left; white-space:nowrap;}
+  table.an td{padding:5px 6px; border-bottom:1px solid var(--panel-border); vertical-align:top;}
+  table.an input,table.an select,table.an textarea{font-family:var(--body); font-size:12px; padding:4px 6px; border:1px solid var(--panel-border); border-radius:6px; background:#fff; color:var(--ink-0); width:100%;}
+  table.an textarea{resize:vertical; min-height:44px;} table.an select[multiple]{min-height:70px;}
+  table.an tr.hasf td:first-child{box-shadow:inset 3px 0 0 var(--warn);}
+  .pill{font-family:var(--mono); font-size:10.5px; font-weight:800; padding:2px 9px; border-radius:12px; white-space:nowrap;}
+  .st-verde{background:rgba(0,194,168,.16); color:#00806d;} .st-ambar{background:rgba(255,159,28,.2); color:#a05a00;} .st-rojo{background:rgba(255,84,112,.15); color:#c0203c;} .st-vacio{background:#eef1f5; color:#5b6472;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px;} @media(max-width:1000px){.grid2{grid-template-columns:1fr;}}
+  .fd{display:flex; flex-direction:column; gap:3px;} .fd label{font-size:11px; font-weight:700; color:var(--ink-1);}
+  .fd textarea{font-family:var(--body); font-size:12.5px; padding:6px 8px; border:1px solid var(--panel-border); border-radius:7px; width:100%; min-height:88px;}
+  .bars{display:grid; gap:6px; margin-top:10px;} .bar{display:grid; grid-template-columns:130px 1fr 150px; gap:8px; align-items:center; font-size:12px;}
+  .bar i{display:block; height:10px; border-radius:6px; background:linear-gradient(90deg,var(--cyan),var(--cyan-dark));} .bar.nc i{background:linear-gradient(90deg,#ff9f1c,#ff5470);}
+  .finds{list-style:none; margin:6px 0 0; padding:0; font-size:12.5px; line-height:1.5;} .finds li{padding:6px 8px; border-radius:8px; margin-bottom:5px; background:#f4f8fb;}
+  .finds li.riesgo{background:#fdecef; color:#7d1024;} .finds li.aviso{background:#fff3d6; color:#6b4a00;}
+  .finds b.cd{font-family:var(--mono); font-size:10.5px; margin-right:6px;}
+  .empty-hint{background:#f2fbf9; border:1px dashed var(--cyan); border-radius:12px; padding:18px; color:var(--ink-1); font-size:13px; line-height:1.6;}
+  .banner{display:none; background:#fff3d6; border-bottom:1px solid #ffd58a; color:#6b4a00; padding:9px 22px; font-size:12.5px;} .banner.show{display:block;}
+  .statusbar{border-top:1px solid var(--panel-border); background:var(--bg-1); padding:7px 22px; font-size:11px; color:var(--ink-2); display:flex; justify-content:space-between; font-family:var(--mono);}
+</style>
+<link rel="stylesheet" href="gpi-shared.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">✔</div>
+    <div>
+      <h1>Plan de Gestión de la Calidad <span class="tag">PMBOK</span></h1>
+      <div class="sub" id="projectSub">Métricas, aseguramiento y control por paquete, y costo de la calidad</div>
+    </div>
+  </div>
+</header>
+<div class="banner" id="banner" role="alert"></div>
+
+<div class="toolbar">
+  <button class="btn primary" id="btnAddCheck">＋ Control / aseguramiento</button>
+  <button class="btn" id="btnAddMetric">＋ Métrica</button>
+  <button class="btn" id="btnAddCoq">＋ Partida de costo</button>
+  <button class="btn" id="btnCsv">⭳ Exportar plan de control (CSV)</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnSample">Cargar ejemplo</button>
+  <button class="btn" id="btnClear">Nuevo plan</button>
+</div>
+
+<div class="main-area" id="mainArea"></div>
+
+<div class="statusbar">
+  <span id="statusLeft">Listo</span>
+  <span>El criterio de aceptación de cada paquete se lee del Diccionario de la EDT; los responsables son puestos del OBS</span>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h3 id="modalTitle">Confirmar</h3>
+    <p id="modalMessage"></p>
+    <div class="modal-actions">
+      <button class="btn" id="modalCancelBtn">Cancelar</button>
+      <button class="btn primary" id="modalConfirmBtn">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<script src="gpi-core.js"></script>
+<script src="quality.js"></script>
+</body>
+</html>

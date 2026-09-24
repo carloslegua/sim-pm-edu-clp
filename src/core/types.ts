@@ -361,7 +361,14 @@ export interface CommsModule {
   items?: unknown[]; plan?: Record<string, unknown> | null; idCounter?: number;
 }
 
+// Plan de Calidad (Plan_Calidad.html): política y normas, métricas, actividades de aseguramiento y control por paquete de la EDT y costo de la
+// calidad. Esquema y normalización en shared/quality-plan.ts; el criterio de aceptación se lee del Diccionario de la EDT (no se duplica).
+export interface QualityModule {
+  policy?: string; standards?: string; metrics?: unknown[]; checks?: unknown[]; coq?: unknown[]; idCounter?: number;
+}
+
 export interface ProjectModules {
+  quality?: QualityModule | null;
   comms?: CommsModule | null;
   pmplan?: PmPlanModule | null;
   changes?: ChangesModule | null;

@@ -1191,7 +1191,12 @@ Con ramas paralelas es el resultado principal; con una cadena única se muestra
 además como contraste (avisa si la aproximación de una ruta difiere ≥ 3 puntos:
 rutas casi críticas). **Supuestos declarados:** duraciones independientes (sin
 correlación), distribución Beta-PERT, ±1 punto de error típico. Se cachea por
-huella de los datos (cambiar solo el plazo no vuelve a simular).
+huella de los datos (cambiar solo el plazo no vuelve a simular). **Rendimiento:** la
+simulación trabaja en días laborables y **no pasa fecha de inicio al `cpm()`**: con fechas cada
+corrida costaba ~11 ms (43 actividades × 2 000 iteraciones ≈ 22 s, congelaba la pantalla) y sin
+ellas ~0,08 ms; la duración en días laborables no depende de las fechas. Solo los desfases en
+días **transcurridos** (`ed`) dependen del calendario real: con ellos se aproximan con la
+proporción semanal y `elapsedApprox` lo avisa en pantalla.
 
 **Probabilidad de plazo PERT: solo sobre una ruta crítica única**
 (`GPI.util.pertCriticalChain`, usada por Cronograma/CPM y por PERT).
@@ -1357,6 +1362,36 @@ arranca **en blanco**; en modo independiente muestra el ejemplo.
   independiente.
 - **Límites declarados**: no crea ni edita las órdenes de Costos, las MOD ni la LB-n (eso lo
   hace cada módulo); solo verifica que existan y sean coherentes.
+
+**Plan_Calidad.html** (módulo `quality`, PMBOK «Planificar la gestión de la calidad») —
+auditoría metodológica: el Panel tenía la tarjeta sin archivo. Lógica pura en
+`src/shared/quality-plan.ts` (inlineada en `quality.js`, con 14 pruebas unitarias); patrón de
+Control de Cambios. Con un proyecto activo arranca **en blanco**; en modo independiente muestra el
+ejemplo.
+- **Cuatro piezas**: política y normas; **métricas** (qué se mide, objetivo, tolerancia, método);
+  **aseguramiento** (prevenir: revisiones de diseño, auditorías) y **control** (detectar:
+  inspecciones, ensayos, pruebas) por paquete de trabajo; y **costo de la calidad** (conformidad =
+  prevención + evaluación; no conformidad = fallas internas + externas), con su peso sobre el costo
+  base y la parte de fallas.
+- **No duplica**: el criterio de aceptación de cada paquete se **lee del Diccionario de la EDT**
+  (`node.acceptance`/`node.loe`, con un botón «Tomar de la EDT» que lo copia al control), los
+  responsables son puestos del OBS y los paquetes con riesgo alto abierto salen del Registro de
+  Riesgos. Cobertura: cada paquete con criterio de aceptación (salvo esfuerzo continuo) necesita
+  una actividad que lo verifique.
+- **Hallazgos Q1–Q11**: Q1 paquete con criterio sin verificación; **Q2 (riesgo) si además tiene un
+  riesgo alto abierto**; Q4 control incompleto; Q5 sin registro; Q6 responsable fuera del OBS; Q7
+  métrica sin objetivo/método o que ningún control usa; Q8 enlace roto (paquete o métrica
+  inexistente); Q9 solo control y nada de aseguramiento; Q10 costo de la calidad ausente, sin
+  prevención o con más de la mitad en fallas; Q11 sin política o sin normas. Los umbrales
+  (50 % en fallas) son criterio didáctico declarado.
+- **Ejemplo DISTRIB+** (`src/shared/quality-sample.ts`, mismo caso): 17 controles (uno por cada
+  paquete salvo 1.3, que es esfuerzo continuo) cuyo criterio es el del diccionario, 5 métricas
+  (resistencia del concreto, compactación, verticalidad del montaje, conformidad de piezas,
+  protocolos), costo de la calidad 350.000 (4,9 % del costo base; 240.000 conformidad, 110.000
+  fallas). **Las normas (RNE E.050/E.060/E.090, CNE) y los valores son ILUSTRATIVOS**: verificar contra
+  la versión vigente; los montos se suponen incluidos en las partidas del presupuesto. Conectado,
+  el ejemplo se enlaza a los paquetes reales por código EDT. e2e en Chrome real sobre la EDT y el
+  OBS reales: 17/17 verificados y sin hallazgos.
 
 **Plan_Comunicaciones.html** (módulo `comms`, PMBOK «Planificar la gestión de las
 comunicaciones») — auditoría metodológica: el Panel tenía la tarjeta sin archivo. Lógica pura en
@@ -2802,6 +2837,9 @@ vez que se agrega o toca un módulo:
   Logística, Jefe de Ingeniería, Residente de Obra, Director de Proyecto).
   Cualquier módulo que hable de un riesgo del caso debe reutilizar estos
   códigos (Costos ya cita R-03).
+- **Calidad** (`quality`, `src/shared/quality-sample.ts`): QC-01…QC-17 (un control por paquete
+  1.1…5.3 salvo 1.3 LOE, con el criterio del diccionario de `wbs-sample.ts`), QM-01…QM-05,
+  responsables = puestos del OBS (nombre exacto) y costo de la calidad ilustrativo de 350.000.
 - **Comunicaciones** (`comms`, `src/shared/comms-sample.ts`): CM-01…CM-11, destinatarios = los
   interesados s1…s12 (por id), emisores = puestos del OBS (nombre exacto), frecuencias las de sus
   estrategias de compromiso. Los puestos y paquetes que usan los módulos nuevos sin proyecto

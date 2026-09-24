@@ -11,6 +11,19 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Nuevo módulo «Gestión de la Calidad» (`Plan_Calidad.html`, auditoría metodológica)** — la
+  tarjeta del Panel existía sin archivo. Política y normas, **métricas** (objetivo, tolerancia,
+  método), actividades de **aseguramiento** (prevenir) y **control** (detectar) por paquete, y
+  **costo de la calidad** (conformidad vs. no conformidad). No duplica: el **criterio de aceptación
+  se lee del Diccionario de la EDT** (con «Tomar de la EDT»), los responsables son del OBS y los
+  paquetes con riesgo alto salen del Registro de Riesgos. Revisa la cobertura con **hallazgos
+  Q1–Q11** (paquete con criterio sin verificación; riesgo si además tiene un riesgo alto abierto;
+  solo control y nada de aseguramiento; costo de la calidad sin prevención o con más de la mitad en
+  fallas…). Ejemplo DISTRIB+ ampliado (17 controles, 5 métricas, costo de la calidad ilustrativo de
+  350.000; normas y valores **ilustrativos**). Nuevos `src/shared/quality-plan.ts`,
+  `quality-sample.ts` y rama opcional `quality`. Pruebas: 14 unitarias, 5 smoke y 1 e2e en Chrome
+  real.
+
 - **Nuevo módulo «Gestión de las Comunicaciones» (`Plan_Comunicaciones.html`, auditoría
   metodológica)** — la tarjeta del Panel existía sin archivo. Matriz de comunicaciones (qué, para
   qué, a quién, quién la emite, frecuencia, medio, canal y registro) más las reglas del plan

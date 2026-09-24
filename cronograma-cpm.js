@@ -63,8 +63,9 @@
 	}
 	var isTriple = (a) => a.o != null && a.m != null && a.p != null && isFinite(a.o) && isFinite(a.m) && isFinite(a.p) && a.o > 0 && a.o <= a.m && a.m <= a.p && a.p > a.o;
 	function simulatePertNetwork(acts, links, calendar, cpm, opts = {}) {
-		const n = Math.max(200, Math.round(opts.iterations || 2e3)), rnd = mulberry32(opts.seed || 20260713), startDate = opts.startDate || "";
-		const run = (durs) => cpm(durs, links, calendar, { startDate });
+		const n = Math.max(200, Math.round(opts.iterations || 2e3)), rnd = mulberry32(opts.seed || 20260713);
+		const elapsedApprox = links.some((l) => (l.lagUnit || "d") === "ed" && Number(l.lag) !== 0);
+		const run = (durs) => cpm(durs, links, calendar, {});
 		const base = run(acts.map((a) => ({
 			id: a.id,
 			dur: a.dur
@@ -104,7 +105,8 @@
 			percentiles,
 			criticality,
 			sorted: fins,
-			stochastic: stoch.length
+			stochastic: stoch.length,
+			elapsedApprox
 		};
 	}
 	function probWithin(res, target) {
@@ -902,21 +904,17 @@
 	var simKey = "";
 	var simVal = null;
 	function simFor(acts, links, cal) {
-		const key = JSON.stringify([
-			acts,
-			links.map((l) => [
-				l.from,
-				l.to,
-				l.type,
-				l.lag,
-				l.lagUnit
-			]),
-			metaStart()
-		]);
+		const key = JSON.stringify([acts, links.map((l) => [
+			l.from,
+			l.to,
+			l.type,
+			l.lag,
+			l.lagUnit
+		])]);
 		if (key !== simKey) {
 			simKey = key;
 			try {
-				simVal = simulatePertNetwork(acts, links, cal, GPI.util.cpm, { startDate: metaStart() });
+				simVal = simulatePertNetwork(acts, links, cal, GPI.util.cpm);
 			} catch (_) {
 				simVal = null;
 			}
@@ -982,7 +980,7 @@
 			sim
 		};
 	}
-	var simLine = (sm) => "P10 " + fmt(sm.percentiles[10]) + " · P50 " + fmt(sm.percentiles[50]) + " · P80 " + fmt(sm.percentiles[80]) + " · P90 " + fmt(sm.percentiles[90]) + " d";
+	var simLine = (sm) => "P10 " + fmt(sm.percentiles[10]) + " · P50 " + fmt(sm.percentiles[50]) + " · P80 " + fmt(sm.percentiles[80]) + " · P90 " + fmt(sm.percentiles[90]) + " d" + (sm.elapsedApprox ? " (⚠ desfases en días transcurridos aproximados)" : "");
 	function renderProbability(R) {
 		const out = document.getElementById("probOut");
 		const t = parseFloat(document.getElementById("probTarget").value);

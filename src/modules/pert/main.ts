@@ -343,9 +343,9 @@ type CriticalPathStats =
 // Simulación Monte Carlo de la RED COMPLETA (ver shared/pert-network.ts): cubre las ramas paralelas y las casi críticas que la
 // probabilidad de una sola ruta no ve. Se guarda por huella de los datos: cambiar solo el plazo objetivo no la vuelve a correr.
 let simKey = "", simVal: PertSimResult | null = null;
-function simFor(acts: SimAct[], links: ScheduleLink[], cal: unknown, startDate: string): PertSimResult | null {
-  const key = JSON.stringify([acts, links.map((l) => [l.from, l.to, l.type, l.lag, l.lagUnit]), startDate]);
-  if (key !== simKey) { simKey = key; try { simVal = simulatePertNetwork(acts, links as unknown as NetLink[], cal, window.GPI!.util.cpm as unknown as CpmFn, { startDate }); } catch (e) { simVal = null; } }
+function simFor(acts: SimAct[], links: ScheduleLink[], cal: unknown): PertSimResult | null {
+  const key = JSON.stringify([acts, links.map((l) => [l.from, l.to, l.type, l.lag, l.lagUnit])]);
+  if (key !== simKey) { simKey = key; try { simVal = simulatePertNetwork(acts, links as unknown as NetLink[], cal, window.GPI!.util.cpm as unknown as CpmFn); } catch (e) { simVal = null; } }
   return simVal;
 }
 
@@ -382,7 +382,7 @@ function criticalPathStats(): CriticalPathStats {
   if (!(res.criticalIds || []).length) return { reason: "no-path" };
   const vars: Record<string, number> = {}; Object.keys(byId).forEach((id) => { vars[id] = byId[id].va; });
   const ch = window.GPI.util.pertCriticalChain(res, links, cal, vars);
-  const sim = simFor(simActs, links, cal, startDate);
+  const sim = simFor(simActs, links, cal);
   if (!ch.ok) return ch.reason === "parallel" ? { reason: "parallel", count: res.criticalIds.length, sim } : ch.reason === "empty" ? { reason: "no-path" } : ch.reason === "elapsed" ? { reason: "elapsed" } : { reason: "inconsistent" };
   // Media = duración del proyecto con TE (incluye desfases); varianza = la de las
   // actividades que de verdad deciden el fin (ver pertCriticalChain).
@@ -407,6 +407,7 @@ function simHtml(sm: PertSimResult | null, target: number, cross: number | null)
     + "P(fin ≤ " + fmt(target, 0) + " d) = <b style=\"color:" + pc + "\">" + p.toFixed(1) + " %</b> · media " + fmt(sm.mean, 1) + " d · σ " + fmt(sm.sd, 1) + " d<br>"
     + "P10 " + fmt(sm.percentiles[10], 1) + " · P50 " + fmt(sm.percentiles[50], 1) + " · P80 " + fmt(sm.percentiles[80], 1) + " · P90 " + fmt(sm.percentiles[90], 1) + " d" + gap
     + (top.length ? "<br><b>Índice de criticidad</b> (fracción de iteraciones en la ruta crítica): " + top.map((id) => esc(nameOf(id)) + " " + Math.round(sm.criticality[id] * 100) + " %").join(" · ") : "")
+    + (sm.elapsedApprox ? "<br>⚠ Hay desfases en días transcurridos: la simulación trabaja en días laborables y los aproxima con una proporción semanal." : "")
     + (sm.stochastic < actsCache.length ? "<br>ℹ " + (actsCache.length - sm.stochastic) + " actividad(es) sin terna válida se simulan con su duración fija." : "");
 }
 let targetTouched = false;
