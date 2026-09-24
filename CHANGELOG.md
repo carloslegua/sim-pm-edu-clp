@@ -200,6 +200,11 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Changed
 
+- **Etiqueta «PMBOK 8» → «PMBOK»** (auditoría metodológica) — la numeración de la edición no se
+  podía verificar contra la guía y los módulos no dependen de una edición concreta; se quitó de
+  las cabeceras, las descripciones del Panel, el README y la documentación. Sin cambios de
+  comportamiento ni de datos.
+
 - **Caso DISTRIB+ — fechas contractuales alineadas con el cronograma CPM real** — el Acta decía
   «concluir en 4 meses (julio–noviembre 2026), entrega el 06/11/2026» y los hitos del Plan del
   Cronograma, el cierre del Panel y la restricción de plazo del Enunciado repetían esa fecha, mientras la

@@ -98,7 +98,7 @@ const MODULOS_EXTRA: ModuleDef[] = [
 const CUR: Record<string, string> = { USD: "USD $", PEN: "S/", EUR: "€" };
 
 interface GroupDef { key: string; name: string; hint: string; }
-// Áreas de conocimiento / dominios del PMBOK 8, en orden de despliegue.
+// Áreas de conocimiento / dominios del PMBOK, en orden de despliegue.
 const GROUPS: GroupDef[] = [
   { key: "integ", name: "Integración", hint: "dirige y unifica el proyecto de principio a fin" },
   { key: "stake", name: "Interesados", hint: "identificación y compromiso de las partes interesadas" },
@@ -131,7 +131,7 @@ let MODULES: ModuleDef[] = [
   { key: "requirements", group: "scope", name: "Recopilar Requisitos", file: "Recopilar_Requisitos.html", icon: "📝", color: "#6c5ce7",
     desc: "Matriz de trazabilidad de requisitos: cada REQ.00X enlaza el RAN del Acta y el interesado que lo origina. Separa la línea base de sus modificaciones de alcance." },
   { key: "scopeStatement", group: "scope", name: "Enunciado del Alcance", file: "Enunciado_del_Alcance.html", icon: "🎯", color: "#6c5ce7",
-    desc: "Definir el Alcance (PMBOK 8): descripción del alcance, entregables (DEL.0X) con criterios de aceptación, y supuestos/restricciones/exclusiones. Es el puente que agrupa los REQ en entregables; la EDT descompone esos entregables, no los requisitos." },
+    desc: "Definir el Alcance (PMBOK): descripción del alcance, entregables (DEL.0X) con criterios de aceptación, y supuestos/restricciones/exclusiones. Es el puente que agrupa los REQ en entregables; la EDT descompone esos entregables, no los requisitos." },
   { key: "wbs", group: "scope", name: "WBS Builder", file: "WBS_Builder.html", icon: "▦", color: "#6c5ce7",
     desc: "Estructura de desglose del trabajo con costo, duración, avance y diccionario WBS. Siembra sus ramas desde los entregables del Enunciado del Alcance." },
 
@@ -147,7 +147,7 @@ let MODULES: ModuleDef[] = [
 
   // — Costo —
   { key: "cost", group: "cost", name: "Planificar la Gestión Financiera", file: "Cost-management.html", icon: "S/", color: "#0093c0",
-    desc: "Plan de gestión de costos (PMBOK 8 + AACE): moneda, clase de estimado, contingencia e inflación, umbrales CV/CPI, órdenes de cambio y documento BOE. Toma la estimación base de la EDT o de Estimar los Costos." },
+    desc: "Plan de gestión de costos (PMBOK + AACE): moneda, clase de estimado, contingencia e inflación, umbrales CV/CPI, órdenes de cambio y documento BOE. Toma la estimación base de la EDT o de Estimar los Costos." },
   { key: "costEstimate", group: "cost", name: "Estimar los Costos", file: "Estimar_Costos.html", icon: "🧮", color: "#00967f",
     desc: "Estimación de costo por paquete de trabajo (Unidad, Cantidad, Precio unitario → Subtotal), importada/exportada desde un .xlsx verificado por Código EDT y nombre contra la EDT. Alimenta el costo real del WBS y la línea base de Planificar la Gestión Financiera." },
   { key: "evm", group: "cost", name: "Valor Ganado (EVM)", file: "Valor_Ganado.html", icon: "📈", color: "#2e4374",
@@ -700,7 +700,7 @@ function renderInteg(): void {
     + '<div class="step"><span class="n">3</span><div>Al cambiar o al salir, devuelve tu rebanada con <code>GPI.setModule("clave", datos)</code>. Eso alimenta al Panel y a las demás herramientas.</div></div>'
     + '<div class="code"><div class="cp"><button class="btn sm" id="btnCopy">⧉ Copiar</button></div><pre>' + esc(snippet) + '</pre></div>'
     + '<p style="margin-top:12px"><b>Esquema del proyecto</b> (una rebanada <code>modules.&lt;clave&gt;</code> por herramienta):</p>'
-    + '<div class="code"><pre>' + esc('{\n  meta: { name, code, client, location, sponsor, manager,\n          startDate, endDate, currency, capex, description, course },\n  modules: {\n    charter:      { identification, purpose, description, boundaries,\n                    objectives[], requirements[], deliverables[], milestones[],\n                    budget, risks[], assumptions[], constraints[], exclusions[],\n                    stakeholders[], approval },  // PMBOK — Project Charter\n    stakeholders: { stakeholders[], powerWeights, interestWeights },\n    wbs:          { rootId, idCounter, nodes },\n    activities:   { byLeaf: { wbsLeafId: [ {id, name, unit, qty} ] } },\n    pert:         { byActivity: { actId: {o, m, mAuto, p} }, inputMode },\n    obs:          { rootId, idCounter, nodes },   // roles del organigrama\n    raci:         { assignments: { wbsLeafId: { obsNodeId: "R"|"A"|"C"|"I" } } },\n    schedulePlan: { methodology, calendar, durationEstimating, criticalPath,\n                    controlThresholds[], performanceMeasurement, milestones[],\n                    scheduleReserve, roles[], reportingFormats[], changeControl,\n                    assumptions[], exclusions[], approval },  // AACE RP 38R-06 / PMBOK\n    cost:         { plan:{currency, evMethod, thresholds:{cpi, cv}},\n                    estimate:{class, boe}, budget:{baseCost, contingency,\n                    escalation, computed}, changeOrders[] },  // PMBOK 8 + AACE\n    // risks, schedule (CPM/Gantt), evm, montecarlo, ...\n  }\n}') + '</pre></div>'
+    + '<div class="code"><pre>' + esc('{\n  meta: { name, code, client, location, sponsor, manager,\n          startDate, endDate, currency, capex, description, course },\n  modules: {\n    charter:      { identification, purpose, description, boundaries,\n                    objectives[], requirements[], deliverables[], milestones[],\n                    budget, risks[], assumptions[], constraints[], exclusions[],\n                    stakeholders[], approval },  // PMBOK — Project Charter\n    stakeholders: { stakeholders[], powerWeights, interestWeights },\n    wbs:          { rootId, idCounter, nodes },\n    activities:   { byLeaf: { wbsLeafId: [ {id, name, unit, qty} ] } },\n    pert:         { byActivity: { actId: {o, m, mAuto, p} }, inputMode },\n    obs:          { rootId, idCounter, nodes },   // roles del organigrama\n    raci:         { assignments: { wbsLeafId: { obsNodeId: "R"|"A"|"C"|"I" } } },\n    schedulePlan: { methodology, calendar, durationEstimating, criticalPath,\n                    controlThresholds[], performanceMeasurement, milestones[],\n                    scheduleReserve, roles[], reportingFormats[], changeControl,\n                    assumptions[], exclusions[], approval },  // AACE RP 38R-06 / PMBOK\n    cost:         { plan:{currency, evMethod, thresholds:{cpi, cv}},\n                    estimate:{class, boe}, budget:{baseCost, contingency,\n                    escalation, computed}, changeOrders[] },  // PMBOK + AACE\n    // risks, schedule (CPM/Gantt), evm, montecarlo, ...\n  }\n}') + '</pre></div>'
     + '<p class="empty">Si <code>gpi-core.js</code> no está presente, la herramienta sigue funcionando de forma independiente (el puente simplemente no se activa).</p>';
 
   const cp = document.getElementById("btnCopy");

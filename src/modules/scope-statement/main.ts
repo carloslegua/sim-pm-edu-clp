@@ -1,5 +1,5 @@
 /* ============================================================
-   Enunciado del Alcance — Definir el Alcance (PMBOK 8)
+   Enunciado del Alcance — Definir el Alcance (PMBOK)
    Port mecánico del <script> inline de Enunciado_del_Alcance.html (Fase 4
    de MIGRATION.md): misma lógica, mismo comportamiento. Se agregan tipos
    y se compila a scope-statement.js (IIFE) para que el HTML lo cargue
@@ -572,7 +572,7 @@ function buildReport(): void {
   el.innerHTML = '<div class="rep-head"><div><h1>Enunciado del Alcance del Proyecto</h1>'
     + '<div class="sub">' + esc(pName) + (meta.code ? ' · ' + esc(meta.code) : '') + '</div>'
     + '<div class="sub" style="font-weight:500">' + esc(course) + '</div></div>'
-    + '<div class="rep-meta">Definir el Alcance · PMBOK 8<br>Emitido: ' + esc(today)
+    + '<div class="rep-meta">Definir el Alcance · PMBOK<br>Emitido: ' + esc(today)
     + (meta.client ? '<br>Cliente: ' + esc(meta.client) : '') + (meta.location ? '<br>' + esc(meta.location) : '') + '</div></div>' + body;
   document.body.classList.add("report-mode");
   function done() { document.body.classList.remove("report-mode"); window.removeEventListener("afterprint", done); }

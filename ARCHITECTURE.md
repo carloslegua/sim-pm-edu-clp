@@ -26,7 +26,7 @@ CORS) y los artefactos compilados se commitean junto a su fuente.
 flowchart TB
     subgraph nav["Navegador — file:// o GitHub Pages, sin servidor"]
         panel["Panel_Control.html<br>(punto de entrada)"]
-        subgraph tools["14 módulos de herramienta<br>(uno por área del PMBOK 8)"]
+        subgraph tools["14 módulos de herramienta<br>(uno por área del PMBOK)"]
             risks["Risk_Register.html"]
             charter["Project_Charter.html"]
             stake["Stakeholder_Studio.html"]

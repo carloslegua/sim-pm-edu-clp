@@ -1208,7 +1208,7 @@ function buildDoc(): void {
     <p class="doc-meta">Generado ${new Date().toLocaleDateString("es-PE")} · Fecha base del estimado: ${esc(($("boeDate") as HTMLInputElement).value) || "—"} · Moneda base: ${esc(($("cur") as HTMLSelectElement).value)} (${sym()}) · Clase AACE: <b>Clase ${state.curClass}</b></p>
 
     <section class="dsec">
-      <h4 class="dsec-t"><span class="dn">01</span>Reglas normativas del plan (PMBOK 8)</h4>
+      <h4 class="dsec-t"><span class="dn">01</span>Reglas normativas del plan (PMBOK)</h4>
       <div class="dgrid">
         <table class="dt">
           <tr><td>Moneda base</td><td>${esc(($("cur") as HTMLSelectElement).value)} — ${sym()}</td></tr>

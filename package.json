@@ -2,7 +2,7 @@
   "name": "sim-pm-edu-clp",
   "version": "1.0.0",
   "private": true,
-  "description": "Suite de módulos HTML de Gestión de Proyectos de Ingeniería (PMBOK 8) que comparten un núcleo de datos sobre localStorage. Sitio estático sin backend; el núcleo se está migrando a TypeScript compilado con Vite en modo librería (ver MIGRATION.md).",
+  "description": "Suite de módulos HTML de Gestión de Proyectos de Ingeniería (PMBOK) que comparten un núcleo de datos sobre localStorage. Sitio estático sin backend; el núcleo se está migrando a TypeScript compilado con Vite en modo librería (ver MIGRATION.md).",
   "scripts": {
     "dev": "node scripts/static-server.mjs",
     "build:core": "vite build --config configs/core.vite.config.ts && node scripts/sync-artifact.mjs gpi-core.js",

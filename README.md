@@ -17,7 +17,7 @@ misma carpeta** para que los enlaces relativos y el núcleo compartido funcionen
 
 - **`Panel_Control.html`** — abrir este primero. Gestiona el proyecto activo,
   los datos comunes y lanza cada herramienta. Las tarjetas están organizadas por
-  **área de conocimiento del PMBOK 8** (Integración, Interesados, Alcance,
+  **área de conocimiento del PMBOK** (Integración, Interesados, Alcance,
   Cronograma, Costo, Calidad, Recursos, Comunicaciones, Riesgos, Adquisiciones).
 
 ## Entrega gradual de módulos (novedad)
@@ -169,7 +169,7 @@ encabezado cuando el Panel cambia el proyecto, sin pisar la edición en curso.
 
 ## Planificar la Gestión Financiera (novedad)
 
-`Cost-management.html` implementa el Plan de Gestión Financiera (PMBOK 8 + AACE):
+`Cost-management.html` implementa el Plan de Gestión Financiera (PMBOK + AACE):
 moneda y estimación base, clase de estimado (AACE 17R-97), contingencia e
 inflación, umbrales CV/CPI, órdenes de cambio y documento BOE. Integrado al
 núcleo: toma la estimación base del rollup de costos del WBS (botón
@@ -193,7 +193,7 @@ traer su costo base directamente de este total.
 ## Módulo de Requisitos (novedad)
 
 `Recopilar_Requisitos.html` implementa la matriz de trazabilidad de requisitos
-(RTM, PMBOK 8). Cada `REQ.00X` enlaza el requisito de alto nivel del Acta
+(RTM, PMBOK). Cada `REQ.00X` enlaza el requisito de alto nivel del Acta
 (`RAN.0X`) y el interesado que lo origina (del registro de `stakeholders`) con
 el paquete de la EDT (`wbs`) que lo satisface, más su criterio de aceptación y
 método de verificación. Distingue con claridad dos etapas:
@@ -217,7 +217,7 @@ automática desde el esquema antiguo de cadenas), y `gpi-core.js` expone
 
 ## Enunciado del Alcance — flujo corregido (novedad)
 
-`Enunciado_del_Alcance.html` implementa **Definir el Alcance** (PMBOK 8) y cierra
+`Enunciado_del_Alcance.html` implementa **Definir el Alcance** (PMBOK) y cierra
 el eslabón que faltaba entre requisitos y EDT. El orden del área de Alcance queda
 alineado con el PMBOK:
 

@@ -760,7 +760,7 @@
 		});
 		const pName = $("projectTitle").value || meta.name || "Proyecto";
 		const course = $("courseTitle").value || meta.course || "Gestión de Proyectos de Ingeniería";
-		el.innerHTML = "<div class=\"rep-head\"><div><h1>Enunciado del Alcance del Proyecto</h1><div class=\"sub\">" + esc(pName) + (meta.code ? " · " + esc(meta.code) : "") + "</div><div class=\"sub\" style=\"font-weight:500\">" + esc(course) + "</div></div><div class=\"rep-meta\">Definir el Alcance · PMBOK 8<br>Emitido: " + esc(today) + (meta.client ? "<br>Cliente: " + esc(meta.client) : "") + (meta.location ? "<br>" + esc(meta.location) : "") + "</div></div>" + body;
+		el.innerHTML = "<div class=\"rep-head\"><div><h1>Enunciado del Alcance del Proyecto</h1><div class=\"sub\">" + esc(pName) + (meta.code ? " · " + esc(meta.code) : "") + "</div><div class=\"sub\" style=\"font-weight:500\">" + esc(course) + "</div></div><div class=\"rep-meta\">Definir el Alcance · PMBOK<br>Emitido: " + esc(today) + (meta.client ? "<br>Cliente: " + esc(meta.client) : "") + (meta.location ? "<br>" + esc(meta.location) : "") + "</div></div>" + body;
 		document.body.classList.add("report-mode");
 		function done() {
 			document.body.classList.remove("report-mode");
