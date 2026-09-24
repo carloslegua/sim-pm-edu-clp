@@ -240,7 +240,8 @@ export interface ScopeStatementModule {
   assumptions?: Array<{ id: string; text: string }>;
   constraints?: Array<{ id: string; text: string }>;
   exclusions?: Array<{ id: string; text: string }>;
-  baseline?: { frozen?: boolean; version?: string; date?: string; approver?: string; snapshot?: unknown };
+  // Línea base del alcance: `snapshot` incluye el enunciado, la EDT (`wbs`) y su diccionario; `history` archiva cada versión anterior COMPLETA (ver shared/scope-baseline.ts).
+  baseline?: { frozen?: boolean; version?: string; date?: string; approver?: string; reason?: string; snapshot?: unknown; history?: unknown[] };
   idCounter: number;
   delCounter: number;
 }

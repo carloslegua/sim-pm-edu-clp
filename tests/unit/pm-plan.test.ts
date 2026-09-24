@@ -89,6 +89,14 @@ describe("integrationFindings — el cruce entre líneas base", () => {
     const p17 = integrationFindings(g).filter((x) => x.code === "P17"); expect(p17.map((x) => x.area)).toEqual(["Calidad", "Adquisiciones"]); expect(p17[0].severity).toBe("info");
     expect(codes(emptyFacts())).toEqual([]);                                                       // sin nada que integrar no hay que avisar de planes faltantes
   });
+  it("P21/P22: el alcance aprobado incluye la EDT y su diccionario: si el trabajo en edición difiere, o la línea base se congeló sin EDT, se avisa", () => {
+    const f = completo(); expect(codes(f)).not.toContain("P21");
+    f.scope.drift = { wbsInBaseline: true, wbsChanges: 0, enunciadoChanged: false }; expect(codes(f)).toEqual(["P13"]);            // coincide con lo aprobado: nada que avisar
+    f.scope.drift = { wbsInBaseline: true, wbsChanges: 3, enunciadoChanged: true };
+    const p = integrationFindings(f).find((x) => x.code === "P21")!; expect(p.severity).toBe("aviso"); expect(p.text).toMatch(/difiere de la línea base del alcance v1\.0: 3 cambio\(s\) en la EDT y su diccionario y cambios en el enunciado/);
+    f.scope.drift = { wbsInBaseline: false, wbsChanges: 0, enunciadoChanged: false }; expect(integrationFindings(f).find((x) => x.code === "P22")!.text).toMatch(/se congeló sin la EDT y su diccionario/);
+    f.scope.base = { has: false, version: "", date: "", approver: "" }; expect(codes(f)).not.toContain("P22");                     // sin línea base del alcance no aplica
+  });
   it("P11: el pronóstico se desvía más del 10 % de la línea base", () => {
     const f = completo(); f.schedule.deviationPct = 12.34; expect(integrationFindings(f).find((x) => x.code === "P11")!.text).toMatch(/12\.3 %/);
     f.schedule.deviationPct = 9; expect(codes(f)).not.toContain("P11");

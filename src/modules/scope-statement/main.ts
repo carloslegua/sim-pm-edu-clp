@@ -15,6 +15,8 @@
 import type * as GpiCore from "../../core/gpi-core";
 import type { EditSession, GpiProject, ProjectMeta, ProjectModules, RequirementItem, ScopeStatementModule } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
+import { advanceScopeBaseline, normalizeScopeBaseline, scopeDriftOf, scopeSnapshotOf, wbsScopeCodes, type ScopeBaselineData } from "../../shared/scope-baseline";
+import { newVersionProblems, suggestNextVersion } from "../../shared/requirements-baseline";
 
 type ModuleKey = keyof ProjectModules;
 
@@ -27,7 +29,8 @@ declare global {
 interface DeliverableUi { id: string; code: string; name: string; description: string; acceptanceCriteria: string; ranIds: string[]; reqIds: string[]; }
 interface SreItem { id: string; text: string; }
 type SreKey = "assumptions" | "constraints" | "exclusions";
-interface ScopeBaseline { frozen: boolean; version: string; date: string; approver: string; snapshot: Record<string, unknown> | null; }
+// La línea base incluye el enunciado, la EDT y su diccionario (shared/scope-baseline.ts) y archiva cada versión al fijar la siguiente.
+type ScopeBaseline = ScopeBaselineData;
 interface ScopeState {
   productScope: string; projectScope: string; deliverables: DeliverableUi[];
   assumptions: SreItem[]; constraints: SreItem[]; exclusions: SreItem[];
@@ -59,7 +62,7 @@ function blank(): ScopeState {
   return {
     productScope: "", projectScope: "", deliverables: [],
     assumptions: [], constraints: [], exclusions: [],
-    baseline: { frozen: false, version: "1.0", date: "", approver: "", snapshot: null },
+    baseline: normalizeScopeBaseline(null),
     idCounter: 1, delCounter: 1
   };
 }
@@ -93,10 +96,7 @@ function normalize(d: any): ScopeState {
       else s[k].push({ id: x.id || uid(), text: x.text || "" });
     });
   });
-  if (d.baseline) s.baseline = {
-    frozen: !!d.baseline.frozen, version: d.baseline.version || "1.0",
-    date: d.baseline.date || "", approver: d.baseline.approver || "", snapshot: d.baseline.snapshot || null
-  };
+  if (d.baseline) s.baseline = normalizeScopeBaseline(d.baseline);   // tolerante: lo guardado antes no trae EDT, motivo ni historial
   reCode(s);
   return s;
 }
@@ -348,22 +348,59 @@ function renderCoherence(): void {
   renderBaseline(a);
 }
 
+// El borrador del formulario de «nueva versión» sobrevive a los re-dibujos (otra pestaña edita la EDT y esta se refresca mientras se escribe).
+const NV_IDS = ["nv_ver", "nv_date", "nv_appr", "nv_reason"];
 function renderBaseline(a: GpiCore.ScopeAuditResult): void {
   const b = state.baseline, host = $("baselineHost"), st = $("baselineState");
   if (b.frozen) {
-    st.innerHTML = '<span class="state-pill" style="background:rgba(0,194,168,.16);color:#00967f">🔒 Congelada v' + esc(b.version) + '</span>';
-    host.innerHTML = '<div class="muted">Línea base <b>v' + esc(b.version) + '</b> congelada el <b>' + esc(b.date || "—") + '</b> por <b>' + esc(b.approver || "—") + '</b>. '
-      + 'Contiene ' + (((b.snapshot?.deliverables as unknown[]) || []).length) + ' entregable(s). '
-      + 'Los cambios posteriores deberían gestionarse por Control Integrado de Cambios.</div>'
-      + '<div style="margin-top:10px"><button class="btn sm danger" id="btnUnfreeze">Descongelar (volver a editar la línea base)</button></div>';
-    ($("btnUnfreeze") as HTMLElement).onclick = () => {
-      confirmModal("Descongelar línea base", "¿Reabrir la línea base del alcance para editarla? Deberías dejar constancia del cambio.", "Descongelar", true).then((ok) => {
-        if (ok) { b.frozen = false; persist(); renderCoherence(); toast("Línea base reabierta"); }
-      });
+    const wbsNow = mod("wbs"), drift = scopeDriftOf(b, state, wbsNow), draft = NV_IDS.map((id) => { const el = document.getElementById(id) as HTMLInputElement | null; return el ? el.value : undefined; });
+    const nEdt = b.snapshot && b.snapshot.wbs ? Object.keys(b.snapshot.wbs.nodes).length - 1 : 0;
+    st.innerHTML = '<span class="state-pill" style="background:' + (drift.total ? "rgba(255,159,28,.2);color:#a05a00" : "rgba(0,194,168,.16);color:#00967f") + '">🔒 Congelada v' + esc(b.version) + (drift.total ? " · " + drift.total + " cambio(s) sin aprobar" : "") + '</span>';
+    let h = '<div class="muted">Línea base <b>v' + esc(b.version) + '</b> congelada el <b>' + esc(b.date || "—") + '</b> por <b>' + esc(b.approver || "—") + '</b>' + (b.reason ? ' · motivo: ' + esc(b.reason) : '') + '. '
+      + 'Contiene ' + (((b.snapshot?.deliverables as unknown[]) || []).length) + ' entregable(s)' + (drift.wbsInBaseline ? ', el enunciado y <b>' + nEdt + ' elemento(s) de la EDT con su diccionario</b>' : '') + '. '
+      + 'Los cambios posteriores se gestionan por Control Integrado de Cambios y solo una <b>nueva versión</b> actualiza esta referencia.</div>';
+    if (!drift.wbsInBaseline) h += '<div class="empty-note" style="margin-top:8px">⚠ Esta línea base se congeló <b>antes de incluir la EDT y su diccionario</b>: no se puede comprobar si la EDT cambió desde entonces. Fija una nueva versión (con motivo y aprobador) para incluirlos en lo aprobado.</div>';
+    // trabajo en edición frente a lo aprobado
+    if (drift.total) {
+      h += '<div class="card-sub" style="margin-top:10px"><b>Trabajo en edición distinto de lo aprobado (v' + esc(b.version) + '):</b><ul class="warn-list" style="margin-top:6px">'
+        + (drift.enunciadoChanged ? '<li><span class="tag a">revisar</span>El enunciado (entregables, supuestos, restricciones, exclusiones o alcances) cambió desde la aprobación.</li>' : '')
+        + drift.wbsChanges.slice(0, 12).map((c) => '<li><span class="tag a">EDT</span><b>' + esc(c.code || "—") + '</b> ' + esc(c.name) + ' — ' + esc(c.kind) + ': ' + esc(c.detail) + '</li>').join("")
+        + (drift.wbsChanges.length > 12 ? '<li class="muted">…y ' + (drift.wbsChanges.length - 12) + ' cambio(s) más en la EDT.</li>' : '')
+        + '</ul><div class="muted" style="font-size:12px">Lo aprobado sigue siendo la instantánea; estos cambios son trabajo en edición hasta que se apruebe una nueva versión.</div></div>';
+    } else if (drift.wbsInBaseline) h += '<div class="ok-note" style="margin-top:8px">✓ El enunciado, la EDT y su diccionario coinciden con lo aprobado en la v' + esc(b.version) + '.</div>';
+    // nueva versión (archiva la vigente)
+    const dv = (i: number, def: string): string => escAttr(draft[i] !== undefined ? draft[i] : def);
+    h += '<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"><b>Nueva versión de la línea base</b> <span class="muted" style="font-size:12px">— archiva la v' + esc(b.version) + ' completa (enunciado, EDT y diccionario) antes de establecer la siguiente.</span>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:8px 0">'
+      + '<div><label class="fl">Versión</label><input class="txt" id="nv_ver" value="' + dv(0, suggestNextVersion(b)) + '"></div>'
+      + '<div><label class="fl">Fecha</label><input class="txt" id="nv_date" type="date" value="' + dv(1, new Date().toISOString().slice(0, 10)) + '"></div>'
+      + '<div><label class="fl">Aprobador</label><input class="txt" id="nv_appr" value="' + dv(2, "") + '" placeholder="Patrocinador / CCB"></div></div>'
+      + '<label class="fl">Motivo del cambio</label><textarea class="txt" id="nv_reason" rows="2" placeholder="Ej.: incorpora CR-002 (ampliación de la sala eléctrica) aprobada por el CCB">' + esc(draft[3] !== undefined ? draft[3] : "") + '</textarea>'
+      + '<div class="empty-note" id="nv_msg" style="display:none;margin-top:6px"></div>'
+      + '<div style="margin-top:8px"><button class="btn primary sm" id="btnNewVer">🔒 Fijar nueva versión</button></div></div>';
+    // historial
+    if (b.history.length) {
+      h += '<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"><b>Historial de versiones (' + b.history.length + ')</b>'
+        + b.history.slice().reverse().map((v) => {
+          const nd = v.snapshot && Array.isArray(v.snapshot.deliverables) ? (v.snapshot.deliverables as unknown[]).length : 0, wv = v.snapshot && v.snapshot.wbs ? v.snapshot.wbs : null, codes = wv ? wbsScopeCodes(wv) : {};
+          return '<details class="lb-hist" style="border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-top:8px"><summary style="cursor:pointer;font-size:12.5px"><b>v' + esc(v.version) + '</b> · aprobada ' + esc(v.date || "—") + ' por ' + esc(v.approver || "—") + ' · ' + nd + ' entregable(s)' + (wv ? ' · ' + (Object.keys(wv.nodes).length - 1) + ' elemento(s) de la EDT' : ' · sin EDT (anterior a incluirla)') + ' · sustituida el ' + esc(v.supersededOn || "—") + '</summary>'
+            + '<div class="muted" style="font-size:12px;margin:6px 0"><b>Motivo:</b> ' + esc(v.reason || "—") + '</div>'
+            + (wv ? '<table style="width:100%;font-size:12px"><thead><tr><th>Cód.</th><th>Elemento de la EDT</th><th>Criterio de aceptación</th></tr></thead><tbody>' + Object.keys(codes).sort((x, y) => codes[x].localeCompare(codes[y], undefined, { numeric: true })).map((id) => '<tr><td>' + esc(codes[id]) + '</td><td>' + esc(wv.nodes[id].name) + '</td><td>' + esc(wv.nodes[id].acceptance || "—") + '</td></tr>').join("") + '</tbody></table>' : '')
+            + '</details>';
+        }).join("") + '</div>';
+    }
+    host.innerHTML = h;
+    ($("btnNewVer") as HTMLElement).onclick = () => {
+      const g = (id: string): string => ($(id) as HTMLInputElement).value, input = { version: g("nv_ver").trim(), date: g("nv_date"), approver: g("nv_appr").trim(), reason: g("nv_reason").trim() }, problems = newVersionProblems(state.baseline, input), msg = $("nv_msg");
+      if (problems.length) { msg.textContent = "No se puede fijar la nueva versión: " + problems.join("; ") + "."; msg.style.display = ""; return; }
+      const prev = state.baseline.version;
+      state.baseline = advanceScopeBaseline(state.baseline, scopeSnapshotOf(state, mod("wbs")), input, new Date().toISOString().slice(0, 10));
+      persist(); renderCoherence(); toast("Línea base v" + input.version + " fijada; la v" + prev + " quedó archivada");
     };
   } else {
     const canFreeze = a.total > 0;
-    host.innerHTML = '<div class="muted" style="margin-bottom:10px">Cuando el alcance esté acordado, <b>congela la línea base</b>: guarda una copia inmutable de los entregables y del marco de supuestos/restricciones/exclusiones. Sirve de referencia para medir el <i>scope creep</i>.</div>'
+    host.innerHTML = '<div class="muted" style="margin-bottom:10px">Cuando el alcance esté acordado, <b>congela la línea base</b>: guarda una copia inmutable del <b>enunciado</b> (entregables, supuestos, restricciones y exclusiones), de la <b>EDT</b> y de su <b>diccionario</b> (descripción del trabajo, criterio de aceptación y esfuerzo continuo de cada elemento). Sirve de referencia para medir el <i>scope creep</i>; el costo y las fechas tienen sus propias líneas base.</div>'
+      + (mod("wbs") ? "" : '<div class="empty-note" style="margin-bottom:10px">ⓘ No hay una EDT en el proyecto activo: la línea base se congelaría sin ella. Arma la EDT en WBS Builder antes de congelar para que quede en lo aprobado.</div>')
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:10px">'
       + '<div><label class="fl">Versión</label><input class="txt" id="b_ver" value="' + escAttr(b.version || "1.0") + '"></div>'
       + '<div><label class="fl">Fecha</label><input class="txt" id="b_date" type="date" value="' + escAttr(b.date || "") + '"></div>'
@@ -376,7 +413,8 @@ function renderBaseline(a: GpiCore.ScopeAuditResult): void {
       b.version = ($("b_ver") as HTMLInputElement).value.trim() || "1.0";
       b.date = ($("b_date") as HTMLInputElement).value || new Date().toISOString().slice(0, 10);
       b.approver = ($("b_appr") as HTMLInputElement).value.trim();
-      b.snapshot = JSON.parse(JSON.stringify({ deliverables: state.deliverables, assumptions: state.assumptions, constraints: state.constraints, exclusions: state.exclusions, productScope: state.productScope, projectScope: state.projectScope }));
+      b.snapshot = scopeSnapshotOf(state, mod("wbs"));       // enunciado + EDT + diccionario, versionados juntos
+      b.reason = b.reason || "Línea base inicial";
       b.frozen = true; persist(); renderCoherence(); toast("Línea base v" + b.version + " congelada");
     };
   }

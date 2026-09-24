@@ -20,17 +20,19 @@ export function normalizeRBaseline<T>(o: unknown): RBaseline<T> {
     history: arr<Record<string, unknown>>(x.history).filter((h) => h && typeof h === "object").map((h) => ({ version: str(h.version), date: str(h.date), approver: str(h.approver), reason: str(h.reason), supersededOn: str(h.supersededOn), snapshot: arr<T>(h.snapshot) }))
   };
 }
+// Lo mínimo que necesitan las utilidades de versión (sirve también para la línea base del alcance: shared/scope-baseline.ts).
+export interface VerHolder { version: string; history: Array<{ version: string }>; }
 // Versiones ya usadas (la vigente y las archivadas).
-export const usedVersions = <T>(b: RBaseline<T>): string[] => [b.version].concat(b.history.map((h) => h.version));
+export const usedVersions = (b: VerHolder): string[] => [b.version].concat(b.history.map((h) => h.version));
 // «1.0» → «2.0»; si ya existe, sigue subiendo hasta una libre.
-export function suggestNextVersion<T>(b: RBaseline<T>): string {
+export function suggestNextVersion(b: VerHolder): string {
   const m = /^(\d+)(?:\.(\d+))?/.exec(b.version || "1.0"), used = new Set(usedVersions(b)); let maj = (m ? Number(m[1]) : 1) + 1;
   while (used.has(maj + ".0")) maj++;
   return maj + ".0";
 }
 export interface NewVersionInput { version: string; date: string; approver: string; reason: string; }
 // Qué falta para fijar la nueva versión: número no repetido, quién la aprueba, cuándo y POR QUÉ (el motivo del cambio).
-export function newVersionProblems<T>(b: RBaseline<T>, i: NewVersionInput): string[] {
+export function newVersionProblems(b: VerHolder, i: NewVersionInput): string[] {
   const p: string[] = [];
   if (!i.version.trim()) p.push("indica la versión");
   else if (usedVersions(b).indexOf(i.version.trim()) >= 0) p.push("la versión " + i.version.trim() + " ya existe (vigente o archivada)");

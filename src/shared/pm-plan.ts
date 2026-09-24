@@ -47,7 +47,7 @@ export function digestOf(v: unknown): string {
 }
 export interface PlanFacts {
   charter: { has: boolean; pct: number; end: string };
-  scope: { has: boolean; state: AreaState; base: BaselineFact; notDecomposed: number };
+  scope: { has: boolean; state: AreaState; base: BaselineFact; notDecomposed: number; drift?: { wbsInBaseline: boolean; wbsChanges: number; enunciadoChanged: boolean } };
   requirements: { has: boolean; state: AreaState; base: BaselineFact; total: number };
   wbs: { leaves: number; state: AreaState; dictPct: number; riesgo: number; aviso: number };
   schedule: { has: boolean; ok: boolean; activities: number; duration: number | null; start: string; finish: string; critical: number; base: BaselineFact; deviationPct: number | null };
@@ -147,6 +147,12 @@ export function integrationFindings(f: PlanFacts): PFinding[] {
   const sd = f.scope.base.date, td = s.base.date;
   if (sd && td && sd > td) F("P5", "aviso", "Integración", "La línea base del alcance (v" + f.scope.base.version + ", " + sd + ") es posterior a la del cronograma (" + s.base.version + ", " + td + "): el cronograma no refleja el alcance vigente.");
   if (sd && f.cost.boeApprovedOn && sd > f.cost.boeApprovedOn) F("P5", "aviso", "Integración", "La línea base del alcance (" + sd + ") es posterior a la aprobación de la BOE (" + f.cost.boeApprovedOn + "): el presupuesto no refleja el alcance vigente.");
+  // la línea base del alcance incluye enunciado + EDT + diccionario: el trabajo en edición no puede diferir de lo aprobado sin una nueva versión
+  const dr = f.scope.drift;
+  if (f.scope.base.has && dr) {
+    if (!dr.wbsInBaseline) F("P22", "aviso", "Alcance", "La línea base del alcance v" + f.scope.base.version + " se congeló sin la EDT y su diccionario: no se puede comprobar si los paquetes cambiaron desde la aprobación. Fija una nueva versión (con motivo y aprobador) que los incluya.");
+    else if (dr.wbsChanges > 0 || dr.enunciadoChanged) F("P21", "aviso", "Alcance", "El trabajo en edición difiere de la línea base del alcance v" + f.scope.base.version + ": " + (dr.wbsChanges ? dr.wbsChanges + " cambio(s) en la EDT y su diccionario" : "") + (dr.wbsChanges && dr.enunciadoChanged ? " y " : "") + (dr.enunciadoChanged ? "cambios en el enunciado" : "") + ". El plan describe un alcance que no es el aprobado: fija una nueva versión de la línea base (con motivo y aprobación).");
+  }
   if (f.changes.approvedOpen > 0) F("P6", "aviso", "Cambios", f.changes.approvedOpen + " solicitud(es) de cambio aprobada(s) aún sin implementar: sus líneas base (alcance, cronograma o costo) no están actualizadas.");
   const end = f.contractualEnd || f.projectEnd, over = s.finish && end ? days(end, s.finish) : null;
   if (over !== null && over > 0) F("P7", "aviso", "Cronograma", "El cronograma termina el " + s.finish + ", " + over + " día(s) después de la fecha de fin del proyecto (" + end + "): el plazo comprometido no es alcanzable con el plan actual.");

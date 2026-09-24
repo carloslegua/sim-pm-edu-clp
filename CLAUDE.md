@@ -138,6 +138,8 @@ src/shared/case-distribplus.ts   → (solo lectura) puestos del OBS y 18 paquete
                                     independiente de los módulos nuevos; prueba contra el caso en tests/unit
 src/shared/evm-reference.ts      → (se inlinea en cronograma-cpm.js y evm.js) referencia de valor ganado que se congela con la línea base LB-n:
                                     presupuesto por paquete, fechas por paquete, calendario; y su diferencia con lo vigente
+src/shared/scope-baseline.ts     → (se inlinea en scope-statement.js y plan-direccion.js) línea base del alcance: enunciado + EDT + diccionario
+                                    versionados juntos, archivo de versiones y comparación de lo aprobado con el trabajo en edición
 src/shared/requirements-baseline.ts → (se inlinea en requirements.js) versiones de la línea base de requisitos: archiva cada versión
                                     completa (aprobador, fecha, motivo, instantánea) antes de establecer la siguiente
 src/shared/plan-facts.ts         → (se inlinea en comms/quality/procurement/pmplan) lectura ÚNICA del proyecto para los tres planes

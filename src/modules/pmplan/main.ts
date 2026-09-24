@@ -22,6 +22,7 @@ import { modFacts, normalizeCr, portfolio as crPortfolio, type ChangeFacts, type
 import { inherentScore, levelOf, normalizePlan as normalizeRiskPlan, normalizeRisk, portfolio as riskPortfolio, rankRisks } from "../../shared/risk-analysis";
 import { QUADRANT_LABEL, levelName, quadrantOf } from "../../shared/stakeholder-engagement";
 import { gatherCommFacts, gatherProcurementFacts, gatherQualityFacts } from "../../shared/plan-facts";
+import { normalizeScopeBaseline, scopeDriftOf } from "../../shared/scope-baseline";
 import { commState, coverage as commCoverage, normalizeComms, type CommData } from "../../shared/comms-plan";
 import { COQ_CATS, COQ_LABEL, coqSummary, coverage as qualityCoverage, normalizeQuality, qualityState, type QualityData } from "../../shared/quality-plan";
 import { launchBy, normalizeProcurement, procurementState, summary as procSummary, type ProcData } from "../../shared/procurement-plan";
@@ -90,7 +91,9 @@ function buildCtx(): Ctx {
     // Requisitos y alcance
     const ra = G.util.requirementsAudit(req, charter, wbs), sa = G.util.scopeAudit(scope, req, charter, wbs);
     f.requirements = { has: ra.total > 0, state: ra.state as AreaState, base: baseOf(req && req.baseline as Record<string, unknown>), total: ra.total };
-    f.scope = { has: sa.total > 0 || !!str(scope && scope.productScope).trim(), state: sa.state as AreaState, base: baseOf(scope && scope.baseline as Record<string, unknown>), notDecomposed: sa.delsNotDecomposed.length };
+    // El trabajo en edición (EDT, diccionario y enunciado vigentes) frente a lo aprobado en la línea base del alcance (que incluye la EDT y su diccionario)
+    const sbl = normalizeScopeBaseline(scope && scope.baseline), sc = rec(scope), sd = scopeDriftOf(sbl, { deliverables: sc.deliverables, assumptions: sc.assumptions, constraints: sc.constraints, exclusions: sc.exclusions, productScope: sc.productScope, projectScope: sc.projectScope }, wbs);
+    f.scope = { has: sa.total > 0 || !!str(scope && scope.productScope).trim(), state: sa.state as AreaState, base: baseOf(scope && scope.baseline as Record<string, unknown>), notDecomposed: sa.delsNotDecomposed.length, drift: sd.frozen ? { wbsInBaseline: sd.wbsInBaseline, wbsChanges: sd.wbsChanges.length, enunciadoChanged: sd.enunciadoChanged } : undefined };
     // EDT
     const wq = analyzeWbs(wbs as never);
     f.wbs = { leaves: wq.leaves, state: wq.state as AreaState, dictPct: wq.dictionary.pct, riesgo: wq.counts.riesgo, aviso: wq.counts.aviso };

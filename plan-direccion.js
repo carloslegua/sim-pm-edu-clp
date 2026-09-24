@@ -25,7 +25,7 @@
 			session: next
 		};
 	}
-	var str$7 = (v) => v === null || v === void 0 ? "" : String(v);
+	var str$8 = (v) => v === null || v === void 0 ? "" : String(v);
 	var fin = (v, d = 0) => {
 		const x = Number(v);
 		return isFinite(x) ? x : d;
@@ -37,9 +37,9 @@
 		const rows = s.rows.filter((r) => r && typeof r === "object").map((r) => {
 			const q = r;
 			return {
-				id: str$7(q.id),
-				code: str$7(q.code),
-				name: str$7(q.name),
+				id: str$8(q.id),
+				code: str$8(q.code),
+				name: str$8(q.name),
 				isMilestone: !!q.isMilestone,
 				dur: fin(q.dur),
 				es: fin(q.es),
@@ -51,24 +51,24 @@
 		const log = (Array.isArray(x.log) ? x.log : []).filter((e) => e && typeof e === "object").map((e) => {
 			const q = e;
 			return {
-				version: str$7(q.version),
-				date: str$7(q.date),
-				reason: str$7(q.reason),
-				approver: str$7(q.approver),
+				version: str$8(q.version),
+				date: str$8(q.date),
+				reason: str$8(q.reason),
+				approver: str$8(q.approver),
 				sponsorAuth: !!q.sponsorAuth,
 				projectDuration: fin(q.projectDuration),
-				finishDate: str$7(q.finishDate),
+				finishDate: str$8(q.finishDate),
 				deviationPct: q.deviationPct === null || q.deviationPct === void 0 ? null : fin(q.deviationPct)
 			};
 		});
 		return {
 			frozen: x.frozen !== false,
-			version: str$7(x.version) || "LB-1",
-			date: str$7(x.date),
+			version: str$8(x.version) || "LB-1",
+			date: str$8(x.date),
 			snapshot: {
 				projectDuration: fin(s.projectDuration),
-				startDate: str$7(s.startDate),
-				finishDate: str$7(s.finishDate),
+				startDate: str$8(s.startDate),
+				finishDate: str$8(s.finishDate),
 				nearCriticalDays: fin(s.nearCriticalDays, 10),
 				rows,
 				evm: normalizeEvmReference(s.evm)
@@ -84,11 +84,11 @@
 		const packages = x.packages.filter((p) => p && typeof p === "object").map((p) => {
 			const q = p;
 			return {
-				id: str$7(q.id),
-				code: str$7(q.code),
-				name: str$7(q.name),
+				id: str$8(q.id),
+				code: str$8(q.code),
+				name: str$8(q.name),
 				bac: fin(q.bac),
-				source: str$7(q.source),
+				source: str$8(q.source),
 				es: optNum(q.es),
 				ef: optNum(q.ef)
 			};
@@ -102,7 +102,7 @@
 					4,
 					5
 				]).map((d) => Number(d)).filter((d) => isFinite(d)),
-				holidays: (Array.isArray(cal.holidays) ? cal.holidays : []).map(str$7)
+				holidays: (Array.isArray(cal.holidays) ? cal.holidays : []).map(str$8)
 			},
 			packages,
 			total: fin(x.total, packages.reduce((s, p) => s + p.bac, 0))
@@ -783,7 +783,7 @@
 		}
 	];
 	var isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
-	var str$6 = (v) => v === null || v === void 0 ? "" : String(v);
+	var str$7 = (v) => v === null || v === void 0 ? "" : String(v);
 	function blankBoe() {
 		const text = {};
 		TEXT_KEYS.forEach((k) => {
@@ -809,21 +809,21 @@
 		const b = blankBoe();
 		if (!isObj(raw)) return b;
 		TEXT_KEYS.forEach((k) => {
-			b.text[k] = str$6(raw[k]);
+			b.text[k] = str$7(raw[k]);
 		});
-		b.version = str$6(raw.version) || "1.0";
+		b.version = str$7(raw.version) || "1.0";
 		b.status = STATUSES$1.indexOf(raw.status) >= 0 ? raw.status : "borrador";
-		b.preparedBy = str$6(raw.preparedBy);
-		b.reviewedBy = str$6(raw.reviewedBy);
-		b.approvedBy = str$6(raw.approvedBy);
-		b.approvedOn = /^\d{4}-\d{2}-\d{2}$/.test(str$6(raw.approvedOn)) ? str$6(raw.approvedOn) : "";
+		b.preparedBy = str$7(raw.preparedBy);
+		b.reviewedBy = str$7(raw.reviewedBy);
+		b.approvedBy = str$7(raw.approvedBy);
+		b.approvedOn = /^\d{4}-\d{2}-\d{2}$/.test(str$7(raw.approvedOn)) ? str$7(raw.approvedOn) : "";
 		if (Array.isArray(raw.team)) b.team = raw.team.filter(isObj).map((m) => ({
-			name: str$6(m.name),
-			role: str$6(m.role)
+			name: str$7(m.name),
+			role: str$7(m.role)
 		})).filter((m) => m.name.trim() || m.role.trim());
 		if (Array.isArray(raw.refs)) b.refs = raw.refs.filter(isObj).map((r) => ({
-			title: str$6(r.title),
-			note: str$6(r.note)
+			title: str$7(r.title),
+			note: str$7(r.note)
 		})).filter((r) => r.title.trim() || r.note.trim());
 		if (Array.isArray(raw.checklist)) raw.checklist.filter(isObj).forEach((c) => {
 			const it = b.checklist.find((x) => x.id === c.id);
@@ -868,51 +868,51 @@
 		"Diferida",
 		"Implementada"
 	];
-	var str$5 = (v) => v === null || v === void 0 ? "" : String(v);
+	var str$6 = (v) => v === null || v === void 0 ? "" : String(v);
 	var numOrNull$2 = (v) => {
 		if (v === null || v === void 0 || v === "") return null;
 		const n = Number(v);
 		return isFinite(n) ? n : null;
 	};
-	var strs$3 = (v) => Array.isArray(v) ? v.map(str$5).filter(Boolean) : [];
+	var strs$3 = (v) => Array.isArray(v) ? v.map(str$6).filter(Boolean) : [];
 	function normalizeCr(o, fallbackId) {
 		const x = o && typeof o === "object" ? o : {}, im = x.impact && typeof x.impact === "object" ? x.impact : {};
 		const impact = {};
 		AREAS.forEach((a) => {
 			const q = im[a] && typeof im[a] === "object" ? im[a] : {};
 			impact[a] = {
-				state: ["sin_impacto", "con_impacto"].indexOf(str$5(q.state)) >= 0 ? q.state : "sin_evaluar",
-				note: str$5(q.note)
+				state: ["sin_impacto", "con_impacto"].indexOf(str$6(q.state)) >= 0 ? q.state : "sin_evaluar",
+				note: str$6(q.note)
 			};
 		});
-		const id = str$5(x.id) || fallbackId;
+		const id = str$6(x.id) || fallbackId;
 		return {
 			id,
-			code: str$5(x.code) || id,
-			title: str$5(x.title),
-			description: str$5(x.description),
-			requester: str$5(x.requester),
-			requestedOn: str$5(x.requestedOn),
-			origin: str$5(x.origin),
-			type: str$5(x.type),
+			code: str$6(x.code) || id,
+			title: str$6(x.title),
+			description: str$6(x.description),
+			requester: str$6(x.requester),
+			requestedOn: str$6(x.requestedOn),
+			origin: str$6(x.origin),
+			type: str$6(x.type),
 			impact,
 			wbsIds: strs$3(x.wbsIds),
 			actIds: strs$3(x.actIds),
 			daysDelta: numOrNull$2(x.daysDelta),
 			costDelta: numOrNull$2(x.costDelta),
-			fund: str$5(x.fund),
+			fund: str$6(x.fund),
 			orderIds: strs$3(x.orderIds),
 			modIds: strs$3(x.modIds),
 			riskIds: strs$3(x.riskIds),
-			scheduleBaseline: str$5(x.scheduleBaseline),
+			scheduleBaseline: str$6(x.scheduleBaseline),
 			status: CR_STATUSES.indexOf(x.status) >= 0 ? x.status : "Pendiente",
-			decidedOn: str$5(x.decidedOn),
-			approver: str$5(x.approver),
-			authLevel: str$5(x.authLevel),
+			decidedOn: str$6(x.decidedOn),
+			approver: str$6(x.approver),
+			authLevel: str$6(x.authLevel),
 			sponsorAuth: !!x.sponsorAuth,
-			rationale: str$5(x.rationale),
-			implementedOn: str$5(x.implementedOn),
-			notes: str$5(x.notes)
+			rationale: str$6(x.rationale),
+			implementedOn: str$6(x.implementedOn),
+			notes: str$6(x.notes)
 		};
 	}
 	var MOD_STATUS_LABEL = {
@@ -1129,23 +1129,23 @@
 		const n = toNum(v);
 		return n !== null && Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
 	}
-	var str$4 = (v) => v === null || v === void 0 ? "" : String(v);
+	var str$5 = (v) => v === null || v === void 0 ? "" : String(v);
 	var arrNum = (v, def) => Array.isArray(v) && v.length === def.length && v.every((x) => toNum(x) !== null) ? v.map((x) => toNum(x)) : def.slice();
 	function normalizePlan(p) {
 		const o = p && typeof p === "object" ? p : {};
-		const cats = Array.isArray(o.categories) ? o.categories.map(str$4).map((s) => s.trim()).filter(Boolean) : [];
+		const cats = Array.isArray(o.categories) ? o.categories.map(str$5).map((s) => s.trim()).filter(Boolean) : [];
 		return {
 			probPct: arrNum(o.probPct, DEFAULT_PLAN.probPct),
 			costBandsPct: arrNum(o.costBandsPct, DEFAULT_PLAN.costBandsPct),
 			timeBandsDays: arrNum(o.timeBandsDays, DEFAULT_PLAN.timeBandsDays),
-			scopeDescriptors: Array.isArray(o.scopeDescriptors) && o.scopeDescriptors.length === 5 ? o.scopeDescriptors.map(str$4) : DEFAULT_PLAN.scopeDescriptors.slice(),
+			scopeDescriptors: Array.isArray(o.scopeDescriptors) && o.scopeDescriptors.length === 5 ? o.scopeDescriptors.map(str$5) : DEFAULT_PLAN.scopeDescriptors.slice(),
 			thresholdMedium: toNum(o.thresholdMedium) ?? DEFAULT_PLAN.thresholdMedium,
 			thresholdHigh: toNum(o.thresholdHigh) ?? DEFAULT_PLAN.thresholdHigh,
 			reviewDays: toNum(o.reviewDays) ?? DEFAULT_PLAN.reviewDays,
 			categories: cats.length ? cats : DEFAULT_PLAN.categories.slice(),
-			methodology: str$4(o.methodology),
-			reservePolicy: str$4(o.reservePolicy),
-			roles: str$4(o.roles),
+			methodology: str$5(o.methodology),
+			reservePolicy: str$5(o.reservePolicy),
+			roles: str$5(o.roles),
 			reserves: normalizeReserves(o.reserves)
 		};
 	}
@@ -1231,22 +1231,22 @@
 		const x = o && typeof o === "object" ? o : {};
 		const type = x.type === "oportunidad" ? "oportunidad" : "amenaza";
 		const status = RISK_STATUSES.indexOf(x.status) >= 0 ? x.status : "identificado";
-		const id = str$4(x.id) || fallbackId;
+		const id = str$5(x.id) || fallbackId;
 		return {
 			id,
-			code: str$4(x.code) || id,
-			title: str$4(x.title),
-			cause: str$4(x.cause),
-			event: str$4(x.event),
-			effect: str$4(x.effect),
+			code: str$5(x.code) || id,
+			title: str$5(x.title),
+			cause: str$5(x.cause),
+			event: str$5(x.event),
+			effect: str$5(x.effect),
 			type,
-			category: str$4(x.category),
-			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str$4).filter(Boolean) : [],
-			actIds: Array.isArray(x.actIds) ? x.actIds.map(str$4).filter(Boolean) : [],
-			owner: str$4(x.owner),
-			proximity: PROXIMITY.indexOf(str$4(x.proximity)) >= 0 ? str$4(x.proximity) : "",
-			identifiedOn: str$4(x.identifiedOn),
-			reviewedOn: str$4(x.reviewedOn),
+			category: str$5(x.category),
+			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str$5).filter(Boolean) : [],
+			actIds: Array.isArray(x.actIds) ? x.actIds.map(str$5).filter(Boolean) : [],
+			owner: str$5(x.owner),
+			proximity: PROXIMITY.indexOf(str$5(x.proximity)) >= 0 ? str$5(x.proximity) : "",
+			identifiedOn: str$5(x.identifiedOn),
+			reviewedOn: str$5(x.reviewedOn),
 			status,
 			prob: toLevel(x.prob),
 			impCost: toLevel(x.impCost),
@@ -1255,12 +1255,12 @@
 			probPct: toNum(x.probPct),
 			costImpact: range(x.costImpact),
 			timeImpact: range(x.timeImpact),
-			strategy: str$4(x.strategy),
-			response: str$4(x.response),
-			trigger: str$4(x.trigger),
-			responseOwner: str$4(x.responseOwner),
+			strategy: str$5(x.strategy),
+			response: str$5(x.response),
+			trigger: str$5(x.trigger),
+			responseOwner: str$5(x.responseOwner),
 			responseCost: toNum(x.responseCost),
-			secondary: str$4(x.secondary),
+			secondary: str$5(x.secondary),
 			resProb: toLevel(x.resProb),
 			resImpCost: toLevel(x.resImpCost),
 			resImpTime: toLevel(x.resImpTime),
@@ -1268,10 +1268,10 @@
 			resProbPct: toNum(x.resProbPct),
 			resCostImpact: range(x.resCostImpact),
 			resTimeImpact: range(x.resTimeImpact),
-			materializedOn: str$4(x.materializedOn),
+			materializedOn: str$5(x.materializedOn),
 			actualCost: toNum(x.actualCost),
 			actualDelay: toNum(x.actualDelay),
-			notes: str$4(x.notes)
+			notes: str$5(x.notes)
 		};
 	}
 	var isOpen = (r) => r.status !== "materializado" && r.status !== "cerrado";
@@ -1417,14 +1417,14 @@
 	}
 	//#endregion
 	//#region src/shared/plan-facts.ts
-	var rec$3 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+	var rec$4 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
 	var num$1 = (v) => {
 		const n = Number(v);
 		return isFinite(n) ? n : 0;
 	};
 	function gatherCommFacts(G) {
 		return {
-			stakeholders: (Array.isArray(rec$3(G.getModule("stakeholders")).stakeholders) ? rec$3(G.getModule("stakeholders")).stakeholders.map(rec$3) : []).map((s) => ({
+			stakeholders: (Array.isArray(rec$4(G.getModule("stakeholders")).stakeholders) ? rec$4(G.getModule("stakeholders")).stakeholders.map(rec$4) : []).map((s) => ({
 				id: String(s.id),
 				name: String(s.name || s.id),
 				quadrant: quadrantOf(num$1(s.power), num$1(s.interest)),
@@ -1451,10 +1451,10 @@
 	}
 	var rolesOf = (G) => Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)));
 	function gatherQualityFacts(G) {
-		const wbs = G.getModule("wbs"), nodes = rec$3(wbs && wbs.nodes);
+		const wbs = G.getModule("wbs"), nodes = rec$4(wbs && wbs.nodes);
 		return {
 			leaves: G.util.wbsLeaves(wbs).map((l) => {
-				const n = rec$3(nodes[l.id]);
+				const n = rec$4(nodes[l.id]);
 				return {
 					id: l.id,
 					code: l.code,
@@ -1470,20 +1470,623 @@
 		};
 	}
 	function gatherProcurementFacts(G) {
-		const wbs = G.getModule("wbs"), nodes = rec$3(wbs && wbs.nodes), obs = G.util.obsNodes(G.getModule("obs")), sk = rec$3(G.getModule("stakeholders")).stakeholders;
+		const wbs = G.getModule("wbs"), nodes = rec$4(wbs && wbs.nodes), obs = G.util.obsNodes(G.getModule("obs")), sk = rec$4(G.getModule("stakeholders")).stakeholders;
 		const cost = G.getModule("cost"), cl = Number(String(cost && cost.estimate && cost.estimate.class).replace(/\D/g, ""));
 		return {
 			leaves: G.util.wbsLeaves(wbs).map((l) => ({
 				id: l.id,
 				code: l.code,
 				name: l.name,
-				cost: Number(rec$3(nodes[l.id]).cost) || 0
+				cost: Number(rec$4(nodes[l.id]).cost) || 0
 			})),
 			roles: rolesOf(G),
 			risks: openRisks(G),
-			suppliers: Array.from(new Set(obs.map((n) => (n.person || "").trim()).concat((Array.isArray(sk) ? sk : []).map((s) => String(rec$3(s).org || "").trim())).filter(Boolean))),
+			suppliers: Array.from(new Set(obs.map((n) => (n.person || "").trim()).concat((Array.isArray(sk) ? sk : []).map((s) => String(rec$4(s).org || "").trim())).filter(Boolean))),
 			estimateClass: cl >= 1 && cl <= 5 ? cl : null,
 			baseCost: baseCostOf(G)
+		};
+	}
+	//#endregion
+	//#region src/shared/pm-plan.ts
+	var PLAN_COMPONENTS = [
+		{
+			key: "meta",
+			label: "Ficha del proyecto"
+		},
+		{
+			key: "charter",
+			label: "Acta de Constitución"
+		},
+		{
+			key: "requirements",
+			label: "Requisitos"
+		},
+		{
+			key: "scopeStatement",
+			label: "Enunciado del Alcance"
+		},
+		{
+			key: "wbs",
+			label: "EDT y diccionario"
+		},
+		{
+			key: "activities",
+			label: "Actividades"
+		},
+		{
+			key: "pert",
+			label: "Estimación PERT"
+		},
+		{
+			key: "costEstimate",
+			label: "Estimación de costos"
+		},
+		{
+			key: "schedulePlan",
+			label: "Plan del Cronograma"
+		},
+		{
+			key: "schedule",
+			label: "Cronograma y línea base"
+		},
+		{
+			key: "cost",
+			label: "Plan de Costos y BOE"
+		},
+		{
+			key: "riskPlan",
+			label: "Plan de Riesgos"
+		},
+		{
+			key: "obs",
+			label: "Organización (OBS)"
+		},
+		{
+			key: "raci",
+			label: "Matriz RACI"
+		},
+		{
+			key: "quality",
+			label: "Plan de Calidad"
+		},
+		{
+			key: "comms",
+			label: "Plan de Comunicaciones"
+		},
+		{
+			key: "procurement",
+			label: "Plan de Adquisiciones"
+		}
+	];
+	function stableStringify(v) {
+		if (v === null || v === void 0) return "null";
+		if (typeof v !== "object") return JSON.stringify(v);
+		if (Array.isArray(v)) return "[" + v.map(stableStringify).join(",") + "]";
+		const o = v;
+		return "{" + Object.keys(o).sort().filter((k) => o[k] !== void 0).map((k) => JSON.stringify(k) + ":" + stableStringify(o[k])).join(",") + "}";
+	}
+	function digestOf(v) {
+		const s = stableStringify(v);
+		let h1 = 3735928559, h2 = 1103547991;
+		for (let i = 0; i < s.length; i++) {
+			const c = s.charCodeAt(i);
+			h1 = Math.imul(h1 ^ c, 2654435761);
+			h2 = Math.imul(h2 ^ c, 1597334677);
+		}
+		h1 = Math.imul(h1 ^ h1 >>> 16, 2246822507) ^ Math.imul(h2 ^ h2 >>> 13, 3266489909);
+		h2 = Math.imul(h2 ^ h2 >>> 16, 2246822507) ^ Math.imul(h1 ^ h1 >>> 13, 3266489909);
+		return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+	}
+	var emptyBase = () => ({
+		has: false,
+		version: "",
+		date: "",
+		approver: ""
+	});
+	function emptyFacts(today = "") {
+		return {
+			charter: {
+				has: false,
+				pct: 0,
+				end: ""
+			},
+			scope: {
+				has: false,
+				state: "vacio",
+				base: emptyBase(),
+				notDecomposed: 0
+			},
+			requirements: {
+				has: false,
+				state: "vacio",
+				base: emptyBase(),
+				total: 0
+			},
+			wbs: {
+				leaves: 0,
+				state: "vacio",
+				dictPct: 0,
+				riesgo: 0,
+				aviso: 0
+			},
+			schedule: {
+				has: false,
+				ok: true,
+				activities: 0,
+				duration: null,
+				start: "",
+				finish: "",
+				critical: 0,
+				base: emptyBase(),
+				deviationPct: null
+			},
+			cost: {
+				has: false,
+				bac: 0,
+				bacCurrent: 0,
+				total: 0,
+				pendingBaseline: 0,
+				capex: null,
+				boeStatus: "",
+				boeApprovedOn: "",
+				baselineVersion: "",
+				baselineDate: ""
+			},
+			risks: {
+				total: 0,
+				open: 0,
+				high: 0
+			},
+			stakeholders: {
+				count: 0,
+				close: 0
+			},
+			resources: {
+				roles: 0,
+				withPerson: 0,
+				leaves: 0,
+				withR: 0,
+				withoutA: 0
+			},
+			changes: {
+				total: 0,
+				pending: 0,
+				approvedOpen: 0,
+				oldestPending: null
+			},
+			evm: {
+				reports: 0,
+				lastCut: ""
+			},
+			quality: {
+				has: false,
+				state: "vacio",
+				needing: 0,
+				verified: 0,
+				checks: 0,
+				coqTotal: 0
+			},
+			comms: {
+				has: false,
+				state: "vacio",
+				items: 0,
+				covered: 0,
+				stakeholders: 0,
+				closeUncovered: 0
+			},
+			procurement: {
+				has: false,
+				state: "vacio",
+				items: 0,
+				total: 0,
+				late: 0,
+				soon: 0,
+				asOf: ""
+			},
+			projectEnd: "",
+			contractualEnd: "",
+			today,
+			digests: {},
+			plan: {
+				status: "borrador",
+				version: "1.0",
+				approvedBy: "",
+				approvedOn: "",
+				snapshot: null
+			}
+		};
+	}
+	var STATE_LABEL = {
+		vacio: "Sin datos",
+		verde: "En orden",
+		ambar: "Con avisos",
+		rojo: "Con riesgos"
+	};
+	var pctState = (has, pct) => !has ? "vacio" : pct >= 100 ? "verde" : pct >= 50 ? "ambar" : "rojo";
+	var iso$1 = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	var days = (a, b) => {
+		if (!iso$1(a) || !iso$1(b)) return null;
+		return Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
+	};
+	var money$1 = (n) => Math.round(n).toLocaleString("es-PE");
+	function areaRows(f) {
+		const c = f.changes, s = f.schedule, k = f.cost;
+		const schedState = !s.has ? "vacio" : !s.ok ? "rojo" : !s.base.has || s.deviationPct !== null && s.deviationPct > 10 ? "ambar" : "verde";
+		const costState = !k.has ? "vacio" : k.capex !== null && k.total > k.capex + .5 ? "rojo" : k.boeStatus !== "aprobada" || k.pendingBaseline > 0 ? "ambar" : "verde";
+		const riskState = f.risks.total === 0 ? "vacio" : f.risks.high > 0 ? "ambar" : "verde";
+		const resState = f.resources.roles === 0 ? "vacio" : f.resources.withoutA > 0 || f.resources.leaves > 0 && f.resources.withR < f.resources.leaves ? "ambar" : "verde";
+		const chState = c.total === 0 ? "vacio" : c.approvedOpen > 0 ? "ambar" : "verde";
+		return [
+			{
+				key: "charter",
+				label: "Acta de Constitución",
+				file: "Project_Charter.html",
+				state: pctState(f.charter.has, f.charter.pct),
+				metric: f.charter.has ? f.charter.pct + " % completa" : "—",
+				note: ""
+			},
+			{
+				key: "requirements",
+				label: "Requisitos",
+				file: "Recopilar_Requisitos.html",
+				state: f.requirements.state,
+				metric: f.requirements.has ? f.requirements.total + " requisito(s) · " + (f.requirements.base.has ? "línea base " + f.requirements.base.version : "sin línea base") : "—",
+				note: ""
+			},
+			{
+				key: "scope",
+				label: "Enunciado del Alcance",
+				file: "Enunciado_del_Alcance.html",
+				state: f.scope.state,
+				metric: f.scope.has ? (f.scope.base.has ? "línea base v" + f.scope.base.version : "sin línea base") + (f.scope.notDecomposed ? " · " + f.scope.notDecomposed + " entregable(s) sin descomponer" : "") : "—",
+				note: ""
+			},
+			{
+				key: "wbs",
+				label: "EDT y diccionario",
+				file: "WBS_Builder.html",
+				state: f.wbs.state,
+				metric: f.wbs.leaves ? f.wbs.leaves + " paquetes · diccionario " + f.wbs.dictPct + " %" : "—",
+				note: ""
+			},
+			{
+				key: "schedule",
+				label: "Cronograma",
+				file: "Cronograma_CPM.html",
+				state: schedState,
+				metric: s.has ? (s.duration !== null ? s.duration + " d laborables" : "—") + (s.finish ? " · fin " + s.finish : "") + (s.base.has ? " · " + s.base.version : " · sin línea base") : "—",
+				note: ""
+			},
+			{
+				key: "cost",
+				label: "Costos y BOE",
+				file: "Cost-management.html",
+				state: costState,
+				metric: k.has ? "BAC " + money$1(k.bacCurrent || k.bac) + " · BOE " + (k.boeStatus || "sin datos") : "—",
+				note: ""
+			},
+			{
+				key: "risks",
+				label: "Riesgos",
+				file: "Risk_Register.html",
+				state: riskState,
+				metric: f.risks.total ? f.risks.open + " abiertos · " + f.risks.high + " de nivel alto" : "—",
+				note: ""
+			},
+			{
+				key: "stakeholders",
+				label: "Interesados",
+				file: "Stakeholder_Studio.html",
+				state: f.stakeholders.count ? "verde" : "vacio",
+				metric: f.stakeholders.count ? f.stakeholders.count + " interesado(s) · " + f.stakeholders.close + " a gestionar de cerca" : "—",
+				note: ""
+			},
+			{
+				key: "resources",
+				label: "Equipo y responsabilidades",
+				file: "RACI_Matrix.html",
+				state: resState,
+				metric: f.resources.roles ? f.resources.roles + " puestos · " + f.resources.withR + "/" + f.resources.leaves + " paquetes con responsable" : "—",
+				note: ""
+			},
+			{
+				key: "changes",
+				label: "Control integrado de cambios",
+				file: "Control_Cambios.html",
+				state: chState,
+				metric: c.total ? c.pending + " pendiente(s) · " + c.approvedOpen + " aprobada(s) sin implementar" : "—",
+				note: ""
+			},
+			{
+				key: "evm",
+				label: "Valor ganado",
+				file: "Valor_Ganado.html",
+				state: f.evm.reports ? "verde" : "vacio",
+				metric: f.evm.reports ? f.evm.reports + " corte(s) · último " + f.evm.lastCut : "—",
+				note: ""
+			},
+			{
+				key: "quality",
+				label: "Plan de Calidad",
+				file: "Plan_Calidad.html",
+				state: f.quality.state,
+				metric: f.quality.has ? f.quality.verified + "/" + f.quality.needing + " paquetes verificados · " + f.quality.checks + " control(es) · costo de la calidad " + money$1(f.quality.coqTotal) : "—",
+				note: ""
+			},
+			{
+				key: "comms",
+				label: "Plan de Comunicaciones",
+				file: "Plan_Comunicaciones.html",
+				state: f.comms.state,
+				metric: f.comms.has ? f.comms.items + " comunicación(es) · " + f.comms.covered + "/" + f.comms.stakeholders + " interesados cubiertos" : "—",
+				note: ""
+			},
+			{
+				key: "procurement",
+				label: "Plan de Adquisiciones",
+				file: "Plan_Adquisiciones.html",
+				state: f.procurement.state,
+				metric: f.procurement.has ? f.procurement.items + " adquisición(es) · " + money$1(f.procurement.total) + " · " + f.procurement.late + " convocatoria(s) vencida(s)" : "—",
+				note: ""
+			}
+		];
+	}
+	function snapshotOf(f) {
+		return {
+			scopeVersion: f.scope.base.has ? f.scope.base.version : "",
+			scopeDate: f.scope.base.date,
+			requirementsVersion: f.requirements.base.has ? f.requirements.base.version : "",
+			scheduleVersion: f.schedule.base.has ? f.schedule.base.version : "",
+			scheduleDate: f.schedule.base.date,
+			scheduleFinish: f.schedule.finish,
+			bacCurrent: Math.round((f.cost.bacCurrent || f.cost.bac) * 100) / 100,
+			costBaseline: f.cost.baselineVersion,
+			boeStatus: f.cost.boeStatus,
+			digests: { ...f.digests }
+		};
+	}
+	function snapshotDiff(a, b) {
+		const out = [], d = (label, x, y) => {
+			if (String(x) !== String(y)) out.push({
+				label,
+				from: String(x || "—"),
+				to: String(y || "—")
+			});
+		};
+		d("Línea base del alcance", a.scopeVersion, b.scopeVersion);
+		d("Línea base de requisitos", a.requirementsVersion, b.requirementsVersion);
+		d("Línea base del cronograma", a.scheduleVersion, b.scheduleVersion);
+		d("Fin del cronograma", a.scheduleFinish, b.scheduleFinish);
+		d("BAC vigente", money$1(a.bacCurrent), money$1(b.bacCurrent));
+		d("Línea base de costos", a.costBaseline, b.costBaseline);
+		d("Estado de la BOE", a.boeStatus, b.boeStatus);
+		if (a.digests) PLAN_COMPONENTS.forEach((c) => {
+			if (a.digests[c.key] !== void 0 && a.digests[c.key] !== (b.digests || {})[c.key]) out.push({
+				label: c.label,
+				from: "aprobado",
+				to: "modificado"
+			});
+		});
+		return out;
+	}
+	function integrationFindings(f) {
+		const out = [], F = (code, severity, area, text) => {
+			out.push({
+				code,
+				severity,
+				area,
+				text
+			});
+		};
+		const s = f.schedule, k = f.cost, anyData = f.scope.has || s.has || k.has || f.wbs.leaves > 0;
+		if (!f.charter.has && anyData) F("P1", "aviso", "Acta", "El proyecto tiene planes y líneas base pero no un Acta de Constitución que los autorice y fije sus objetivos y restricciones.");
+		if (f.scope.has && !f.scope.base.has) F("P2", "aviso", "Alcance", "El Enunciado del Alcance no tiene línea base: el alcance del plan no está congelado y no hay contra qué controlar los cambios de alcance.");
+		if (f.requirements.has && !f.requirements.base.has) F("P2", "aviso", "Requisitos", "La matriz de requisitos no tiene línea base: los cambios a los requisitos no se distinguen de la definición inicial.");
+		if (s.has && s.ok && !s.base.has) F("P3", "aviso", "Cronograma", "El cronograma no tiene línea base (LB-n): no se puede medir el avance ni la variación del plazo.");
+		if (k.has && k.boeStatus !== "aprobada") F("P4", "aviso", "Costos", "La Basis of Estimate no está aprobada" + (k.boeStatus ? " (" + k.boeStatus + ")" : "") + ": la línea base de costos no tiene su documento de sustento aprobado.");
+		const sd = f.scope.base.date, td = s.base.date;
+		if (sd && td && sd > td) F("P5", "aviso", "Integración", "La línea base del alcance (v" + f.scope.base.version + ", " + sd + ") es posterior a la del cronograma (" + s.base.version + ", " + td + "): el cronograma no refleja el alcance vigente.");
+		if (sd && f.cost.boeApprovedOn && sd > f.cost.boeApprovedOn) F("P5", "aviso", "Integración", "La línea base del alcance (" + sd + ") es posterior a la aprobación de la BOE (" + f.cost.boeApprovedOn + "): el presupuesto no refleja el alcance vigente.");
+		const dr = f.scope.drift;
+		if (f.scope.base.has && dr) {
+			if (!dr.wbsInBaseline) F("P22", "aviso", "Alcance", "La línea base del alcance v" + f.scope.base.version + " se congeló sin la EDT y su diccionario: no se puede comprobar si los paquetes cambiaron desde la aprobación. Fija una nueva versión (con motivo y aprobador) que los incluya.");
+			else if (dr.wbsChanges > 0 || dr.enunciadoChanged) F("P21", "aviso", "Alcance", "El trabajo en edición difiere de la línea base del alcance v" + f.scope.base.version + ": " + (dr.wbsChanges ? dr.wbsChanges + " cambio(s) en la EDT y su diccionario" : "") + (dr.wbsChanges && dr.enunciadoChanged ? " y " : "") + (dr.enunciadoChanged ? "cambios en el enunciado" : "") + ". El plan describe un alcance que no es el aprobado: fija una nueva versión de la línea base (con motivo y aprobación).");
+		}
+		if (f.changes.approvedOpen > 0) F("P6", "aviso", "Cambios", f.changes.approvedOpen + " solicitud(es) de cambio aprobada(s) aún sin implementar: sus líneas base (alcance, cronograma o costo) no están actualizadas.");
+		const end = f.contractualEnd || f.projectEnd, over = s.finish && end ? days(end, s.finish) : null;
+		if (over !== null && over > 0) F("P7", "aviso", "Cronograma", "El cronograma termina el " + s.finish + ", " + over + " día(s) después de la fecha de fin del proyecto (" + end + "): el plazo comprometido no es alcanzable con el plan actual.");
+		if (k.capex !== null && k.total > k.capex + .5) F("P8", "aviso", "Costos", "El presupuesto total (" + money$1(k.total) + ") supera el CAPEX autorizado (" + money$1(k.capex) + "): requiere reconciliación o una autorización adicional.");
+		if (f.changes.oldestPending !== null && f.changes.oldestPending > 14) F("P9", "info", "Cambios", "Hay solicitudes de cambio pendientes hace más de 14 días (la más antigua, " + f.changes.oldestPending + "): el plan puede estar desactualizado respecto de la realidad.");
+		if (f.risks.total === 0 && (s.has || k.has)) F("P10", "aviso", "Riesgos", "El plan no tiene Registro de Riesgos: la contingencia y el plazo no tienen sustento en riesgos identificados.");
+		if (f.procurement.late > 0) F("P15", "aviso", "Adquisiciones", f.procurement.late + " adquisición(es) con la convocatoria ya vencida a la fecha de corte " + f.procurement.asOf + ": el suministro llegará después de lo que el cronograma necesita.");
+		if (f.quality.has && f.quality.needing > f.quality.verified) F("P16", "aviso", "Calidad", f.quality.needing - f.quality.verified + " paquete(s) con criterio de aceptación sin ninguna actividad que lo verifique: el plan de calidad no cubre lo que el alcance promete entregar.");
+		if (f.comms.closeUncovered > 0) F("P18", "aviso", "Comunicaciones", f.comms.closeUncovered + " interesado(s) a gestionar de cerca sin ninguna comunicación planificada.");
+		const bac = f.cost.bacCurrent || f.cost.bac;
+		if (f.procurement.has && bac > 0 && f.procurement.total > bac) F("P19", "aviso", "Adquisiciones", "El valor estimado de las adquisiciones (" + money$1(f.procurement.total) + ") supera el BAC vigente (" + money$1(bac) + "): concilia los contratos con el presupuesto.");
+		if (anyData) [
+			["quality", "Calidad"],
+			["comms", "Comunicaciones"],
+			["procurement", "Adquisiciones"]
+		].forEach(([k, n]) => {
+			if (!f[k].has) F("P17", "info", n, "El Plan de " + n + " aún no está elaborado: el plan para la dirección se aprueba con sus planes subsidiarios.");
+		});
+		if (s.base.has && s.deviationPct !== null && s.deviationPct > 10) F("P11", "aviso", "Cronograma", "El pronóstico del cronograma se desvía " + Math.round(s.deviationPct * 10) / 10 + " % de su línea base: evalúa un cambio (o una nueva línea base) antes de aprobar el plan.");
+		if (f.plan.status === "aprobado") {
+			if (!f.plan.approvedBy.trim() || !f.plan.approvedOn) F("P14", "riesgo", "Plan", "El plan figura «aprobado» sin registrar quién lo aprueba y en qué fecha.");
+			if (f.plan.snapshot) {
+				const diff = snapshotDiff(f.plan.snapshot, snapshotOf(f));
+				if (diff.length) F("P12", "riesgo", "Plan", "El plan aprobado (v" + f.plan.version + (f.plan.approvedOn ? ", " + f.plan.approvedOn : "") + ") tiene CAMBIOS SIN APROBAR desde su aprobación: " + diff.map((x) => x.label + " " + x.from + " → " + x.to).join("; ") + ". El documento aprobado se conserva tal como se aprobó; los cambios vigentes forman un borrador que necesita una nueva versión aprobada.");
+				if (!f.plan.snapshot.digests || !f.plan.docPreserved) F("P20", "aviso", "Plan", "El plan v" + f.plan.version + " se aprobó antes de conservar su contenido (huellas de cada plan y documento aprobado): no se puede demostrar que el documento actual sea el aprobado. Crea una nueva versión y apruébala para conservar su contenido.");
+			}
+		} else if (s.base.has && f.scope.base.has && k.boeStatus === "aprobada") F("P13", "info", "Plan", "Las líneas base de alcance, cronograma y costo existen y la BOE está aprobada: el plan puede aprobarse como un conjunto.");
+		return out;
+	}
+	function approvalBlockers(f) {
+		const b = [];
+		if (!f.scope.base.has) b.push("falta la línea base del alcance");
+		if (!f.schedule.base.has) b.push("falta la línea base del cronograma");
+		if (!f.cost.has) b.push("falta el presupuesto (línea base de costos)");
+		return b;
+	}
+	//#endregion
+	//#region src/shared/scope-baseline.ts
+	var str$4 = (v) => v === null || v === void 0 ? "" : String(v);
+	var rec$3 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+	function wbsScopeOf(wbs) {
+		const w = rec$3(wbs), nodes = rec$3(w.nodes), rootId = str$4(w.rootId);
+		if (!rootId || !nodes[rootId]) return null;
+		const out = {};
+		Object.keys(nodes).forEach((id) => {
+			const n = rec$3(nodes[id]);
+			out[id] = {
+				name: str$4(n.name),
+				children: (Array.isArray(n.children) ? n.children : []).map(str$4),
+				delId: str$4(n.delId),
+				notes: str$4(n.notes),
+				acceptance: str$4(n.acceptance),
+				loe: !!n.loe
+			};
+		});
+		return {
+			rootId,
+			nodes: out
+		};
+	}
+	function normalizeWbsScope(o) {
+		return wbsScopeOf(o);
+	}
+	function wbsScopeCodes(s) {
+		const codes = {}, seen = /* @__PURE__ */ new Set();
+		const walk = (id, prefix) => {
+			const n = s.nodes[id];
+			if (!n || seen.has(id)) return;
+			seen.add(id);
+			n.children.forEach((c, i) => {
+				const code = (prefix ? prefix + "." : "") + (i + 1);
+				if (s.nodes[c]) {
+					codes[c] = code;
+					walk(c, code);
+				}
+			});
+		};
+		walk(s.rootId, "");
+		return codes;
+	}
+	var parentMap = (s) => {
+		const p = {};
+		Object.keys(s.nodes).forEach((id) => s.nodes[id].children.forEach((c) => {
+			p[c] = id;
+		}));
+		return p;
+	};
+	function wbsScopeDiff(frozen, live) {
+		const out = [], fc = wbsScopeCodes(frozen), lc = live ? wbsScopeCodes(live) : {}, fp = parentMap(frozen), lp = live ? parentMap(live) : {};
+		Object.keys(frozen.nodes).forEach((id) => {
+			if (id === frozen.rootId) return;
+			const a = frozen.nodes[id], b = live ? live.nodes[id] : void 0;
+			if (!b) {
+				out.push({
+					id,
+					code: fc[id] || "",
+					name: a.name,
+					kind: "eliminado",
+					detail: "ya no está en la EDT vigente"
+				});
+				return;
+			}
+			if (a.name !== b.name) out.push({
+				id,
+				code: lc[id] || fc[id] || "",
+				name: b.name,
+				kind: "renombrado",
+				detail: "«" + a.name + "» → «" + b.name + "»"
+			});
+			if ((fp[id] || "") !== (lp[id] || "")) out.push({
+				id,
+				code: lc[id] || "",
+				name: b.name,
+				kind: "movido",
+				detail: "cambió de padre en la estructura" + (fc[id] !== lc[id] ? " (" + (fc[id] || "—") + " → " + (lc[id] || "—") + ")" : "")
+			});
+			const fields = [];
+			if (a.notes !== b.notes) fields.push("descripción del trabajo");
+			if (a.acceptance !== b.acceptance) fields.push("criterio de aceptación");
+			if (a.loe !== b.loe) fields.push("esfuerzo continuo (LOE)");
+			if (a.delId !== b.delId) fields.push("entregable al que responde");
+			if (fields.length) out.push({
+				id,
+				code: lc[id] || fc[id] || "",
+				name: b.name,
+				kind: "diccionario",
+				detail: "cambió " + fields.join(", ")
+			});
+		});
+		if (live) Object.keys(live.nodes).forEach((id) => {
+			if (id !== live.rootId && !frozen.nodes[id]) out.push({
+				id,
+				code: lc[id] || "",
+				name: live.nodes[id].name,
+				kind: "agregado",
+				detail: "no estaba en la EDT aprobada"
+			});
+		});
+		return out;
+	}
+	function snapOf(v) {
+		if (!v || typeof v !== "object") return null;
+		const s = { ...v };
+		if (s.wbs !== void 0) s.wbs = normalizeWbsScope(s.wbs);
+		return s;
+	}
+	function normalizeScopeBaseline(o) {
+		const x = rec$3(o);
+		return {
+			frozen: !!x.frozen,
+			version: str$4(x.version) || "1.0",
+			date: str$4(x.date),
+			approver: str$4(x.approver),
+			reason: str$4(x.reason),
+			snapshot: snapOf(x.snapshot),
+			history: (Array.isArray(x.history) ? x.history : []).filter((h) => h && typeof h === "object").map((h) => {
+				const q = rec$3(h);
+				return {
+					version: str$4(q.version),
+					date: str$4(q.date),
+					approver: str$4(q.approver),
+					reason: str$4(q.reason),
+					supersededOn: str$4(q.supersededOn),
+					snapshot: snapOf(q.snapshot)
+				};
+			})
+		};
+	}
+	var ENUNCIADO = [
+		"deliverables",
+		"assumptions",
+		"constraints",
+		"exclusions",
+		"productScope",
+		"projectScope"
+	];
+	function scopeDriftOf(baseline, live, wbs) {
+		if (!baseline.frozen || !baseline.snapshot) return {
+			frozen: false,
+			version: baseline.version,
+			wbsInBaseline: false,
+			wbsChanges: [],
+			enunciadoChanged: false,
+			total: 0
+		};
+		const snap = baseline.snapshot, lv = live;
+		const enunciadoChanged = ENUNCIADO.some((k) => stableStringify(snap[k] === void 0 ? null : snap[k]) !== stableStringify(lv[k] === void 0 ? null : lv[k]));
+		const frozenWbs = snap.wbs || null, wbsChanges = frozenWbs ? wbsScopeDiff(frozenWbs, wbsScopeOf(wbs)) : [];
+		return {
+			frozen: true,
+			version: baseline.version,
+			wbsInBaseline: !!frozenWbs,
+			wbsChanges,
+			enunciadoChanged,
+			total: wbsChanges.length + (enunciadoChanged ? 1 : 0)
 		};
 	}
 	//#endregion
@@ -1736,7 +2339,7 @@
 		return isFinite(n) ? n : null;
 	};
 	var rec$1 = (o) => o && typeof o === "object" ? o : {};
-	var iso$1 = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	var iso = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 	function normalizeItem(o, fb) {
 		const x = rec$1(o), id = str$1(x.id) || fb;
 		return {
@@ -1773,16 +2376,16 @@
 			strategy: str$1(x.strategy),
 			performance: str$1(x.performance),
 			approvals: str$1(x.approvals),
-			asOf: iso$1(str$1(x.asOf)) ? str$1(x.asOf) : today,
+			asOf: iso(str$1(x.asOf)) ? str$1(x.asOf) : today,
 			items,
 			idCounter: Number(x.idCounter) || items.length + 1
 		};
 	}
 	var day = (s) => Date.parse(s + "T12:00:00Z");
 	var addDays = (s, n) => new Date(day(s) + n * 864e5).toISOString().slice(0, 10);
-	var daysBetween = (a, b) => iso$1(a) && iso$1(b) ? Math.round((day(b) - day(a)) / 864e5) : null;
+	var daysBetween = (a, b) => iso(a) && iso(b) ? Math.round((day(b) - day(a)) / 864e5) : null;
 	function launchBy(it) {
-		if (!iso$1(it.needDate) || it.leadDays === null || it.selectionDays === null) return null;
+		if (!iso(it.needDate) || it.leadDays === null || it.selectionDays === null) return null;
 		return addDays(it.needDate, -(it.leadDays + it.selectionDays));
 	}
 	var isBuy = (it) => it.decision !== "Hacer (recursos propios)";
@@ -1849,7 +2452,7 @@
 			const edt = it.wbsIds.map((i) => leafBy.get(i)).filter((l) => !!l).reduce((s, l) => s + l.cost, 0);
 			if (it.value === null) F("P6", "aviso", it.id, w + ": falta el valor estimado.");
 			else if (it.full && edt > 0 && Math.abs(it.value - edt) / edt * 100 > 10) F("P6", "aviso", it.id, w + ": el valor estimado (" + Math.round(it.value).toLocaleString("es-PE") + ") difiere más de 10 % del costo de los paquetes que cubre en la EDT (" + Math.round(edt).toLocaleString("es-PE") + "): concilia el presupuesto con el contrato.");
-			if (rank >= STATUS_RANK.Adjudicada && (!it.supplier.trim() || !iso$1(it.awardDate))) F("P7", "aviso", it.id, w + ": está «" + it.status + "» pero no registra el proveedor o la fecha de adjudicación.");
+			if (rank >= STATUS_RANK.Adjudicada && (!it.supplier.trim() || !iso(it.awardDate))) F("P7", "aviso", it.id, w + ": está «" + it.status + "» pero no registra el proveedor o la fecha de adjudicación.");
 			else if (it.supplier.trim() && sup.size && !sup.has(it.supplier.trim().toLowerCase())) F("P12", "info", it.id, w + ": el proveedor «" + it.supplier + "» no figura en el OBS ni entre los interesados: regístralo para gestionar su compromiso.");
 			const cited = new Set(it.riskIds);
 			f.risks.filter((r) => r.high && r.threat && r.wbsIds.some((i) => it.wbsIds.indexOf(i) >= 0) && !cited.has(r.id)).forEach((r) => F("P8", "info", it.id, w + ": el riesgo alto " + r.code + " «" + r.title + "» afecta sus paquetes y no lo cita: define si el contrato lo transfiere, lo mitiga o lo acepta."));
@@ -1864,443 +2467,6 @@
 		if (!d.items.length) return "vacio";
 		const fs = procurementFindings(d, f);
 		return fs.some((x) => x.severity === "riesgo") ? "rojo" : fs.some((x) => x.severity === "aviso") ? "ambar" : "verde";
-	}
-	//#endregion
-	//#region src/shared/pm-plan.ts
-	var PLAN_COMPONENTS = [
-		{
-			key: "meta",
-			label: "Ficha del proyecto"
-		},
-		{
-			key: "charter",
-			label: "Acta de Constitución"
-		},
-		{
-			key: "requirements",
-			label: "Requisitos"
-		},
-		{
-			key: "scopeStatement",
-			label: "Enunciado del Alcance"
-		},
-		{
-			key: "wbs",
-			label: "EDT y diccionario"
-		},
-		{
-			key: "activities",
-			label: "Actividades"
-		},
-		{
-			key: "pert",
-			label: "Estimación PERT"
-		},
-		{
-			key: "costEstimate",
-			label: "Estimación de costos"
-		},
-		{
-			key: "schedulePlan",
-			label: "Plan del Cronograma"
-		},
-		{
-			key: "schedule",
-			label: "Cronograma y línea base"
-		},
-		{
-			key: "cost",
-			label: "Plan de Costos y BOE"
-		},
-		{
-			key: "riskPlan",
-			label: "Plan de Riesgos"
-		},
-		{
-			key: "obs",
-			label: "Organización (OBS)"
-		},
-		{
-			key: "raci",
-			label: "Matriz RACI"
-		},
-		{
-			key: "quality",
-			label: "Plan de Calidad"
-		},
-		{
-			key: "comms",
-			label: "Plan de Comunicaciones"
-		},
-		{
-			key: "procurement",
-			label: "Plan de Adquisiciones"
-		}
-	];
-	function stableStringify(v) {
-		if (v === null || v === void 0) return "null";
-		if (typeof v !== "object") return JSON.stringify(v);
-		if (Array.isArray(v)) return "[" + v.map(stableStringify).join(",") + "]";
-		const o = v;
-		return "{" + Object.keys(o).sort().filter((k) => o[k] !== void 0).map((k) => JSON.stringify(k) + ":" + stableStringify(o[k])).join(",") + "}";
-	}
-	function digestOf(v) {
-		const s = stableStringify(v);
-		let h1 = 3735928559, h2 = 1103547991;
-		for (let i = 0; i < s.length; i++) {
-			const c = s.charCodeAt(i);
-			h1 = Math.imul(h1 ^ c, 2654435761);
-			h2 = Math.imul(h2 ^ c, 1597334677);
-		}
-		h1 = Math.imul(h1 ^ h1 >>> 16, 2246822507) ^ Math.imul(h2 ^ h2 >>> 13, 3266489909);
-		h2 = Math.imul(h2 ^ h2 >>> 16, 2246822507) ^ Math.imul(h1 ^ h1 >>> 13, 3266489909);
-		return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
-	}
-	var emptyBase = () => ({
-		has: false,
-		version: "",
-		date: "",
-		approver: ""
-	});
-	function emptyFacts(today = "") {
-		return {
-			charter: {
-				has: false,
-				pct: 0,
-				end: ""
-			},
-			scope: {
-				has: false,
-				state: "vacio",
-				base: emptyBase(),
-				notDecomposed: 0
-			},
-			requirements: {
-				has: false,
-				state: "vacio",
-				base: emptyBase(),
-				total: 0
-			},
-			wbs: {
-				leaves: 0,
-				state: "vacio",
-				dictPct: 0,
-				riesgo: 0,
-				aviso: 0
-			},
-			schedule: {
-				has: false,
-				ok: true,
-				activities: 0,
-				duration: null,
-				start: "",
-				finish: "",
-				critical: 0,
-				base: emptyBase(),
-				deviationPct: null
-			},
-			cost: {
-				has: false,
-				bac: 0,
-				bacCurrent: 0,
-				total: 0,
-				pendingBaseline: 0,
-				capex: null,
-				boeStatus: "",
-				boeApprovedOn: "",
-				baselineVersion: "",
-				baselineDate: ""
-			},
-			risks: {
-				total: 0,
-				open: 0,
-				high: 0
-			},
-			stakeholders: {
-				count: 0,
-				close: 0
-			},
-			resources: {
-				roles: 0,
-				withPerson: 0,
-				leaves: 0,
-				withR: 0,
-				withoutA: 0
-			},
-			changes: {
-				total: 0,
-				pending: 0,
-				approvedOpen: 0,
-				oldestPending: null
-			},
-			evm: {
-				reports: 0,
-				lastCut: ""
-			},
-			quality: {
-				has: false,
-				state: "vacio",
-				needing: 0,
-				verified: 0,
-				checks: 0,
-				coqTotal: 0
-			},
-			comms: {
-				has: false,
-				state: "vacio",
-				items: 0,
-				covered: 0,
-				stakeholders: 0,
-				closeUncovered: 0
-			},
-			procurement: {
-				has: false,
-				state: "vacio",
-				items: 0,
-				total: 0,
-				late: 0,
-				soon: 0,
-				asOf: ""
-			},
-			projectEnd: "",
-			contractualEnd: "",
-			today,
-			digests: {},
-			plan: {
-				status: "borrador",
-				version: "1.0",
-				approvedBy: "",
-				approvedOn: "",
-				snapshot: null
-			}
-		};
-	}
-	var STATE_LABEL = {
-		vacio: "Sin datos",
-		verde: "En orden",
-		ambar: "Con avisos",
-		rojo: "Con riesgos"
-	};
-	var pctState = (has, pct) => !has ? "vacio" : pct >= 100 ? "verde" : pct >= 50 ? "ambar" : "rojo";
-	var iso = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
-	var days = (a, b) => {
-		if (!iso(a) || !iso(b)) return null;
-		return Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
-	};
-	var money$1 = (n) => Math.round(n).toLocaleString("es-PE");
-	function areaRows(f) {
-		const c = f.changes, s = f.schedule, k = f.cost;
-		const schedState = !s.has ? "vacio" : !s.ok ? "rojo" : !s.base.has || s.deviationPct !== null && s.deviationPct > 10 ? "ambar" : "verde";
-		const costState = !k.has ? "vacio" : k.capex !== null && k.total > k.capex + .5 ? "rojo" : k.boeStatus !== "aprobada" || k.pendingBaseline > 0 ? "ambar" : "verde";
-		const riskState = f.risks.total === 0 ? "vacio" : f.risks.high > 0 ? "ambar" : "verde";
-		const resState = f.resources.roles === 0 ? "vacio" : f.resources.withoutA > 0 || f.resources.leaves > 0 && f.resources.withR < f.resources.leaves ? "ambar" : "verde";
-		const chState = c.total === 0 ? "vacio" : c.approvedOpen > 0 ? "ambar" : "verde";
-		return [
-			{
-				key: "charter",
-				label: "Acta de Constitución",
-				file: "Project_Charter.html",
-				state: pctState(f.charter.has, f.charter.pct),
-				metric: f.charter.has ? f.charter.pct + " % completa" : "—",
-				note: ""
-			},
-			{
-				key: "requirements",
-				label: "Requisitos",
-				file: "Recopilar_Requisitos.html",
-				state: f.requirements.state,
-				metric: f.requirements.has ? f.requirements.total + " requisito(s) · " + (f.requirements.base.has ? "línea base " + f.requirements.base.version : "sin línea base") : "—",
-				note: ""
-			},
-			{
-				key: "scope",
-				label: "Enunciado del Alcance",
-				file: "Enunciado_del_Alcance.html",
-				state: f.scope.state,
-				metric: f.scope.has ? (f.scope.base.has ? "línea base v" + f.scope.base.version : "sin línea base") + (f.scope.notDecomposed ? " · " + f.scope.notDecomposed + " entregable(s) sin descomponer" : "") : "—",
-				note: ""
-			},
-			{
-				key: "wbs",
-				label: "EDT y diccionario",
-				file: "WBS_Builder.html",
-				state: f.wbs.state,
-				metric: f.wbs.leaves ? f.wbs.leaves + " paquetes · diccionario " + f.wbs.dictPct + " %" : "—",
-				note: ""
-			},
-			{
-				key: "schedule",
-				label: "Cronograma",
-				file: "Cronograma_CPM.html",
-				state: schedState,
-				metric: s.has ? (s.duration !== null ? s.duration + " d laborables" : "—") + (s.finish ? " · fin " + s.finish : "") + (s.base.has ? " · " + s.base.version : " · sin línea base") : "—",
-				note: ""
-			},
-			{
-				key: "cost",
-				label: "Costos y BOE",
-				file: "Cost-management.html",
-				state: costState,
-				metric: k.has ? "BAC " + money$1(k.bacCurrent || k.bac) + " · BOE " + (k.boeStatus || "sin datos") : "—",
-				note: ""
-			},
-			{
-				key: "risks",
-				label: "Riesgos",
-				file: "Risk_Register.html",
-				state: riskState,
-				metric: f.risks.total ? f.risks.open + " abiertos · " + f.risks.high + " de nivel alto" : "—",
-				note: ""
-			},
-			{
-				key: "stakeholders",
-				label: "Interesados",
-				file: "Stakeholder_Studio.html",
-				state: f.stakeholders.count ? "verde" : "vacio",
-				metric: f.stakeholders.count ? f.stakeholders.count + " interesado(s) · " + f.stakeholders.close + " a gestionar de cerca" : "—",
-				note: ""
-			},
-			{
-				key: "resources",
-				label: "Equipo y responsabilidades",
-				file: "RACI_Matrix.html",
-				state: resState,
-				metric: f.resources.roles ? f.resources.roles + " puestos · " + f.resources.withR + "/" + f.resources.leaves + " paquetes con responsable" : "—",
-				note: ""
-			},
-			{
-				key: "changes",
-				label: "Control integrado de cambios",
-				file: "Control_Cambios.html",
-				state: chState,
-				metric: c.total ? c.pending + " pendiente(s) · " + c.approvedOpen + " aprobada(s) sin implementar" : "—",
-				note: ""
-			},
-			{
-				key: "evm",
-				label: "Valor ganado",
-				file: "Valor_Ganado.html",
-				state: f.evm.reports ? "verde" : "vacio",
-				metric: f.evm.reports ? f.evm.reports + " corte(s) · último " + f.evm.lastCut : "—",
-				note: ""
-			},
-			{
-				key: "quality",
-				label: "Plan de Calidad",
-				file: "Plan_Calidad.html",
-				state: f.quality.state,
-				metric: f.quality.has ? f.quality.verified + "/" + f.quality.needing + " paquetes verificados · " + f.quality.checks + " control(es) · costo de la calidad " + money$1(f.quality.coqTotal) : "—",
-				note: ""
-			},
-			{
-				key: "comms",
-				label: "Plan de Comunicaciones",
-				file: "Plan_Comunicaciones.html",
-				state: f.comms.state,
-				metric: f.comms.has ? f.comms.items + " comunicación(es) · " + f.comms.covered + "/" + f.comms.stakeholders + " interesados cubiertos" : "—",
-				note: ""
-			},
-			{
-				key: "procurement",
-				label: "Plan de Adquisiciones",
-				file: "Plan_Adquisiciones.html",
-				state: f.procurement.state,
-				metric: f.procurement.has ? f.procurement.items + " adquisición(es) · " + money$1(f.procurement.total) + " · " + f.procurement.late + " convocatoria(s) vencida(s)" : "—",
-				note: ""
-			}
-		];
-	}
-	function snapshotOf(f) {
-		return {
-			scopeVersion: f.scope.base.has ? f.scope.base.version : "",
-			scopeDate: f.scope.base.date,
-			requirementsVersion: f.requirements.base.has ? f.requirements.base.version : "",
-			scheduleVersion: f.schedule.base.has ? f.schedule.base.version : "",
-			scheduleDate: f.schedule.base.date,
-			scheduleFinish: f.schedule.finish,
-			bacCurrent: Math.round((f.cost.bacCurrent || f.cost.bac) * 100) / 100,
-			costBaseline: f.cost.baselineVersion,
-			boeStatus: f.cost.boeStatus,
-			digests: { ...f.digests }
-		};
-	}
-	function snapshotDiff(a, b) {
-		const out = [], d = (label, x, y) => {
-			if (String(x) !== String(y)) out.push({
-				label,
-				from: String(x || "—"),
-				to: String(y || "—")
-			});
-		};
-		d("Línea base del alcance", a.scopeVersion, b.scopeVersion);
-		d("Línea base de requisitos", a.requirementsVersion, b.requirementsVersion);
-		d("Línea base del cronograma", a.scheduleVersion, b.scheduleVersion);
-		d("Fin del cronograma", a.scheduleFinish, b.scheduleFinish);
-		d("BAC vigente", money$1(a.bacCurrent), money$1(b.bacCurrent));
-		d("Línea base de costos", a.costBaseline, b.costBaseline);
-		d("Estado de la BOE", a.boeStatus, b.boeStatus);
-		if (a.digests) PLAN_COMPONENTS.forEach((c) => {
-			if (a.digests[c.key] !== void 0 && a.digests[c.key] !== (b.digests || {})[c.key]) out.push({
-				label: c.label,
-				from: "aprobado",
-				to: "modificado"
-			});
-		});
-		return out;
-	}
-	function integrationFindings(f) {
-		const out = [], F = (code, severity, area, text) => {
-			out.push({
-				code,
-				severity,
-				area,
-				text
-			});
-		};
-		const s = f.schedule, k = f.cost, anyData = f.scope.has || s.has || k.has || f.wbs.leaves > 0;
-		if (!f.charter.has && anyData) F("P1", "aviso", "Acta", "El proyecto tiene planes y líneas base pero no un Acta de Constitución que los autorice y fije sus objetivos y restricciones.");
-		if (f.scope.has && !f.scope.base.has) F("P2", "aviso", "Alcance", "El Enunciado del Alcance no tiene línea base: el alcance del plan no está congelado y no hay contra qué controlar los cambios de alcance.");
-		if (f.requirements.has && !f.requirements.base.has) F("P2", "aviso", "Requisitos", "La matriz de requisitos no tiene línea base: los cambios a los requisitos no se distinguen de la definición inicial.");
-		if (s.has && s.ok && !s.base.has) F("P3", "aviso", "Cronograma", "El cronograma no tiene línea base (LB-n): no se puede medir el avance ni la variación del plazo.");
-		if (k.has && k.boeStatus !== "aprobada") F("P4", "aviso", "Costos", "La Basis of Estimate no está aprobada" + (k.boeStatus ? " (" + k.boeStatus + ")" : "") + ": la línea base de costos no tiene su documento de sustento aprobado.");
-		const sd = f.scope.base.date, td = s.base.date;
-		if (sd && td && sd > td) F("P5", "aviso", "Integración", "La línea base del alcance (v" + f.scope.base.version + ", " + sd + ") es posterior a la del cronograma (" + s.base.version + ", " + td + "): el cronograma no refleja el alcance vigente.");
-		if (sd && f.cost.boeApprovedOn && sd > f.cost.boeApprovedOn) F("P5", "aviso", "Integración", "La línea base del alcance (" + sd + ") es posterior a la aprobación de la BOE (" + f.cost.boeApprovedOn + "): el presupuesto no refleja el alcance vigente.");
-		if (f.changes.approvedOpen > 0) F("P6", "aviso", "Cambios", f.changes.approvedOpen + " solicitud(es) de cambio aprobada(s) aún sin implementar: sus líneas base (alcance, cronograma o costo) no están actualizadas.");
-		const end = f.contractualEnd || f.projectEnd, over = s.finish && end ? days(end, s.finish) : null;
-		if (over !== null && over > 0) F("P7", "aviso", "Cronograma", "El cronograma termina el " + s.finish + ", " + over + " día(s) después de la fecha de fin del proyecto (" + end + "): el plazo comprometido no es alcanzable con el plan actual.");
-		if (k.capex !== null && k.total > k.capex + .5) F("P8", "aviso", "Costos", "El presupuesto total (" + money$1(k.total) + ") supera el CAPEX autorizado (" + money$1(k.capex) + "): requiere reconciliación o una autorización adicional.");
-		if (f.changes.oldestPending !== null && f.changes.oldestPending > 14) F("P9", "info", "Cambios", "Hay solicitudes de cambio pendientes hace más de 14 días (la más antigua, " + f.changes.oldestPending + "): el plan puede estar desactualizado respecto de la realidad.");
-		if (f.risks.total === 0 && (s.has || k.has)) F("P10", "aviso", "Riesgos", "El plan no tiene Registro de Riesgos: la contingencia y el plazo no tienen sustento en riesgos identificados.");
-		if (f.procurement.late > 0) F("P15", "aviso", "Adquisiciones", f.procurement.late + " adquisición(es) con la convocatoria ya vencida a la fecha de corte " + f.procurement.asOf + ": el suministro llegará después de lo que el cronograma necesita.");
-		if (f.quality.has && f.quality.needing > f.quality.verified) F("P16", "aviso", "Calidad", f.quality.needing - f.quality.verified + " paquete(s) con criterio de aceptación sin ninguna actividad que lo verifique: el plan de calidad no cubre lo que el alcance promete entregar.");
-		if (f.comms.closeUncovered > 0) F("P18", "aviso", "Comunicaciones", f.comms.closeUncovered + " interesado(s) a gestionar de cerca sin ninguna comunicación planificada.");
-		const bac = f.cost.bacCurrent || f.cost.bac;
-		if (f.procurement.has && bac > 0 && f.procurement.total > bac) F("P19", "aviso", "Adquisiciones", "El valor estimado de las adquisiciones (" + money$1(f.procurement.total) + ") supera el BAC vigente (" + money$1(bac) + "): concilia los contratos con el presupuesto.");
-		if (anyData) [
-			["quality", "Calidad"],
-			["comms", "Comunicaciones"],
-			["procurement", "Adquisiciones"]
-		].forEach(([k, n]) => {
-			if (!f[k].has) F("P17", "info", n, "El Plan de " + n + " aún no está elaborado: el plan para la dirección se aprueba con sus planes subsidiarios.");
-		});
-		if (s.base.has && s.deviationPct !== null && s.deviationPct > 10) F("P11", "aviso", "Cronograma", "El pronóstico del cronograma se desvía " + Math.round(s.deviationPct * 10) / 10 + " % de su línea base: evalúa un cambio (o una nueva línea base) antes de aprobar el plan.");
-		if (f.plan.status === "aprobado") {
-			if (!f.plan.approvedBy.trim() || !f.plan.approvedOn) F("P14", "riesgo", "Plan", "El plan figura «aprobado» sin registrar quién lo aprueba y en qué fecha.");
-			if (f.plan.snapshot) {
-				const diff = snapshotDiff(f.plan.snapshot, snapshotOf(f));
-				if (diff.length) F("P12", "riesgo", "Plan", "El plan aprobado (v" + f.plan.version + (f.plan.approvedOn ? ", " + f.plan.approvedOn : "") + ") tiene CAMBIOS SIN APROBAR desde su aprobación: " + diff.map((x) => x.label + " " + x.from + " → " + x.to).join("; ") + ". El documento aprobado se conserva tal como se aprobó; los cambios vigentes forman un borrador que necesita una nueva versión aprobada.");
-				if (!f.plan.snapshot.digests || !f.plan.docPreserved) F("P20", "aviso", "Plan", "El plan v" + f.plan.version + " se aprobó antes de conservar su contenido (huellas de cada plan y documento aprobado): no se puede demostrar que el documento actual sea el aprobado. Crea una nueva versión y apruébala para conservar su contenido.");
-			}
-		} else if (s.base.has && f.scope.base.has && k.boeStatus === "aprobada") F("P13", "info", "Plan", "Las líneas base de alcance, cronograma y costo existen y la BOE está aprobada: el plan puede aprobarse como un conjunto.");
-		return out;
-	}
-	function approvalBlockers(f) {
-		const b = [];
-		if (!f.scope.base.has) b.push("falta la línea base del alcance");
-		if (!f.schedule.base.has) b.push("falta la línea base del cronograma");
-		if (!f.cost.has) b.push("falta el presupuesto (línea base de costos)");
-		return b;
 	}
 	//#endregion
 	//#region src/modules/pmplan/main.ts
@@ -2426,11 +2592,24 @@
 				base: baseOf(req && req.baseline),
 				total: ra.total
 			};
+			const sbl = normalizeScopeBaseline(scope && scope.baseline), sc = rec(scope), sd = scopeDriftOf(sbl, {
+				deliverables: sc.deliverables,
+				assumptions: sc.assumptions,
+				constraints: sc.constraints,
+				exclusions: sc.exclusions,
+				productScope: sc.productScope,
+				projectScope: sc.projectScope
+			}, wbs);
 			f.scope = {
 				has: sa.total > 0 || !!str(scope && scope.productScope).trim(),
 				state: sa.state,
 				base: baseOf(scope && scope.baseline),
-				notDecomposed: sa.delsNotDecomposed.length
+				notDecomposed: sa.delsNotDecomposed.length,
+				drift: sd.frozen ? {
+					wbsInBaseline: sd.wbsInBaseline,
+					wbsChanges: sd.wbsChanges.length,
+					enunciadoChanged: sd.enunciadoChanged
+				} : void 0
 			};
 			const wq = analyzeWbs(wbs);
 			f.wbs = {

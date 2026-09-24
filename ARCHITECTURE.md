@@ -2096,6 +2096,27 @@ Estimating»; la RP 118R-21 cubre rangos + Monte Carlo de riesgos inherentes) y
 - El módulo de solo-lectura más complejo: su pestaña "Consistencia"
   consume `GPI.util.traceMatrix` (RAN→REQ→DEL→WP), la función de
   integración vertical más elaborada del núcleo.
+- **La línea base del alcance incluye la EDT y su diccionario (auditoría, media).** Antes se
+  congelaban solo el enunciado, los entregables, los supuestos, las restricciones y las
+  exclusiones; los paquetes se podían modificar mientras la línea base conservaba su versión. La
+  definición del PMI integra enunciado, EDT y diccionario en la referencia aprobada. Ahora
+  (`shared/scope-baseline.ts`, inlineada en `scope-statement.js` y `plan-direccion.js`) la
+  instantánea guarda además `snapshot.wbs`: la **estructura** y el **diccionario** de cada elemento
+  (descripción del trabajo `notes`, criterio de aceptación `acceptance`, esfuerzo continuo `loe` y
+  el entregable al que responde `delId`), y **no** lo que pertenece a otras líneas base (costo,
+  duración, fechas, avance y responsable). **Estado aprobado y trabajo en edición quedan
+  separados:** WBS Builder sigue siendo el dueño de la EDT viva; la instantánea es lo aprobado, y
+  `scopeDriftOf` compara ambos y lista, con su código, qué se agregó, eliminó, renombró, movió o
+  cambió en el diccionario (y si el enunciado cambió); la pestaña Coherencia lo muestra como
+  «N cambio(s) sin aprobar» y el Plan para la Dirección lo cruza (**P21**; **P22** si la línea base
+  se congeló sin EDT). **Solo una nueva versión** (versión no repetida, fecha, **aprobador y motivo**)
+  actualiza la referencia, y **archiva la vigente completa** (con su EDT) en `baseline.history[]`
+  antes de establecer la siguiente (mismo criterio que Requisitos); por eso se retiró
+  «Descongelar», que permitía re-congelar y pisar la versión sin rastro. Una línea base guardada
+  antes no trae EDT, motivo ni historial: se lee sin fallar, se avisa que no se puede comprobar la EDT
+  y una nueva versión la incluye (lo ya perdido no se reconstruye). **Límites declarados:** no
+  compara los cambios de fondo del texto de un entregable con el de la EDT, solo con su vínculo
+  (`delId`); y la EDT aprobada se guarda como una copia más (≈ pocos KB por versión).
 
 **Recopilar_Requisitos.html**
 - Una de las dos excepciones que usan atributos `onclick`/`onchange`

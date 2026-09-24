@@ -364,6 +364,21 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **La línea base del alcance no incluía la EDT y su diccionario (auditoría, media)** — se congelaban
+  el enunciado, los entregables, los supuestos, las restricciones y las exclusiones, pero la estructura
+  de la EDT y su diccionario quedaban fuera: los paquetes se podían modificar mientras la línea base
+  conservaba su versión (la definición del PMI integra los tres en la referencia aprobada). Ahora la
+  instantánea incluye la **EDT y su diccionario** (descripción, criterio de aceptación, esfuerzo
+  continuo y entregable de cada elemento; no el costo ni las fechas, que tienen sus líneas base) y se
+  **versionan juntos**. **Estado aprobado y trabajo en edición quedan separados**: el Enunciado compara
+  la EDT vigente con lo aprobado y lista cada cambio (código, qué cambió) como «sin aprobar» sin tocar
+  la instantánea; el Plan para la Dirección lo cruza (P21, y P22 si la línea base es anterior a incluir
+  la EDT). Solo una **nueva versión con aprobador y motivo** actualiza la referencia y **archiva la
+  anterior completa** (se retira «Descongelar», que permitía pisar la versión sin rastro). Las líneas
+  base guardadas antes se leen sin fallar y se avisa que no incluyen la EDT. Nuevo
+  `src/shared/scope-baseline.ts`. Pruebas: 12 unitarias, 4 smoke, 1 unitaria del plan y 1 e2e en
+  Chrome real (EDT real de WBS Builder, edición posterior, nueva versión con recarga).
+
 - **Requisitos perdía la línea base anterior al crear otra versión (auditoría, media)** — el mensaje
   prometía que la anterior quedaba como historial, pero el código reemplazaba su versión, fecha e
   instantánea (y no actualizaba el aprobador): al pasar de v1.0 a v2.0, el requisito que solo existía
