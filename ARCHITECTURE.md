@@ -1985,18 +1985,91 @@ Estimating»; la RP 118R-21 cubre rangos + Monte Carlo de riesgos inherentes) y
     obra; Procura: materiales/equipos; MEP: subcontrato…); precios fijados en 3.1
     Estructuras metálicas (2026-09-15) y 3.3 Equipos eléctricos (2026-09-28).
     Cifras de oro (`escalation-sample.test.ts`): escalación central sobre el costo
-    base **112.033** (1,58 %; fecha media del gasto 2026-12-19; por año 32.356 en
-    2026 y 79.677 en 2027); con el retraso del cronograma y la contingencia
-    escalada, central 125.477, **P70 = 172.386** (financiado), P50 157.106, P80
-    182.075, P90 196.173 — el central equivale al P10: con el retraso probable del
+    base **81.463** (1,15 %; fecha media del gasto 2026-12-19; por año 22.819 en
+    2026 y 58.644 en 2027); con el retraso del cronograma y la contingencia
+    escalada, central 91.239, **P70 = 127.601** (financiado), P50 115.270, P80
+    135.352, P90 146.622 — el central equivale al P12: con el retraso probable del
     caso, escalar más que el central es lo esperable. El BAC del ejemplo pasa de
-    8.075.181 (método simple) a **8.124.386**.
+    8.075.181 (método simple) a **8.079.601** y el presupuesto total (con la
+    reserva de gestión) a **8.483.582**. **Las tasas ilustrativas se calibraron para
+    que el caso siga coherente**: con tasas mayores el total superaba el CAPEX de
+    USD 8,5 M que fijan el Acta y el Enunciado (la BOE lo concilia y lo avisa, B6).
   - Pruebas: `escalation.test.ts` (28, fórmulas analíticas), `escalation-sample
     .test.ts` (6, oro), smoke `cost-escalation.smoke.test.ts` (10, incluye un
     proyecto con red propia contra el cálculo analítico) y e2e en Chrome real
     (`cost-escalation.spec.ts`: el proyecto armado con los botones reales tiene la
     misma distribución del gasto que el ejemplo, se guarda tras una recarga y usa
     el retraso del Registro de Riesgos).
+- **Basis of Estimate (AACE RP 34R-05; lógica pura en `src/shared/boe.ts`,
+  ejemplo en `src/shared/boe-sample.ts`, ambas inlineadas en `cost.js`)**. La BOE
+  tenía cinco campos (fecha, fuente, supuestos, exclusiones, productividad). 34R-05
+  (rev. 5-oct-2021; páginas públicas de muestra) la define como el **entregable que
+  define el alcance del proyecto y es la base del control de cambios**: debe
+  bastar para entender y evaluar el estimado sin otros documentos, comunicar su
+  incertidumbre y sus riesgos y oportunidades, registrar documentos y equipo
+  estimador, y prepararse **en paralelo** con el estimado (borrador → revisión →
+  aprobación → cambios y actualizaciones). **Estructura** = el índice público de la
+  práctica: 3.1 generalidades (propósito, objetivos, alcance, plan de ejecución,
+  parámetros, clasificación), 3.2 metodología, 3.3 base de diseño (unidades, moneda
+  y tipo de cambio, redondeo), 3.4 cantidades, 3.5 costos, 3.6 planificación, 3.7
+  materiales a granel, 3.8 mano de obra, 3.9 demolición, 3.10 asignaciones, 3.11
+  supuestos, 3.12 exclusiones, 3.13 excepciones, 3.14 riesgos y oportunidades, 3.16
+  contingencias, 3.17 reserva de gestión, 3.18 conciliación, 3.19 benchmarking, 3.20
+  aseguramiento de la calidad, 3.21 equipo estimador y 3.22 anexos (A: entregables
+  del estimado; B: documentos de referencia): **32 campos en 8 grupos**. La 3.15 del
+  índice público («Containments») **no se pudo verificar y se omite**; la lista del
+  Anexo A es propia (la de 34R-05 no se pudo verificar).
+  - **Qué es criterio didáctico y no de la práctica**: *qué secciones se exigen
+    según la clase del estimado*. §4 dice que el detalle depende del nivel de
+    definición, del valor y del tipo de proyecto, pero no fija una lista por clase;
+    aquí cada sección tiene la clase desde la que se exige (`from`: 5 = menos madura …
+    1 = más madura), así que a mayor madurez más secciones (clase 5: propósito, alcance,
+    clasificación, base de costos, supuestos, exclusiones, contingencia, moneda;
+    clase 3 suma ejecución, cantidades, conciliación, equipo…; clase 1, todas). Se
+    rotula así en pantalla.
+  - **Lo que cita del proyecto** (solo lectura, `boeAutoHtml`): el alcance del
+    Enunciado, el cronograma (duración, inicio, fin, críticas, fecha media del
+    gasto), la clase y su madurez, la EDT (paquetes con costo y cuentas de
+    escalación), la moneda y el tipo de cambio, los riesgos del registro, la
+    contingencia y la reserva de gestión con su monto, la escalación y el CAPEX del
+    Acta. Una sección con dato del proyecto cuenta como **respaldada** aunque su
+    texto esté vacío (excepto la 3.5.2, que hay que escribir).
+  - **Frontera de la escalación (3.5.2, 58R-10)**: 58R-10 pide que cada organización
+    defina qué es escalación, asignación, contingencia y tipo de cambio y lo
+    documente en la BOE; se exige cuando el presupuesto tiene escalación o tipo de
+    cambio y NO la respalda el proyecto.
+  - **Proceso y hallazgos**: versión, estado (Borrador / En revisión / Aprobada),
+    quién prepara, revisa y aprueba y cuándo. B1 aprobada con secciones exigidas
+    sin completar (riesgo); B2 aprobada sin quién ni cuándo (riesgo) o en revisión
+    sin revisor; **B3 hay línea base de costos (LB-n) y la BOE sigue en borrador; B4
+    la BOE se aprobó antes de la última línea base** (la BOE es la base del control
+    de cambios: debe actualizarse y volver a aprobarse cuando la línea base cambia);
+    **B5 hay escalación y la BOE no define la frontera**; **B6 el presupuesto total
+    supera el CAPEX del Acta** (conciliación, 3.18); B7 sin preparador; B8 lista de
+    lo que falta.
+  - **Regla de oro (#5) y compatibilidad (#3)**: los textos por omisión del HTML
+    (supuestos, exclusiones, «factor 1,15 por altitud») se quitaron: un proyecto
+    nuevo arranca con la BOE **en blanco**; el caso DISTRIB+ solo se carga en modo
+    independiente. `estimate.boe` conserva `date`, `source`, `assumptions`,
+    `exclusions` y `productivity` con su nombre y suma el resto; un proyecto
+    guardado antes se lee con esos cinco campos, el resto vacío y estado en
+    borrador (sus escalaciones y BAC no cambian).
+  - **Ejemplo DISTRIB+ ampliado** (una sola fuente, `boe-sample.ts`): BOE de clase 3
+    aprobada por el sponsor el 2026-07-03, con las 32 secciones escritas (reutiliza
+    el CAPEX de USD 8,5 M, los supuestos y exclusiones del Enunciado, OC-001 y
+    OC-003, los riesgos R-01…R-10, la fecha base 2026-07-01 y las personas del OBS) y
+    la frontera de la escalación (R-02 acero solo por el exceso sobre la tendencia).
+    Se corrigió un dato: el «factor de productividad 1,15 por altitud» del texto
+    antiguo no aplica a Lurín (nivel del mar).
+  - Interfaz: barra de completitud según la clase, lista de secciones que faltan
+    (cada una lleva al campo), insignia por sección (Completa / Respaldada por el
+    proyecto / Falta / Opcional / No aplica), grupos plegables con «Abrir todas»,
+    equipo, documentos y anexo A editables, y la BOE completa en el documento de la
+    pestaña 05 en el orden de 34R-05.
+  - Pruebas: `boe.test.ts` (17), `boe-sample.test.ts` (4), smoke
+    `cost-boe.smoke.test.ts` (11) y e2e en Chrome real (`cost-boe.spec.ts`: cita el
+    Acta, el Enunciado, el cronograma y la EDT del proyecto real, arranca en blanco,
+    se guarda tras una recarga y detecta el presupuesto que supera el CAPEX).
 - Dos fuentes para el "costo base" de la estimación, ambas manuales
   (el alumno decide cuál traer, no hay auto-sincronización): "↧ Traer
   de la EDT" (`pullFromWBS`, rollup de costo del WBS — mezcla estimados

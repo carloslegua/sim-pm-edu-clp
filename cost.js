@@ -359,7 +359,7 @@
 		"materializado",
 		"cerrado"
 	];
-	var STATUS_LABEL = {
+	var STATUS_LABEL$1 = {
 		identificado: "Identificado",
 		analizado: "Analizado",
 		con_respuesta: "Con respuesta",
@@ -424,23 +424,23 @@
 		const n = toNum(v);
 		return n !== null && Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
 	}
-	var str$1 = (v) => v === null || v === void 0 ? "" : String(v);
+	var str$2 = (v) => v === null || v === void 0 ? "" : String(v);
 	var arrNum = (v, def) => Array.isArray(v) && v.length === def.length && v.every((x) => toNum(x) !== null) ? v.map((x) => toNum(x)) : def.slice();
 	function normalizePlan(p) {
 		const o = p && typeof p === "object" ? p : {};
-		const cats = Array.isArray(o.categories) ? o.categories.map(str$1).map((s) => s.trim()).filter(Boolean) : [];
+		const cats = Array.isArray(o.categories) ? o.categories.map(str$2).map((s) => s.trim()).filter(Boolean) : [];
 		return {
 			probPct: arrNum(o.probPct, DEFAULT_PLAN.probPct),
 			costBandsPct: arrNum(o.costBandsPct, DEFAULT_PLAN.costBandsPct),
 			timeBandsDays: arrNum(o.timeBandsDays, DEFAULT_PLAN.timeBandsDays),
-			scopeDescriptors: Array.isArray(o.scopeDescriptors) && o.scopeDescriptors.length === 5 ? o.scopeDescriptors.map(str$1) : DEFAULT_PLAN.scopeDescriptors.slice(),
+			scopeDescriptors: Array.isArray(o.scopeDescriptors) && o.scopeDescriptors.length === 5 ? o.scopeDescriptors.map(str$2) : DEFAULT_PLAN.scopeDescriptors.slice(),
 			thresholdMedium: toNum(o.thresholdMedium) ?? DEFAULT_PLAN.thresholdMedium,
 			thresholdHigh: toNum(o.thresholdHigh) ?? DEFAULT_PLAN.thresholdHigh,
 			reviewDays: toNum(o.reviewDays) ?? DEFAULT_PLAN.reviewDays,
 			categories: cats.length ? cats : DEFAULT_PLAN.categories.slice(),
-			methodology: str$1(o.methodology),
-			reservePolicy: str$1(o.reservePolicy),
-			roles: str$1(o.roles),
+			methodology: str$2(o.methodology),
+			reservePolicy: str$2(o.reservePolicy),
+			roles: str$2(o.roles),
 			reserves: normalizeReserves(o.reserves)
 		};
 	}
@@ -522,22 +522,22 @@
 		const x = o && typeof o === "object" ? o : {};
 		const type = x.type === "oportunidad" ? "oportunidad" : "amenaza";
 		const status = RISK_STATUSES.indexOf(x.status) >= 0 ? x.status : "identificado";
-		const id = str$1(x.id) || fallbackId;
+		const id = str$2(x.id) || fallbackId;
 		return {
 			id,
-			code: str$1(x.code) || id,
-			title: str$1(x.title),
-			cause: str$1(x.cause),
-			event: str$1(x.event),
-			effect: str$1(x.effect),
+			code: str$2(x.code) || id,
+			title: str$2(x.title),
+			cause: str$2(x.cause),
+			event: str$2(x.event),
+			effect: str$2(x.effect),
 			type,
-			category: str$1(x.category),
-			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str$1).filter(Boolean) : [],
-			actIds: Array.isArray(x.actIds) ? x.actIds.map(str$1).filter(Boolean) : [],
-			owner: str$1(x.owner),
-			proximity: PROXIMITY.indexOf(str$1(x.proximity)) >= 0 ? str$1(x.proximity) : "",
-			identifiedOn: str$1(x.identifiedOn),
-			reviewedOn: str$1(x.reviewedOn),
+			category: str$2(x.category),
+			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str$2).filter(Boolean) : [],
+			actIds: Array.isArray(x.actIds) ? x.actIds.map(str$2).filter(Boolean) : [],
+			owner: str$2(x.owner),
+			proximity: PROXIMITY.indexOf(str$2(x.proximity)) >= 0 ? str$2(x.proximity) : "",
+			identifiedOn: str$2(x.identifiedOn),
+			reviewedOn: str$2(x.reviewedOn),
 			status,
 			prob: toLevel(x.prob),
 			impCost: toLevel(x.impCost),
@@ -546,12 +546,12 @@
 			probPct: toNum(x.probPct),
 			costImpact: range(x.costImpact),
 			timeImpact: range(x.timeImpact),
-			strategy: str$1(x.strategy),
-			response: str$1(x.response),
-			trigger: str$1(x.trigger),
-			responseOwner: str$1(x.responseOwner),
+			strategy: str$2(x.strategy),
+			response: str$2(x.response),
+			trigger: str$2(x.trigger),
+			responseOwner: str$2(x.responseOwner),
 			responseCost: toNum(x.responseCost),
-			secondary: str$1(x.secondary),
+			secondary: str$2(x.secondary),
 			resProb: toLevel(x.resProb),
 			resImpCost: toLevel(x.resImpCost),
 			resImpTime: toLevel(x.resImpTime),
@@ -559,10 +559,10 @@
 			resProbPct: toNum(x.resProbPct),
 			resCostImpact: range(x.resCostImpact),
 			resTimeImpact: range(x.resTimeImpact),
-			materializedOn: str$1(x.materializedOn),
+			materializedOn: str$2(x.materializedOn),
 			actualCost: toNum(x.actualCost),
 			actualDelay: toNum(x.actualDelay),
-			notes: str$1(x.notes)
+			notes: str$2(x.notes)
 		};
 	}
 	var isOpen = (r) => r.status !== "materializado" && r.status !== "cerrado";
@@ -2269,7 +2269,7 @@
 		subcontract: 15
 	};
 	var WORK_TO_CALENDAR = 7 / 5;
-	var isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+	var isObj$1 = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 	var numOr = (v, d) => {
 		if (v === null || v === void 0 || v === "" || typeof v === "boolean") return d;
 		const n = Number(v);
@@ -2285,7 +2285,7 @@
 	}
 	var isoOfDay = (n) => (/* @__PURE__ */ new Date(n * DAY)).toISOString().slice(0, 10);
 	var cleanMix = (v) => {
-		if (!isObj(v)) return void 0;
+		if (!isObj$1(v)) return void 0;
 		const out = {};
 		let any = false;
 		ACCOUNT_IDS.forEach((id) => {
@@ -2318,12 +2318,12 @@
 	function normalizeEscPlan(raw, baseDate = "") {
 		const p = blankEscPlan();
 		p.baseDate = baseDate;
-		if (!isObj(raw)) return p;
+		if (!isObj$1(raw)) return p;
 		p.method = raw.method === "indices" ? "indices" : "simple";
-		const accs = Array.isArray(raw.accounts) ? raw.accounts.filter(isObj) : [];
+		const accs = Array.isArray(raw.accounts) ? raw.accounts.filter(isObj$1) : [];
 		p.accounts = ACCOUNT_IDS.map((id) => {
 			const a = accs.find((x) => x.id === id) || {}, rates = {};
-			if (isObj(a.rates)) Object.keys(a.rates).forEach((y) => {
+			if (isObj$1(a.rates)) Object.keys(a.rates).forEach((y) => {
 				const n = numOr(a.rates && a.rates[y], NaN);
 				if (/^\d{4}$/.test(y) && isFinite(n) && a.rates[y] !== "") rates[y] = n;
 			});
@@ -2338,9 +2338,9 @@
 		});
 		const dm = cleanMix(raw.defaultMix);
 		if (dm) p.defaultMix = dm;
-		if (isObj(raw.packages)) Object.keys(raw.packages).forEach((k) => {
+		if (isObj$1(raw.packages)) Object.keys(raw.packages).forEach((k) => {
 			const o = raw.packages && raw.packages[k];
-			if (!isObj(o)) return;
+			if (!isObj$1(o)) return;
 			const ov = {}, mix = cleanMix(o.mix);
 			if (mix) ov.mix = mix;
 			if (typeof o.lock === "string" && dayNum(o.lock) !== null) ov.lock = o.lock;
@@ -2793,39 +2793,39 @@
 	var SAMPLE_ESC_ACCOUNTS = {
 		labor: {
 			rates: {
-				"2026": 4,
-				"2027": 4.5,
-				"2028": 4
+				"2026": 3,
+				"2027": 3.3,
+				"2028": 3
 			},
 			low: -1,
-			high: 2
+			high: 1.5
 		},
 		material: {
 			rates: {
-				"2026": 3,
-				"2027": 3.5,
-				"2028": 3
+				"2026": 2,
+				"2027": 2.5,
+				"2028": 2
 			},
-			low: -1.5,
-			high: 3.5
+			low: -1,
+			high: 3
 		},
 		equipment: {
 			rates: {
-				"2026": 2.5,
-				"2027": 3,
-				"2028": 3
+				"2026": 1.8,
+				"2027": 2.2,
+				"2028": 2.2
 			},
-			low: -1,
-			high: 2
+			low: -.5,
+			high: 1.5
 		},
 		subcontract: {
 			rates: {
-				"2026": 3.5,
-				"2027": 4,
-				"2028": 3.5
+				"2026": 2.6,
+				"2027": 3,
+				"2028": 2.6
 			},
 			low: -1,
-			high: 2.5
+			high: 2
 		}
 	};
 	var SAMPLE_ESC_DEFAULT_MIX = {
@@ -2906,6 +2906,618 @@
 			provision: "p70",
 			correlation: .5
 		}, SAMPLE_BASE_DATE);
+	}
+	//#endregion
+	//#region src/shared/boe.ts
+	var STATUS_LABEL = {
+		borrador: "Borrador",
+		revision: "En revisión",
+		aprobada: "Aprobada"
+	};
+	var STATUSES = [
+		"borrador",
+		"revision",
+		"aprobada"
+	];
+	var GROUPS = [
+		{
+			id: "g1",
+			title: "3.1 Generalidades"
+		},
+		{
+			id: "g2",
+			title: "3.2 Metodología"
+		},
+		{
+			id: "g3",
+			title: "3.3 Base de diseño y 3.4 Cantidades"
+		},
+		{
+			id: "g5",
+			title: "3.5 Costos y 3.6 Planificación"
+		},
+		{
+			id: "g7",
+			title: "3.7 a 3.9 Materiales, mano de obra y demolición"
+		},
+		{
+			id: "g8",
+			title: "3.10 a 3.13 Asignaciones, supuestos, exclusiones y excepciones"
+		},
+		{
+			id: "g9",
+			title: "3.14 a 3.17 Riesgos y reservas"
+		},
+		{
+			id: "g10",
+			title: "3.18 a 3.22 Conciliación, calidad, equipo y anexos"
+		}
+	];
+	var SECTIONS = [
+		{
+			id: "3.1.1",
+			group: "g1",
+			from: 5,
+			title: "Propósito",
+			en: "Purpose",
+			keys: ["purpose"],
+			hint: "Para qué se prepara el estimado: estudio de costos, opciones, financiamiento, autorización de presupuesto…",
+			placeholder: "Ej. Sustentar el presupuesto de autorización y servir de base del control de cambios."
+		},
+		{
+			id: "3.1.2",
+			group: "g1",
+			from: 4,
+			title: "Objetivos del proyecto y del estimado",
+			en: "Project and Estimate Objectives",
+			keys: ["objectives"],
+			hint: "Qué busca el proyecto y qué decisión debe soportar el estimado."
+		},
+		{
+			id: "3.1.3",
+			group: "g1",
+			from: 5,
+			title: "Descripción del alcance del proyecto",
+			en: "Project Scope Description",
+			keys: ["scope"],
+			auto: "scope",
+			hint: "El alcance que cubre el estimado (viene del Enunciado del Alcance). La BOE es el entregable que lo define y la base del control de cambios."
+		},
+		{
+			id: "3.1.4",
+			group: "g1",
+			from: 3,
+			title: "Resumen del plan de ejecución",
+			en: "Project Execution Plan Summary",
+			keys: ["execution"],
+			auto: "execution",
+			hint: "Estrategia de contratación, secuencia y fases, jornadas y turnos, hitos que condicionan el costo."
+		},
+		{
+			id: "3.1.5",
+			group: "g1",
+			from: 3,
+			title: "Parámetros de construcción, fabricación y operación",
+			en: "Construction, Fabrication, and Operating Parameters",
+			keys: ["parameters"],
+			hint: "Condiciones del sitio, accesos, restricciones de horario, ubicación, clima, servicios provisionales."
+		},
+		{
+			id: "3.1.6",
+			group: "g1",
+			from: 5,
+			title: "Clasificación del estimado",
+			en: "Estimate Classification",
+			keys: ["classNote"],
+			auto: "classification",
+			hint: "La clase AACE (pestaña 02) y por qué corresponde a la madurez de la definición."
+		},
+		{
+			id: "3.2.1",
+			group: "g2",
+			from: 4,
+			title: "Herramientas de estimación",
+			en: "Estimating Tools",
+			keys: ["tools"],
+			hint: "Programas, hojas de cálculo, bases de datos y técnicas usadas para producir el estimado."
+		},
+		{
+			id: "3.2.2",
+			group: "g2",
+			from: 4,
+			title: "Estructura de codificación",
+			en: "Coding Structure",
+			keys: ["coding"],
+			auto: "coding",
+			hint: "Cómo se codifican los costos (EDT y cuentas de costo)."
+		},
+		{
+			id: "3.3.1",
+			group: "g3",
+			from: 3,
+			title: "Unidades de medida",
+			en: "Units of Measure",
+			keys: ["units"],
+			hint: "Sistema de unidades y unidades por tipo de trabajo; califica los rendimientos (unidades/hora o horas/unidad)."
+		},
+		{
+			id: "3.3.2",
+			group: "g3",
+			from: 5,
+			title: "Moneda y tipos de cambio",
+			en: "Currency and Exchange Rates",
+			keys: ["currencyNote"],
+			auto: "currency",
+			hint: "Moneda del estimado, fecha y fuente del tipo de cambio. El tipo de cambio se estima aparte de la escalación (58R-10)."
+		},
+		{
+			id: "3.3.3",
+			group: "g3",
+			from: 1,
+			title: "Redondeo",
+			en: "Rounding",
+			keys: ["rounding"],
+			hint: "Criterio de redondeo de cantidades y costos."
+		},
+		{
+			id: "3.4",
+			group: "g3",
+			from: 3,
+			title: "Base de cantidades",
+			en: "Quantity Basis",
+			keys: ["quantities"],
+			hint: "De dónde salen las cantidades (metrados de planos, factores, paramétricos) y su nivel de madurez."
+		},
+		{
+			id: "3.5",
+			group: "g5",
+			from: 5,
+			title: "Base de costos: fecha y fuente de precios",
+			en: "Cost Basis",
+			keys: ["date", "source"],
+			all: true,
+			hint: "La fecha base de los precios (de ella se mide la escalación) y su fuente: cotizaciones, bases de precios, contratos.",
+			area: false
+		},
+		{
+			id: "3.5.1",
+			group: "g5",
+			from: 4,
+			title: "Base de costos: criterios de costeo",
+			en: "Cost Basis",
+			keys: ["costBasis"],
+			hint: "Costos directos e indirectos, impuestos, gastos generales, utilidad, moneda de las cotizaciones."
+		},
+		{
+			id: "3.5.2",
+			group: "g5",
+			from: 4,
+			title: "Frontera entre escalación, contingencia, asignaciones y tipo de cambio",
+			en: "Cost Basis (RP 58R-10)",
+			keys: ["boundary"],
+			auto: "escalation",
+			when: "escalation",
+			hint: "58R-10: cada organización debe definir qué es escalación (incluye la inflación), qué es asignación, contingencia y tipo de cambio, y documentarlo en la BOE. La contingencia excluye la escalación."
+		},
+		{
+			id: "3.6",
+			group: "g5",
+			from: 4,
+			title: "Base de planificación",
+			en: "Planning Basis",
+			keys: ["planning"],
+			auto: "planning",
+			hint: "El cronograma en que se apoya el estimado: duración, calendario, fechas de gasto y línea base."
+		},
+		{
+			id: "3.7",
+			group: "g7",
+			from: 2,
+			title: "Materiales a granel",
+			en: "Bulk Commodity Material",
+			keys: ["bulk"],
+			hint: "Cómo se cuantifican y cotizan los materiales a granel (desperdicios, factores, suministro)."
+		},
+		{
+			id: "3.8",
+			group: "g7",
+			from: 2,
+			title: "Mano de obra",
+			en: "Labor",
+			keys: ["labor", "productivity"],
+			hint: "Tarifas, jornada, rendimientos y factores de productividad o de ajuste."
+		},
+		{
+			id: "3.9",
+			group: "g7",
+			from: 1,
+			title: "Demolición",
+			en: "Demolition",
+			keys: ["demolition"],
+			hint: "Qué demolición incluye o excluye el estimado. Si no aplica, escribe «No aplica»."
+		},
+		{
+			id: "3.10",
+			group: "g8",
+			from: 3,
+			title: "Asignaciones",
+			en: "Allowances",
+			keys: ["allowances"],
+			hint: "Montos previstos para trabajo aún no definido y qué cubren (no son contingencia). Si no hay, escribe «Sin asignaciones»."
+		},
+		{
+			id: "3.11",
+			group: "g8",
+			from: 5,
+			title: "Supuestos",
+			en: "Assumptions",
+			keys: ["assumptions"],
+			hint: "Lo que se da por cierto para estimar y cuyo cambio invalidaría el estimado."
+		},
+		{
+			id: "3.12",
+			group: "g8",
+			from: 5,
+			title: "Exclusiones",
+			en: "Exclusions",
+			keys: ["exclusions"],
+			hint: "Lo que el lector podría esperar dentro del estimado y NO está."
+		},
+		{
+			id: "3.13",
+			group: "g8",
+			from: 2,
+			title: "Excepciones",
+			en: "Exceptions",
+			keys: ["exceptions"],
+			hint: "Desviaciones de la práctica estándar de estimación de la organización. Si no hay, escribe «Ninguna»."
+		},
+		{
+			id: "3.14",
+			group: "g9",
+			from: 4,
+			title: "Riesgos y oportunidades",
+			en: "Risks and Opportunities",
+			keys: ["risksNote"],
+			auto: "risks",
+			hint: "Los riesgos y oportunidades de costo que el estimador conoce (viene del Registro de Riesgos) y cómo se tratan."
+		},
+		{
+			id: "3.16",
+			group: "g9",
+			from: 5,
+			title: "Contingencias",
+			en: "Contingencies",
+			keys: ["contingencyNote"],
+			auto: "contingency",
+			hint: "Método y monto de la contingencia; de quién es y cómo se libera."
+		},
+		{
+			id: "3.17",
+			group: "g9",
+			from: 4,
+			title: "Reserva de gestión",
+			en: "Management Reserve",
+			keys: ["mgmtNote"],
+			auto: "mgmt",
+			hint: "Monto de la reserva de gestión, quién la controla y cómo se autoriza su uso (fuera de la línea base)."
+		},
+		{
+			id: "3.18",
+			group: "g10",
+			from: 3,
+			title: "Conciliación",
+			en: "Reconciliation",
+			keys: ["reconciliation"],
+			auto: "capex",
+			hint: "Cómo se concilia el estimado con estimados anteriores y con el presupuesto autorizado o CAPEX."
+		},
+		{
+			id: "3.19",
+			group: "g10",
+			from: 1,
+			title: "Benchmarking",
+			en: "Benchmarking",
+			keys: ["benchmarking"],
+			hint: "Proyectos comparables con los que se contrastó el estimado (costos por unidad, ratios)."
+		},
+		{
+			id: "3.20",
+			group: "g10",
+			from: 2,
+			title: "Aseguramiento de la calidad del estimado",
+			en: "Estimate Quality Assurance",
+			keys: ["qa"],
+			hint: "Revisiones internas, chequeos y quién los hizo."
+		},
+		{
+			id: "3.21",
+			group: "g10",
+			from: 3,
+			title: "Equipo estimador",
+			en: "Estimating Team",
+			keys: [],
+			list: "team",
+			hint: "Quiénes prepararon el estimado y su rol."
+		},
+		{
+			id: "3.22.A",
+			group: "g10",
+			from: 2,
+			title: "Anexo A: entregables del estimado",
+			en: "Attachment A: Estimate Deliverables Checklist",
+			keys: [],
+			list: "checklist",
+			hint: "Lista de control de lo que se entrega con el estimado (lista propia; la de 34R-05 no se pudo verificar)."
+		},
+		{
+			id: "3.22.B",
+			group: "g10",
+			from: 3,
+			title: "Anexo B: documentos de referencia",
+			en: "Attachment B: Reference Documents",
+			keys: [],
+			list: "refs",
+			hint: "Documentos y proyectos usados o referenciados al preparar el estimado."
+		}
+	];
+	var TEXT_KEYS = Array.from(new Set(SECTIONS.reduce((a, s) => a.concat(s.keys), [])));
+	var CHECKLIST_ITEMS = [
+		{
+			id: "boe",
+			label: "Basis of Estimate (este documento)"
+		},
+		{
+			id: "summary",
+			label: "Resumen del estimado por paquete de la EDT"
+		},
+		{
+			id: "detail",
+			label: "Estimado detallado (precios unitarios por actividad)"
+		},
+		{
+			id: "quantities",
+			label: "Hoja de cantidades (metrados)"
+		},
+		{
+			id: "schedule",
+			label: "Cronograma y flujo de caja"
+		},
+		{
+			id: "risk",
+			label: "Análisis de riesgo y contingencia"
+		},
+		{
+			id: "escalation",
+			label: "Cálculo de la escalación"
+		},
+		{
+			id: "reconc",
+			label: "Conciliación y comparación con proyectos similares"
+		},
+		{
+			id: "signoff",
+			label: "Revisión y aprobación del estimado"
+		}
+	];
+	var isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+	var str$1 = (v) => v === null || v === void 0 ? "" : String(v);
+	function blankBoe() {
+		const text = {};
+		TEXT_KEYS.forEach((k) => {
+			text[k] = "";
+		});
+		return {
+			version: "1.0",
+			status: "borrador",
+			preparedBy: "",
+			reviewedBy: "",
+			approvedBy: "",
+			approvedOn: "",
+			text,
+			team: [],
+			refs: [],
+			checklist: CHECKLIST_ITEMS.map((c) => ({
+				id: c.id,
+				done: false
+			}))
+		};
+	}
+	function normalizeBoe(raw) {
+		const b = blankBoe();
+		if (!isObj(raw)) return b;
+		TEXT_KEYS.forEach((k) => {
+			b.text[k] = str$1(raw[k]);
+		});
+		b.version = str$1(raw.version) || "1.0";
+		b.status = STATUSES.indexOf(raw.status) >= 0 ? raw.status : "borrador";
+		b.preparedBy = str$1(raw.preparedBy);
+		b.reviewedBy = str$1(raw.reviewedBy);
+		b.approvedBy = str$1(raw.approvedBy);
+		b.approvedOn = /^\d{4}-\d{2}-\d{2}$/.test(str$1(raw.approvedOn)) ? str$1(raw.approvedOn) : "";
+		if (Array.isArray(raw.team)) b.team = raw.team.filter(isObj).map((m) => ({
+			name: str$1(m.name),
+			role: str$1(m.role)
+		})).filter((m) => m.name.trim() || m.role.trim());
+		if (Array.isArray(raw.refs)) b.refs = raw.refs.filter(isObj).map((r) => ({
+			title: str$1(r.title),
+			note: str$1(r.note)
+		})).filter((r) => r.title.trim() || r.note.trim());
+		if (Array.isArray(raw.checklist)) raw.checklist.filter(isObj).forEach((c) => {
+			const it = b.checklist.find((x) => x.id === c.id);
+			if (it) it.done = c.done === true;
+		});
+		return b;
+	}
+	function serializeBoe(b) {
+		const out = {};
+		TEXT_KEYS.forEach((k) => {
+			out[k] = b.text[k] || "";
+		});
+		return {
+			...out,
+			version: b.version,
+			status: b.status,
+			preparedBy: b.preparedBy,
+			reviewedBy: b.reviewedBy,
+			approvedBy: b.approvedBy,
+			approvedOn: b.approvedOn,
+			team: b.team,
+			refs: b.refs,
+			checklist: b.checklist
+		};
+	}
+	var filled = (s) => !!s && s.trim().length > 0;
+	function sectionDone(s, b) {
+		if (s.list === "team") return b.team.some((m) => filled(m.name));
+		if (s.list === "refs") return b.refs.some((r) => filled(r.title));
+		if (s.list === "checklist") return b.checklist.some((c) => c.done);
+		return s.all ? s.keys.every((k) => filled(b.text[k])) : s.keys.some((k) => filled(b.text[k]));
+	}
+	function evaluateBoe(b, facts, classNum) {
+		return SECTIONS.map((s) => {
+			const applies = !s.when || !!facts[s.when], required = applies && classNum <= s.from;
+			const own = sectionDone(s, b), backed = !own && !!s.auto && !!facts[s.auto] && s.id !== "3.5.2";
+			return {
+				section: s,
+				applies,
+				required,
+				state: own ? "completa" : backed ? "respaldada" : required ? "falta" : "opcional"
+			};
+		});
+	}
+	function completeness(b, facts, classNum) {
+		const evals = evaluateBoe(b, facts, classNum), req = evals.filter((e) => e.required), done = req.filter((e) => e.state === "completa" || e.state === "respaldada");
+		return {
+			required: req.length,
+			done: done.length,
+			pct: req.length ? Math.round(done.length / req.length * 100) : 100,
+			evals,
+			missing: req.filter((e) => e.state === "falta").map((e) => e.section),
+			optionalMissing: evals.filter((e) => e.applies && !e.required && e.state === "opcional").map((e) => e.section)
+		};
+	}
+	function boeFindings(b, facts, ctx) {
+		const out = [], c = completeness(b, facts, ctx.classNum), F = (code, severity, text) => {
+			out.push({
+				code,
+				severity,
+				text
+			});
+		};
+		const names = (l) => l.slice(0, 4).map((s) => s.id + " " + s.title).join("; ") + (l.length > 4 ? "…" : "");
+		if (b.status === "aprobada" && c.missing.length) F("B1", "riesgo", "La BOE figura «Aprobada» pero le faltan " + c.missing.length + " sección(es) que se exigen para un estimado de clase " + ctx.classNum + " (" + names(c.missing) + "): no puede ser la base del control de cambios.");
+		if (b.status === "aprobada" && (!filled(b.approvedBy) || !b.approvedOn)) F("B2", "riesgo", "La BOE está «Aprobada» sin registrar quién la aprueba y en qué fecha.");
+		if (b.status === "revision" && !filled(b.reviewedBy)) F("B2", "aviso", "La BOE está «En revisión» sin indicar quién la revisa.");
+		if (b.status === "borrador" && ctx.baselineVersion) F("B3", "aviso", "Ya hay una línea base de costos (" + ctx.baselineVersion + ") pero la BOE sigue en borrador: la BOE es la base del control de cambios y debe aprobarse con la línea base.");
+		if (b.status === "aprobada" && b.approvedOn && ctx.baselineDate && b.approvedOn < ctx.baselineDate) F("B4", "aviso", "La BOE se aprobó el " + b.approvedOn + ", antes de la última línea base de costos (" + (ctx.baselineVersion || "LB") + ", " + ctx.baselineDate + "): actualízala y vuelve a aprobarla, porque los cambios de la línea base ya no están reflejados.");
+		if (ctx.escalation > 0 && !filled(b.text.boundary)) F("B5", "aviso", "Hay escalación en el presupuesto pero la BOE no define qué es escalación, contingencia, asignación y tipo de cambio (sección 3.5.2): 58R-10 pide documentarlo, porque la contingencia excluye la escalación.");
+		if (ctx.capex !== null && ctx.total !== null && ctx.total > ctx.capex + .5) F("B6", "aviso", "El presupuesto total (" + Math.round(ctx.total).toLocaleString("es-PE") + ") supera el CAPEX del Acta (" + Math.round(ctx.capex).toLocaleString("es-PE") + "): concíliala en la sección 3.18 o solicita la autorización que corresponda.");
+		if (!filled(b.preparedBy)) F("B7", "info", "No se registró quién prepara la BOE.");
+		if (c.missing.length && b.status !== "aprobada") F("B8", "info", "Faltan " + c.missing.length + " sección(es) requeridas para un estimado de clase " + ctx.classNum + ": " + names(c.missing) + ".");
+		return out;
+	}
+	//#endregion
+	//#region src/shared/boe-sample.ts
+	var SAMPLE_CAPEX = 85e5;
+	function buildSampleBoe() {
+		return normalizeBoe({
+			version: "1.0",
+			status: "aprobada",
+			preparedBy: "Director de Proyecto (PM)",
+			reviewedBy: "Jefe de Ingeniería",
+			approvedBy: "Gerencia General DISTRIB+ (Sponsor)",
+			approvedOn: "2026-07-03",
+			purpose: "Sustentar el presupuesto de autorización del Almacén Lurín de DISTRIB+ S.A. (línea base de costos) y servir de base del control de cambios durante la ejecución.",
+			objectives: "Autorizar el financiamiento del proyecto dentro del CAPEX de referencia (USD 8,5 M) y dejar una línea base de costos, con su contingencia y su escalación, sobre la que controlar el valor ganado. Estimado de clase 3, preparado en paralelo con el Plan para la Dirección del Proyecto.",
+			scope: "Almacén logístico para DISTRIB+ S.A. en Lurín (Lima): nave industrial con cobertura metálica, instalaciones eléctricas y sanitarias dimensionadas para operación logística y patio de maniobras para vehículos de carga pesada. Comprende ingeniería de detalle, permisos, procura de estructuras y materiales, obra civil y MEP, y pruebas y puesta en marcha hasta la entrega formal (ver el Enunciado del Alcance, DEL.01 a DEL.06).",
+			execution: "Obra civil con cuadrillas propias A a D; suministro de estructuras metálicas, materiales y equipos eléctricos por contratos con los Proveedores A, B y C; instalaciones MEP por subcontrata. Jornada de 8 h, de lunes a viernes, sin trabajo nocturno. Los permisos municipales (licencia de edificación e ITSE) preceden al movimiento de tierras.",
+			parameters: "Terreno plano en Lurín, a nivel del mar; acceso de vehículos de carga pesada sin restricción de horario; agua y energía provisionales a cargo del contratista.",
+			classNote: "Clase 3 (autorización de presupuesto): definición de ingeniería en torno al 30 % de madurez, con la ingeniería de detalle en curso. El rango de exactitud de la clase se aplica al presupuesto en la pestaña 03.",
+			tools: "Estimar los Costos (precio unitario × metrado por actividad), WBS Builder (EDT), Cronograma/CPM (fechas de gasto), y en Costos la estimación por rangos con simulación Monte Carlo (contingencia) y la escalación por índices.",
+			coding: "Código EDT jerárquico de WBS Builder (1.1 a 5.3): cada paquete de trabajo es una cuenta de costo. Las cuentas de escalación son cuatro: mano de obra, materiales, equipos y subcontratos.",
+			currencyNote: "USD, la moneda del CAPEX y de todo el caso; las cotizaciones vienen en USD. El 30 % del costo está denominado en otra moneda: el tipo de cambio se congela a la fecha base (2026-07-01) y la exposición cambiaria se cuantifica aparte de la escalación (banda de ±8 %, solo con régimen flotante).",
+			units: "Sistema métrico: m, m², m³, kg, ton, und, glb; horas-hombre para la mano de obra. Los rendimientos se expresan en unidades por día por cuadrilla.",
+			rounding: "Costos por paquete redondeados al dólar; los totales se suman sin redondeos intermedios.",
+			quantities: "Metrados por actividad de Definir las Actividades, medidos de los planos al ~30 % de definición; los de concreto y acero de refuerzo llevan el rango de la clase (contingencia). Las cantidades de las partidas de procura son las de las cotizaciones.",
+			date: SAMPLE_BASE_DATE,
+			source: "Cotizaciones de los Proveedores A, B y C (vigencia de 60 días), base de rendimientos regional y precios unitarios de la última licitación de DISTRIB+.",
+			costBasis: "Costo directo sin IGV. Incluye los gastos generales de obra (≈ 5,8 % del costo base, repartidos en el plazo y valorizados por día de extensión del plazo). Cotizaciones en USD.",
+			boundary: "Escalación = movimiento general de precios de mercado por cuenta de costo, medido con índices desde la fecha base (2026-07-01), en el momento en que se gasta cada paquete; se financia al P70 de la simulación y se controla como una cuenta aparte. Contingencia = riesgos específicos del proyecto (Registro de Riesgos R-01 a R-10) e incertidumbre de los rangos del estimado; NO incluye escalación. Tipo de cambio = línea aparte (régimen congelado a la fecha base). Asignaciones: ninguna. R-02 (alza del precio del acero) permanece como evento de contingencia solo por el exceso sobre la tendencia general de materiales.",
+			planning: "Cronograma CPM de 273 días laborables (calendario de 5 días) con inicio el 2026-07-06; las compras se ejecutan en paralelo con la ingeniería. Las fechas de gasto de la escalación salen de este cronograma (línea base LB-n cuando se fije).",
+			bulk: "Concreto f'c=280 kg/cm² y acero de refuerzo: metrado de planos + 5 % de desperdicio; cemento y agregados por tonelada según la cotización del Proveedor B.",
+			labor: "Cuadrillas propias A a D con rendimientos de la base regional; tarifas del convenio de construcción civil vigente. Jornada de 8 h.",
+			productivity: "Rendimientos según la base regional, sin factor por altitud (Lurín está a nivel del mar); un factor de 1,05 por trabajo en obra abierta con tráfico de vehículos pesados.",
+			demolition: "La demolición de la losa existente no identificada en el levantamiento queda fuera del estimado base: se gestiona como trabajo imprevisto dentro del alcance (orden de cambio OC-003, con reserva de gestión).",
+			allowances: "Sin asignaciones en el estimado base: cada paquete está cotizado o valorizado por precio unitario. El hallazgo geotécnico se cubre con contingencia (R-03; OC-001).",
+			assumptions: "Diseño al 30 % de madurez. Suministro nacional. Jornada de 8 h, sin trabajo nocturno. El terreno de Lurín está saneado legalmente y disponible desde el inicio. La disponibilidad de cuadrillas y subcontratistas se mantiene según el plan de recursos. El tipo de cambio y el precio del acero se mantienen dentro del rango presupuestado.",
+			exclusions: "IGV, saneamiento físico-legal del terreno, costos financieros y expropiaciones; operación y mantenimiento posteriores a la entrega; equipamiento logístico interno (racks, montacargas, sistemas de gestión de almacén); obras fuera del lindero y ampliaciones futuras de la nave.",
+			exceptions: "Sin excepciones a la práctica de estimación de DISTRIB+; los costos financieros se presupuestan aparte.",
+			risksNote: "Los riesgos abiertos del Registro de Riesgos (R-01 licencia, R-02 acero, R-03 suelo…) se cuantifican en la contingencia con su riesgo residual; las oportunidades se registran pero no reducen el presupuesto.",
+			contingencyNote: "La contingencia es del director del proyecto y está dentro de la línea base; su liberación sigue la política de reservas del plan de riesgos (director de proyecto, CCB o sponsor según el monto).",
+			mgmtNote: "La reserva de gestión es el 5 % de la línea base, del sponsor y fuera de ella; su uso y el de los fondos adicionales los autoriza siempre el sponsor.",
+			reconciliation: "Conciliado con el CAPEX de referencia del Acta de Constitución (USD 8,5 M): el presupuesto total, con la reserva de gestión, queda dentro de esa cifra. No existe un estimado anterior con el que conciliar.",
+			benchmarking: "Contrastado con el costo por m² de los tres últimos almacenes construidos por DISTRIB+ en Lima, ajustado por fecha base y por tipo de estructura.",
+			qa: "Revisión del estimado por el Jefe de Ingeniería (metrados y rendimientos) y por Control de Calidad (consistencia con la EDT y las cotizaciones) antes de la aprobación del sponsor.",
+			team: [
+				{
+					name: "Director de Proyecto (PM)",
+					role: "Estimador responsable; integra el estimado y prepara la BOE"
+				},
+				{
+					name: "Jefe de Ingeniería",
+					role: "Metrados, rendimientos y revisión técnica del estimado"
+				},
+				{
+					name: "Jefe de Logística",
+					role: "Cotizaciones de los Proveedores A, B y C"
+				},
+				{
+					name: "Residente de Obra",
+					role: "Rendimientos de cuadrillas y plazos de obra"
+				},
+				{
+					name: "Control de Calidad (QA/QC)",
+					role: "Revisión de consistencia del estimado"
+				}
+			],
+			refs: [
+				{
+					title: "Acta de Constitución del Proyecto",
+					note: "CAPEX de referencia y requisitos de alto nivel (RAN.01 a RAN.04)"
+				},
+				{
+					title: "Enunciado del Alcance",
+					note: "Entregables DEL.01 a DEL.06, supuestos, restricciones y exclusiones"
+				},
+				{
+					title: "Cotizaciones de los Proveedores A, B y C",
+					note: "Vigencia de 60 días desde la fecha base"
+				},
+				{
+					title: "Base de rendimientos regional",
+					note: "Rendimientos por cuadrilla"
+				},
+				{
+					title: "Registro de Riesgos R-01 a R-10",
+					note: "Riesgos cuantificados en la contingencia"
+				}
+			],
+			checklist: [
+				"boe",
+				"summary",
+				"detail",
+				"quantities",
+				"schedule",
+				"risk",
+				"escalation",
+				"reconc",
+				"signoff"
+			].map((id) => ({
+				id,
+				done: id !== "reconc"
+			}))
+		});
 	}
 	//#endregion
 	//#region src/shared/evm-sample.ts
@@ -3133,6 +3745,7 @@
 		baselines: [],
 		ranges: [],
 		legacyMethod: "",
+		boe: blankBoe(),
 		esc: blankEscPlan()
 	};
 	$("tabs").addEventListener("click", (e) => {
@@ -3143,6 +3756,7 @@
 		b.classList.add("active");
 		$(b.dataset.p).classList.add("active");
 		if (b.dataset.p === "p5") buildDoc();
+		else if (b.dataset.p === "p2") refreshBoe();
 	});
 	$("classbar").addEventListener("click", (e) => {
 		const b = e.target.closest("button");
@@ -4173,6 +4787,7 @@
 			total
 		};
 		state._escCalc = ec;
+		refreshBoe();
 		renderAccuracy(base, cont, calc.res);
 		renderCO();
 	}
@@ -4199,7 +4814,7 @@
 	}
 	function riskOptions(ctx, selectedId, selectedCode) {
 		const th = ctx.risks.filter((r) => r.type === "amenaza");
-		return `<option value="">— Vincular riesgo —</option>${th.map((r) => `<option value="${escA(r.id)}" ${r.id === selectedId ? "selected" : ""}>${esc(r.code + " · " + (r.title || "sin título").slice(0, 44) + " (" + STATUS_LABEL[r.status] + ")")}</option>`).join("")}${selectedId && !th.some((r) => r.id === selectedId) ? `<option value="${escA(selectedId)}" selected>${esc((selectedCode || "?") + " (no está en el registro)")}</option>` : ""}`;
+		return `<option value="">— Vincular riesgo —</option>${th.map((r) => `<option value="${escA(r.id)}" ${r.id === selectedId ? "selected" : ""}>${esc(r.code + " · " + (r.title || "sin título").slice(0, 44) + " (" + STATUS_LABEL$1[r.status] + ")")}</option>`).join("")}${selectedId && !th.some((r) => r.id === selectedId) ? `<option value="${escA(selectedId)}" selected>${esc((selectedCode || "?") + " (no está en el registro)")}</option>` : ""}`;
 	}
 	function authCell(r, i, pol, locked, usesReserve) {
 		if (usesReserve || !hasTiers(pol)) return "";
@@ -4410,6 +5025,266 @@
 		renderCO();
 		save();
 	}
+	var LEGACY_ID = {
+		date: "boeDate",
+		source: "boeSource",
+		assumptions: "boeAssum",
+		exclusions: "boeExcl",
+		productivity: "boeProd"
+	};
+	var boeId = (k) => LEGACY_ID[k] || "boe_" + k;
+	var FIELD_LABEL = {
+		date: "Fecha base de los precios (de ella se mide la escalación)",
+		source: "Fuente de los precios",
+		labor: "Tarifas, jornada y rendimientos",
+		productivity: "Factores de productividad y de ajuste"
+	};
+	var nl2br = (s) => esc(s).replace(/\n/g, "<br>");
+	function capexValue() {
+		if (!gpiOn()) return SAMPLE_CAPEX;
+		try {
+			const m = GPI.meta(), raw = m && m.capex ? String(m.capex).trim() : "";
+			if (!raw || !/^[\d.,\s]+$/.test(raw)) return null;
+			const n = Number(raw.replace(/[,\s]/g, ""));
+			return n > 0 ? n : null;
+		} catch (e) {
+			return null;
+		}
+	}
+	function boeFacts() {
+		const b = state._budget, connected = gpiOn(), g = getEng();
+		let scope = false, coding = !connected;
+		try {
+			if (connected) {
+				const sc = GPI.getModule("scopeStatement");
+				scope = !!sc && !!((sc.productScope || "").trim() || (sc.projectScope || "").trim());
+				coding = GPI.util.wbsLeaves(GPI.getModule("wbs")).length > 0;
+			}
+		} catch (e) {}
+		return {
+			scope,
+			execution: !!g,
+			classification: true,
+			coding,
+			currency: true,
+			planning: !!g,
+			risks: riskCtx().risks.length > 0,
+			contingency: !!b && b.cont > 0,
+			mgmt: !!b && b.mgmt > 0,
+			escalation: !!b && b.esc > 0,
+			capex: capexValue() !== null
+		};
+	}
+	function boeCtx() {
+		const b = state._budget, last = state.baselines.length ? state.baselines[state.baselines.length - 1] : null;
+		return {
+			classNum: state.curClass,
+			escalation: b ? b.esc : 0,
+			baselineVersion: last ? last.version : null,
+			baselineDate: last ? String(last.date || "") : "",
+			capex: capexValue(),
+			total: b ? b.total : null
+		};
+	}
+	function boeAutoHtml(k) {
+		const b = state._budget, ec = state._escCalc, c = CLASSES[state.curClass], g = getEng(), connected = gpiOn();
+		const none = (t) => `<span class="muted">${t}</span>`;
+		switch (k) {
+			case "scope": {
+				if (!connected) return none("En modo independiente no hay un Enunciado del Alcance conectado: escribe el alcance abajo.");
+				const sc = GPI.getModule("scopeStatement");
+				const t = sc ? [sc.productScope, sc.projectScope].filter((x) => x && x.trim()).join(" ") : "";
+				return t ? `<b>Del Enunciado del Alcance:</b> ${esc(t)}${sc && Array.isArray(sc.deliverables) ? " · " + sc.deliverables.length + " entregable(s)." : ""}` : none("El proyecto aún no tiene Enunciado del Alcance: defínelo o escribe el alcance abajo.");
+			}
+			case "execution":
+			case "planning": {
+				if (!g) return none("Sin cronograma (actividades y enlaces en Cronograma/CPM): la duración y las fechas no se pueden citar.");
+				const crit = Object.keys(g.rows).filter((id) => g.rows[id].critical).length, fin = finishOf(g.base);
+				return `<b>Cronograma del proyecto:</b> ${fmtDays(g.base)} laborables${net && net.startDate ? ", inicio " + esc(net.startDate) : ""}${fin ? ", fin " + esc(fin) : ""} · ${crit} actividad(es) críticas${k === "planning" && ec && ec.res && ec.res.ok ? " · fecha media del gasto " + esc(ec.res.midDate || "—") : ""}.`;
+			}
+			case "classification": return `<b>Clase ${state.curClass}</b> — ${esc(c.desc)} Madurez del diseño ${esc(c.mat)}; uso previsto: ${esc(c.use)}; rango de exactitud típico ${esc(c.range)}.`;
+			case "coding": {
+				const n = escPackages().pkgs.length;
+				return `<b>EDT:</b> ${n ? n + " paquete(s) de trabajo con costo" : "sin paquetes con costo"}, con Código EDT jerárquico. Cuentas de escalación: ${ACCOUNT_IDS.map((id) => esc(ACCOUNT_LABEL[id])).join(", ")}.`;
+			}
+			case "currency": return `<b>Moneda del plan:</b> ${esc($("cur").value)} (${sym()}). Componente en moneda extranjera ${esc($("fxShare").value)} %, tipo de cambio ${$("fxMode").value === "frozen" ? "congelado a la fecha base" : "flotante con banda ±" + esc($("fxBand").value) + " %"}; su exposición (${fmt(b ? b.fx : 0)}) se cuantifica aparte de la escalación.`;
+			case "risks": {
+				const rc = riskCtx(), open = rc.risks.filter((r) => r.status !== "materializado" && r.status !== "cerrado");
+				return rc.source === "sin registro" ? none("Este proyecto no tiene Registro de Riesgos.") : `<b>Registro de Riesgos (${rc.source === "registro" ? "del proyecto" : "caso de ejemplo"}):</b> ${rc.risks.length} riesgo(s), ${open.length} abierto(s)${open.length ? ": " + esc(open.slice(0, 5).map((r) => r.code + " " + (r.title || "")).join("; ")) + (open.length > 5 ? "…" : "") : ""}.`;
+			}
+			case "contingency": return b ? `<b>${esc(METHOD_LABEL[contMethod()])}:</b> ${fmt(b.cont)}${b.base ? " (" + (b.cont / b.base * 100).toFixed(1) + " % del costo base)" : ""}${contMethod() === "manual" ? "" : ", " + esc($("contPct").value)}.` : "";
+			case "mgmt": return b ? `<b>${esc($("mgmtPct").value)} % de la línea base = ${fmt(b.mgmt)}</b>, propiedad del sponsor y fuera de la línea base.` : "";
+			case "escalation": return b && ec ? `<b>Escalación:</b> ${ec.method === "indices" ? "por índices (58R-10 / 68R-11), " + esc(ec.provLabel) : "método simple"} ${fmt(b.escIdx || 0)}; <b>tipo de cambio:</b> ${fmt(b.fx || 0)}; la contingencia (${fmt(b.cont)}) excluye ambos.` : "";
+			case "capex": {
+				const cx = capexValue();
+				return cx !== null && b ? `<b>CAPEX de referencia:</b> ${fmt(cx)} · presupuesto total ${fmt(b.total)} → ${b.total <= cx + .5 ? "dentro del CAPEX" : "SUPERA el CAPEX en " + fmt(b.total - cx)}.` : none("Sin CAPEX de referencia (Acta de Constitución).");
+			}
+			default: return "";
+		}
+	}
+	var boeOpen = /* @__PURE__ */ new Set(["g1"]);
+	var boeStateLabel = (e) => !e.applies ? "No aplica" : e.state === "completa" ? "Completa" : e.state === "respaldada" ? "Respaldada por el proyecto" : e.state === "falta" ? "Falta" : "Opcional";
+	function renderBoe() {
+		if (!document.getElementById("boeForm")) return;
+		const B = state.boe;
+		const meta = (id, label, val, k, type = "text") => `<label class="f"><span>${label}</span><input id="${id}" class="mono" type="${type}" value="${escA(val)}" data-b="meta" data-k="${k}" oninput="boeEdit(this)" onchange="save()"></label>`;
+		$("boeHead").innerHTML = `<div class="boe-head">
+      ${meta("boeVersion", "Versión de la BOE", B.version, "version")}
+      <label class="f"><span>Estado</span><select id="boeStatusSel" class="mono" data-b="meta" data-k="status" onchange="boeEdit(this);save()">${STATUSES.map((s) => `<option value="${s}" ${B.status === s ? "selected" : ""}>${STATUS_LABEL[s]}</option>`).join("")}</select></label>
+      ${meta("boePrepared", "Preparó", B.preparedBy, "preparedBy")}${meta("boeReviewed", "Revisó", B.reviewedBy, "reviewedBy")}${meta("boeApprover", "Aprueba", B.approvedBy, "approvedBy")}${meta("boeApprovedOn", "Fecha de aprobación", B.approvedOn, "approvedOn", "date")}
+    </div><div class="muted small" style="margin-top:6px">Proceso de 34R-05: borrador → revisión → aprobación → cambios y actualizaciones. La BOE es la base del control de cambios: cuando la línea base cambia, se actualiza y se vuelve a aprobar.</div>`;
+		const field = (k, s) => {
+			const v = B.text[k] || "", attr = `id="${boeId(k)}" data-b="text" data-k="${k}" oninput="boeEdit(this)" onchange="save()" aria-label="${escA(s.id + " " + s.title)}"`;
+			const lab = FIELD_LABEL[k] ? `<span>${esc(FIELD_LABEL[k])}</span>` : "";
+			if (k === "date") return `<label class="f">${lab}<input type="date" class="mono" ${attr} value="${escA(v)}"></label>`;
+			if (k === "source") return `<label class="f">${lab}<input ${attr} value="${escA(v)}" placeholder="Ej. cotizaciones vigentes, base de precios, contratos"></label>`;
+			return `<label class="f">${lab}<textarea ${attr} rows="3" placeholder="${escA(s.placeholder || "")}">${esc(v)}</textarea></label>`;
+		};
+		const sec = (s) => `<div class="boe-sec" id="sec-${s.id}"><h5>${s.id} ${esc(s.title)} <span class="en">· ${esc(s.en)}</span><span class="boe-st" id="st-${s.id}"></span></h5>
+      <div class="boe-hint">${esc(s.hint)}</div>${s.auto ? `<div class="boe-auto" id="auto-${s.id}"></div>` : ""}
+      ${s.list ? `<div id="boeList-${s.list}"></div>` : s.keys.map((k) => field(k, s)).join("")}</div>`;
+		$("boeForm").innerHTML = GROUPS.map((g) => `<details class="boe-grp" data-g="${g.id}" ${boeOpen.has(g.id) ? "open" : ""}><summary>${esc(g.title)}<span class="boe-gc" id="gc-${g.id}"></span></summary>${SECTIONS.filter((s) => s.group === g.id).map(sec).join("")}</details>`).join("");
+		document.querySelectorAll("#boeForm details.boe-grp").forEach((d) => d.addEventListener("toggle", () => {
+			const id = d.dataset.g;
+			if (d.open) boeOpen.add(id);
+			else boeOpen.delete(id);
+		}));
+		renderBoeLists();
+		refreshBoe();
+	}
+	function renderBoeLists() {
+		const B = state.boe, cell = (kind, i, f, v, ph) => `<td><input data-kind="${kind}" data-i="${i}" data-f="${f}" value="${escA(v)}" placeholder="${ph}" oninput="boeListEdit(this)" onchange="save()" aria-label="${ph}"></td>`;
+		const tbl = (kind, head, f, rows) => `<table class="boe-list"><thead><tr><td class="muted small">${head[0]}</td><td class="muted small">${head[1]}</td><td></td></tr></thead><tbody>${rows.map((r, i) => `<tr>${cell(kind, i, f[0], r[f[0]], head[0])}${cell(kind, i, f[1], r[f[1]], head[1])}<td style="width:34px"><button class="btn ghost sm" onclick="boeListDel('${kind}',${i})" aria-label="Quitar">✕</button></td></tr>`).join("")}</tbody></table><button class="btn sm" style="margin-top:6px" onclick="boeListAdd('${kind}')">+ Agregar</button>`;
+		const t = document.getElementById("boeList-team"), r = document.getElementById("boeList-refs"), c = document.getElementById("boeList-checklist");
+		if (t) t.innerHTML = tbl("team", ["Nombre o cargo", "Rol en el estimado"], ["name", "role"], B.team);
+		if (r) r.innerHTML = tbl("refs", ["Documento o proyecto", "Nota"], ["title", "note"], B.refs);
+		if (c) c.innerHTML = `<div class="boe-chk">${CHECKLIST_ITEMS.map((it) => `<label><input type="checkbox" data-id="${it.id}" ${B.checklist.some((x) => x.id === it.id && x.done) ? "checked" : ""} onchange="boeCheck(this)"> ${esc(it.label)}</label>`).join("")}</div>`;
+	}
+	function refreshBoe() {
+		if (!document.getElementById("boeStatus")) return;
+		const facts = boeFacts(), ctx = boeCtx(), c = completeness(state.boe, facts, state.curClass), f = boeFindings(state.boe, facts, ctx);
+		const miss = c.missing.length ? `<div class="boe-miss">${c.missing.map((s) => `<button type="button" data-goto="${s.id}">${esc(s.id + " " + s.title)}</button>`).join("")}</div>` : `<div class="muted small">Todas las secciones que se exigen para un estimado de clase ${state.curClass} están completas o respaldadas por el proyecto.</div>`;
+		const fl = f.length ? `<ul class="esc-adv" style="margin-top:8px">${f.map((x) => `<li class="${x.severity}"><b class="cd">${x.code}</b>${esc(x.text)}</li>`).join("")}</ul>` : "";
+		$("boeStatus").innerHTML = `<div><b>Estimado de clase ${state.curClass}</b> · se exigen <b>${c.required}</b> de ${SECTIONS.length} secciones · completas o respaldadas por el proyecto: <b>${c.done}</b> (${c.pct} %)</div>
+    <div class="boe-bar"><div style="width:${c.pct}%"></div></div>${miss}${fl}
+    <div style="margin-top:8px"><button type="button" class="btn sm" id="boeOpenAll">Abrir todas las secciones</button> <button type="button" class="btn sm" id="boeCloseAll">Plegar todas</button></div>
+    <div class="muted" style="font-size:11.5px;margin-top:8px">Qué secciones se exigen según la clase es un <b>criterio didáctico</b> de este módulo: 34R-05 (§4) dice que el detalle de la BOE depende de la definición del proyecto, de su valor y de su tipo, pero no fija una lista por clase. La sección 3.15 del índice público («Containments») no se pudo verificar y se omite.</div>`;
+		$("boeStatus").querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("click", () => {
+			const s = SECTIONS.find((x) => x.id === b.dataset.goto);
+			if (!s) return;
+			const d = document.querySelector(`#boeForm details[data-g="${s.group}"]`);
+			if (d) {
+				d.open = true;
+				boeOpen.add(s.group);
+			}
+			const el = document.getElementById("sec-" + s.id);
+			if (el) {
+				el.scrollIntoView({ block: "center" });
+				const i = el.querySelector("textarea,input");
+				if (i) i.focus();
+			}
+		}));
+		const setAll = (open) => {
+			document.querySelectorAll("#boeForm details.boe-grp").forEach((d) => {
+				d.open = open;
+				const id = d.dataset.g;
+				if (open) boeOpen.add(id);
+				else boeOpen.delete(id);
+			});
+		};
+		const oa = document.getElementById("boeOpenAll"), ca = document.getElementById("boeCloseAll");
+		if (oa) oa.addEventListener("click", () => setAll(true));
+		if (ca) ca.addEventListener("click", () => setAll(false));
+		const done = {};
+		c.evals.forEach((e) => {
+			const st = document.getElementById("st-" + e.section.id);
+			if (st) {
+				st.textContent = boeStateLabel(e);
+				st.className = "boe-st " + (!e.applies ? "opcional" : e.state);
+			}
+			const au = document.getElementById("auto-" + e.section.id);
+			if (au && e.section.auto) au.innerHTML = boeAutoHtml(e.section.auto);
+			if (e.required) {
+				const g = done[e.section.group] || (done[e.section.group] = [0, 0]);
+				g[1]++;
+				if (e.state === "completa" || e.state === "respaldada") g[0]++;
+			}
+		});
+		GROUPS.forEach((g) => {
+			const el = document.getElementById("gc-" + g.id);
+			if (el) el.textContent = done[g.id] ? done[g.id][0] + "/" + done[g.id][1] + " exigidas" : "opcionales";
+		});
+	}
+	function boeEdit(el) {
+		userEdited = true;
+		const kind = el.dataset.b, k = el.dataset.k || "", B = state.boe;
+		if (kind === "text") B.text[k] = el.value;
+		else if (kind === "meta") {
+			if (k === "status") {
+				B.status = STATUSES.indexOf(el.value) >= 0 ? el.value : "borrador";
+				if (B.status === "aprobada" && !B.approvedOn) {
+					B.approvedOn = todayISO();
+					const d = document.getElementById("boeApprovedOn");
+					if (d) d.value = B.approvedOn;
+				}
+			} else if (k === "approvedOn") B.approvedOn = /^\d{4}-\d{2}-\d{2}$/.test(el.value) ? el.value : "";
+			else B[k] = el.value;
+		}
+		if (kind === "text" && k === "date") recalcCont();
+		else refreshBoe();
+	}
+	function boeListAdd(kind) {
+		userEdited = true;
+		if (kind === "team") state.boe.team.push({
+			name: "",
+			role: ""
+		});
+		else state.boe.refs.push({
+			title: "",
+			note: ""
+		});
+		renderBoeLists();
+		refreshBoe();
+		save();
+	}
+	function boeListDel(kind, i) {
+		userEdited = true;
+		state.boe[kind].splice(i, 1);
+		renderBoeLists();
+		refreshBoe();
+		save();
+	}
+	function boeListEdit(el) {
+		userEdited = true;
+		const kind = el.dataset.kind, i = Number(el.dataset.i), f = el.dataset.f, row = state.boe[kind][i];
+		if (row) row[f] = el.value;
+		refreshBoe();
+	}
+	function boeCheck(el) {
+		userEdited = true;
+		const it = state.boe.checklist.find((x) => x.id === el.dataset.id);
+		if (it) it.done = el.checked;
+		refreshBoe();
+		save();
+	}
+	function boeDocHtml() {
+		const B = state.boe, facts = boeFacts(), c = completeness(B, facts, state.curClass), f = boeFindings(B, facts, boeCtx());
+		const head = `<table class="dt">
+      <tr><td>Versión · estado</td><td>${esc(B.version)} · <b>${STATUS_LABEL[B.status]}</b></td></tr>
+      <tr><td>Preparó · revisó</td><td>${esc(B.preparedBy) || "—"} · ${esc(B.reviewedBy) || "—"}</td></tr>
+      <tr><td>Aprobó</td><td>${esc(B.approvedBy) || "—"}${B.approvedOn ? " · " + esc(B.approvedOn) : ""}</td></tr>
+      <tr><td>Nivel de detalle</td><td>Estimado de clase ${state.curClass}: ${c.required} sección(es) exigidas, ${c.done} completas o respaldadas por el proyecto (${c.pct} %)${c.missing.length ? ". <b>Faltan:</b> " + esc(c.missing.map((s) => s.id + " " + s.title).join("; ")) : ""}.</td></tr></table>`;
+		const listHtml = (s) => s.list === "team" ? B.team.filter((m) => m.name.trim()).map((m) => esc(m.name) + (m.role.trim() ? " — " + esc(m.role) : "")).join("<br>") : s.list === "refs" ? B.refs.filter((r) => r.title.trim()).map((r) => esc(r.title) + (r.note.trim() ? " — " + esc(r.note) : "")).join("<br>") : CHECKLIST_ITEMS.map((it) => (B.checklist.some((x) => x.id === it.id && x.done) ? "☑ " : "☐ ") + esc(it.label)).join("<br>");
+		return head + GROUPS.map((g) => {
+			const rows = c.evals.filter((e) => e.section.group === g.id && e.applies).map((e) => {
+				const s = e.section, txt = s.list ? listHtml(s) : s.keys.map((k) => B.text[k] ? (s.keys.length > 1 && FIELD_LABEL[k] ? `<i>${esc(FIELD_LABEL[k])}:</i> ` : "") + nl2br(B.text[k]) : "").filter(Boolean).join("<br>");
+				const auto = s.auto && facts[s.auto] ? boeAutoHtml(s.auto) : "";
+				if (!txt && !auto && !e.required) return "";
+				return `<tr><td>${s.id} ${esc(s.title)}</td><td>${auto}${auto && txt ? "<br>" : ""}${txt || (auto ? "" : `<span class="muted">— (falta)</span>`)}</td></tr>`;
+			}).join("");
+			return rows ? `<p style="font-size:12.5px;margin:12px 0 4px"><b>${esc(g.title)}</b></p><table class="dt">${rows}</table>` : "";
+		}).join("") + (f.length ? `<p style="font-size:12.5px;margin:10px 0 0"><b>Revisar:</b> ${f.map((x) => esc(x.code + " — " + x.text)).join(" · ")}</p>` : "");
+	}
 	function boeCORows() {
 		if (!state.co.length) return `<tr><td class="muted" colspan="7">Sin órdenes de cambio registradas</td></tr>`;
 		return state.co.map((r) => `<tr>
@@ -4496,14 +5371,8 @@
     </section>
 
     <section class="dsec">
-      <h4 class="dsec-t"><span class="dn">04</span>Bases del estimado (AACE RP 34R-05)</h4>
-      <table class="dt">
-        <tr><td>Fecha base</td><td>${esc($("boeDate").value) || "—"}</td></tr>
-        <tr><td>Fuente de precios</td><td>${esc($("boeSource").value) || "—"}</td></tr>
-        <tr><td>Supuestos</td><td>${esc($("boeAssum").value) || "—"}</td></tr>
-        <tr><td>Exclusiones</td><td>${esc($("boeExcl").value) || "—"}</td></tr>
-        <tr><td>Factores de productividad</td><td>${esc($("boeProd").value) || "—"}</td></tr>
-      </table>
+      <h4 class="dsec-t"><span class="dn">04</span>Basis of Estimate (AACE RP 34R-05)</h4>
+      ${boeDocHtml()}
     </section>
 
     <section class="dsec">
@@ -4574,13 +5443,7 @@
 			},
 			estimate: {
 				class: state.curClass,
-				boe: {
-					date: $("boeDate").value,
-					source: $("boeSource").value,
-					assumptions: $("boeAssum").value,
-					exclusions: $("boeExcl").value,
-					productivity: $("boeProd").value
-				}
+				boe: serializeBoe(state.boe)
 			},
 			budget: {
 				baseCost: +$("baseCost").value,
@@ -4878,11 +5741,8 @@
 		}
 		if (e.class) state.curClass = e.class;
 		if (e.boe) {
-			$("boeDate").value = e.boe.date || "";
-			$("boeSource").value = e.boe.source || "";
-			$("boeAssum").value = e.boe.assumptions || "";
-			$("boeExcl").value = e.boe.exclusions || "";
-			$("boeProd").value = e.boe.productivity || "";
+			state.boe = normalizeBoe(e.boe);
+			renderBoe();
 		}
 		if (b.baseCost) {
 			$("baseCost").value = b.baseCost;
@@ -4956,9 +5816,10 @@
 			$("rngTimeCost").value = String(SAMPLE_TIME_COST);
 			$("rngTimeBasis").value = SAMPLE_TIME_BASIS;
 			state.esc = buildSampleEscPlan((c) => "w-" + c);
-			$("boeDate").value = SAMPLE_BASE_DATE;
 			$("escMethod").value = "indices";
 			escInputsKey = "";
+			state.boe = buildSampleBoe();
+			renderBoe();
 		}
 	}
 	function gpiBadge() {
@@ -4983,6 +5844,7 @@
 	}
 	function init(reload) {
 		session = gpiOn() ? GPI.openSession("cost") : null;
+		renderBoe();
 		load();
 		const connected = gpiOn();
 		if (connected) loadedProjectId = GPI.activeId();
@@ -5058,7 +5920,12 @@
 		pullRangesFromWbs,
 		applyClassRange,
 		onEscMethod,
-		escEdit
+		escEdit,
+		boeEdit,
+		boeListAdd,
+		boeListDel,
+		boeListEdit,
+		boeCheck
 	});
 	//#endregion
 })();

@@ -138,6 +138,9 @@ src/shared/escalation.ts         → (se inlinea en cost.js) escalación por ín
                                     + Monte Carlo con retraso del cronograma (68R-11); tipo de cambio aparte
 src/shared/escalation-sample.ts  → (se inlinea en cost.js) ejemplo DISTRIB+ de la escalación (tasas ILUSTRATIVAS, mezcla
                                     por paquete, precios fijados); prueba de oro en tests/unit/escalation-sample.test.ts
+src/shared/boe.ts                → (se inlinea en cost.js) Basis of Estimate (AACE 34R-05): 32 campos del índice de la
+                                    práctica, completitud según la clase, estado de aprobación y hallazgos B1–B8
+src/shared/boe-sample.ts         → (se inlinea en cost.js) BOE del ejemplo DISTRIB+ (clase 3, aprobada); SAMPLE_CAPEX
 src/shared/wbs-quality.ts        → (se inlinea en wbs.js) calidad de la EDT: estructura, diccionario de los
                                     paquetes y tamaño, con umbrales didácticos declarados (LIMITS)
 src/shared/wbs-sample.ts         → (se inlinea en wbs.js) diccionario de los 18 paquetes del ejemplo DISTRIB+

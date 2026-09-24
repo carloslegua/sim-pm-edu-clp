@@ -11,12 +11,13 @@ export const SAMPLE_BASE_DATE = "2026-07-01";
 export const SAMPLE_ESC_SOURCE = "Ejemplo DISTRIB+ — valores ILUSTRATIVOS (reemplazar por el pronóstico de un economista o de una fuente reconocida de índices de construcción).";
 
 // Tasa anual esperada (%) por cuenta y año calendario, y rango de incertidumbre de la tasa (puntos porcentuales sobre el pronóstico,
-// mín / máx): el riesgo es asimétrico hacia arriba, sobre todo en materiales (acero, cemento).
+// mín / máx): el riesgo es asimétrico hacia arriba, sobre todo en materiales (acero, cemento). Calibradas para que el caso siga
+// coherente: el presupuesto total (BAC + reserva de gestión) queda dentro del CAPEX de referencia de USD 8,5 M del Acta y del Enunciado.
 export const SAMPLE_ESC_ACCOUNTS: Record<string, { rates: Record<string, number>; low: number; high: number }> = {
-  labor:       { rates: { "2026": 4.0, "2027": 4.5, "2028": 4.0 }, low: -1.0, high: 2.0 },
-  material:    { rates: { "2026": 3.0, "2027": 3.5, "2028": 3.0 }, low: -1.5, high: 3.5 },
-  equipment:   { rates: { "2026": 2.5, "2027": 3.0, "2028": 3.0 }, low: -1.0, high: 2.0 },
-  subcontract: { rates: { "2026": 3.5, "2027": 4.0, "2028": 3.5 }, low: -1.0, high: 2.5 }
+  labor:       { rates: { "2026": 3.0, "2027": 3.3, "2028": 3.0 }, low: -1.0, high: 1.5 },
+  material:    { rates: { "2026": 2.0, "2027": 2.5, "2028": 2.0 }, low: -1.0, high: 3.0 },
+  equipment:   { rates: { "2026": 1.8, "2027": 2.2, "2028": 2.2 }, low: -0.5, high: 1.5 },
+  subcontract: { rates: { "2026": 2.6, "2027": 3.0, "2028": 2.6 }, low: -1.0, high: 2.0 }
 };
 // Composición del costo de cada paquete por cuenta (%), por Código EDT. Lo que no figura usa la composición por omisión del plan.
 export const SAMPLE_ESC_DEFAULT_MIX: Record<string, number> = { labor: 35, material: 35, equipment: 15, subcontract: 15 };

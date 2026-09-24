@@ -37,6 +37,7 @@ test("escalación por índices sobre el proyecto real: mismo gasto en el tiempo 
 
   // 2) fecha base de precios (Basis of Estimate) y pronóstico por cuenta
   await page.locator('.tab[data-p="p2"]').click();
+  await page.locator("#boeOpenAll").click();                                 // los grupos de la BOE parten plegados: la fecha base está en 3.5
   await page.locator("#boeDate").fill("2026-07-01"); await page.locator("#boeDate").blur();
   await page.locator('.tab[data-p="p3"]').click();
   await expect(page.locator("#escInputs")).toContainText("Fecha base de precios: 2026-07-01");
@@ -62,7 +63,7 @@ test("escalación por índices sobre el proyecto real: mismo gasto en el tiempo 
   const resSolo = await txt(solo, "#escResults");
   expect(resSolo).toContain("fecha media del gasto 2026-12-19");
   expect(resSolo).toMatch(/2026\s*\$ 4,023,415/); expect(resSolo).toMatch(/2027\s*\$ 3,076,585/);
-  await expect(solo.locator("#kEsc")).toHaveText("$ 172,386");                // el ejemplo: P70 con el retraso del cronograma
+  await expect(solo.locator("#kEsc")).toHaveText("$ 127,601");                // el ejemplo: P70 con el retraso del cronograma
   await limpio.close();
 
   // sin Registro de Riesgos no hay retraso que simular; se dice

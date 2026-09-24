@@ -50,7 +50,9 @@ import {
   ACCOUNT_IDS, ACCOUNT_LABEL, DEFAULT_MIX, PROVISIONS, PROVISION_LABEL, blankEscPlan, escalate, escalationAdvisories, fxExposure, horizonYears, normalizeEscPlan,
   provisionFactor, simpleEscalation, simpleMethodAdvisory, simulateEscalation, type Advisory, type EscPackage, type EscPlan, type EscResult, type EscSim
 } from "../../shared/escalation";
-import { SAMPLE_BASE_DATE, buildSampleEscPlan } from "../../shared/escalation-sample";
+import { buildSampleEscPlan } from "../../shared/escalation-sample";
+import { CHECKLIST_ITEMS, GROUPS, SECTIONS, STATUSES, STATUS_LABEL as BOE_STATUS_LABEL, blankBoe, boeFindings, completeness, normalizeBoe, serializeBoe, type Boe, type BoeCtx, type BoeFacts, type BoeSection } from "../../shared/boe";
+import { SAMPLE_CAPEX, buildSampleBoe } from "../../shared/boe-sample";
 import { EVM_SAMPLE_COSTS } from "../../shared/evm-sample";
 import { normalizeBaseline } from "../../shared/schedule-control";
 
@@ -132,6 +134,7 @@ interface CostState {
   baselines: CoBaselineEntry[];
   ranges: RangeLine[];          // partidas del análisis de rangos (método «rangos_mc»)
   legacyMethod: string;         // método que declaraba un proyecto antiguo (solo para avisar), "" si no aplica
+  boe: Boe;                     // Basis of Estimate (AACE 34R-05): texto por sección, estado de aprobación, equipo, documentos y anexo A
   esc: EscPlan;                 // escalación por índices (AACE 58R-10 / 68R-11); la fecha base de precios es la de la BOE (`boeDate`)
   _budget?: BudgetComputed;
   _coTotals?: ChangeTotals;
@@ -144,6 +147,7 @@ const state: CostState = {
   baselines: [],
   ranges: [],
   legacyMethod: "",
+  boe: blankBoe(),
   esc: blankEscPlan()
 };
 
@@ -153,7 +157,7 @@ $("tabs").addEventListener("click", (e) => {
   document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
   document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
   b.classList.add("active"); $(b.dataset.p as string).classList.add("active");
-  if (b.dataset.p === "p5") { buildDoc(); }
+  if (b.dataset.p === "p5") { buildDoc(); } else if (b.dataset.p === "p2") { refreshBoe(); }
 });
 
 /* ---------- Estimate class ---------- */
@@ -784,6 +788,7 @@ function recalcCont(): void {
   $("kEscP").textContent = base ? ((escIdx / base) * 100).toFixed(1) + "%" : "—";
   state._budget = { base, cont, esc: escT, escIdx, fx, bac, mgmt, total };
   state._escCalc = ec;
+  refreshBoe();   // la BOE cita el presupuesto, la escalación y las reservas
   renderAccuracy(base, cont, calc.res);
   renderCO(); // los saldos de las órdenes dependen del presupuesto recién calculado (y renderCO ya llama buildJSON)
 }
@@ -976,6 +981,171 @@ function delCO(i: number): void {
   userEdited = true; state.co.splice(i, 1); renderCO(); save();
 }
 
+/* ---------- Basis of Estimate (AACE RP 34R-05) ---------- */
+// La BOE se guarda en `estimate.boe`: los cinco campos de siempre conservan su nombre (y sus ids del HTML) y el resto se suma.
+const LEGACY_ID: Record<string, string> = { date: "boeDate", source: "boeSource", assumptions: "boeAssum", exclusions: "boeExcl", productivity: "boeProd" };
+const boeId = (k: string): string => LEGACY_ID[k] || "boe_" + k;
+const FIELD_LABEL: Record<string, string> = { date: "Fecha base de los precios (de ella se mide la escalación)", source: "Fuente de los precios", labor: "Tarifas, jornada y rendimientos", productivity: "Factores de productividad y de ajuste" };
+const nl2br = (s: string): string => esc(s).replace(/\n/g, "<br>");
+// CAPEX de referencia del Acta: conectado, el de los datos del proyecto (si es un número); independiente, el del caso de ejemplo.
+function capexValue(): number | null {
+  if (!gpiOn()) return SAMPLE_CAPEX;
+  try {
+    const m = (GPI as GpiApi).meta(), raw = m && m.capex ? String(m.capex).trim() : "";
+    if (!raw || !/^[\d.,\s]+$/.test(raw)) return null;
+    const n = Number(raw.replace(/[,\s]/g, "")); return n > 0 ? n : null;
+  } catch (e) { return null; }
+}
+// Lo que se puede derivar del proyecto: respalda la sección aunque el texto esté vacío.
+function boeFacts(): BoeFacts {
+  const b = state._budget, connected = gpiOn(), g = getEng();
+  let scope = false, coding = !connected;
+  try {
+    if (connected) {
+      const sc = (GPI as GpiApi).getModule("scopeStatement") as { productScope?: string; projectScope?: string } | null;
+      scope = !!sc && !!((sc.productScope || "").trim() || (sc.projectScope || "").trim());
+      coding = (GPI as GpiApi).util.wbsLeaves((GPI as GpiApi).getModule("wbs")).length > 0;
+    }
+  } catch (e) { /* noop */ }
+  return { scope, execution: !!g, classification: true, coding, currency: true, planning: !!g, risks: riskCtx().risks.length > 0, contingency: !!b && b.cont > 0, mgmt: !!b && b.mgmt > 0, escalation: !!b && b.esc > 0, capex: capexValue() !== null };
+}
+function boeCtx(): BoeCtx {
+  const b = state._budget, last = state.baselines.length ? state.baselines[state.baselines.length - 1] : null;
+  return { classNum: state.curClass, escalation: b ? b.esc : 0, baselineVersion: last ? last.version : null, baselineDate: last ? String(last.date || "") : "", capex: capexValue(), total: b ? b.total : null };
+}
+// Contenido de una sección que viene del proyecto (solo lectura): la BOE lo cita, no lo duplica.
+function boeAutoHtml(k: string): string {
+  const b = state._budget, ec = state._escCalc, c = CLASSES[state.curClass], g = getEng(), connected = gpiOn();
+  const none = (t: string): string => `<span class="muted">${t}</span>`;
+  switch (k) {
+    case "scope": {
+      if (!connected) return none("En modo independiente no hay un Enunciado del Alcance conectado: escribe el alcance abajo.");
+      const sc = (GPI as GpiApi).getModule("scopeStatement") as { productScope?: string; projectScope?: string; deliverables?: unknown[] } | null;
+      const t = sc ? [sc.productScope, sc.projectScope].filter((x) => x && x.trim()).join(" ") : "";
+      return t ? `<b>Del Enunciado del Alcance:</b> ${esc(t)}${sc && Array.isArray(sc.deliverables) ? " · " + sc.deliverables.length + " entregable(s)." : ""}` : none("El proyecto aún no tiene Enunciado del Alcance: defínelo o escribe el alcance abajo.");
+    }
+    case "execution": case "planning": {
+      if (!g) return none("Sin cronograma (actividades y enlaces en Cronograma/CPM): la duración y las fechas no se pueden citar.");
+      const crit = Object.keys(g.rows).filter((id) => g.rows[id].critical).length, fin = finishOf(g.base);
+      return `<b>Cronograma del proyecto:</b> ${fmtDays(g.base)} laborables${net && net.startDate ? ", inicio " + esc(net.startDate) : ""}${fin ? ", fin " + esc(fin) : ""} · ${crit} actividad(es) críticas${k === "planning" && ec && ec.res && ec.res.ok ? " · fecha media del gasto " + esc(ec.res.midDate || "—") : ""}.`;
+    }
+    case "classification": return `<b>Clase ${state.curClass}</b> — ${esc(c.desc)} Madurez del diseño ${esc(c.mat)}; uso previsto: ${esc(c.use)}; rango de exactitud típico ${esc(c.range)}.`;
+    case "coding": { const n = escPackages().pkgs.length; return `<b>EDT:</b> ${n ? n + " paquete(s) de trabajo con costo" : "sin paquetes con costo"}, con Código EDT jerárquico. Cuentas de escalación: ${ACCOUNT_IDS.map((id) => esc(ACCOUNT_LABEL[id])).join(", ")}.`; }
+    case "currency": return `<b>Moneda del plan:</b> ${esc(($("cur") as HTMLSelectElement).value)} (${sym()}). Componente en moneda extranjera ${esc(($("fxShare") as HTMLInputElement).value)} %, tipo de cambio ${($("fxMode") as HTMLSelectElement).value === "frozen" ? "congelado a la fecha base" : "flotante con banda ±" + esc(($("fxBand") as HTMLInputElement).value) + " %"}; su exposición (${fmt(b ? b.fx : 0)}) se cuantifica aparte de la escalación.`;
+    case "risks": {
+      const rc = riskCtx(), open = rc.risks.filter((r) => r.status !== "materializado" && r.status !== "cerrado");
+      return rc.source === "sin registro" ? none("Este proyecto no tiene Registro de Riesgos.") : `<b>Registro de Riesgos (${rc.source === "registro" ? "del proyecto" : "caso de ejemplo"}):</b> ${rc.risks.length} riesgo(s), ${open.length} abierto(s)${open.length ? ": " + esc(open.slice(0, 5).map((r) => r.code + " " + (r.title || "")).join("; ")) + (open.length > 5 ? "…" : "") : ""}.`;
+    }
+    case "contingency": return b ? `<b>${esc(METHOD_LABEL[contMethod()])}:</b> ${fmt(b.cont)}${b.base ? " (" + ((b.cont / b.base) * 100).toFixed(1) + " % del costo base)" : ""}${contMethod() === "manual" ? "" : ", " + esc(($("contPct") as HTMLSelectElement).value)}.` : "";
+    case "mgmt": return b ? `<b>${esc(($("mgmtPct") as HTMLInputElement).value)} % de la línea base = ${fmt(b.mgmt)}</b>, propiedad del sponsor y fuera de la línea base.` : "";
+    case "escalation": return b && ec ? `<b>Escalación:</b> ${ec.method === "indices" ? "por índices (58R-10 / 68R-11), " + esc(ec.provLabel) : "método simple"} ${fmt(b.escIdx || 0)}; <b>tipo de cambio:</b> ${fmt(b.fx || 0)}; la contingencia (${fmt(b.cont)}) excluye ambos.` : "";
+    case "capex": { const cx = capexValue(); return cx !== null && b ? `<b>CAPEX de referencia:</b> ${fmt(cx)} · presupuesto total ${fmt(b.total)} → ${b.total <= cx + 0.5 ? "dentro del CAPEX" : "SUPERA el CAPEX en " + fmt(b.total - cx)}.` : none("Sin CAPEX de referencia (Acta de Constitución)."); }
+    default: return "";
+  }
+}
+const boeOpen = new Set<string>(["g1"]);
+const boeStateLabel = (e: { state: string; applies: boolean }): string => (!e.applies ? "No aplica" : e.state === "completa" ? "Completa" : e.state === "respaldada" ? "Respaldada por el proyecto" : e.state === "falta" ? "Falta" : "Opcional");
+function renderBoe(): void {
+  if (!document.getElementById("boeForm")) return;
+  const B = state.boe;
+  const meta = (id: string, label: string, val: string, k: string, type = "text"): string => `<label class="f"><span>${label}</span><input id="${id}" class="mono" type="${type}" value="${escA(val)}" data-b="meta" data-k="${k}" oninput="boeEdit(this)" onchange="save()"></label>`;
+  $("boeHead").innerHTML = `<div class="boe-head">
+      ${meta("boeVersion", "Versión de la BOE", B.version, "version")}
+      <label class="f"><span>Estado</span><select id="boeStatusSel" class="mono" data-b="meta" data-k="status" onchange="boeEdit(this);save()">${STATUSES.map((s) => `<option value="${s}" ${B.status === s ? "selected" : ""}>${BOE_STATUS_LABEL[s]}</option>`).join("")}</select></label>
+      ${meta("boePrepared", "Preparó", B.preparedBy, "preparedBy")}${meta("boeReviewed", "Revisó", B.reviewedBy, "reviewedBy")}${meta("boeApprover", "Aprueba", B.approvedBy, "approvedBy")}${meta("boeApprovedOn", "Fecha de aprobación", B.approvedOn, "approvedOn", "date")}
+    </div><div class="muted small" style="margin-top:6px">Proceso de 34R-05: borrador → revisión → aprobación → cambios y actualizaciones. La BOE es la base del control de cambios: cuando la línea base cambia, se actualiza y se vuelve a aprobar.</div>`;
+  const field = (k: string, s: BoeSection): string => {
+    const v = B.text[k] || "", attr = `id="${boeId(k)}" data-b="text" data-k="${k}" oninput="boeEdit(this)" onchange="save()" aria-label="${escA(s.id + " " + s.title)}"`;
+    const lab = FIELD_LABEL[k] ? `<span>${esc(FIELD_LABEL[k])}</span>` : "";
+    if (k === "date") return `<label class="f">${lab}<input type="date" class="mono" ${attr} value="${escA(v)}"></label>`;
+    if (k === "source") return `<label class="f">${lab}<input ${attr} value="${escA(v)}" placeholder="Ej. cotizaciones vigentes, base de precios, contratos"></label>`;
+    return `<label class="f">${lab}<textarea ${attr} rows="3" placeholder="${escA(s.placeholder || "")}">${esc(v)}</textarea></label>`;
+  };
+  const sec = (s: BoeSection): string => `<div class="boe-sec" id="sec-${s.id}"><h5>${s.id} ${esc(s.title)} <span class="en">· ${esc(s.en)}</span><span class="boe-st" id="st-${s.id}"></span></h5>
+      <div class="boe-hint">${esc(s.hint)}</div>${s.auto ? `<div class="boe-auto" id="auto-${s.id}"></div>` : ""}
+      ${s.list ? `<div id="boeList-${s.list}"></div>` : s.keys.map((k) => field(k, s)).join("")}</div>`;
+  $("boeForm").innerHTML = GROUPS.map((g) => `<details class="boe-grp" data-g="${g.id}" ${boeOpen.has(g.id) ? "open" : ""}><summary>${esc(g.title)}<span class="boe-gc" id="gc-${g.id}"></span></summary>${SECTIONS.filter((s) => s.group === g.id).map(sec).join("")}</details>`).join("");
+  document.querySelectorAll<HTMLDetailsElement>("#boeForm details.boe-grp").forEach((d) => d.addEventListener("toggle", () => { const id = d.dataset.g as string; if (d.open) boeOpen.add(id); else boeOpen.delete(id); }));
+  renderBoeLists(); refreshBoe();
+}
+function renderBoeLists(): void {
+  const B = state.boe, cell = (kind: string, i: number, f: string, v: string, ph: string): string => `<td><input data-kind="${kind}" data-i="${i}" data-f="${f}" value="${escA(v)}" placeholder="${ph}" oninput="boeListEdit(this)" onchange="save()" aria-label="${ph}"></td>`;
+  const tbl = (kind: "team" | "refs", head: string[], f: [string, string], rows: Array<Record<string, string>>): string => `<table class="boe-list"><thead><tr><td class="muted small">${head[0]}</td><td class="muted small">${head[1]}</td><td></td></tr></thead><tbody>${rows.map((r, i) => `<tr>${cell(kind, i, f[0], r[f[0]], head[0])}${cell(kind, i, f[1], r[f[1]], head[1])}<td style="width:34px"><button class="btn ghost sm" onclick="boeListDel('${kind}',${i})" aria-label="Quitar">✕</button></td></tr>`).join("")}</tbody></table><button class="btn sm" style="margin-top:6px" onclick="boeListAdd('${kind}')">+ Agregar</button>`;
+  const t = document.getElementById("boeList-team"), r = document.getElementById("boeList-refs"), c = document.getElementById("boeList-checklist");
+  if (t) t.innerHTML = tbl("team", ["Nombre o cargo", "Rol en el estimado"], ["name", "role"], B.team as unknown as Array<Record<string, string>>);
+  if (r) r.innerHTML = tbl("refs", ["Documento o proyecto", "Nota"], ["title", "note"], B.refs as unknown as Array<Record<string, string>>);
+  if (c) c.innerHTML = `<div class="boe-chk">${CHECKLIST_ITEMS.map((it) => `<label><input type="checkbox" data-id="${it.id}" ${B.checklist.some((x) => x.id === it.id && x.done) ? "checked" : ""} onchange="boeCheck(this)"> ${esc(it.label)}</label>`).join("")}</div>`;
+}
+function refreshBoe(): void {
+  if (!document.getElementById("boeStatus")) return;
+  const facts = boeFacts(), ctx = boeCtx(), c = completeness(state.boe, facts, state.curClass), f = boeFindings(state.boe, facts, ctx);
+  const miss = c.missing.length ? `<div class="boe-miss">${c.missing.map((s) => `<button type="button" data-goto="${s.id}">${esc(s.id + " " + s.title)}</button>`).join("")}</div>` : `<div class="muted small">Todas las secciones que se exigen para un estimado de clase ${state.curClass} están completas o respaldadas por el proyecto.</div>`;
+  const fl = f.length ? `<ul class="esc-adv" style="margin-top:8px">${f.map((x) => `<li class="${x.severity}"><b class="cd">${x.code}</b>${esc(x.text)}</li>`).join("")}</ul>` : "";
+  $("boeStatus").innerHTML = `<div><b>Estimado de clase ${state.curClass}</b> · se exigen <b>${c.required}</b> de ${SECTIONS.length} secciones · completas o respaldadas por el proyecto: <b>${c.done}</b> (${c.pct} %)</div>
+    <div class="boe-bar"><div style="width:${c.pct}%"></div></div>${miss}${fl}
+    <div style="margin-top:8px"><button type="button" class="btn sm" id="boeOpenAll">Abrir todas las secciones</button> <button type="button" class="btn sm" id="boeCloseAll">Plegar todas</button></div>
+    <div class="muted" style="font-size:11.5px;margin-top:8px">Qué secciones se exigen según la clase es un <b>criterio didáctico</b> de este módulo: 34R-05 (§4) dice que el detalle de la BOE depende de la definición del proyecto, de su valor y de su tipo, pero no fija una lista por clase. La sección 3.15 del índice público («Containments») no se pudo verificar y se omite.</div>`;
+  $("boeStatus").querySelectorAll<HTMLElement>("[data-goto]").forEach((b) => b.addEventListener("click", () => {
+    const s = SECTIONS.find((x) => x.id === b.dataset.goto); if (!s) return;
+    const d = document.querySelector<HTMLDetailsElement>(`#boeForm details[data-g="${s.group}"]`); if (d) { d.open = true; boeOpen.add(s.group); }
+    const el = document.getElementById("sec-" + s.id); if (el) { el.scrollIntoView({ block: "center" }); const i = el.querySelector<HTMLElement>("textarea,input"); if (i) i.focus(); }
+  }));
+  const setAll = (open: boolean): void => { document.querySelectorAll<HTMLDetailsElement>("#boeForm details.boe-grp").forEach((d) => { d.open = open; const id = d.dataset.g as string; if (open) boeOpen.add(id); else boeOpen.delete(id); }); };
+  const oa = document.getElementById("boeOpenAll"), ca = document.getElementById("boeCloseAll");
+  if (oa) oa.addEventListener("click", () => setAll(true)); if (ca) ca.addEventListener("click", () => setAll(false));
+  const done: Record<string, [number, number]> = {};
+  c.evals.forEach((e) => {
+    const st = document.getElementById("st-" + e.section.id);
+    if (st) { st.textContent = boeStateLabel(e); st.className = "boe-st " + (!e.applies ? "opcional" : e.state); }
+    const au = document.getElementById("auto-" + e.section.id); if (au && e.section.auto) au.innerHTML = boeAutoHtml(e.section.auto);
+    if (e.required) { const g = done[e.section.group] || (done[e.section.group] = [0, 0]); g[1]++; if (e.state === "completa" || e.state === "respaldada") g[0]++; }
+  });
+  GROUPS.forEach((g) => { const el = document.getElementById("gc-" + g.id); if (el) el.textContent = done[g.id] ? done[g.id][0] + "/" + done[g.id][1] + " exigidas" : "opcionales"; });
+}
+function boeEdit(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): void {
+  userEdited = true;
+  const kind = el.dataset.b, k = el.dataset.k || "", B = state.boe;
+  if (kind === "text") B.text[k] = el.value;
+  else if (kind === "meta") {
+    if (k === "status") {
+      B.status = STATUSES.indexOf(el.value as never) >= 0 ? el.value as Boe["status"] : "borrador";
+      if (B.status === "aprobada" && !B.approvedOn) { B.approvedOn = todayISO(); const d = document.getElementById("boeApprovedOn") as HTMLInputElement | null; if (d) d.value = B.approvedOn; }
+    } else if (k === "approvedOn") B.approvedOn = /^\d{4}-\d{2}-\d{2}$/.test(el.value) ? el.value : "";
+    else (B as unknown as Record<string, string>)[k] = el.value;
+  }
+  if (kind === "text" && k === "date") recalcCont(); else refreshBoe();   // la fecha base de precios mueve la escalación
+}
+function boeListAdd(kind: "team" | "refs"): void { userEdited = true; if (kind === "team") state.boe.team.push({ name: "", role: "" }); else state.boe.refs.push({ title: "", note: "" }); renderBoeLists(); refreshBoe(); save(); }
+function boeListDel(kind: "team" | "refs", i: number): void { userEdited = true; state.boe[kind].splice(i, 1); renderBoeLists(); refreshBoe(); save(); }
+function boeListEdit(el: HTMLInputElement): void {
+  userEdited = true;
+  const kind = el.dataset.kind as "team" | "refs", i = Number(el.dataset.i), f = el.dataset.f as string, row = state.boe[kind][i] as unknown as Record<string, string> | undefined;
+  if (row) row[f] = el.value; refreshBoe();
+}
+function boeCheck(el: HTMLInputElement): void { userEdited = true; const it = state.boe.checklist.find((x) => x.id === el.dataset.id); if (it) it.done = el.checked; refreshBoe(); save(); }
+// La BOE en el documento (pestaña 05): en el orden de 34R-05, con lo que viene del proyecto citado junto al texto.
+function boeDocHtml(): string {
+  const B = state.boe, facts = boeFacts(), c = completeness(B, facts, state.curClass), f = boeFindings(B, facts, boeCtx());
+  const head = `<table class="dt">
+      <tr><td>Versión · estado</td><td>${esc(B.version)} · <b>${BOE_STATUS_LABEL[B.status]}</b></td></tr>
+      <tr><td>Preparó · revisó</td><td>${esc(B.preparedBy) || "—"} · ${esc(B.reviewedBy) || "—"}</td></tr>
+      <tr><td>Aprobó</td><td>${esc(B.approvedBy) || "—"}${B.approvedOn ? " · " + esc(B.approvedOn) : ""}</td></tr>
+      <tr><td>Nivel de detalle</td><td>Estimado de clase ${state.curClass}: ${c.required} sección(es) exigidas, ${c.done} completas o respaldadas por el proyecto (${c.pct} %)${c.missing.length ? ". <b>Faltan:</b> " + esc(c.missing.map((s) => s.id + " " + s.title).join("; ")) : ""}.</td></tr></table>`;
+  const listHtml = (s: BoeSection): string => s.list === "team" ? B.team.filter((m) => m.name.trim()).map((m) => esc(m.name) + (m.role.trim() ? " — " + esc(m.role) : "")).join("<br>")
+    : s.list === "refs" ? B.refs.filter((r) => r.title.trim()).map((r) => esc(r.title) + (r.note.trim() ? " — " + esc(r.note) : "")).join("<br>")
+    : CHECKLIST_ITEMS.map((it) => (B.checklist.some((x) => x.id === it.id && x.done) ? "☑ " : "☐ ") + esc(it.label)).join("<br>");
+  const groups = GROUPS.map((g) => {
+    const rows = c.evals.filter((e) => e.section.group === g.id && e.applies).map((e) => {
+      const s = e.section, txt = s.list ? listHtml(s) : s.keys.map((k) => B.text[k] ? (s.keys.length > 1 && FIELD_LABEL[k] ? `<i>${esc(FIELD_LABEL[k])}:</i> ` : "") + nl2br(B.text[k]) : "").filter(Boolean).join("<br>");
+      const auto = s.auto && facts[s.auto] ? boeAutoHtml(s.auto) : "";
+      if (!txt && !auto && !e.required) return "";
+      return `<tr><td>${s.id} ${esc(s.title)}</td><td>${auto}${auto && txt ? "<br>" : ""}${txt || (auto ? "" : `<span class="muted">— (falta)</span>`)}</td></tr>`;
+    }).join("");
+    return rows ? `<p style="font-size:12.5px;margin:12px 0 4px"><b>${esc(g.title)}</b></p><table class="dt">${rows}</table>` : "";
+  }).join("");
+  return head + groups + (f.length ? `<p style="font-size:12.5px;margin:10px 0 0"><b>Revisar:</b> ${f.map((x) => esc(x.code + " — " + x.text)).join(" · ")}</p>` : "");
+}
+
 /* ---------- Documento BOE (recopilación integral) ---------- */
 function boeCORows(): string {
   if (!state.co.length) return `<tr><td class="muted" colspan="7">Sin órdenes de cambio registradas</td></tr>`;
@@ -1075,14 +1245,8 @@ function buildDoc(): void {
     </section>
 
     <section class="dsec">
-      <h4 class="dsec-t"><span class="dn">04</span>Bases del estimado (AACE RP 34R-05)</h4>
-      <table class="dt">
-        <tr><td>Fecha base</td><td>${esc(($("boeDate") as HTMLInputElement).value) || "—"}</td></tr>
-        <tr><td>Fuente de precios</td><td>${esc(($("boeSource") as HTMLInputElement).value) || "—"}</td></tr>
-        <tr><td>Supuestos</td><td>${esc(($("boeAssum") as HTMLTextAreaElement).value) || "—"}</td></tr>
-        <tr><td>Exclusiones</td><td>${esc(($("boeExcl") as HTMLTextAreaElement).value) || "—"}</td></tr>
-        <tr><td>Factores de productividad</td><td>${esc(($("boeProd") as HTMLTextAreaElement).value) || "—"}</td></tr>
-      </table>
+      <h4 class="dsec-t"><span class="dn">04</span>Basis of Estimate (AACE RP 34R-05)</h4>
+      ${boeDocHtml()}
     </section>
 
     <section class="dsec">
@@ -1143,10 +1307,7 @@ function collect(): Record<string, unknown> {
       }
     },
     estimate: {
-      class: state.curClass, boe: {
-        date: ($("boeDate") as HTMLInputElement).value, source: ($("boeSource") as HTMLInputElement).value,
-        assumptions: ($("boeAssum") as HTMLTextAreaElement).value, exclusions: ($("boeExcl") as HTMLTextAreaElement).value, productivity: ($("boeProd") as HTMLTextAreaElement).value
-      }
+      class: state.curClass, boe: serializeBoe(state.boe)   // 34R-05: date, source, assumptions, exclusions y productivity conservan su nombre; el resto se suma
     },
     budget: {
       baseCost: +($("baseCost") as HTMLInputElement).value,
@@ -1338,10 +1499,7 @@ function applyData(d: any): void {
     if (th.cv) { ($("cvWarn") as HTMLInputElement).value = th.cv.warn; ($("cvEsc") as HTMLInputElement).value = th.cv.escalate; }
   }
   if (e.class) state.curClass = e.class;
-  if (e.boe) {
-    ($("boeDate") as HTMLInputElement).value = e.boe.date || ""; ($("boeSource") as HTMLInputElement).value = e.boe.source || "";
-    ($("boeAssum") as HTMLTextAreaElement).value = e.boe.assumptions || ""; ($("boeExcl") as HTMLTextAreaElement).value = e.boe.exclusions || ""; ($("boeProd") as HTMLTextAreaElement).value = e.boe.productivity || "";
-  }
+  if (e.boe) { state.boe = normalizeBoe(e.boe); renderBoe(); }   // un proyecto guardado antes solo trae los cinco campos de siempre: el resto queda vacío y el estado en borrador
   if (b.baseCost) { ($("baseCost") as HTMLInputElement).value = b.baseCost; ($("actCostP1") as HTMLInputElement).value = b.baseCost; }
   if (b.contingency) {
     const m = b.contingency.method;
@@ -1391,7 +1549,8 @@ function load(): void {
     state.co = JSON.parse(JSON.stringify(SAMPLE_CO)); state.ranges = JSON.parse(JSON.stringify(SAMPLE_RANGES));
     ($("rngTimeCost") as HTMLInputElement).value = String(SAMPLE_TIME_COST); ($("rngTimeBasis") as HTMLInputElement).value = SAMPLE_TIME_BASIS;
     // Escalación del caso: por índices, con la fecha base de precios de la BOE (los mismos 18 paquetes y las mismas fechas de la red).
-    state.esc = buildSampleEscPlan((c) => "w-" + c); ($("boeDate") as HTMLInputElement).value = SAMPLE_BASE_DATE; ($("escMethod") as HTMLSelectElement).value = "indices"; escInputsKey = "";
+    state.esc = buildSampleEscPlan((c) => "w-" + c); ($("escMethod") as HTMLSelectElement).value = "indices"; escInputsKey = "";
+    state.boe = buildSampleBoe(); renderBoe();   // la BOE del caso trae la fecha base de precios (SAMPLE_BASE_DATE) y el resto de sus secciones
   }
 }
 /* ---------- Barra de proyecto (badge flotante) ---------- */
@@ -1415,6 +1574,7 @@ function gpiBadge(): void {
 /* ---------- Init ---------- */
 function init(reload: boolean): void {
   session = gpiOn() ? (GPI as GpiApi).openSession("cost") : null; // en el mismo instante en que load() lee el dato
+  renderBoe();   // los campos de la BOE (fecha base, etc.) existen antes de cargar y de calcular
   load();
   const connected = gpiOn();
   if (connected) loadedProjectId = (GPI as GpiApi).activeId();
@@ -1460,4 +1620,4 @@ init(false);
 // archivo) que buscan estas funciones POR NOMBRE en el ámbito global.
 // Sin esto, Vite las deja encerradas en el closure del bundle y cada
 // clic tira "x is not defined".
-Object.assign(window, { coPolicyHint, save, recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc, coEdit, coBaseline, coKindHint, evalVariance, onContMethod, addRange, delRange, rangeEdit, pullRangesFromEstimate, pullRangesFromWbs, applyClassRange, onEscMethod, escEdit });
+Object.assign(window, { coPolicyHint, save, recalcCont, onBaseInput, pullFromWBS, pullFromCostEstimate, addCO, coStatus, delCO, buildDoc, coEdit, coBaseline, coKindHint, evalVariance, onContMethod, addRange, delRange, rangeEdit, pullRangesFromEstimate, pullRangesFromWbs, applyClassRange, onEscMethod, escEdit, boeEdit, boeListAdd, boeListDel, boeListEdit, boeCheck });

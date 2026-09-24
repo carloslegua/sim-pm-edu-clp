@@ -11,6 +11,23 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Costos — Basis of Estimate conforme a AACE RP 34R-05** — la BOE tenía cinco campos; 34R-05 la
+  define como el entregable que define el alcance del estimado y es la base del control de
+  cambios. Ahora sigue el índice de la práctica en **32 campos y 8 grupos** (propósito, objetivos,
+  alcance, plan de ejecución, clasificación, herramientas, codificación, unidades, moneda y tipo de
+  cambio, cantidades, costos, planificación, mano de obra, asignaciones, supuestos, exclusiones,
+  excepciones, riesgos, contingencias, reserva de gestión, conciliación, benchmarking, calidad,
+  equipo y anexos), **cita del proyecto** el alcance del Enunciado, el cronograma, la EDT, los
+  riesgos, las reservas, la escalación y el CAPEX del Acta, y trae el proceso de la práctica
+  (versión, borrador → revisión → aprobación) con **hallazgos B1–B8**: aprobada incompleta, sin
+  quién ni cuándo, **BOE aprobada antes de la última línea base de costos**, escalación sin definir
+  su frontera con la contingencia y el tipo de cambio (58R-10), presupuesto que **supera el CAPEX
+  del Acta**. Qué secciones se exigen según la clase del estimado es criterio didáctico declarado
+  (34R-05 §4 no fija una lista); la sección 3.15 del índice público no se pudo verificar y se omite.
+  Un proyecto nuevo arranca con la BOE **en blanco** (se quitaron los textos por omisión) y uno
+  guardado antes conserva sus cinco campos. Nuevos `src/shared/boe.ts` y `src/shared/boe-sample.ts`.
+  Pruebas: `boe.test.ts` (17), `boe-sample.test.ts` (4), smoke (11) y e2e en Chrome real. Ver
+  ARCHITECTURE.md.
 - **Costos — escalación por índices y simulación (auditoría metodológica AACE RP 58R-10 y
   68R-11)** — la escalación era `base × ((1 + i)ⁿ − 1)`: una tasa, un punto de gasto y el tipo de
   cambio mezclado en la misma línea. Ahora, por índices: una **tasa anual por cuenta de costo**
@@ -23,7 +40,8 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
   cambio** pasa a su propia línea (AACE recomienda segregarlo). Avisos X1–X15, incluido el
   solapamiento con riesgos de precio del registro. Los proyectos guardados antes se leen como
   método «simple» y **no cambian de cifras**; un proyecto nuevo arranca por índices en blanco. Las
-  tasas del ejemplo DISTRIB+ son **ilustrativas** (el BAC del ejemplo pasa de 8.075.181 a 8.124.386).
+  tasas del ejemplo DISTRIB+ son **ilustrativas** y están calibradas para que el presupuesto total
+  siga dentro del CAPEX de USD 8,5 M del caso (el BAC del ejemplo pasa de 8.075.181 a 8.079.601).
   Nuevos `src/shared/escalation.ts` y `src/shared/escalation-sample.ts`. Pruebas:
   `escalation.test.ts` (28), `escalation-sample.test.ts` (6), smoke (10) y e2e en Chrome real. Ver
   ARCHITECTURE.md (con lo que se verificó de las prácticas y lo que no).
