@@ -1466,12 +1466,19 @@ NO captura datos propios ni tiene «Cargar ejemplo» (regla #6: no hay un ejempl
 mantener coherente; refleja el caso que ya cargaron los demás módulos) y sin proyecto activo solo
 avisa, sin inventar nada (regla #5).
 - **Estado por área** (`areaRows`): Acta, Requisitos, Alcance, EDT, Cronograma, Costos y BOE,
-  Riesgos, Interesados, Equipo/RACI, Cambios y Valor Ganado, cada una con el estado que ya
-  calculan las auditorías del núcleo (`charterAudit`, `requirementsAudit`, `scopeAudit`,
-  `analyzeWbs`, `scheduleStats`, `costSummary`, `portfolio` de riesgos y de cambios…). Los planes
-  de **Calidad, Comunicaciones y Adquisiciones** aún no tienen módulo: se listan como «sin módulo
-  en la suite», no se inventa su contenido.
-- **Hallazgos de integración P1–P14** (`integrationFindings`), lo que ningún módulo ve solo:
+  Riesgos, Interesados, Equipo/RACI, Cambios, Valor Ganado y los planes de **Calidad,
+  Comunicaciones y Adquisiciones** (14 áreas, cada una con su módulo), cada una con el estado que
+  ya calculan las auditorías del núcleo (`charterAudit`, `requirementsAudit`, `scopeAudit`,
+  `analyzeWbs`, `scheduleStats`, `costSummary`, `portfolio` de riesgos y de cambios…) o su propio
+  `qualityState`/`commState`/`procurementState`. **La lectura de datos de esos tres planes es la
+  misma que usa cada módulo** (`src/shared/plan-facts.ts`: `gatherQualityFacts`,
+  `gatherCommFacts`, `gatherProcurementFacts`), así lo que el módulo revisa y lo que el plan resume
+  no puede divergir.
+- **Hallazgos de integración P1–P19** (`integrationFindings`), lo que ningún módulo ve solo.
+  Entre los planes subsidiarios: **P15** adquisiciones con la convocatoria vencida (el suministro
+  llegará después de lo que el cronograma necesita), **P16** paquetes con criterio de aceptación
+  sin verificación de calidad, **P18** interesados a gestionar de cerca sin comunicación, **P19**
+  valor de las adquisiciones sobre el BAC y **P17** (info) plan subsidiario aún no elaborado. Los demás:
   falta de Acta, líneas base de alcance/requisitos/cronograma ausentes, BOE sin aprobar, **alcance
   cambiado después de las líneas base del cronograma y del costo**, cambios aprobados sin
   implementar, **cronograma que termina después de la fecha contractual/del proyecto**,
@@ -1488,8 +1495,10 @@ avisa, sin inventar nada (regla #5).
 - **Rama propia `pmplan`** (opcional, aditiva; ProjectModules tiene firma de índice): `{version,
   status, preparedBy, approvedBy, approvedOn, notes, snapshot, history[]}`. Solo esto se escribe;
   el resto son lecturas.
-- **Documento** siguiendo el formato del PDF de la cátedra: portada, contenido con anclas y diez
-  secciones (descripción del proyecto del Acta; alcance con **matriz de trazabilidad** de
+- **Documento** siguiendo el formato del PDF de la cátedra: portada, contenido con anclas y trece
+  secciones **numeradas automáticamente en el orden de las áreas de conocimiento** (alcance,
+  cronograma, costos, **calidad**, recursos, **comunicaciones**, riesgos, **adquisiciones**,
+  interesados; luego cambios, valor ganado y líneas base). Descripción del proyecto del Acta; alcance con **matriz de trazabilidad** de
   requisitos —identificación, requisito, fuente, prioridad, categoría, objetivo de negocio,
   entregable, verificación, validación—, Enunciado con entregables y sus responsables de
   elaboración (R) y aceptación (A) tomados de la RACI de los paquetes que los componen, EDT con

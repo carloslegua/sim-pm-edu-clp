@@ -68,6 +68,25 @@
 		return P && I ? "cerca" : P ? "satisfecho" : I ? "informado" : "monitorear";
 	}
 	//#endregion
+	//#region src/shared/plan-facts.ts
+	var rec = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+	var num = (v) => {
+		const n = Number(v);
+		return isFinite(n) ? n : 0;
+	};
+	function gatherCommFacts(G) {
+		return {
+			stakeholders: (Array.isArray(rec(G.getModule("stakeholders")).stakeholders) ? rec(G.getModule("stakeholders")).stakeholders.map(rec) : []).map((s) => ({
+				id: String(s.id),
+				name: String(s.name || s.id),
+				quadrant: quadrantOf(num(s.power), num(s.interest)),
+				engCurrent: s.engCurrent === null || s.engCurrent === void 0 ? null : num(s.engCurrent),
+				engDesired: s.engDesired === null || s.engDesired === void 0 ? null : num(s.engDesired)
+			})),
+			roles: Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)))
+		};
+	}
+	//#endregion
 	//#region src/shared/comms-plan.ts
 	var FREQUENCIES = [
 		"Única vez",
@@ -437,11 +456,6 @@
 	function setStatus(msg) {
 		$("statusLeft").textContent = msg;
 	}
-	var rec = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
-	var num = (v) => {
-		const n = Number(v);
-		return isFinite(n) ? n : 0;
-	};
 	var STATE_LABEL = {
 		vacio: "Sin datos",
 		verde: "En orden",
@@ -465,16 +479,7 @@
 			};
 			if (!connected) facts = sampleCommFacts();
 			else if (G && G.util) try {
-				facts = {
-					stakeholders: (Array.isArray(rec(G.getModule("stakeholders")).stakeholders) ? rec(G.getModule("stakeholders")).stakeholders.map(rec) : []).map((s) => ({
-						id: String(s.id),
-						name: String(s.name || s.id),
-						quadrant: quadrantOf(num(s.power), num(s.interest)),
-						engCurrent: s.engCurrent === null || s.engCurrent === void 0 ? null : num(s.engCurrent),
-						engDesired: s.engDesired === null || s.engDesired === void 0 ? null : num(s.engDesired)
-					})),
-					roles: Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)))
-				};
+				facts = gatherCommFacts(G);
 			} catch (e) {}
 			ctx = {
 				connected,

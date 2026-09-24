@@ -15,7 +15,8 @@
 import type * as GpiCore from "../../core/gpi-core";
 import type { EditSession } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
-import { quadrantOf, levelName } from "../../shared/stakeholder-engagement";
+import { levelName } from "../../shared/stakeholder-engagement";
+import { gatherCommFacts } from "../../shared/plan-facts";
 import {
   FREQUENCIES, METHODS, blankItem, channelsFor, commFindings, commState, coverage, nextCode, normalizeComms,
   type CommData, type CommFacts, type CommItem, type CommState
@@ -29,8 +30,6 @@ declare global { interface Window { GPI?: GpiApi; } }
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)); }
 function setStatus(msg: string): void { $("statusLeft").textContent = msg; }
-const rec = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
-const num = (v: unknown): number => { const n = Number(v); return isFinite(n) ? n : 0; };
 const STATE_LABEL: Record<CommState, string> = { vacio: "Sin datos", verde: "En orden", ambar: "Con avisos", rojo: "Con riesgos" };
 const QUAD: Record<string, string> = { cerca: "Gestionar de cerca", satisfecho: "Mantener satisfecho", informado: "Mantener informado", monitorear: "Monitorear" };
 
@@ -42,16 +41,7 @@ function getCtx(): { connected: boolean; facts: CommFacts } {
     let facts: CommFacts = { stakeholders: [], roles: [] };
     if (!connected) facts = sampleCommFacts();
     else if (G && G.util) {
-      try {
-        const sk = Array.isArray(rec(G.getModule("stakeholders")).stakeholders) ? (rec(G.getModule("stakeholders")).stakeholders as unknown[]).map(rec) : [];
-        facts = {
-          stakeholders: sk.map((s) => ({
-            id: String(s.id), name: String(s.name || s.id), quadrant: quadrantOf(num(s.power), num(s.interest)),
-            engCurrent: s.engCurrent === null || s.engCurrent === undefined ? null : num(s.engCurrent), engDesired: s.engDesired === null || s.engDesired === undefined ? null : num(s.engDesired)
-          })),
-          roles: Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)))
-        };
-      } catch (e) { /* noop */ }
+      try { facts = gatherCommFacts(G); } catch (e) { /* noop */ }
     }
     ctx = { connected, facts }; ctxDirty = false;
   }

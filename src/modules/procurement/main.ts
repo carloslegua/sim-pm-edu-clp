@@ -15,7 +15,7 @@
 import type * as GpiCore from "../../core/gpi-core";
 import type { EditSession } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
-import { inherentScore, isOpen, levelOf, normalizePlan as normalizeRiskPlan, normalizeRisk } from "../../shared/risk-analysis";
+import { gatherProcurementFacts } from "../../shared/plan-facts";
 import {
   CONTRACT_TYPES, DECISIONS, SELECTION_METHODS, STATUSES, WARN_DAYS, blankProcurement, criteriaSum, daysBetween, isBuy, launchBy, nextCode, normalizeItem, normalizeProcurement, procurementFindings, procurementState, summary,
   type ProcData, type ProcFacts, type ProcItem, type ProcState
@@ -29,7 +29,6 @@ declare global { interface Window { GPI?: GpiApi; } }
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)); }
 function setStatus(msg: string): void { $("statusLeft").textContent = msg; }
-const rec = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 const todayISO = (): string => new Date().toISOString().slice(0, 10);
 const CUR: Record<string, string> = { USD: "$", PEN: "S/", EUR: "€" };
 const STATE_LABEL: Record<ProcState, string> = { vacio: "Sin datos", verde: "En orden", ambar: "Con avisos", rojo: "Con riesgos" };
@@ -42,18 +41,7 @@ function getCtx(): { connected: boolean; facts: ProcFacts; sym: string } {
     let facts: ProcFacts = { leaves: [], roles: [], risks: [], suppliers: [], estimateClass: null, baseCost: null }, sym = "$";
     if (!connected) facts = sampleProcurementFacts();
     else if (G && G.util) {
-      try {
-        const wbs = G.getModule("wbs"), nodes = rec(wbs && wbs.nodes), m = G.meta(); sym = CUR[(m && m.currency) || ""] || "$";
-        facts.leaves = G.util.wbsLeaves(wbs).map((l) => ({ id: l.id, code: l.code, name: l.name, cost: Number(rec(nodes[l.id]).cost) || 0 }));
-        const obs = G.util.obsNodes(G.getModule("obs"));
-        facts.roles = Array.from(new Set(obs.map((n) => (n.role || "").trim()).filter(Boolean)));
-        const sk = rec(G.getModule("stakeholders")).stakeholders;
-        facts.suppliers = Array.from(new Set(obs.map((n) => (n.person || "").trim()).concat((Array.isArray(sk) ? sk : []).map((s) => String(rec(s).org || "").trim())).filter(Boolean)));
-        const rk = G.getModule("risks"), plan = normalizeRiskPlan(rk && rk.plan);
-        facts.risks = (rk && Array.isArray(rk.risks) ? rk.risks : []).map((r, i) => normalizeRisk(r, "rk" + (i + 1))).filter(isOpen).map((r) => ({ id: r.id, code: r.code, title: r.title, wbsIds: r.wbsIds, high: levelOf(inherentScore(r), plan) === "alto", threat: r.type === "amenaza" }));
-        const cost = G.getModule("cost"), b = cost && cost.budget, base = Number(b && (b.baseCost || (b.computed && b.computed.base))) || 0, cl = Number(String(cost && cost.estimate && cost.estimate.class).replace(/\D/g, ""));
-        facts.baseCost = base > 0 ? base : null; facts.estimateClass = cl >= 1 && cl <= 5 ? cl : null;
-      } catch (e) { /* noop */ }
+      try { const m = G.meta(); sym = CUR[(m && m.currency) || ""] || "$"; facts = gatherProcurementFacts(G); } catch (e) { /* noop */ }
     }
     ctx = { connected, facts, sym }; ctxDirty = false;
   }

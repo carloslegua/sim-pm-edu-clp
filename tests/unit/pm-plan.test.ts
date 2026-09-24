@@ -16,22 +16,24 @@ function completo(): PlanFacts {
   f.resources = { roles: 12, withPerson: 12, leaves: 18, withR: 18, withoutA: 0 };
   f.changes = { total: 2, pending: 0, approvedOpen: 0, oldestPending: null };
   f.evm = { reports: 3, lastCut: "2026-10-30" };
+  f.quality = { has: true, state: "verde", needing: 17, verified: 17, checks: 17, coqTotal: 350000 };
+  f.comms = { has: true, state: "verde", items: 11, covered: 12, stakeholders: 12, closeUncovered: 0 };
+  f.procurement = { has: true, state: "verde", items: 5, total: 3530000, late: 0, soon: 0, asOf: "2026-08-03" };
   f.projectEnd = "2027-07-21"; f.contractualEnd = "2027-07-21";
   return f;
 }
 const codes = (f: PlanFacts) => integrationFindings(f).map((x) => x.code);
 
 describe("areaRows / estado del plan", () => {
-  it("un proyecto vacío: todo sin datos; los planes sin módulo se muestran como no disponibles, no se inventan", () => {
+  it("un proyecto vacío: las 14 áreas sin datos, cada una con su módulo (ninguna queda «sin módulo»)", () => {
     const rows = areaRows(emptyFacts());
-    expect(rows.filter((r) => !r.unavailable).every((r) => r.state === "vacio")).toBe(true);
-    expect(rows.filter((r) => r.unavailable).map((r) => r.key)).toEqual(["quality", "comms", "procurement"]);
-    expect(rows.filter((r) => r.unavailable).every((r) => r.file === null && r.state === "vacio")).toBe(true);
-    expect(rows.length).toBe(14);
+    expect(rows.every((r) => r.state === "vacio")).toBe(true); expect(rows.every((r) => !!r.file && !r.unavailable)).toBe(true);
+    expect(rows.length).toBe(14); expect(rows.filter((r) => ["quality", "comms", "procurement"].indexOf(r.key) >= 0).map((r) => r.file)).toEqual(["Plan_Calidad.html", "Plan_Comunicaciones.html", "Plan_Adquisiciones.html"]);
   });
-  it("un proyecto coherente: las áreas con datos quedan en orden", () => {
+  it("un proyecto coherente: las áreas con datos quedan en orden, incluidos los planes de calidad, comunicaciones y adquisiciones", () => {
     const rows = areaRows(completo()), by = (k: string) => rows.find((r) => r.key === k)!;
-    ["charter", "requirements", "scope", "wbs", "schedule", "cost", "risks", "stakeholders", "resources", "changes", "evm"].forEach((k) => expect(by(k).state, k).toBe("verde"));
+    ["charter", "requirements", "scope", "wbs", "schedule", "cost", "risks", "stakeholders", "resources", "changes", "evm", "quality", "comms", "procurement"].forEach((k) => expect(by(k).state, k).toBe("verde"));
+    expect(by("quality").metric).toMatch(/17\/17 paquetes verificados · 17 control\(es\)/); expect(by("comms").metric).toBe("11 comunicación(es) · 12/12 interesados cubiertos"); expect(by("procurement").metric).toMatch(/5 adquisición\(es\).* 0 convocatoria\(s\) vencida\(s\)/);
     expect(by("schedule").metric).toBe("273 d laborables · fin 2027-07-21 · LB-1"); expect(by("cost").metric).toMatch(/BAC 8[.,]000[.,]000 · BOE aprobada/);
   });
   it("cronograma: sin línea base o muy desviado → ámbar; con ciclo → rojo. Costos: BOE sin aprobar → ámbar; sobre el CAPEX → rojo", () => {
@@ -77,6 +79,15 @@ describe("integrationFindings — el cruce entre líneas base", () => {
     f.schedule.finish = "2026-11-06"; expect(codes(f)).not.toContain("P7");
     f.cost.total = 8500001; expect(integrationFindings(f).find((x) => x.code === "P8")!.text).toMatch(/8[.,]500[.,]001.*8[.,]500[.,]000/);
     f.cost.capex = null; expect(codes(f)).not.toContain("P8");
+  });
+  it("P15–P19: los planes subsidiarios se cruzan con el cronograma, el presupuesto y los interesados", () => {
+    const f = completo(); f.procurement.late = 2; f.quality.verified = 15; f.comms.closeUncovered = 1; f.procurement.total = 9000000;
+    const by = (c: string) => integrationFindings(f).find((x) => x.code === c)!;
+    expect(by("P15").text).toMatch(/2 adquisición\(es\).*vencida.*2026-08-03/); expect(by("P16").text).toMatch(/2 paquete\(s\) con criterio de aceptación sin ninguna actividad/);
+    expect(by("P18").text).toMatch(/1 interesado\(s\) a gestionar de cerca sin ninguna comunicación/); expect(by("P19").text).toMatch(/9[.,]000[.,]000.*supera el BAC vigente.*8[.,]000[.,]000/);
+    const g = completo(); g.quality = emptyFacts().quality; g.procurement = emptyFacts().procurement;
+    const p17 = integrationFindings(g).filter((x) => x.code === "P17"); expect(p17.map((x) => x.area)).toEqual(["Calidad", "Adquisiciones"]); expect(p17[0].severity).toBe("info");
+    expect(codes(emptyFacts())).toEqual([]);                                                       // sin nada que integrar no hay que avisar de planes faltantes
   });
   it("P11: el pronóstico se desvía más del 10 % de la línea base", () => {
     const f = completo(); f.schedule.deviationPct = 12.34; expect(integrationFindings(f).find((x) => x.code === "P11")!.text).toMatch(/12\.3 %/);

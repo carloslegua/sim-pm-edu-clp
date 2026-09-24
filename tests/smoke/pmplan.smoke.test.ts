@@ -65,11 +65,12 @@ describe("Plan_Direccion.html (Plan para la Dirección del Proyecto)", () => {
     expect(doc.getElementById("btnApprove")).toBeNull();
   });
 
-  it("proyecto sin líneas base: muestra las 14 áreas (3 sin módulo), avisa y bloquea la aprobación", async () => {
+  it("proyecto sin líneas base: muestra las 14 áreas, avisa y bloquea la aprobación", async () => {
     const dom = await abrir(proyecto()), doc = dom.window.document;
     expect(doc.querySelectorAll("#stateView tbody tr").length).toBeGreaterThan(14);
     const t = estado(doc);
-    expect(t).toMatch(/Plan de Calidad.*sin módulo en la suite/); expect(t).toMatch(/Plan de Comunicaciones/); expect(t).toMatch(/Plan de Adquisiciones/);
+    expect(t).toMatch(/Plan de Calidad.*Sin datos/); expect(t).toMatch(/Plan de Comunicaciones.*Sin datos/); expect(t).toMatch(/Plan de Adquisiciones.*Sin datos/);
+    expect(t).toMatch(/P17 .*Calidad: El Plan de Calidad aún no está elaborado/);                          // hay planes y líneas base pero faltan los planes subsidiarios
     expect(t).toMatch(/15 d laborables .* sin línea base/);                                  // el cronograma sí se lee de la red del proyecto
     expect(t).toMatch(/P3 .*El cronograma no tiene línea base/);
     expect(t).toMatch(/No se puede aprobar todavía: falta la línea base del alcance; falta la línea base del cronograma; falta el presupuesto/);
@@ -81,11 +82,30 @@ describe("Plan_Direccion.html (Plan para la Dirección del Proyecto)", () => {
     pestana(doc, "doc");
     const t = documento(doc);
     expect(t).toMatch(/Plan para la dirección del proyecto\s*Proyecto Live/); expect(t).toMatch(/Contenido/);
-    ["1. Descripción del proyecto", "2. Plan de gestión del alcance", "3. Plan de gestión del cronograma", "4. Plan de gestión de costos", "5. Plan de gestión de riesgos", "6. Plan de involucramiento", "7. Plan de gestión de recursos", "8. Control integrado de cambios", "9. Medición del desempeño", "10. Líneas base y aprobación"]
-      .forEach((s) => expect(t, s).toContain(s));
+    // en el orden de las áreas de conocimiento: alcance, cronograma, costos, calidad, recursos, comunicaciones, riesgos, adquisiciones, interesados…
+    const titulos = ["1. Descripción del proyecto", "2. Plan de gestión del alcance", "3. Plan de gestión del cronograma", "4. Plan de gestión de costos", "5. Plan de gestión de la calidad", "6. Plan de gestión de recursos", "7. Plan de gestión de las comunicaciones", "8. Plan de gestión de riesgos", "9. Plan de gestión de las adquisiciones", "10. Plan de involucramiento", "11. Control integrado de cambios", "12. Medición del desempeño", "13. Líneas base y aprobación"];
+    titulos.forEach((s) => expect(t, s).toContain(s));
+    const pos = (s: string) => doc.querySelector("#docView .paper")!.textContent!.lastIndexOf(s);
+    titulos.slice(1).forEach((s, i) => expect(pos(s), s).toBeGreaterThan(pos(titulos[i])));
     expect(t).toMatch(/Excavación/); expect(t).toMatch(/Relleno/);                            // EDT con diccionario
     expect(t).toMatch(/Duración \(días laborables\) 15/);
     expect(doc.querySelectorAll("#docView .toc a").length).toBeGreaterThan(10);
+  });
+
+  it("los planes de calidad, comunicaciones y adquisiciones se resumen en el estado y se documentan (con su fecha de convocatoria vencida como aviso)", async () => {
+    const seed = proyecto({
+      quality: { idCounter: 3, checks: [{ id: "qc1", code: "QC-01", wbsId: "w1", what: "Ensayo de probetas", criterion: "f'c ≥ 210", kind: "Control", method: "Ensayo de laboratorio", frequency: "Por vaciado", owner: "Control de Calidad", record: "Informe" }], metrics: [], coq: [{ id: "cq1", cat: "prevencion", description: "Revisiones", amount: 1000 }] },
+      comms: { idCounter: 2, items: [{ id: "cm1", code: "CM-01", info: "Avance", purpose: "Alinear", stkIds: [], audience: "Sponsor", sender: "PM", frequency: "Mensual", method: "Informe escrito", storage: "Acta" }], plan: {} },
+      procurement: { idCounter: 2, asOf: "2026-10-01", items: [{ id: "pr1", code: "PR-01", name: "Estructuras", wbsIds: ["w1"], decision: "Comprar", contractType: "Precio unitario", selection: "Concurso de precios", criteria: [{ name: "Precio", weight: 100 }], value: 900, needDate: "2026-10-15", leadDays: 10, selectionDays: 30, status: "Planificada", owner: "PM" }] }
+    });
+    const dom = await abrir(seed), doc = dom.window.document, t = estado(doc);
+    expect(t).toMatch(/Plan de Calidad.*1 control\(es\) · costo de la calidad/); expect(t).toMatch(/Plan de Comunicaciones.*1 comunicación\(es\)/); expect(t).toMatch(/Plan de Adquisiciones.*1 adquisición\(es\).*1 convocatoria\(s\) vencida\(s\)/);
+    expect(t).toMatch(/P15 .*Adquisiciones: 1 adquisición\(es\) con la convocatoria ya vencida a la fecha de corte 2026-10-01/);
+    expect(t).not.toMatch(/P17 /);                                                                        // los tres planes existen
+    pestana(doc, "doc");
+    const d = documento(doc);
+    expect(d).toMatch(/5\. Plan de gestión de la calidad/); expect(d).toMatch(/Ensayo de probetas/); expect(d).toMatch(/7\. Plan de gestión de las comunicaciones/); expect(d).toMatch(/CM-01.*Avance.*Alinear.*Sponsor/);
+    expect(d).toMatch(/9\. Plan de gestión de las adquisiciones/); expect(d).toMatch(/PR-01.*Estructuras.*Precio unitario.*Precio 100 %.*2026-10-15.*2026-09-05/);   // convocar antes del 2026-10-15 − 40 d
   });
 
   it("con las tres líneas base se puede aprobar: guarda versión, quién, cuándo y la instantánea; sin nombre no aprueba", async () => {

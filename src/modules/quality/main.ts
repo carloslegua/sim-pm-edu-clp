@@ -15,7 +15,7 @@
 import type * as GpiCore from "../../core/gpi-core";
 import type { EditSession } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
-import { inherentScore, isOpen, levelOf, normalizePlan as normalizeRiskPlan, normalizeRisk } from "../../shared/risk-analysis";
+import { gatherQualityFacts } from "../../shared/plan-facts";
 import {
   CHECK_KINDS, COQ_CATS, COQ_GROUP, COQ_LABEL, QUALITY_METHODS, blankQuality, coqSummary, coverage, nextCheckCode, nextMetricCode, normalizeCheck, normalizeCoq, normalizeMetric, normalizeQuality,
   qualityFindings, qualityState, type QCheck, type QMetric, type QualityData, type QualityFacts, type QualityState
@@ -29,7 +29,6 @@ declare global { interface Window { GPI?: GpiApi; } }
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)); }
 function setStatus(msg: string): void { $("statusLeft").textContent = msg; }
-const rec = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 const CUR: Record<string, string> = { USD: "$", PEN: "S/", EUR: "€" };
 const STATE_LABEL: Record<QualityState, string> = { vacio: "Sin datos", verde: "En orden", ambar: "Con avisos", rojo: "Con riesgos" };
 
@@ -41,16 +40,7 @@ function getCtx(): { connected: boolean; facts: QualityFacts; sym: string } {
     let facts: QualityFacts = { leaves: [], roles: [], highRiskLeafIds: [], baseCost: null }, sym = "$";
     if (!connected) facts = sampleQualityFacts();
     else if (G && G.util) {
-      try {
-        const wbs = G.getModule("wbs"), nodes = rec(wbs && wbs.nodes), m = G.meta(); sym = CUR[(m && m.currency) || ""] || "$";
-        facts.leaves = G.util.wbsLeaves(wbs).map((l) => { const n = rec(nodes[l.id]); return { id: l.id, code: l.code, name: l.name, acceptance: String(n.acceptance || ""), loe: !!n.loe, cost: Number(n.cost) || 0 }; });
-        facts.roles = Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)));
-        const rk = G.getModule("risks"), plan = normalizeRiskPlan(rk && rk.plan), high = new Set<string>();
-        (rk && Array.isArray(rk.risks) ? rk.risks : []).map((r, i) => normalizeRisk(r, "rk" + (i + 1))).filter(isOpen).filter((r) => levelOf(inherentScore(r), plan) === "alto").forEach((r) => r.wbsIds.forEach((w) => high.add(w)));
-        facts.highRiskLeafIds = Array.from(high);
-        const cost = G.getModule("cost"), b = cost && cost.budget, base = Number(b && (b.baseCost || (b.computed && b.computed.base))) || 0;
-        facts.baseCost = base > 0 ? base : null;
-      } catch (e) { /* noop */ }
+      try { const m = G.meta(); sym = CUR[(m && m.currency) || ""] || "$"; facts = gatherQualityFacts(G); } catch (e) { /* noop */ }
     }
     ctx = { connected, facts, sym }; ctxDirty = false;
   }

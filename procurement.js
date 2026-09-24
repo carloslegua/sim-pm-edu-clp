@@ -206,6 +206,42 @@
 	}
 	var isOpen = (r) => r.status !== "materializado" && r.status !== "cerrado";
 	//#endregion
+	//#region src/shared/plan-facts.ts
+	var rec$1 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+	function openRisks(G) {
+		const rk = G.getModule("risks"), plan = normalizePlan(rk && rk.plan);
+		return (rk && Array.isArray(rk.risks) ? rk.risks : []).map((r, i) => normalizeRisk(r, "rk" + (i + 1))).filter(isOpen).map((r) => ({
+			id: r.id,
+			code: r.code,
+			title: r.title,
+			wbsIds: r.wbsIds,
+			high: levelOf(inherentScore(r), plan) === "alto",
+			threat: r.type === "amenaza"
+		}));
+	}
+	function baseCostOf(G) {
+		const cost = G.getModule("cost"), b = cost && cost.budget, base = Number(b && (b.baseCost || b.computed && b.computed.base)) || 0;
+		return base > 0 ? base : null;
+	}
+	var rolesOf = (G) => Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)));
+	function gatherProcurementFacts(G) {
+		const wbs = G.getModule("wbs"), nodes = rec$1(wbs && wbs.nodes), obs = G.util.obsNodes(G.getModule("obs")), sk = rec$1(G.getModule("stakeholders")).stakeholders;
+		const cost = G.getModule("cost"), cl = Number(String(cost && cost.estimate && cost.estimate.class).replace(/\D/g, ""));
+		return {
+			leaves: G.util.wbsLeaves(wbs).map((l) => ({
+				id: l.id,
+				code: l.code,
+				name: l.name,
+				cost: Number(rec$1(nodes[l.id]).cost) || 0
+			})),
+			roles: rolesOf(G),
+			risks: openRisks(G),
+			suppliers: Array.from(new Set(obs.map((n) => (n.person || "").trim()).concat((Array.isArray(sk) ? sk : []).map((s) => String(rec$1(s).org || "").trim())).filter(Boolean))),
+			estimateClass: cl >= 1 && cl <= 5 ? cl : null,
+			baseCost: baseCostOf(G)
+		};
+	}
+	//#endregion
 	//#region src/shared/procurement-plan.ts
 	var DECISIONS = [
 		"Comprar",
@@ -249,10 +285,10 @@
 		const n = Number(v);
 		return isFinite(n) ? n : null;
 	};
-	var rec$1 = (o) => o && typeof o === "object" ? o : {};
+	var rec = (o) => o && typeof o === "object" ? o : {};
 	var iso = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 	function normalizeItem(o, fb) {
-		const x = rec$1(o), id = str(x.id) || fb;
+		const x = rec(o), id = str(x.id) || fb;
 		return {
 			id,
 			code: str(x.code) || id,
@@ -263,7 +299,7 @@
 			contractType: str(x.contractType),
 			selection: str(x.selection),
 			criteria: (Array.isArray(x.criteria) ? x.criteria : []).map((c) => {
-				const q = rec$1(c);
+				const q = rec(c);
 				return {
 					name: str(q.name),
 					weight: numOrNull(q.weight)
@@ -282,7 +318,7 @@
 		};
 	}
 	function normalizeProcurement(raw, today = "") {
-		const x = rec$1(raw), items = (Array.isArray(x.items) ? x.items : []).map((o, i) => normalizeItem(o, "pr" + (i + 1)));
+		const x = rec(raw), items = (Array.isArray(x.items) ? x.items : []).map((o, i) => normalizeItem(o, "pr" + (i + 1)));
 		return {
 			strategy: str(x.strategy),
 			performance: str(x.performance),
@@ -1118,7 +1154,6 @@
 	function setStatus(msg) {
 		$("statusLeft").textContent = msg;
 	}
-	var rec = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
 	var todayISO = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
 	var CUR = {
 		USD: "$",
@@ -1146,30 +1181,9 @@
 			}, sym = "$";
 			if (!connected) facts = sampleProcurementFacts();
 			else if (G && G.util) try {
-				const wbs = G.getModule("wbs"), nodes = rec(wbs && wbs.nodes), m = G.meta();
+				const m = G.meta();
 				sym = CUR[m && m.currency || ""] || "$";
-				facts.leaves = G.util.wbsLeaves(wbs).map((l) => ({
-					id: l.id,
-					code: l.code,
-					name: l.name,
-					cost: Number(rec(nodes[l.id]).cost) || 0
-				}));
-				const obs = G.util.obsNodes(G.getModule("obs"));
-				facts.roles = Array.from(new Set(obs.map((n) => (n.role || "").trim()).filter(Boolean)));
-				const sk = rec(G.getModule("stakeholders")).stakeholders;
-				facts.suppliers = Array.from(new Set(obs.map((n) => (n.person || "").trim()).concat((Array.isArray(sk) ? sk : []).map((s) => String(rec(s).org || "").trim())).filter(Boolean)));
-				const rk = G.getModule("risks"), plan = normalizePlan(rk && rk.plan);
-				facts.risks = (rk && Array.isArray(rk.risks) ? rk.risks : []).map((r, i) => normalizeRisk(r, "rk" + (i + 1))).filter(isOpen).map((r) => ({
-					id: r.id,
-					code: r.code,
-					title: r.title,
-					wbsIds: r.wbsIds,
-					high: levelOf(inherentScore(r), plan) === "alto",
-					threat: r.type === "amenaza"
-				}));
-				const cost = G.getModule("cost"), b = cost && cost.budget, base = Number(b && (b.baseCost || b.computed && b.computed.base)) || 0, cl = Number(String(cost && cost.estimate && cost.estimate.class).replace(/\D/g, ""));
-				facts.baseCost = base > 0 ? base : null;
-				facts.estimateClass = cl >= 1 && cl <= 5 ? cl : null;
+				facts = gatherProcurementFacts(G);
 			} catch (e) {}
 			ctx = {
 				connected,

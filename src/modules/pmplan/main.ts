@@ -21,6 +21,10 @@ import { normalizeBoe, STATUS_LABEL as BOE_STATUS_LABEL } from "../../shared/boe
 import { normalizeCr, portfolio as crPortfolio, type ChangeFacts, type ChangeRequest } from "../../shared/change-control";
 import { inherentScore, levelOf, normalizePlan as normalizeRiskPlan, normalizeRisk, portfolio as riskPortfolio, rankRisks } from "../../shared/risk-analysis";
 import { QUADRANT_LABEL, levelName, quadrantOf } from "../../shared/stakeholder-engagement";
+import { gatherCommFacts, gatherProcurementFacts, gatherQualityFacts } from "../../shared/plan-facts";
+import { commState, coverage as commCoverage, normalizeComms, type CommData } from "../../shared/comms-plan";
+import { COQ_CATS, COQ_LABEL, coqSummary, coverage as qualityCoverage, normalizeQuality, qualityState, type QualityData } from "../../shared/quality-plan";
+import { launchBy, normalizeProcurement, procurementState, summary as procSummary, type ProcData } from "../../shared/procurement-plan";
 import {
   STATE_LABEL, approvalBlockers, areaRows, emptyBase, emptyFacts, integrationFindings, snapshotDiff, snapshotOf,
   type AreaState, type BaselineFact, type PlanFacts, type PlanSnapshot
@@ -119,6 +123,13 @@ function buildCtx(): Ctx {
     };
     const cp = crPortfolio(crs, cf, todayISO());
     f.changes = { total: cp.total, pending: cp.byStatus.Pendiente, approvedOpen: cp.pendingBaseline, oldestPending: cp.oldestPendingDays };
+    // Planes de calidad, comunicaciones y adquisiciones (la misma lectura que usa cada módulo)
+    const qd = normalizeQuality(G.getModule("quality")), qf = gatherQualityFacts(G), qcov = qualityCoverage(qd, qf).filter((r) => r.needs);
+    f.quality = { has: qd.checks.length + qd.metrics.length + qd.coq.length > 0, state: qualityState(qd, qf) as AreaState, needing: qcov.length, verified: qcov.filter((r) => r.checks.length).length, checks: qd.checks.length, coqTotal: coqSummary(qd.coq, qf.baseCost).total };
+    const cd = normalizeComms(G.getModule("comms")), cf2 = gatherCommFacts(G), ccov = commCoverage(cd.items, cf2);
+    f.comms = { has: cd.items.length > 0, state: commState(cd, cf2) as AreaState, items: cd.items.length, covered: ccov.filter((r) => r.items.length).length, stakeholders: cf2.stakeholders.length, closeUncovered: ccov.filter((r) => r.stk.quadrant === "cerca" && !r.items.length).length };
+    const pd = normalizeProcurement(G.getModule("procurement"), todayISO()), pf = gatherProcurementFacts(G), ps = procSummary(pd, pf);
+    f.procurement = { has: pd.items.length > 0, state: procurementState(pd, pf) as AreaState, items: pd.items.length, total: ps.total, late: ps.late, soon: ps.soon, asOf: pd.asOf };
     // Valor ganado
     const reps = arr(rec(G.getModule("evm")).reports);
     f.evm = { reports: reps.length, lastCut: reps.length ? str(reps[reps.length - 1].date) : "" };
@@ -174,7 +185,7 @@ function renderState(): void {
       <table class="an"><thead><tr><th>Área</th><th>Estado</th><th>Resumen</th><th>Módulo</th></tr></thead><tbody>
       ${rows.map((r) => `<tr><td>${esc(r.label)}</td><td>${pill(r.state)}</td><td>${esc(r.metric)}${r.note ? ` <span class="muted small">${esc(r.note)}</span>` : ""}</td><td>${r.file ? `<a href="${esc(r.file)}">Abrir</a>` : '<span class="muted">—</span>'}</td></tr>`).join("")}
       </tbody></table></div>
-    <div class="card"><h3>Integración entre líneas base (${finds.length})</h3>
+    <div class="card"><h3>Integración entre líneas base y planes (${finds.length})</h3>
       ${finds.length ? `<ul class="finds">${finds.map((x) => `<li class="${x.severity}"><b class="cd">${x.code} ${sevIcon[x.severity]}</b><b>${esc(x.area)}:</b> ${esc(x.text)}</li>`).join("")}</ul>` : '<p class="muted small">Sin hallazgos: las líneas base calzan entre sí.</p>'}
     </div>`;
   wireState();
@@ -336,6 +347,29 @@ function buildSections(): Sect[] {
     out.push({ id: "s9", title: "9. Medición del desempeño (valor ganado)", subs: [], html: h });
   }
 
+  // Calidad, comunicaciones y adquisiciones: cada planes subsidiario se lee con la MISMA lectura que usa su módulo (shared/plan-facts.ts)
+  {
+    const qd: QualityData = normalizeQuality(G.getModule("quality")), qf = gatherQualityFacts(G), s = coqSummary(qd.coq, qf.baseCost), cov = qualityCoverage(qd, qf).filter((r) => r.needs), leaf = new Map(qf.leaves.map((l) => [l.id, l.code + " " + l.name] as const));
+    const has = qd.checks.length + qd.metrics.length + qd.coq.length > 0;
+    let h = has ? kv([["Política de calidad", nl(qd.policy)], ["Normas y especificaciones", nl(qd.standards)], ["Paquetes con criterio de aceptación verificados", cov.filter((r) => r.checks.length).length + " de " + cov.length]]) : nodata("El plan de calidad aún no tiene datos.");
+    h += `<h3 class="d2" id="sq-m">Métricas de calidad</h3>` + (qd.metrics.length ? tbl(["Código", "Métrica", "Objetivo", "Tolerancia", "Método", "Frecuencia", "Responsable"], qd.metrics.map((x) => [esc(x.code), esc(x.name), nl(x.target), nl(x.tolerance), esc(x.method), esc(x.frequency), esc(x.owner)])) : nodata("Sin métricas definidas."));
+    h += `<h3 class="d2" id="sq-c">Aseguramiento y control por paquete</h3>` + (qd.checks.length ? tbl(["Código", "Paquete", "Qué se verifica", "Criterio de aceptación", "Tipo", "Método", "Frecuencia", "Responsable", "Registro"], qd.checks.map((x) => [esc(x.code), esc(leaf.get(x.wbsId) || ""), nl(x.what), nl(x.criterion), esc(x.kind), esc(x.method), esc(x.frequency), esc(x.owner), esc(x.record)])) : nodata("Sin actividades de control ni aseguramiento."));
+    h += `<h3 class="d2" id="sq-k">Costo de la calidad</h3>` + (s.total > 0 ? tbl(["Categoría", "Monto", "Parte"], COQ_CATS.map((k) => [esc(COQ_LABEL[k]), m(s.byCat[k]), Math.round(s.byCat[k] / s.total * 100) + " %"]).concat([["Total", m(s.total), s.pctOfBase !== null ? s.pctOfBase.toFixed(1) + " % del costo base" : ""]])) : nodata("Sin costo de la calidad definido."));
+    out.push({ id: "sq", title: "Plan de gestión de la calidad", subs: [{ id: "sq-m", title: "Métricas" }, { id: "sq-c", title: "Aseguramiento y control" }, { id: "sq-k", title: "Costo de la calidad" }], html: h });
+  }
+  {
+    const cd: CommData = normalizeComms(G.getModule("comms")), cf = gatherCommFacts(G), who = (ids: string[], aud: string): string => ids.map((i) => (cf.stakeholders.find((x) => x.id === i) || { name: i }).name).concat(aud.trim() ? [aud.trim()] : []).join("; ");
+    let h = cd.items.length ? tbl(["Código", "Información", "Propósito", "Destinatarios", "Emisor", "Frecuencia", "Medio", "Registro"], cd.items.map((x) => [esc(x.code), nl(x.info), nl(x.purpose), esc(who(x.stkIds, x.audience)), esc(x.sender), esc(x.frequency), esc(x.method), esc(x.storage)])) : nodata("La matriz de comunicaciones aún no tiene datos.");
+    if (cd.items.length) h += `<p class="note">${commCoverage(cd.items, cf).filter((r) => r.items.length).length} de ${cf.stakeholders.length} interesados reciben al menos una comunicación planificada.</p>` + kv([["Escalamiento", nl(cd.plan.escalation)], ["Restricciones y confidencialidad", nl(cd.plan.restrictions)], ["Actualización del plan", nl(cd.plan.review)]]);
+    out.push({ id: "sc", title: "Plan de gestión de las comunicaciones", subs: [], html: h });
+  }
+  {
+    const pd: ProcData = normalizeProcurement(G.getModule("procurement"), todayISO()), pf = gatherProcurementFacts(G), code = (ids: string[]): string => ids.map((i) => (pf.leaves.find((l) => l.id === i) || { code: "" }).code).filter(Boolean).join(", ");
+    let h = pd.items.length ? kv([["Fecha de corte del plan", esc(pd.asOf)], ["Estrategia de adquisiciones", nl(pd.strategy)], ["Desempeño de proveedores", nl(pd.performance)], ["Autorizaciones", nl(pd.approvals)]]) : nodata("El plan de adquisiciones aún no tiene datos.");
+    if (pd.items.length) h += tbl(["Código", "Adquisición", "Paquetes EDT", "Decisión", "Contrato", "Selección", "Valor", "Fecha requerida", "Convocar antes del", "Proveedor", "Estado", "Responsable"], pd.items.map((x) => [esc(x.code), esc(x.name), esc(code(x.wbsIds)), esc(x.decision), esc(x.contractType), esc(x.selection) + (x.criteria.length ? "<br><span class=\"note\">" + esc(x.criteria.map((c) => c.name + " " + (c.weight ?? "?") + " %").join("; ")) + "</span>" : ""), x.value === null ? "" : m(x.value), esc(x.needDate), esc(launchBy(x) || ""), esc(x.supplier), esc(x.status), esc(x.owner)]));
+    out.push({ id: "sp", title: "Plan de gestión de las adquisiciones", subs: [], html: h });
+  }
+
   // 10. Líneas base y aprobación
   {
     const snap = plan.snapshot, diff = snap ? snapshotDiff(snap, snapshotOf(f)) : [];
@@ -348,8 +382,12 @@ function buildSections(): Sect[] {
   }
   return out;
 }
+// Orden del documento (áreas de conocimiento): alcance, cronograma, costos, calidad, recursos, comunicaciones, riesgos, adquisiciones, interesados;
+// luego cambios, valor ganado y líneas base. La numeración se asigna aquí, en ese orden.
+const SECTION_ORDER = ["s1", "s2", "s3", "s4", "sq", "s7", "sc", "s5", "sp", "s6", "s8", "s9", "s10"];
 function docHtml(): string {
-  const C = getCtx(), secs = buildSections();
+  const C = getCtx(), secs = buildSections().sort((a, b) => SECTION_ORDER.indexOf(a.id) - SECTION_ORDER.indexOf(b.id));
+  secs.forEach((s, i) => { s.title = (i + 1) + ". " + s.title.replace(/^\d+\.\s*/, ""); });
   const toc = secs.map((s) => `<div class="l1"><a href="#${s.id}">${esc(s.title)}</a></div>` + s.subs.map((x) => `<div class="l2"><a href="#${x.id}">${esc(x.title)}</a></div>`).join("")).join("");
   return `<div class="paper">
     <div class="cover"><div class="ttl"><h1>Plan para la dirección del proyecto</h1><div class="pn">${esc(C.name || "Proyecto")}</div></div>

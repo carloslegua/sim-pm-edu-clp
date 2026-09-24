@@ -25,7 +25,7 @@
 			session: next
 		};
 	}
-	var str$4 = (v) => v === null || v === void 0 ? "" : String(v);
+	var str$7 = (v) => v === null || v === void 0 ? "" : String(v);
 	var fin = (v, d = 0) => {
 		const x = Number(v);
 		return isFinite(x) ? x : d;
@@ -37,9 +37,9 @@
 		const rows = s.rows.filter((r) => r && typeof r === "object").map((r) => {
 			const q = r;
 			return {
-				id: str$4(q.id),
-				code: str$4(q.code),
-				name: str$4(q.name),
+				id: str$7(q.id),
+				code: str$7(q.code),
+				name: str$7(q.name),
 				isMilestone: !!q.isMilestone,
 				dur: fin(q.dur),
 				es: fin(q.es),
@@ -51,24 +51,24 @@
 		const log = (Array.isArray(x.log) ? x.log : []).filter((e) => e && typeof e === "object").map((e) => {
 			const q = e;
 			return {
-				version: str$4(q.version),
-				date: str$4(q.date),
-				reason: str$4(q.reason),
-				approver: str$4(q.approver),
+				version: str$7(q.version),
+				date: str$7(q.date),
+				reason: str$7(q.reason),
+				approver: str$7(q.approver),
 				sponsorAuth: !!q.sponsorAuth,
 				projectDuration: fin(q.projectDuration),
-				finishDate: str$4(q.finishDate),
+				finishDate: str$7(q.finishDate),
 				deviationPct: q.deviationPct === null || q.deviationPct === void 0 ? null : fin(q.deviationPct)
 			};
 		});
 		return {
 			frozen: x.frozen !== false,
-			version: str$4(x.version) || "LB-1",
-			date: str$4(x.date),
+			version: str$7(x.version) || "LB-1",
+			date: str$7(x.date),
 			snapshot: {
 				projectDuration: fin(s.projectDuration),
-				startDate: str$4(s.startDate),
-				finishDate: str$4(s.finishDate),
+				startDate: str$7(s.startDate),
+				finishDate: str$7(s.finishDate),
 				nearCriticalDays: fin(s.nearCriticalDays, 10),
 				rows
 			},
@@ -226,7 +226,7 @@
 	};
 	var norm = (s) => String(s == null ? "" : s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 	var blank = (s) => !String(s == null ? "" : s).trim();
-	var num$1 = (v) => {
+	var num$2 = (v) => {
 		const n = Number(v);
 		return isFinite(n) ? n : 0;
 	};
@@ -328,7 +328,7 @@
 		const phases = kids[rootId];
 		if (phases.some((p) => kids[p].length)) phases.filter((p) => !kids[p].length).forEach((p) => add("E5", p, nm(p) + " no tiene entregables ni paquetes: descomponla."));
 		body.filter((id) => depth[id] === LIMITS.maxDepth + 1).forEach((id) => add("E6", id, nm(id) + " está en el nivel " + depth[id] + ": la EDT supera los " + LIMITS.maxDepth + " niveles."));
-		const totalCost = leafIds.reduce((s, id) => s + Math.max(0, num$1(nodes[id].cost)), 0);
+		const totalCost = leafIds.reduce((s, id) => s + Math.max(0, num$2(nodes[id].cost)), 0);
 		let complete = 0;
 		leafIds.forEach((id) => {
 			const n = nodes[id];
@@ -337,9 +337,9 @@
 			if (!okAcc) add("D2", id, nm(id) + " no tiene criterio de aceptación.");
 			if (!okRes) add("D3", id, nm(id) + " no tiene responsable.");
 			if (okDesc && okAcc && okRes) complete++;
-			const cost = num$1(n.cost);
+			const cost = num$2(n.cost);
 			if (cost <= 0) add("D4", id, nm(id) + " no tiene costo estimado.");
-			const days = calendarDays(n.start, n.end) ?? Math.max(0, num$1(n.duration));
+			const days = calendarDays(n.start, n.end) ?? Math.max(0, num$2(n.duration));
 			const hasS = !blank(n.start), hasE = !blank(n.end);
 			if (hasS && hasE && n.start > n.end) add("D6", id, nm(id) + " termina (" + n.end + ") antes de empezar (" + n.start + ").");
 			else if (hasS !== hasE) add("D6", id, nm(id) + " tiene solo la fecha de " + (hasS ? "inicio" : "fin") + ": completa la otra o bórrala.");
@@ -398,7 +398,7 @@
 		revision: "En revisión",
 		aprobada: "Aprobada"
 	};
-	var STATUSES = [
+	var STATUSES$1 = [
 		"borrador",
 		"revision",
 		"aprobada"
@@ -750,7 +750,7 @@
 		}
 	];
 	var isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
-	var str$3 = (v) => v === null || v === void 0 ? "" : String(v);
+	var str$6 = (v) => v === null || v === void 0 ? "" : String(v);
 	function blankBoe() {
 		const text = {};
 		TEXT_KEYS.forEach((k) => {
@@ -776,21 +776,21 @@
 		const b = blankBoe();
 		if (!isObj(raw)) return b;
 		TEXT_KEYS.forEach((k) => {
-			b.text[k] = str$3(raw[k]);
+			b.text[k] = str$6(raw[k]);
 		});
-		b.version = str$3(raw.version) || "1.0";
-		b.status = STATUSES.indexOf(raw.status) >= 0 ? raw.status : "borrador";
-		b.preparedBy = str$3(raw.preparedBy);
-		b.reviewedBy = str$3(raw.reviewedBy);
-		b.approvedBy = str$3(raw.approvedBy);
-		b.approvedOn = /^\d{4}-\d{2}-\d{2}$/.test(str$3(raw.approvedOn)) ? str$3(raw.approvedOn) : "";
+		b.version = str$6(raw.version) || "1.0";
+		b.status = STATUSES$1.indexOf(raw.status) >= 0 ? raw.status : "borrador";
+		b.preparedBy = str$6(raw.preparedBy);
+		b.reviewedBy = str$6(raw.reviewedBy);
+		b.approvedBy = str$6(raw.approvedBy);
+		b.approvedOn = /^\d{4}-\d{2}-\d{2}$/.test(str$6(raw.approvedOn)) ? str$6(raw.approvedOn) : "";
 		if (Array.isArray(raw.team)) b.team = raw.team.filter(isObj).map((m) => ({
-			name: str$3(m.name),
-			role: str$3(m.role)
+			name: str$6(m.name),
+			role: str$6(m.role)
 		})).filter((m) => m.name.trim() || m.role.trim());
 		if (Array.isArray(raw.refs)) b.refs = raw.refs.filter(isObj).map((r) => ({
-			title: str$3(r.title),
-			note: str$3(r.note)
+			title: str$6(r.title),
+			note: str$6(r.note)
 		})).filter((r) => r.title.trim() || r.note.trim());
 		if (Array.isArray(raw.checklist)) raw.checklist.filter(isObj).forEach((c) => {
 			const it = b.checklist.find((x) => x.id === c.id);
@@ -805,7 +805,7 @@
 		ccbLimit: null,
 		contAlertPct: null
 	};
-	var numOrNull$1 = (v) => {
+	var numOrNull$3 = (v) => {
 		if (v === null || v === void 0 || v === "") return null;
 		const n = typeof v === "string" ? Number(v.trim().replace(/\s/g, "")) : v;
 		return typeof n === "number" && isFinite(n) ? n : null;
@@ -813,9 +813,9 @@
 	function normalizeReserves(o) {
 		const x = o && typeof o === "object" ? o : {};
 		return {
-			pmLimit: numOrNull$1(x.pmLimit),
-			ccbLimit: numOrNull$1(x.ccbLimit),
-			contAlertPct: numOrNull$1(x.contAlertPct)
+			pmLimit: numOrNull$3(x.pmLimit),
+			ccbLimit: numOrNull$3(x.ccbLimit),
+			contAlertPct: numOrNull$3(x.contAlertPct)
 		};
 	}
 	//#endregion
@@ -835,51 +835,51 @@
 		"Diferida",
 		"Implementada"
 	];
-	var str$2 = (v) => v === null || v === void 0 ? "" : String(v);
-	var numOrNull = (v) => {
+	var str$5 = (v) => v === null || v === void 0 ? "" : String(v);
+	var numOrNull$2 = (v) => {
 		if (v === null || v === void 0 || v === "") return null;
 		const n = Number(v);
 		return isFinite(n) ? n : null;
 	};
-	var strs = (v) => Array.isArray(v) ? v.map(str$2).filter(Boolean) : [];
+	var strs$3 = (v) => Array.isArray(v) ? v.map(str$5).filter(Boolean) : [];
 	function normalizeCr(o, fallbackId) {
 		const x = o && typeof o === "object" ? o : {}, im = x.impact && typeof x.impact === "object" ? x.impact : {};
 		const impact = {};
 		AREAS.forEach((a) => {
 			const q = im[a] && typeof im[a] === "object" ? im[a] : {};
 			impact[a] = {
-				state: ["sin_impacto", "con_impacto"].indexOf(str$2(q.state)) >= 0 ? q.state : "sin_evaluar",
-				note: str$2(q.note)
+				state: ["sin_impacto", "con_impacto"].indexOf(str$5(q.state)) >= 0 ? q.state : "sin_evaluar",
+				note: str$5(q.note)
 			};
 		});
-		const id = str$2(x.id) || fallbackId;
+		const id = str$5(x.id) || fallbackId;
 		return {
 			id,
-			code: str$2(x.code) || id,
-			title: str$2(x.title),
-			description: str$2(x.description),
-			requester: str$2(x.requester),
-			requestedOn: str$2(x.requestedOn),
-			origin: str$2(x.origin),
-			type: str$2(x.type),
+			code: str$5(x.code) || id,
+			title: str$5(x.title),
+			description: str$5(x.description),
+			requester: str$5(x.requester),
+			requestedOn: str$5(x.requestedOn),
+			origin: str$5(x.origin),
+			type: str$5(x.type),
 			impact,
-			wbsIds: strs(x.wbsIds),
-			actIds: strs(x.actIds),
-			daysDelta: numOrNull(x.daysDelta),
-			costDelta: numOrNull(x.costDelta),
-			fund: str$2(x.fund),
-			orderIds: strs(x.orderIds),
-			modIds: strs(x.modIds),
-			riskIds: strs(x.riskIds),
-			scheduleBaseline: str$2(x.scheduleBaseline),
+			wbsIds: strs$3(x.wbsIds),
+			actIds: strs$3(x.actIds),
+			daysDelta: numOrNull$2(x.daysDelta),
+			costDelta: numOrNull$2(x.costDelta),
+			fund: str$5(x.fund),
+			orderIds: strs$3(x.orderIds),
+			modIds: strs$3(x.modIds),
+			riskIds: strs$3(x.riskIds),
+			scheduleBaseline: str$5(x.scheduleBaseline),
 			status: CR_STATUSES.indexOf(x.status) >= 0 ? x.status : "Pendiente",
-			decidedOn: str$2(x.decidedOn),
-			approver: str$2(x.approver),
-			authLevel: str$2(x.authLevel),
+			decidedOn: str$5(x.decidedOn),
+			approver: str$5(x.approver),
+			authLevel: str$5(x.authLevel),
 			sponsorAuth: !!x.sponsorAuth,
-			rationale: str$2(x.rationale),
-			implementedOn: str$2(x.implementedOn),
-			notes: str$2(x.notes)
+			rationale: str$5(x.rationale),
+			implementedOn: str$5(x.implementedOn),
+			notes: str$5(x.notes)
 		};
 	}
 	var isCont = (fund) => fund === "Contingencia";
@@ -930,7 +930,7 @@
 		}
 		return p;
 	}
-	var daysBetween = (a, b) => {
+	var daysBetween$1 = (a, b) => {
 		const x = Date.parse(a + "T12:00:00Z"), y = Date.parse(b + "T12:00:00Z");
 		return isFinite(x) && isFinite(y) ? Math.round((y - x) / 864e5) : null;
 	};
@@ -952,7 +952,7 @@
 			}
 			if (c.status === "Aprobada" && implementationProblems(c, f).length) pendingBaseline++;
 			if (c.status === "Pendiente" && c.requestedOn) {
-				const a = daysBetween(c.requestedOn, today);
+				const a = daysBetween$1(c.requestedOn, today);
 				if (a !== null && (oldest === null || a > oldest)) oldest = a;
 			}
 		});
@@ -1032,23 +1032,23 @@
 		const n = toNum(v);
 		return n !== null && Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
 	}
-	var str$1 = (v) => v === null || v === void 0 ? "" : String(v);
+	var str$4 = (v) => v === null || v === void 0 ? "" : String(v);
 	var arrNum = (v, def) => Array.isArray(v) && v.length === def.length && v.every((x) => toNum(x) !== null) ? v.map((x) => toNum(x)) : def.slice();
 	function normalizePlan(p) {
 		const o = p && typeof p === "object" ? p : {};
-		const cats = Array.isArray(o.categories) ? o.categories.map(str$1).map((s) => s.trim()).filter(Boolean) : [];
+		const cats = Array.isArray(o.categories) ? o.categories.map(str$4).map((s) => s.trim()).filter(Boolean) : [];
 		return {
 			probPct: arrNum(o.probPct, DEFAULT_PLAN.probPct),
 			costBandsPct: arrNum(o.costBandsPct, DEFAULT_PLAN.costBandsPct),
 			timeBandsDays: arrNum(o.timeBandsDays, DEFAULT_PLAN.timeBandsDays),
-			scopeDescriptors: Array.isArray(o.scopeDescriptors) && o.scopeDescriptors.length === 5 ? o.scopeDescriptors.map(str$1) : DEFAULT_PLAN.scopeDescriptors.slice(),
+			scopeDescriptors: Array.isArray(o.scopeDescriptors) && o.scopeDescriptors.length === 5 ? o.scopeDescriptors.map(str$4) : DEFAULT_PLAN.scopeDescriptors.slice(),
 			thresholdMedium: toNum(o.thresholdMedium) ?? DEFAULT_PLAN.thresholdMedium,
 			thresholdHigh: toNum(o.thresholdHigh) ?? DEFAULT_PLAN.thresholdHigh,
 			reviewDays: toNum(o.reviewDays) ?? DEFAULT_PLAN.reviewDays,
 			categories: cats.length ? cats : DEFAULT_PLAN.categories.slice(),
-			methodology: str$1(o.methodology),
-			reservePolicy: str$1(o.reservePolicy),
-			roles: str$1(o.roles),
+			methodology: str$4(o.methodology),
+			reservePolicy: str$4(o.reservePolicy),
+			roles: str$4(o.roles),
 			reserves: normalizeReserves(o.reserves)
 		};
 	}
@@ -1134,22 +1134,22 @@
 		const x = o && typeof o === "object" ? o : {};
 		const type = x.type === "oportunidad" ? "oportunidad" : "amenaza";
 		const status = RISK_STATUSES.indexOf(x.status) >= 0 ? x.status : "identificado";
-		const id = str$1(x.id) || fallbackId;
+		const id = str$4(x.id) || fallbackId;
 		return {
 			id,
-			code: str$1(x.code) || id,
-			title: str$1(x.title),
-			cause: str$1(x.cause),
-			event: str$1(x.event),
-			effect: str$1(x.effect),
+			code: str$4(x.code) || id,
+			title: str$4(x.title),
+			cause: str$4(x.cause),
+			event: str$4(x.event),
+			effect: str$4(x.effect),
 			type,
-			category: str$1(x.category),
-			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str$1).filter(Boolean) : [],
-			actIds: Array.isArray(x.actIds) ? x.actIds.map(str$1).filter(Boolean) : [],
-			owner: str$1(x.owner),
-			proximity: PROXIMITY.indexOf(str$1(x.proximity)) >= 0 ? str$1(x.proximity) : "",
-			identifiedOn: str$1(x.identifiedOn),
-			reviewedOn: str$1(x.reviewedOn),
+			category: str$4(x.category),
+			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str$4).filter(Boolean) : [],
+			actIds: Array.isArray(x.actIds) ? x.actIds.map(str$4).filter(Boolean) : [],
+			owner: str$4(x.owner),
+			proximity: PROXIMITY.indexOf(str$4(x.proximity)) >= 0 ? str$4(x.proximity) : "",
+			identifiedOn: str$4(x.identifiedOn),
+			reviewedOn: str$4(x.reviewedOn),
 			status,
 			prob: toLevel(x.prob),
 			impCost: toLevel(x.impCost),
@@ -1158,12 +1158,12 @@
 			probPct: toNum(x.probPct),
 			costImpact: range(x.costImpact),
 			timeImpact: range(x.timeImpact),
-			strategy: str$1(x.strategy),
-			response: str$1(x.response),
-			trigger: str$1(x.trigger),
-			responseOwner: str$1(x.responseOwner),
+			strategy: str$4(x.strategy),
+			response: str$4(x.response),
+			trigger: str$4(x.trigger),
+			responseOwner: str$4(x.responseOwner),
 			responseCost: toNum(x.responseCost),
-			secondary: str$1(x.secondary),
+			secondary: str$4(x.secondary),
 			resProb: toLevel(x.resProb),
 			resImpCost: toLevel(x.resImpCost),
 			resImpTime: toLevel(x.resImpTime),
@@ -1171,10 +1171,10 @@
 			resProbPct: toNum(x.resProbPct),
 			resCostImpact: range(x.resCostImpact),
 			resTimeImpact: range(x.resTimeImpact),
-			materializedOn: str$1(x.materializedOn),
+			materializedOn: str$4(x.materializedOn),
 			actualCost: toNum(x.actualCost),
 			actualDelay: toNum(x.actualDelay),
-			notes: str$1(x.notes)
+			notes: str$4(x.notes)
 		};
 	}
 	var isOpen = (r) => r.status !== "materializado" && r.status !== "cerrado";
@@ -1319,6 +1319,456 @@
 		return P && I ? "cerca" : P ? "satisfecho" : I ? "informado" : "monitorear";
 	}
 	//#endregion
+	//#region src/shared/plan-facts.ts
+	var rec$3 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+	var num$1 = (v) => {
+		const n = Number(v);
+		return isFinite(n) ? n : 0;
+	};
+	function gatherCommFacts(G) {
+		return {
+			stakeholders: (Array.isArray(rec$3(G.getModule("stakeholders")).stakeholders) ? rec$3(G.getModule("stakeholders")).stakeholders.map(rec$3) : []).map((s) => ({
+				id: String(s.id),
+				name: String(s.name || s.id),
+				quadrant: quadrantOf(num$1(s.power), num$1(s.interest)),
+				engCurrent: s.engCurrent === null || s.engCurrent === void 0 ? null : num$1(s.engCurrent),
+				engDesired: s.engDesired === null || s.engDesired === void 0 ? null : num$1(s.engDesired)
+			})),
+			roles: Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)))
+		};
+	}
+	function openRisks(G) {
+		const rk = G.getModule("risks"), plan = normalizePlan(rk && rk.plan);
+		return (rk && Array.isArray(rk.risks) ? rk.risks : []).map((r, i) => normalizeRisk(r, "rk" + (i + 1))).filter(isOpen).map((r) => ({
+			id: r.id,
+			code: r.code,
+			title: r.title,
+			wbsIds: r.wbsIds,
+			high: levelOf(inherentScore(r), plan) === "alto",
+			threat: r.type === "amenaza"
+		}));
+	}
+	function baseCostOf(G) {
+		const cost = G.getModule("cost"), b = cost && cost.budget, base = Number(b && (b.baseCost || b.computed && b.computed.base)) || 0;
+		return base > 0 ? base : null;
+	}
+	var rolesOf = (G) => Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)));
+	function gatherQualityFacts(G) {
+		const wbs = G.getModule("wbs"), nodes = rec$3(wbs && wbs.nodes);
+		return {
+			leaves: G.util.wbsLeaves(wbs).map((l) => {
+				const n = rec$3(nodes[l.id]);
+				return {
+					id: l.id,
+					code: l.code,
+					name: l.name,
+					acceptance: String(n.acceptance || ""),
+					loe: !!n.loe,
+					cost: Number(n.cost) || 0
+				};
+			}),
+			roles: rolesOf(G),
+			highRiskLeafIds: Array.from(new Set(openRisks(G).filter((r) => r.high).flatMap((r) => r.wbsIds))),
+			baseCost: baseCostOf(G)
+		};
+	}
+	function gatherProcurementFacts(G) {
+		const wbs = G.getModule("wbs"), nodes = rec$3(wbs && wbs.nodes), obs = G.util.obsNodes(G.getModule("obs")), sk = rec$3(G.getModule("stakeholders")).stakeholders;
+		const cost = G.getModule("cost"), cl = Number(String(cost && cost.estimate && cost.estimate.class).replace(/\D/g, ""));
+		return {
+			leaves: G.util.wbsLeaves(wbs).map((l) => ({
+				id: l.id,
+				code: l.code,
+				name: l.name,
+				cost: Number(rec$3(nodes[l.id]).cost) || 0
+			})),
+			roles: rolesOf(G),
+			risks: openRisks(G),
+			suppliers: Array.from(new Set(obs.map((n) => (n.person || "").trim()).concat((Array.isArray(sk) ? sk : []).map((s) => String(rec$3(s).org || "").trim())).filter(Boolean))),
+			estimateClass: cl >= 1 && cl <= 5 ? cl : null,
+			baseCost: baseCostOf(G)
+		};
+	}
+	//#endregion
+	//#region src/shared/comms-plan.ts
+	var HIGH_FREQ = ["Diaria", "Semanal"];
+	var str$3 = (v) => v === null || v === void 0 ? "" : String(v);
+	var strs$2 = (v) => Array.isArray(v) ? v.map(str$3).filter(Boolean) : [];
+	function normalizeItem$1(o, fallbackId) {
+		const x = o && typeof o === "object" ? o : {}, id = str$3(x.id) || fallbackId;
+		return {
+			id,
+			code: str$3(x.code) || id,
+			info: str$3(x.info),
+			purpose: str$3(x.purpose),
+			stkIds: strs$2(x.stkIds),
+			audience: str$3(x.audience),
+			sender: str$3(x.sender),
+			frequency: str$3(x.frequency),
+			method: str$3(x.method),
+			channel: str$3(x.channel),
+			storage: str$3(x.storage),
+			notes: str$3(x.notes)
+		};
+	}
+	function normalizeComms(raw) {
+		const x = raw && typeof raw === "object" ? raw : {}, p = x.plan && typeof x.plan === "object" ? x.plan : {};
+		const items = (Array.isArray(x.items) ? x.items : []).map((o, i) => normalizeItem$1(o, "cm" + (i + 1)));
+		return {
+			items,
+			plan: {
+				escalation: str$3(p.escalation),
+				restrictions: str$3(p.restrictions),
+				review: str$3(p.review)
+			},
+			idCounter: Number(x.idCounter) || items.length + 1
+		};
+	}
+	function coverage$1(items, f) {
+		return f.stakeholders.map((s) => ({
+			stk: s,
+			items: items.filter((c) => c.stkIds.indexOf(s.id) >= 0),
+			gap: s.engCurrent !== null && s.engDesired !== null ? s.engDesired - s.engCurrent : null
+		}));
+	}
+	function commFindings(d, f) {
+		const out = [], F = (code, severity, itemId, text) => {
+			out.push({
+				code,
+				severity,
+				itemId,
+				text
+			});
+		};
+		const known = new Set(f.stakeholders.map((s) => s.id)), roles = new Set(f.roles.map((r) => r.toLowerCase()));
+		d.items.forEach((c) => {
+			const w = c.code + (c.info.trim() ? " «" + c.info.trim() + "»" : "");
+			if (!c.info.trim() || !c.purpose.trim()) F("M4", "aviso", c.id, w + ": falta qué información se comunica o para qué (sin propósito no se puede juzgar si hace falta).");
+			if (!c.stkIds.length && !c.audience.trim()) F("M5", "aviso", c.id, w + ": no tiene destinatarios (elige interesados o describe la audiencia).");
+			if (c.stkIds.some((i) => !known.has(i)) && known.size) F("M6", "aviso", c.id, w + ": apunta a un interesado que ya no existe en Stakeholder Studio.");
+			if (!c.sender.trim()) F("M7", "aviso", c.id, w + ": no dice quién la emite.");
+			else if (roles.size && !roles.has(c.sender.trim().toLowerCase())) F("M7", "info", c.id, w + ": el emisor «" + c.sender + "» no figura entre los puestos del OBS.");
+			if (!c.frequency || !c.method) F("M8", "aviso", c.id, w + ": falta la frecuencia o el medio.");
+			if (!c.storage.trim()) F("M9", "info", c.id, w + ": no dice dónde queda el registro (acta, informe archivado): sin registro no hay evidencia de que se comunicó.");
+		});
+		coverage$1(d.items, f).forEach((r) => {
+			const s = r.stk;
+			if (!r.items.length) {
+				if (s.quadrant === "cerca") F("M1", "riesgo", null, "«" + s.name + "» es un interesado a gestionar de cerca y no recibe ninguna comunicación planificada.");
+				else if (r.gap !== null && r.gap > 0) F("M2", "aviso", null, "«" + s.name + "» debe pasar del compromiso " + s.engCurrent + " al " + s.engDesired + " y ninguna comunicación va dirigida a ellos.");
+				else F("M3", "info", null, "«" + s.name + "» no figura como destinatario de ninguna comunicación.");
+			} else if (r.gap !== null && r.gap >= 2 && r.items.every((c) => c.frequency === "Única vez" || c.frequency === "Por evento")) F("M2", "aviso", null, "«" + s.name + "» tiene una brecha de compromiso de " + r.gap + " niveles y solo recibe comunicaciones puntuales: un cambio de actitud necesita contacto sostenido.");
+			if (s.quadrant === "monitorear" && r.items.some((c) => HIGH_FREQ.indexOf(c.frequency) >= 0)) F("M10", "info", null, "«" + s.name + "» es un interesado a solo monitorear y recibe comunicaciones diarias o semanales: se sobrecomunica.");
+		});
+		if (d.items.length && !d.plan.escalation.trim()) F("M11", "aviso", null, "El plan no define la ruta de escalamiento de los asuntos de comunicación (a quién y en cuánto tiempo).");
+		if (d.items.length && !d.plan.review.trim()) F("M12", "info", null, "El plan no dice cómo ni cuándo se revisa y actualiza la matriz (p. ej. tras cada cambio de interesados).");
+		return out;
+	}
+	function commState(d, f) {
+		if (!d.items.length) return "vacio";
+		const fs = commFindings(d, f);
+		return fs.some((x) => x.severity === "riesgo") ? "rojo" : fs.some((x) => x.severity === "aviso") ? "ambar" : "verde";
+	}
+	//#endregion
+	//#region src/shared/quality-plan.ts
+	var COQ_CATS = [
+		"prevencion",
+		"evaluacion",
+		"falla_interna",
+		"falla_externa"
+	];
+	var COQ_LABEL = {
+		prevencion: "Prevención",
+		evaluacion: "Evaluación",
+		falla_interna: "Fallas internas",
+		falla_externa: "Fallas externas"
+	};
+	var str$2 = (v) => v === null || v === void 0 ? "" : String(v);
+	var strs$1 = (v) => Array.isArray(v) ? v.map(str$2).filter(Boolean) : [];
+	var numOrNull$1 = (v) => {
+		if (v === null || v === void 0 || v === "") return null;
+		const n = Number(v);
+		return isFinite(n) ? n : null;
+	};
+	var rec$2 = (o) => o && typeof o === "object" ? o : {};
+	function normalizeMetric(o, fb) {
+		const x = rec$2(o), id = str$2(x.id) || fb;
+		return {
+			id,
+			code: str$2(x.code) || id,
+			name: str$2(x.name),
+			wbsIds: strs$1(x.wbsIds),
+			definition: str$2(x.definition),
+			target: str$2(x.target),
+			tolerance: str$2(x.tolerance),
+			method: str$2(x.method),
+			frequency: str$2(x.frequency),
+			owner: str$2(x.owner)
+		};
+	}
+	function normalizeCheck(o, fb) {
+		const x = rec$2(o), id = str$2(x.id) || fb;
+		return {
+			id,
+			code: str$2(x.code) || id,
+			wbsId: str$2(x.wbsId),
+			what: str$2(x.what),
+			criterion: str$2(x.criterion),
+			kind: str$2(x.kind),
+			method: str$2(x.method),
+			frequency: str$2(x.frequency),
+			owner: str$2(x.owner),
+			record: str$2(x.record),
+			metricId: str$2(x.metricId)
+		};
+	}
+	function normalizeCoq(o, fb) {
+		const x = rec$2(o);
+		return {
+			id: str$2(x.id) || fb,
+			cat: COQ_CATS.indexOf(x.cat) >= 0 ? x.cat : "prevencion",
+			description: str$2(x.description),
+			amount: numOrNull$1(x.amount)
+		};
+	}
+	function normalizeQuality(raw) {
+		const x = rec$2(raw), metrics = (Array.isArray(x.metrics) ? x.metrics : []).map((o, i) => normalizeMetric(o, "qm" + (i + 1))), checks = (Array.isArray(x.checks) ? x.checks : []).map((o, i) => normalizeCheck(o, "qc" + (i + 1)));
+		const coq = (Array.isArray(x.coq) ? x.coq : []).map((o, i) => normalizeCoq(o, "cq" + (i + 1)));
+		return {
+			policy: str$2(x.policy),
+			standards: str$2(x.standards),
+			metrics,
+			checks,
+			coq,
+			idCounter: Number(x.idCounter) || metrics.length + checks.length + coq.length + 1
+		};
+	}
+	function coqSummary(coq, baseCost) {
+		const byCat = {
+			prevencion: 0,
+			evaluacion: 0,
+			falla_interna: 0,
+			falla_externa: 0
+		};
+		coq.forEach((c) => {
+			byCat[c.cat] += c.amount || 0;
+		});
+		const conformity = byCat.prevencion + byCat.evaluacion, nonConformity = byCat.falla_interna + byCat.falla_externa, total = conformity + nonConformity;
+		return {
+			byCat,
+			conformity,
+			nonConformity,
+			total,
+			pctOfBase: baseCost && baseCost > 0 ? total / baseCost * 100 : null,
+			failureShare: total > 0 ? nonConformity / total * 100 : null
+		};
+	}
+	function coverage(d, f) {
+		const hr = new Set(f.highRiskLeafIds);
+		return f.leaves.map((l) => ({
+			leaf: l,
+			checks: d.checks.filter((c) => c.wbsId === l.id),
+			needs: !l.loe && !!l.acceptance.trim(),
+			highRisk: hr.has(l.id)
+		}));
+	}
+	function qualityFindings(d, f) {
+		const out = [], F = (code, severity, text) => {
+			out.push({
+				code,
+				severity,
+				text
+			});
+		};
+		const leafBy = new Map(f.leaves.map((l) => [l.id, l])), roles = new Set(f.roles.map((r) => r.toLowerCase()));
+		if (!(d.checks.length || d.metrics.length || d.coq.length)) return out;
+		coverage(d, f).filter((r) => r.needs).filter((r) => !r.checks.length).forEach((r) => {
+			if (r.highRisk) F("Q2", "riesgo", "El paquete " + r.leaf.code + " «" + r.leaf.name + "» tiene un riesgo alto abierto y ninguna actividad de control o aseguramiento: nada verifica su criterio de aceptación.");
+			else F("Q1", "aviso", "El paquete " + r.leaf.code + " «" + r.leaf.name + "» tiene criterio de aceptación («" + r.leaf.acceptance.trim().slice(0, 70) + (r.leaf.acceptance.trim().length > 70 ? "…" : "") + "») pero ninguna actividad que lo verifique.");
+		});
+		d.checks.forEach((c) => {
+			const w = c.code + (c.what.trim() ? " «" + c.what.trim() + "»" : "");
+			if (!c.wbsId || !leafBy.has(c.wbsId)) F("Q8", "aviso", w + ": no apunta a un paquete de trabajo de la EDT" + (c.wbsId ? " (el paquete ya no existe)" : "") + ".");
+			if (!c.what.trim() || !c.criterion.trim() || !c.method || !c.frequency.trim() || !c.owner.trim()) F("Q4", "aviso", w + ": incompleta (falta qué se verifica, el criterio, el método, la frecuencia o el responsable).");
+			else if (roles.size && !roles.has(c.owner.trim().toLowerCase())) F("Q6", "info", w + ": el responsable «" + c.owner + "» no figura entre los puestos del OBS.");
+			if (!c.record.trim()) F("Q5", "info", w + ": no dice qué registro deja (informe de ensayo, protocolo, acta): sin registro no hay evidencia de conformidad.");
+			if (c.metricId && !d.metrics.some((m) => m.id === c.metricId)) F("Q8", "aviso", w + ": apunta a una métrica que ya no existe.");
+		});
+		d.metrics.forEach((m) => {
+			const w = m.code + (m.name.trim() ? " «" + m.name.trim() + "»" : "");
+			if (!m.name.trim() || !m.target.trim() || !m.method) F("Q7", "aviso", w + ": una métrica necesita nombre, objetivo medible y método de medición.");
+			if (!d.checks.some((c) => c.metricId === m.id)) F("Q7", "info", w + ": ninguna actividad de control la usa: no se está midiendo.");
+		});
+		if (d.checks.length && !d.checks.some((c) => c.kind === "Aseguramiento")) F("Q9", "info", "Todo el plan es control (detectar defectos): falta aseguramiento de la calidad (prevenir: revisiones de diseño, auditorías del proceso).");
+		if (d.checks.length && !d.policy.trim()) F("Q11", "info", "El plan no declara la política de calidad del proyecto.");
+		if (d.checks.length && !d.standards.trim()) F("Q11", "info", "El plan no lista las normas y especificaciones que definen la conformidad.");
+		const s = coqSummary(d.coq, f.baseCost);
+		if (d.checks.length && !d.coq.length) F("Q10", "aviso", "El plan de control y aseguramiento no tiene costo de la calidad: no se sabe cuánto cuesta prevenir y evaluar ni cuánto se reserva por fallas.");
+		if (d.coq.length && s.byCat.prevencion <= 0) F("Q10", "aviso", "El costo de la calidad no invierte nada en prevención: es lo que más barato evita fallas (evaluar solo detecta el defecto ya hecho).");
+		if (d.coq.length && s.failureShare !== null && s.failureShare > 50) F("Q10", "aviso", "Más de la mitad del costo de la calidad (" + Math.round(s.failureShare) + " %) es por fallas: el plan gasta más en corregir que en prevenir y evaluar.");
+		if (d.coq.some((c) => c.amount === null)) F("Q10", "info", "Hay partidas del costo de la calidad sin monto.");
+		return out;
+	}
+	function qualityState(d, f) {
+		if (!(d.checks.length || d.metrics.length || d.coq.length)) return "vacio";
+		const fs = qualityFindings(d, f);
+		return fs.some((x) => x.severity === "riesgo") ? "rojo" : fs.some((x) => x.severity === "aviso") ? "ambar" : "verde";
+	}
+	//#endregion
+	//#region src/shared/procurement-plan.ts
+	var STATUSES = [
+		"Planificada",
+		"Convocada",
+		"Adjudicada",
+		"Contratada",
+		"Entregada"
+	];
+	var STATUS_RANK = {
+		Planificada: 0,
+		Convocada: 1,
+		Adjudicada: 2,
+		Contratada: 3,
+		Entregada: 4
+	};
+	var FIXED_PRICE = ["Precio fijo (FFP)", "Precio fijo con ajuste económico (FPEPA)"];
+	var str$1 = (v) => v === null || v === void 0 ? "" : String(v);
+	var strs = (v) => Array.isArray(v) ? v.map(str$1).filter(Boolean) : [];
+	var numOrNull = (v) => {
+		if (v === null || v === void 0 || v === "") return null;
+		const n = Number(v);
+		return isFinite(n) ? n : null;
+	};
+	var rec$1 = (o) => o && typeof o === "object" ? o : {};
+	var iso$1 = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	function normalizeItem(o, fb) {
+		const x = rec$1(o), id = str$1(x.id) || fb;
+		return {
+			id,
+			code: str$1(x.code) || id,
+			name: str$1(x.name),
+			wbsIds: strs(x.wbsIds),
+			full: x.full === false ? false : true,
+			decision: str$1(x.decision),
+			contractType: str$1(x.contractType),
+			selection: str$1(x.selection),
+			criteria: (Array.isArray(x.criteria) ? x.criteria : []).map((c) => {
+				const q = rec$1(c);
+				return {
+					name: str$1(q.name),
+					weight: numOrNull(q.weight)
+				};
+			}),
+			value: numOrNull(x.value),
+			needDate: str$1(x.needDate),
+			leadDays: numOrNull(x.leadDays),
+			selectionDays: numOrNull(x.selectionDays),
+			supplier: str$1(x.supplier),
+			status: STATUS_RANK[str$1(x.status)] !== void 0 ? str$1(x.status) : "Planificada",
+			owner: str$1(x.owner),
+			awardDate: str$1(x.awardDate),
+			riskIds: strs(x.riskIds),
+			notes: str$1(x.notes)
+		};
+	}
+	function normalizeProcurement(raw, today = "") {
+		const x = rec$1(raw), items = (Array.isArray(x.items) ? x.items : []).map((o, i) => normalizeItem(o, "pr" + (i + 1)));
+		return {
+			strategy: str$1(x.strategy),
+			performance: str$1(x.performance),
+			approvals: str$1(x.approvals),
+			asOf: iso$1(str$1(x.asOf)) ? str$1(x.asOf) : today,
+			items,
+			idCounter: Number(x.idCounter) || items.length + 1
+		};
+	}
+	var day = (s) => Date.parse(s + "T12:00:00Z");
+	var addDays = (s, n) => new Date(day(s) + n * 864e5).toISOString().slice(0, 10);
+	var daysBetween = (a, b) => iso$1(a) && iso$1(b) ? Math.round((day(b) - day(a)) / 864e5) : null;
+	function launchBy(it) {
+		if (!iso$1(it.needDate) || it.leadDays === null || it.selectionDays === null) return null;
+		return addDays(it.needDate, -(it.leadDays + it.selectionDays));
+	}
+	var isBuy = (it) => it.decision !== "Hacer (recursos propios)";
+	var criteriaSum = (it) => it.criteria.reduce((s, c) => s + (c.weight || 0), 0);
+	function summary(d, f) {
+		const byStatus = {};
+		STATUSES.forEach((s) => {
+			byStatus[s] = 0;
+		});
+		let total = 0, late = 0, soon = 0;
+		d.items.forEach((it) => {
+			byStatus[it.status]++;
+			total += it.value || 0;
+			const lb = launchBy(it), left = lb ? daysBetween(d.asOf, lb) : null;
+			if (it.status === "Planificada" && left !== null) {
+				if (left < 0) late++;
+				else if (left <= 30) soon++;
+			}
+		});
+		return {
+			total,
+			count: d.items.length,
+			byStatus,
+			pctOfBase: f.baseCost && f.baseCost > 0 ? total / f.baseCost * 100 : null,
+			late,
+			soon
+		};
+	}
+	function procurementFindings(d, f) {
+		const out = [], F = (code, severity, itemId, text) => {
+			out.push({
+				code,
+				severity,
+				itemId,
+				text
+			});
+		};
+		const roles = new Set(f.roles.map((r) => r.toLowerCase())), leafBy = new Map(f.leaves.map((l) => [l.id, l])), sup = new Set(f.suppliers.map((s) => s.toLowerCase()));
+		d.items.forEach((it) => {
+			const w = it.code + (it.name.trim() ? " «" + it.name.trim() + "»" : ""), buy = isBuy(it), rank = STATUS_RANK[it.status];
+			if (!it.name.trim() || !it.decision) F("P2", "aviso", it.id, w + ": falta el nombre o la decisión hacer o comprar.");
+			if (it.wbsIds.some((i) => !leafBy.has(i)) && f.leaves.length) F("P2", "aviso", it.id, w + ": apunta a un paquete de la EDT que ya no existe.");
+			if (!it.wbsIds.length) F("P2", "info", it.id, w + ": no dice qué paquetes de la EDT cubre.");
+			if (!it.owner.trim()) F("P10", "aviso", it.id, w + ": no tiene responsable de la adquisición.");
+			else if (roles.size && !roles.has(it.owner.trim().toLowerCase())) F("P10", "info", it.id, w + ": el responsable «" + it.owner + "» no figura entre los puestos del OBS.");
+			if (!buy) return;
+			const lb = launchBy(it);
+			if (lb === null) F("P3", "aviso", it.id, w + ": sin fecha requerida o sin plazos (del proveedor y de selección) no se puede calcular cuándo convocar.");
+			else if (it.status === "Planificada") {
+				const left = daysBetween(d.asOf, lb);
+				if (left < 0) F("P1", "riesgo", it.id, w + ": la convocatoria debió lanzarse el " + lb + " (hace " + -left + " días respecto de la fecha de corte " + d.asOf + ") para tener el suministro el " + it.needDate + " y sigue «Planificada»: la fecha de necesidad ya no se sostiene.");
+				else if (left <= 30) F("P1", "info", it.id, w + ": la convocatoria debe lanzarse antes del " + lb + " (" + left + " días desde la fecha de corte).");
+			}
+			if (!it.contractType) F("P4", "aviso", it.id, w + ": falta el tipo de contrato.");
+			else if (FIXED_PRICE.indexOf(it.contractType) >= 0 && f.estimateClass !== null && f.estimateClass >= 4) F("P4", "aviso", it.id, w + ": un contrato de precio fijo traslada el riesgo de costo al proveedor y exige un alcance bien definido; el estimado del proyecto es de clase " + f.estimateClass + " (definición insuficiente): el proveedor lo cotizará con un sobreprecio o reclamará después.");
+			if (!it.selection) F("P5", "aviso", it.id, w + ": falta el método de selección del proveedor.");
+			else if (it.selection === "Adjudicación directa") F("P5", "info", it.id, w + ": adjudicación directa: deja escrita la justificación (proveedor único, urgencia, monto menor) en las notas.");
+			else {
+				const sum = criteriaSum(it);
+				if (!it.criteria.length) F("P5", "aviso", it.id, w + ": no define los criterios de selección con su peso.");
+				else if (Math.abs(sum - 100) > .001 || it.criteria.some((c) => !c.name.trim() || c.weight === null)) F("P5", "aviso", it.id, w + ": los criterios de selección deben tener nombre y peso, y sumar 100 (suman " + Math.round(sum * 100) / 100 + ").");
+				else if (it.criteria.length < 3) F("P5", "info", it.id, w + ": solo " + it.criteria.length + " criterio(s): la selección se apoya en algo más que el precio (capacidad técnica, plazo, experiencia).");
+			}
+			const edt = it.wbsIds.map((i) => leafBy.get(i)).filter((l) => !!l).reduce((s, l) => s + l.cost, 0);
+			if (it.value === null) F("P6", "aviso", it.id, w + ": falta el valor estimado.");
+			else if (it.full && edt > 0 && Math.abs(it.value - edt) / edt * 100 > 10) F("P6", "aviso", it.id, w + ": el valor estimado (" + Math.round(it.value).toLocaleString("es-PE") + ") difiere más de 10 % del costo de los paquetes que cubre en la EDT (" + Math.round(edt).toLocaleString("es-PE") + "): concilia el presupuesto con el contrato.");
+			if (rank >= STATUS_RANK.Adjudicada && (!it.supplier.trim() || !iso$1(it.awardDate))) F("P7", "aviso", it.id, w + ": está «" + it.status + "» pero no registra el proveedor o la fecha de adjudicación.");
+			else if (it.supplier.trim() && sup.size && !sup.has(it.supplier.trim().toLowerCase())) F("P12", "info", it.id, w + ": el proveedor «" + it.supplier + "» no figura en el OBS ni entre los interesados: regístralo para gestionar su compromiso.");
+			const cited = new Set(it.riskIds);
+			f.risks.filter((r) => r.high && r.threat && r.wbsIds.some((i) => it.wbsIds.indexOf(i) >= 0) && !cited.has(r.id)).forEach((r) => F("P8", "info", it.id, w + ": el riesgo alto " + r.code + " «" + r.title + "» afecta sus paquetes y no lo cita: define si el contrato lo transfiere, lo mitiga o lo acepta."));
+			if (it.riskIds.some((i) => !f.risks.some((r) => r.id === i)) && f.risks.length) F("P8", "info", it.id, w + ": cita un riesgo que ya no está abierto en el Registro de Riesgos.");
+		});
+		if (d.items.length && !d.strategy.trim()) F("P13", "info", null, "El plan no declara la estrategia de adquisiciones (qué se compra, qué se hace, cómo se contrata en general).");
+		if (d.items.length && !d.performance.trim()) F("P13", "info", null, "El plan no dice cómo se mide y se gestiona el desempeño de los proveedores (entregas, calidad, plazos).");
+		if (d.items.length && !d.approvals.trim()) F("P13", "info", null, "El plan no dice quién autoriza contratar y hasta qué monto.");
+		return out;
+	}
+	function procurementState(d, f) {
+		if (!d.items.length) return "vacio";
+		const fs = procurementFindings(d, f);
+		return fs.some((x) => x.severity === "riesgo") ? "rojo" : fs.some((x) => x.severity === "aviso") ? "ambar" : "verde";
+	}
+	//#endregion
 	//#region src/shared/pm-plan.ts
 	var emptyBase = () => ({
 		has: false,
@@ -1400,6 +1850,31 @@
 			evm: {
 				reports: 0,
 				lastCut: ""
+			},
+			quality: {
+				has: false,
+				state: "vacio",
+				needing: 0,
+				verified: 0,
+				checks: 0,
+				coqTotal: 0
+			},
+			comms: {
+				has: false,
+				state: "vacio",
+				items: 0,
+				covered: 0,
+				stakeholders: 0,
+				closeUncovered: 0
+			},
+			procurement: {
+				has: false,
+				state: "vacio",
+				items: 0,
+				total: 0,
+				late: 0,
+				soon: 0,
+				asOf: ""
 			},
 			projectEnd: "",
 			contractualEnd: "",
@@ -1525,29 +2000,26 @@
 			{
 				key: "quality",
 				label: "Plan de Calidad",
-				file: null,
-				state: "vacio",
-				metric: "sin módulo en la suite",
-				note: "Aún no hay módulo: no se inventa su contenido.",
-				unavailable: true
+				file: "Plan_Calidad.html",
+				state: f.quality.state,
+				metric: f.quality.has ? f.quality.verified + "/" + f.quality.needing + " paquetes verificados · " + f.quality.checks + " control(es) · costo de la calidad " + money$1(f.quality.coqTotal) : "—",
+				note: ""
 			},
 			{
 				key: "comms",
 				label: "Plan de Comunicaciones",
-				file: null,
-				state: "vacio",
-				metric: "sin módulo en la suite",
-				note: "Aún no hay módulo: no se inventa su contenido.",
-				unavailable: true
+				file: "Plan_Comunicaciones.html",
+				state: f.comms.state,
+				metric: f.comms.has ? f.comms.items + " comunicación(es) · " + f.comms.covered + "/" + f.comms.stakeholders + " interesados cubiertos" : "—",
+				note: ""
 			},
 			{
 				key: "procurement",
 				label: "Plan de Adquisiciones",
-				file: null,
-				state: "vacio",
-				metric: "sin módulo en la suite",
-				note: "Aún no hay módulo: no se inventa su contenido.",
-				unavailable: true
+				file: "Plan_Adquisiciones.html",
+				state: f.procurement.state,
+				metric: f.procurement.has ? f.procurement.items + " adquisición(es) · " + money$1(f.procurement.total) + " · " + f.procurement.late + " convocatoria(s) vencida(s)" : "—",
+				note: ""
 			}
 		];
 	}
@@ -1605,6 +2077,18 @@
 		if (k.capex !== null && k.total > k.capex + .5) F("P8", "aviso", "Costos", "El presupuesto total (" + money$1(k.total) + ") supera el CAPEX autorizado (" + money$1(k.capex) + "): requiere reconciliación o una autorización adicional.");
 		if (f.changes.oldestPending !== null && f.changes.oldestPending > 14) F("P9", "info", "Cambios", "Hay solicitudes de cambio pendientes hace más de 14 días (la más antigua, " + f.changes.oldestPending + "): el plan puede estar desactualizado respecto de la realidad.");
 		if (f.risks.total === 0 && (s.has || k.has)) F("P10", "aviso", "Riesgos", "El plan no tiene Registro de Riesgos: la contingencia y el plazo no tienen sustento en riesgos identificados.");
+		if (f.procurement.late > 0) F("P15", "aviso", "Adquisiciones", f.procurement.late + " adquisición(es) con la convocatoria ya vencida a la fecha de corte " + f.procurement.asOf + ": el suministro llegará después de lo que el cronograma necesita.");
+		if (f.quality.has && f.quality.needing > f.quality.verified) F("P16", "aviso", "Calidad", f.quality.needing - f.quality.verified + " paquete(s) con criterio de aceptación sin ninguna actividad que lo verifique: el plan de calidad no cubre lo que el alcance promete entregar.");
+		if (f.comms.closeUncovered > 0) F("P18", "aviso", "Comunicaciones", f.comms.closeUncovered + " interesado(s) a gestionar de cerca sin ninguna comunicación planificada.");
+		const bac = f.cost.bacCurrent || f.cost.bac;
+		if (f.procurement.has && bac > 0 && f.procurement.total > bac) F("P19", "aviso", "Adquisiciones", "El valor estimado de las adquisiciones (" + money$1(f.procurement.total) + ") supera el BAC vigente (" + money$1(bac) + "): concilia los contratos con el presupuesto.");
+		if (anyData) [
+			["quality", "Calidad"],
+			["comms", "Comunicaciones"],
+			["procurement", "Adquisiciones"]
+		].forEach(([k, n]) => {
+			if (!f[k].has) F("P17", "info", n, "El Plan de " + n + " aún no está elaborado: el plan para la dirección se aprueba con sus planes subsidiarios.");
+		});
 		if (s.base.has && s.deviationPct !== null && s.deviationPct > 10) F("P11", "aviso", "Cronograma", "El pronóstico del cronograma se desvía " + Math.round(s.deviationPct * 10) / 10 + " % de su línea base: evalúa un cambio (o una nueva línea base) antes de aprobar el plan.");
 		if (f.plan.status === "aprobado") {
 			if (!f.plan.approvedBy.trim() || !f.plan.approvedOn) F("P14", "riesgo", "Plan", "El plan figura «aprobado» sin registrar quién lo aprueba y en qué fecha.");
@@ -1833,6 +2317,34 @@
 				approvedOpen: cp.pendingBaseline,
 				oldestPending: cp.oldestPendingDays
 			};
+			const qd = normalizeQuality(G.getModule("quality")), qf = gatherQualityFacts(G), qcov = coverage(qd, qf).filter((r) => r.needs);
+			f.quality = {
+				has: qd.checks.length + qd.metrics.length + qd.coq.length > 0,
+				state: qualityState(qd, qf),
+				needing: qcov.length,
+				verified: qcov.filter((r) => r.checks.length).length,
+				checks: qd.checks.length,
+				coqTotal: coqSummary(qd.coq, qf.baseCost).total
+			};
+			const cd = normalizeComms(G.getModule("comms")), cf2 = gatherCommFacts(G), ccov = coverage$1(cd.items, cf2);
+			f.comms = {
+				has: cd.items.length > 0,
+				state: commState(cd, cf2),
+				items: cd.items.length,
+				covered: ccov.filter((r) => r.items.length).length,
+				stakeholders: cf2.stakeholders.length,
+				closeUncovered: ccov.filter((r) => r.stk.quadrant === "cerca" && !r.items.length).length
+			};
+			const pd = normalizeProcurement(G.getModule("procurement"), todayISO()), pf = gatherProcurementFacts(G), ps = summary(pd, pf);
+			f.procurement = {
+				has: pd.items.length > 0,
+				state: procurementState(pd, pf),
+				items: pd.items.length,
+				total: ps.total,
+				late: ps.late,
+				soon: ps.soon,
+				asOf: pd.asOf
+			};
 			const reps = arr(rec(G.getModule("evm")).reports);
 			f.evm = {
 				reports: reps.length,
@@ -1933,7 +2445,7 @@
       <table class="an"><thead><tr><th>Área</th><th>Estado</th><th>Resumen</th><th>Módulo</th></tr></thead><tbody>
       ${rows.map((r) => `<tr><td>${esc(r.label)}</td><td>${pill(r.state)}</td><td>${esc(r.metric)}${r.note ? ` <span class="muted small">${esc(r.note)}</span>` : ""}</td><td>${r.file ? `<a href="${esc(r.file)}">Abrir</a>` : "<span class=\"muted\">—</span>"}</td></tr>`).join("")}
       </tbody></table></div>
-    <div class="card"><h3>Integración entre líneas base (${finds.length})</h3>
+    <div class="card"><h3>Integración entre líneas base y planes (${finds.length})</h3>
       ${finds.length ? `<ul class="finds">${finds.map((x) => `<li class="${x.severity}"><b class="cd">${x.code} ${sevIcon[x.severity]}</b><b>${esc(x.area)}:</b> ${esc(x.text)}</li>`).join("")}</ul>` : "<p class=\"muted small\">Sin hallazgos: las líneas base calzan entre sí.</p>"}
     </div>`;
 		wireState();
@@ -2440,6 +2952,159 @@
 			});
 		}
 		{
+			const qd = normalizeQuality(G.getModule("quality")), qf = gatherQualityFacts(G), s = coqSummary(qd.coq, qf.baseCost), cov = coverage(qd, qf).filter((r) => r.needs), leaf = new Map(qf.leaves.map((l) => [l.id, l.code + " " + l.name]));
+			let h = qd.checks.length + qd.metrics.length + qd.coq.length > 0 ? kv([
+				["Política de calidad", nl(qd.policy)],
+				["Normas y especificaciones", nl(qd.standards)],
+				["Paquetes con criterio de aceptación verificados", cov.filter((r) => r.checks.length).length + " de " + cov.length]
+			]) : nodata("El plan de calidad aún no tiene datos.");
+			h += `<h3 class="d2" id="sq-m">Métricas de calidad</h3>` + (qd.metrics.length ? tbl([
+				"Código",
+				"Métrica",
+				"Objetivo",
+				"Tolerancia",
+				"Método",
+				"Frecuencia",
+				"Responsable"
+			], qd.metrics.map((x) => [
+				esc(x.code),
+				esc(x.name),
+				nl(x.target),
+				nl(x.tolerance),
+				esc(x.method),
+				esc(x.frequency),
+				esc(x.owner)
+			])) : nodata("Sin métricas definidas."));
+			h += `<h3 class="d2" id="sq-c">Aseguramiento y control por paquete</h3>` + (qd.checks.length ? tbl([
+				"Código",
+				"Paquete",
+				"Qué se verifica",
+				"Criterio de aceptación",
+				"Tipo",
+				"Método",
+				"Frecuencia",
+				"Responsable",
+				"Registro"
+			], qd.checks.map((x) => [
+				esc(x.code),
+				esc(leaf.get(x.wbsId) || ""),
+				nl(x.what),
+				nl(x.criterion),
+				esc(x.kind),
+				esc(x.method),
+				esc(x.frequency),
+				esc(x.owner),
+				esc(x.record)
+			])) : nodata("Sin actividades de control ni aseguramiento."));
+			h += `<h3 class="d2" id="sq-k">Costo de la calidad</h3>` + (s.total > 0 ? tbl([
+				"Categoría",
+				"Monto",
+				"Parte"
+			], COQ_CATS.map((k) => [
+				esc(COQ_LABEL[k]),
+				m(s.byCat[k]),
+				Math.round(s.byCat[k] / s.total * 100) + " %"
+			]).concat([[
+				"Total",
+				m(s.total),
+				s.pctOfBase !== null ? s.pctOfBase.toFixed(1) + " % del costo base" : ""
+			]])) : nodata("Sin costo de la calidad definido."));
+			out.push({
+				id: "sq",
+				title: "Plan de gestión de la calidad",
+				subs: [
+					{
+						id: "sq-m",
+						title: "Métricas"
+					},
+					{
+						id: "sq-c",
+						title: "Aseguramiento y control"
+					},
+					{
+						id: "sq-k",
+						title: "Costo de la calidad"
+					}
+				],
+				html: h
+			});
+		}
+		{
+			const cd = normalizeComms(G.getModule("comms")), cf = gatherCommFacts(G), who = (ids, aud) => ids.map((i) => (cf.stakeholders.find((x) => x.id === i) || { name: i }).name).concat(aud.trim() ? [aud.trim()] : []).join("; ");
+			let h = cd.items.length ? tbl([
+				"Código",
+				"Información",
+				"Propósito",
+				"Destinatarios",
+				"Emisor",
+				"Frecuencia",
+				"Medio",
+				"Registro"
+			], cd.items.map((x) => [
+				esc(x.code),
+				nl(x.info),
+				nl(x.purpose),
+				esc(who(x.stkIds, x.audience)),
+				esc(x.sender),
+				esc(x.frequency),
+				esc(x.method),
+				esc(x.storage)
+			])) : nodata("La matriz de comunicaciones aún no tiene datos.");
+			if (cd.items.length) h += `<p class="note">${coverage$1(cd.items, cf).filter((r) => r.items.length).length} de ${cf.stakeholders.length} interesados reciben al menos una comunicación planificada.</p>` + kv([
+				["Escalamiento", nl(cd.plan.escalation)],
+				["Restricciones y confidencialidad", nl(cd.plan.restrictions)],
+				["Actualización del plan", nl(cd.plan.review)]
+			]);
+			out.push({
+				id: "sc",
+				title: "Plan de gestión de las comunicaciones",
+				subs: [],
+				html: h
+			});
+		}
+		{
+			const pd = normalizeProcurement(G.getModule("procurement"), todayISO()), pf = gatherProcurementFacts(G), code = (ids) => ids.map((i) => (pf.leaves.find((l) => l.id === i) || { code: "" }).code).filter(Boolean).join(", ");
+			let h = pd.items.length ? kv([
+				["Fecha de corte del plan", esc(pd.asOf)],
+				["Estrategia de adquisiciones", nl(pd.strategy)],
+				["Desempeño de proveedores", nl(pd.performance)],
+				["Autorizaciones", nl(pd.approvals)]
+			]) : nodata("El plan de adquisiciones aún no tiene datos.");
+			if (pd.items.length) h += tbl([
+				"Código",
+				"Adquisición",
+				"Paquetes EDT",
+				"Decisión",
+				"Contrato",
+				"Selección",
+				"Valor",
+				"Fecha requerida",
+				"Convocar antes del",
+				"Proveedor",
+				"Estado",
+				"Responsable"
+			], pd.items.map((x) => [
+				esc(x.code),
+				esc(x.name),
+				esc(code(x.wbsIds)),
+				esc(x.decision),
+				esc(x.contractType),
+				esc(x.selection) + (x.criteria.length ? "<br><span class=\"note\">" + esc(x.criteria.map((c) => c.name + " " + (c.weight ?? "?") + " %").join("; ")) + "</span>" : ""),
+				x.value === null ? "" : m(x.value),
+				esc(x.needDate),
+				esc(launchBy(x) || ""),
+				esc(x.supplier),
+				esc(x.status),
+				esc(x.owner)
+			]));
+			out.push({
+				id: "sp",
+				title: "Plan de gestión de las adquisiciones",
+				subs: [],
+				html: h
+			});
+		}
+		{
 			const snap = plan.snapshot, diff = snap ? snapshotDiff(snap, snapshotOf(f)) : [];
 			let h = tbl([
 				"Línea base",
@@ -2498,8 +3163,26 @@
 		}
 		return out;
 	}
+	var SECTION_ORDER = [
+		"s1",
+		"s2",
+		"s3",
+		"s4",
+		"sq",
+		"s7",
+		"sc",
+		"s5",
+		"sp",
+		"s6",
+		"s8",
+		"s9",
+		"s10"
+	];
 	function docHtml() {
-		const C = getCtx(), secs = buildSections();
+		const C = getCtx(), secs = buildSections().sort((a, b) => SECTION_ORDER.indexOf(a.id) - SECTION_ORDER.indexOf(b.id));
+		secs.forEach((s, i) => {
+			s.title = i + 1 + ". " + s.title.replace(/^\d+\.\s*/, "");
+		});
 		const toc = secs.map((s) => `<div class="l1"><a href="#${s.id}">${esc(s.title)}</a></div>` + s.subs.map((x) => `<div class="l2"><a href="#${x.id}">${esc(x.title)}</a></div>`).join("")).join("");
 		return `<div class="paper">
     <div class="cover"><div class="ttl"><h1>Plan para la dirección del proyecto</h1><div class="pn">${esc(C.name || "Proyecto")}</div></div>

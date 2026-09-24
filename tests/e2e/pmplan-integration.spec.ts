@@ -22,15 +22,28 @@ test("Plan para la Dirección sobre el proyecto real: cronograma 273 d, document
   const estado = page.locator("#stateView");
   await expect(estado).toContainText("Estado del plan");
   await expect(estado).toContainText(/273 d laborables\s*·\s*fin 2027-07-21\s*·\s*sin línea base/);         // la misma red que Cronograma/CPM
-  await expect(estado).toContainText(/Plan de Calidad/); await expect(estado).toContainText("sin módulo en la suite");
   await expect(estado).toContainText(/No se puede aprobar todavía: falta la línea base del alcance/);
   await expect(page.locator("#btnApprove")).toBeDisabled();
+  // los tres planes subsidiarios aún no están elaborados: se avisa (P17), no se inventan
+  await expect(estado).toContainText("El Plan de Calidad aún no está elaborado");
+  await expect(estado).toContainText("El Plan de Adquisiciones aún no está elaborado");
+
+  // se elaboran (con «Cargar ejemplo» de cada módulo) y el plan integrador los recoge con lo que ya había
+  await cargar(page, "/Plan_Calidad.html", "#btnSample", "#modalConfirmBtn");
+  await cargar(page, "/Plan_Comunicaciones.html", "#btnSample", "#modalConfirmBtn");
+  await cargar(page, "/Plan_Adquisiciones.html", "#btnSample", "#modalConfirmBtn");
+  await page.goto("/Plan_Direccion.html");
+  await expect(estado).toContainText(/17\/17 paquetes verificados · 17 control\(es\)/);                      // criterio de aceptación leído del diccionario de la EDT real
+  await expect(estado).toContainText(/5 adquisición\(es\).*0 convocatoria\(s\) vencida\(s\)/);
+  await expect(estado).not.toContainText("aún no está elaborado");
 
   // el documento sale con la EDT y el cronograma reales del proyecto
   await page.locator('#tabs .tab[data-view="doc"]').click();
   const doc = page.locator("#docView");
   await expect(doc).toContainText("Plan para la dirección del proyecto");
   await expect(doc).toContainText("3. Plan de gestión del cronograma");
+  await expect(doc).toContainText("5. Plan de gestión de la calidad"); await expect(doc).toContainText("9. Plan de gestión de las adquisiciones");
+  await expect(doc).toContainText("QC-11");                                                                 // el control de cimentaciones del ejemplo de calidad
   await expect(doc.locator("h3#s2-edt ~ table").first().locator("tbody tr")).not.toHaveCount(0);
   await expect(doc).toContainText(/Duración \(días laborables\)\s*273/);
   expect(await doc.locator(".toc a").count()).toBeGreaterThan(10);

@@ -11,6 +11,16 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Added
 
+- **Plan para la Dirección — integra los planes de calidad, comunicaciones y adquisiciones** — las
+  tres áreas que aparecían «sin módulo» ahora se resumen con su estado real y el documento suma las
+  secciones de calidad, comunicaciones y adquisiciones (13 secciones, numeradas en el orden de las
+  áreas de conocimiento). Nuevos hallazgos de integración: **P15** adquisiciones con la
+  convocatoria vencida, **P16** paquetes con criterio de aceptación sin verificación de calidad,
+  **P17** plan subsidiario aún no elaborado, **P18** interesados a gestionar de cerca sin
+  comunicación, **P19** valor de las adquisiciones sobre el BAC. La lectura de datos de los tres
+  planes vive en un solo archivo (`src/shared/plan-facts.ts`) que usan los módulos y el plan
+  integrador, para que no diverjan.
+
 - **Nuevo módulo «Gestión de las Adquisiciones» (`Plan_Adquisiciones.html`, auditoría
   metodológica)** — la tarjeta del Panel existía sin archivo. Estrategia y una ficha por paquete de
   adquisición: paquetes de la EDT, **hacer o comprar**, tipo de contrato, selección con **criterios

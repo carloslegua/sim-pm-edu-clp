@@ -7,7 +7,9 @@
 // integrado de cambios. Aquí eso es: (1) estado por área con las auditorías que ya existen; (2) hallazgos de INTEGRACIÓN (líneas base que
 // no calzan entre sí, plazo contra la fecha del Acta, presupuesto contra el CAPEX, cambios aprobados sin implementar…); (3) al aprobar el plan
 // se guarda una INSTANTÁNEA de las líneas base y, si después cambian, se avisa que el plan aprobado quedó desactualizado (nueva versión).
-// Los planes de calidad, comunicaciones y adquisiciones aún no tienen módulo en la suite: se muestran como «no disponibles», no se inventan.
+// Los planes de calidad, comunicaciones y adquisiciones tienen su módulo (Plan_Calidad / Plan_Comunicaciones / Plan_Adquisiciones): aquí se
+// resumen su estado y se cruzan con lo demás (convocatorias vencidas contra el cronograma, paquetes sin verificación de calidad, interesados
+// a gestionar de cerca sin comunicación, valor de las adquisiciones contra el presupuesto).
 
 export type AreaState = "vacio" | "verde" | "ambar" | "rojo";
 export interface BaselineFact { has: boolean; version: string; date: string; approver: string; }
@@ -26,6 +28,9 @@ export interface PlanFacts {
   stakeholders: { count: number; close: number };
   resources: { roles: number; withPerson: number; leaves: number; withR: number; withoutA: number };
   changes: { total: number; pending: number; approvedOpen: number; oldestPending: number | null };
+  quality: { has: boolean; state: AreaState; needing: number; verified: number; checks: number; coqTotal: number };
+  comms: { has: boolean; state: AreaState; items: number; covered: number; stakeholders: number; closeUncovered: number };
+  procurement: { has: boolean; state: AreaState; items: number; total: number; late: number; soon: number; asOf: string };
   evm: { reports: number; lastCut: string };
   projectEnd: string; contractualEnd: string; today: string;
   plan: { status: "borrador" | "aprobado"; version: string; approvedBy: string; approvedOn: string; snapshot: PlanSnapshot | null };
@@ -42,6 +47,8 @@ export function emptyFacts(today = ""): PlanFacts {
     cost: { has: false, bac: 0, bacCurrent: 0, total: 0, pendingBaseline: 0, capex: null, boeStatus: "", boeApprovedOn: "", baselineVersion: "", baselineDate: "" },
     risks: { total: 0, open: 0, high: 0 }, stakeholders: { count: 0, close: 0 }, resources: { roles: 0, withPerson: 0, leaves: 0, withR: 0, withoutA: 0 },
     changes: { total: 0, pending: 0, approvedOpen: 0, oldestPending: null }, evm: { reports: 0, lastCut: "" },
+    quality: { has: false, state: "vacio", needing: 0, verified: 0, checks: 0, coqTotal: 0 }, comms: { has: false, state: "vacio", items: 0, covered: 0, stakeholders: 0, closeUncovered: 0 },
+    procurement: { has: false, state: "vacio", items: 0, total: 0, late: 0, soon: 0, asOf: "" },
     projectEnd: "", contractualEnd: "", today, plan: { status: "borrador", version: "1.0", approvedBy: "", approvedOn: "", snapshot: null }
   };
 }
@@ -73,9 +80,9 @@ export function areaRows(f: PlanFacts): AreaRow[] {
     { key: "resources", label: "Equipo y responsabilidades", file: "RACI_Matrix.html", state: resState, metric: f.resources.roles ? f.resources.roles + " puestos · " + f.resources.withR + "/" + f.resources.leaves + " paquetes con responsable" : "—", note: "" },
     { key: "changes", label: "Control integrado de cambios", file: "Control_Cambios.html", state: chState, metric: c.total ? c.pending + " pendiente(s) · " + c.approvedOpen + " aprobada(s) sin implementar" : "—", note: "" },
     { key: "evm", label: "Valor ganado", file: "Valor_Ganado.html", state: f.evm.reports ? "verde" : "vacio", metric: f.evm.reports ? f.evm.reports + " corte(s) · último " + f.evm.lastCut : "—", note: "" },
-    { key: "quality", label: "Plan de Calidad", file: null, state: "vacio", metric: "sin módulo en la suite", note: "Aún no hay módulo: no se inventa su contenido.", unavailable: true },
-    { key: "comms", label: "Plan de Comunicaciones", file: null, state: "vacio", metric: "sin módulo en la suite", note: "Aún no hay módulo: no se inventa su contenido.", unavailable: true },
-    { key: "procurement", label: "Plan de Adquisiciones", file: null, state: "vacio", metric: "sin módulo en la suite", note: "Aún no hay módulo: no se inventa su contenido.", unavailable: true }
+    { key: "quality", label: "Plan de Calidad", file: "Plan_Calidad.html", state: f.quality.state, metric: f.quality.has ? f.quality.verified + "/" + f.quality.needing + " paquetes verificados · " + f.quality.checks + " control(es) · costo de la calidad " + money(f.quality.coqTotal) : "—", note: "" },
+    { key: "comms", label: "Plan de Comunicaciones", file: "Plan_Comunicaciones.html", state: f.comms.state, metric: f.comms.has ? f.comms.items + " comunicación(es) · " + f.comms.covered + "/" + f.comms.stakeholders + " interesados cubiertos" : "—", note: "" },
+    { key: "procurement", label: "Plan de Adquisiciones", file: "Plan_Adquisiciones.html", state: f.procurement.state, metric: f.procurement.has ? f.procurement.items + " adquisición(es) · " + money(f.procurement.total) + " · " + f.procurement.late + " convocatoria(s) vencida(s)" : "—", note: "" }
   ];
   return rows;
 }
@@ -114,6 +121,13 @@ export function integrationFindings(f: PlanFacts): PFinding[] {
   if (k.capex !== null && k.total > k.capex + 0.5) F("P8", "aviso", "Costos", "El presupuesto total (" + money(k.total) + ") supera el CAPEX autorizado (" + money(k.capex) + "): requiere reconciliación o una autorización adicional.");
   if (f.changes.oldestPending !== null && f.changes.oldestPending > 14) F("P9", "info", "Cambios", "Hay solicitudes de cambio pendientes hace más de 14 días (la más antigua, " + f.changes.oldestPending + "): el plan puede estar desactualizado respecto de la realidad.");
   if (f.risks.total === 0 && (s.has || k.has)) F("P10", "aviso", "Riesgos", "El plan no tiene Registro de Riesgos: la contingencia y el plazo no tienen sustento en riesgos identificados.");
+  // planes subsidiarios: se cruzan con el cronograma, el presupuesto y los interesados
+  if (f.procurement.late > 0) F("P15", "aviso", "Adquisiciones", f.procurement.late + " adquisición(es) con la convocatoria ya vencida a la fecha de corte " + f.procurement.asOf + ": el suministro llegará después de lo que el cronograma necesita.");
+  if (f.quality.has && f.quality.needing > f.quality.verified) F("P16", "aviso", "Calidad", (f.quality.needing - f.quality.verified) + " paquete(s) con criterio de aceptación sin ninguna actividad que lo verifique: el plan de calidad no cubre lo que el alcance promete entregar.");
+  if (f.comms.closeUncovered > 0) F("P18", "aviso", "Comunicaciones", f.comms.closeUncovered + " interesado(s) a gestionar de cerca sin ninguna comunicación planificada.");
+  const bac = f.cost.bacCurrent || f.cost.bac;
+  if (f.procurement.has && bac > 0 && f.procurement.total > bac) F("P19", "aviso", "Adquisiciones", "El valor estimado de las adquisiciones (" + money(f.procurement.total) + ") supera el BAC vigente (" + money(bac) + "): concilia los contratos con el presupuesto.");
+  if (anyData) ([["quality", "Calidad"], ["comms", "Comunicaciones"], ["procurement", "Adquisiciones"]] as const).forEach(([k, n]) => { if (!f[k].has) F("P17", "info", n, "El Plan de " + n + " aún no está elaborado: el plan para la dirección se aprueba con sus planes subsidiarios."); });
   if (s.base.has && s.deviationPct !== null && s.deviationPct > 10) F("P11", "aviso", "Cronograma", "El pronóstico del cronograma se desvía " + Math.round(s.deviationPct * 10) / 10 + " % de su línea base: evalúa un cambio (o una nueva línea base) antes de aprobar el plan.");
   if (f.plan.status === "aprobado") {
     if (!f.plan.approvedBy.trim() || !f.plan.approvedOn) F("P14", "riesgo", "Plan", "El plan figura «aprobado» sin registrar quién lo aprueba y en qué fecha.");
