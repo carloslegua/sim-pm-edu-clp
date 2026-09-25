@@ -34,7 +34,6 @@ afterAll(() => { server.close(); });
 describe("RACI_Matrix.html (migrado a raci.js)", () => {
   it("sin proyecto activo cae en modo 'sample' con las 18 filas del ejemplo DISTRIB+", async () => {
     const dom = await JSDOM.fromURL(base + "RACI_Matrix.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(doc.getElementById("modeFlag")!.textContent).toContain("Ejemplo independiente");
     expect(doc.querySelectorAll("tr[data-row]").length).toBe(18);
@@ -61,7 +60,6 @@ describe("RACI_Matrix.html (migrado a raci.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(doc.getElementById("modeFlag")!.textContent).toContain("Vinculado a WBS/OBS");
     expect(doc.querySelectorAll("tr[data-row]").length).toBe(1);

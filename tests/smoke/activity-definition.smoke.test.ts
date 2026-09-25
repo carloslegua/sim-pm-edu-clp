@@ -64,7 +64,6 @@ const seedDb = {
 describe("Activity_Definition.html (migrado a activities.js)", () => {
   it("sin proyecto activo (localStorage vacío vía HTTP): arranca en blanco, sin errores", async () => {
     const dom = await JSDOM.fromURL(base + "Activity_Definition.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(doc.getElementById("modeChip")!.textContent).toBe("EDT del proyecto");
     expect(doc.querySelectorAll("#actsBody tr").length).toBe(0);
@@ -72,7 +71,6 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
 
   it("modo ejemplo: 'Explorar con el modo ejemplo' carga la EDT y actividades didácticas de DISTRIB+", async () => {
     const dom = await JSDOM.fromURL(base + "Activity_Definition.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
     (doc.getElementById("btnSampleInner") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 100));
@@ -132,7 +130,6 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedWithMilestone)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     const rows = Array.from(doc.querySelectorAll("#actsBody tr"));
     const idOf = (row: Element) => row.querySelector(".n-cell")!.textContent;
@@ -148,7 +145,6 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(doc.querySelectorAll(".pkg-row").length).toBe(1);
     // Ya no hay inputs de edición por celda ni botón "+ Actividad": el
@@ -162,7 +158,6 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     const win = dom.window as any;
 
@@ -196,7 +191,6 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     const win = dom.window as any;
     expect(win.JSZip).toBeDefined(); // confirma que sí cargó localmente antes de borrarlo a propósito
@@ -248,7 +242,6 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedLive)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 100));
@@ -274,7 +267,6 @@ describe("Activity_Definition.html (migrado a activities.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedNoWbs)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 100));

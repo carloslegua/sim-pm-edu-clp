@@ -33,13 +33,11 @@ afterAll(() => { server.close(); });
 describe("WBS_Builder.html (migrado a wbs.js)", () => {
   it("standalone: arranca en blanco sin errores", async () => {
     const dom = await JSDOM.fromURL(base + "WBS_Builder.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 800));
     expect(dom.window.document.querySelectorAll("#canvas .node").length).toBe(1);
   });
 
   it("'Cargar ejemplo' construye el árbol DISTRIB+ con el costo total documentado (S/ 7,100,000)", async () => {
     const dom = await JSDOM.fromURL(base + "WBS_Builder.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
     (doc.getElementById("btnSample") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 50));
@@ -74,7 +72,6 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     const node = Array.from(doc.querySelectorAll("#canvas .node")).find((n) => n.textContent?.includes("Paquete 1")) as HTMLElement;
     expect(node).toBeTruthy();
@@ -108,7 +105,6 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     const node = Array.from(doc.querySelectorAll("#canvas .node")).find((n) => n.textContent?.includes("Paquete 1")) as HTMLElement;
     node.dispatchEvent(new dom.window.Event("click", { bubbles: true }));
@@ -143,7 +139,6 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     const node = Array.from(doc.querySelectorAll("#canvas .node")).find((n) => n.textContent?.includes("Paquete 1")) as HTMLElement;
     node.dispatchEvent(new dom.window.Event("click", { bubbles: true }));
@@ -184,7 +179,6 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     const node = Array.from(doc.querySelectorAll("#canvas .node")).find((n) => n.textContent?.includes("Paquete 1")) as HTMLElement;
     node.dispatchEvent(new dom.window.Event("click", { bubbles: true }));
@@ -227,7 +221,6 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     const node = Array.from(doc.querySelectorAll("#canvas .node")).find((n) => n.textContent?.includes("Paquete 1")) as HTMLElement;
     node.dispatchEvent(new dom.window.Event("click", { bubbles: true }));
@@ -263,7 +256,6 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     const node = Array.from(doc.querySelectorAll("#canvas .node")).find((n) => n.textContent?.includes("Paquete 1")) as HTMLElement;
     node.dispatchEvent(new dom.window.Event("click", { bubbles: true }));
@@ -297,7 +289,6 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     return dom;
   }
 
@@ -364,7 +355,6 @@ describe("WBS_Builder.html (migrado a wbs.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(Array.from(doc.querySelectorAll("#canvas .node")).some((n) => n.textContent?.includes("Paquete de A"))).toBe(true);
 

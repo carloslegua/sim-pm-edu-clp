@@ -42,7 +42,6 @@ const ONCLICK_FNS = [
 describe("Recopilar_Requisitos.html (migrado a requirements.js)", () => {
   it("standalone: carga la demo DISTRIB+ (6 requisitos) y expone las 11 funciones onclick inline", async () => {
     const dom = await JSDOM.fromURL(base + "Recopilar_Requisitos.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(doc.querySelectorAll(".rtm tbody tr").length).toBe(6);
     for (const fn of ONCLICK_FNS) expect(typeof (dom.window as any)[fn]).toBe("function");
@@ -67,7 +66,6 @@ describe("Recopilar_Requisitos.html (migrado a requirements.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(doc.querySelectorAll(".rtm tbody tr").length).toBe(0); // sin datos -> en blanco, no DISTRIB+
 
@@ -103,7 +101,6 @@ describe("Recopilar_Requisitos.html (migrado a requirements.js)", () => {
   });
   const abrirBase = async (seed: unknown) => {
     const dom = await JSDOM.fromURL(base + "Recopilar_Requisitos.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seed)); } });
-    await new Promise((r) => setTimeout(r, 800));
     return dom;
   };
   const llenar = (doc: Document, dom: any, v: { ver?: string; date?: string; appr?: string; reason?: string }) => {
@@ -191,7 +188,6 @@ describe("Recopilar_Requisitos.html (migrado a requirements.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
 
     // El marcador nunca se ejecutó con solo abrir el módulo -- ni por
@@ -250,7 +246,6 @@ describe("Recopilar_Requisitos.html (migrado a requirements.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document, win = dom.window as any;
 
     // Iniciar "Promover a RAN" -- abre el diálogo de confirmación.

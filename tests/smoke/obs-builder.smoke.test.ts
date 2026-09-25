@@ -41,7 +41,6 @@ afterAll(() => { server.close(); });
 describe("OBS_Builder.html (migrado a obs.js)", () => {
   it("arranca en blanco sin proyecto activo, sin errores", async () => {
     const dom = await JSDOM.fromURL(base + "OBS_Builder.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect((dom.window as any).GPI.available()).toBe(true);
     expect(doc.querySelectorAll("#canvas .node").length).toBe(1); // solo el nodo raíz
@@ -86,7 +85,6 @@ describe("OBS_Builder.html (migrado a obs.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const titleInput = dom.window.document.getElementById("projectTitle") as HTMLInputElement;
     expect(titleInput.value).toBe("Organización del Proyecto — Proyecto X");
   });

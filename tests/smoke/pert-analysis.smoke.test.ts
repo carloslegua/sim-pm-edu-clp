@@ -33,7 +33,6 @@ afterAll(() => { server.close(); });
 describe("Pert_Analysis.html (migrado a pert.js)", () => {
   it("sin proyecto activo (localStorage vacío vía HTTP): arranca en blanco, sin errores", async () => {
     const dom = await JSDOM.fromURL(base + "Pert_Analysis.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(doc.getElementById("modeChip")!.textContent).toBe("Actividades del proyecto");
     expect(doc.querySelectorAll("#actsBody tr").length).toBe(0);
@@ -41,7 +40,6 @@ describe("Pert_Analysis.html (migrado a pert.js)", () => {
 
   it("modo ejemplo DISTRIB+: detecta la terna O>M>P inválida de a8 y calcula la probabilidad PERT sobre la ruta crítica (TE, no duración determinística)", async () => {
     const dom = await JSDOM.fromURL(base + "Pert_Analysis.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
     (doc.getElementById("btnSample") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 200));
@@ -95,7 +93,6 @@ describe("Pert_Analysis.html (migrado a pert.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedRamas(links))); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     const inp = doc.getElementById("sbTarget") as HTMLInputElement;
     inp.value = plazo; inp.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
@@ -151,7 +148,6 @@ describe("Pert_Analysis.html (migrado a pert.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(doc.querySelectorAll(".act-row").length).toBe(1);
     expect(doc.querySelector(".durbase")!.textContent).toBe("4"); // 100/(1×25) = 4
@@ -216,7 +212,6 @@ describe("Pert_Analysis.html (migrado a pert.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedWithMilestone)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     const rows = Array.from(doc.querySelectorAll("#actsBody tr"));
     const idOf = (row: Element) => row.querySelector(".n-cell")!.textContent;

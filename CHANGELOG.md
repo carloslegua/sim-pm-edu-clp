@@ -364,6 +364,20 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **La suite rápida no daba una validación estable (auditoría, media)** — la misma suite completa
+  aprobaba o fallaba según la carga (tiempos de espera y lecturas de interfaz a medio cargar). Causas
+  reales: (1) las pruebas de humo abrían el HTML y esperaban un tiempo **fijo** (500–900 ms) a que
+  «terminara de cargar»; (2) los documentos jsdom **nunca se cerraban** (70+ ventanas vivas por
+  ejecución, con sus temporizadores, restando CPU a las demás); (3) el tope de 5 s por prueba de Vitest
+  se agotaba bajo carga en los módulos pesados (Costos simula Monte Carlo al abrir). Ahora un
+  `tests/setup/jsdom-lifecycle.ts` (registrado en `vitest.config.ts`) hace que `JSDOM.fromURL` **no
+  resuelva hasta el evento `load`** de la ventana y **cierra todos los documentos al terminar cada
+  prueba**; se quitaron 82 esperas fijas posteriores a la apertura; el Panel y Riesgos esperan
+  **condiciones observables** con `tests/helpers/esperar.ts` (`esperarHasta`, con mensaje de qué se
+  esperaba); y `testTimeout`/`hookTimeout` suben a 30 s como **tope** (no como espera). Resultado: 875/875
+  en 3 ejecuciones seguidas en paralelo y 875/875 con `--no-file-parallelism`. Quedan esperas fijas
+  **posteriores a una acción** (guardado diferido de 800–1200 ms): esperan un temporizador de la propia
+  aplicación, no la carga, y no se tocaron.
 - **Los rangos de exactitud se presentaban como «típicos» de AACE sin atribución (auditoría, media)** —
   Costos mostraba −15 % / +30 % para la clase 3 y citaba 56R-08, pero esos porcentajes son valores
   redondos del simulador, no la tabla de la práctica (para edificación, la clase 3 publica un extremo

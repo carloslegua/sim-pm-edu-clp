@@ -4,6 +4,12 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: ["tests/**/*.test.ts"],
+    // Los smoke cargan un módulo real en jsdom (Costos simula Monte Carlo al abrir) con varios workers en paralelo: los 5 s
+    // por defecto se agotaban bajo carga aunque la prueba fuera correcta. Es un TOPE, no una espera: las pruebas siguen
+    // terminando en cuanto se cumple lo que observan.
+    testTimeout: 30000,
+    hookTimeout: 30000,
+    setupFiles: ["tests/setup/jsdom-lifecycle.ts"],   // espera la carga real de cada documento y los cierra al terminar la prueba
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],

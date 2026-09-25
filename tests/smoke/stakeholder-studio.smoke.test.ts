@@ -33,7 +33,6 @@ afterAll(() => { server.close(); });
 describe("Stakeholder_Studio.html (migrado a stakeholder-studio.js)", () => {
   it("standalone (sin proyecto activo): arranca con el ejemplo DISTRIB+ (12 interesados) y renderiza las 3 vistas sin errores", async () => {
     const dom = await JSDOM.fromURL(base + "Stakeholder_Studio.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
     expect(doc.querySelectorAll(".reg-card").length).toBe(12);
     expect(doc.querySelector(".stat .v")!.textContent).toBe("12");
@@ -49,7 +48,6 @@ describe("Stakeholder_Studio.html (migrado a stakeholder-studio.js)", () => {
 
   it("el poder derivado se recalcula en vivo al cambiar un criterio ponderado (5 criterios × pesos por defecto)", async () => {
     const dom = await JSDOM.fromURL(base + "Stakeholder_Studio.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
     (doc.querySelector('[data-view="registro"]') as HTMLElement).click();
     (doc.querySelector(".reg-header") as HTMLElement).click();
@@ -72,7 +70,6 @@ describe("Stakeholder_Studio.html (migrado a stakeholder-studio.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
     expect(doc.querySelectorAll(".reg-card").length).toBe(1); // blankAnalysis(), no el ejemplo DISTRIB+
 
@@ -120,7 +117,6 @@ describe("Stakeholder_Studio.html (migrado a stakeholder-studio.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
 
     // Desplegar la ficha -- es donde se renderizan el Id. (atributo) y la
@@ -159,7 +155,6 @@ describe("Stakeholder_Studio.html (migrado a stakeholder-studio.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { if (seed) window.localStorage.setItem("gpi_db", JSON.stringify(seed)); }
     });
-    await new Promise((r) => setTimeout(r, 500));
     return dom;
   };
   const verCompromiso = async (dom: any) => { (dom.window.document.querySelector('[data-view="compromiso"]') as HTMLElement).click(); await new Promise((r) => setTimeout(r, 50)); };

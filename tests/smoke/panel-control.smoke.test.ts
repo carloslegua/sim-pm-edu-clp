@@ -7,6 +7,7 @@ import { createServer, type Server } from "node:http";
 import { extname, join } from "node:path";
 import jsdomPkg from "jsdom";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { esperarHasta } from "../helpers/esperar";
 
 const { JSDOM } = jsdomPkg;
 const MIME: Record<string, string> = { ".html": "text/html", ".js": "application/javascript", ".css": "text/css" };
@@ -34,8 +35,8 @@ afterAll(() => { server.close(); });
 describe("Panel_Control.html (migrado a panel-control.js)", () => {
   it("localStorage vacío: ensureSeed crea el proyecto DISTRIB+ y el launcher pinta las 22 tarjetas de módulo (20 activas, 2 'próximamente')", async () => {
     const dom = await JSDOM.fromURL(base + "Panel_Control.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
+    await esperarHasta(() => doc.querySelectorAll(".mod-card").length === 22 && doc.querySelectorAll("#projSelect option").length === 1, "que el Panel siembre el proyecto y pinte las 22 tarjetas");
     expect(doc.querySelectorAll("#projSelect option").length).toBe(1);
     expect(doc.querySelector("#projSelect option")!.textContent).toContain("DISTRIB+ S.A.");
     expect(doc.querySelectorAll(".mod-card").length).toBe(22);
@@ -43,10 +44,10 @@ describe("Panel_Control.html (migrado a panel-control.js)", () => {
     expect(doc.querySelectorAll(".mod-card.soon").length).toBe(2);
 
     (doc.getElementById("btnRename") as HTMLElement).click();
-    await new Promise((r) => setTimeout(r, 50));
+    await esperarHasta(() => doc.getElementById("modalInput"), "el cuadro de renombrar");
     (doc.getElementById("modalInput") as HTMLInputElement).value = "Proyecto Renombrado";
     (doc.getElementById("modalOk") as HTMLElement).click();
-    await new Promise((r) => setTimeout(r, 100));
+    await esperarHasta(() => doc.querySelector("#projSelect option")!.textContent!.includes("Proyecto Renombrado"), "que el selector muestre el nombre nuevo");
     expect(doc.querySelector("#projSelect option")!.textContent).toContain("Proyecto Renombrado");
 
     const saved = JSON.parse(dom.window.localStorage.getItem("gpi_db") as string);
@@ -91,7 +92,6 @@ describe("Panel_Control.html (migrado a panel-control.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
     expect(doc.querySelectorAll("#projSelect option").length).toBe(1); // no reseedea sobre un proyecto existente
 

@@ -38,7 +38,6 @@ afterAll(() => { server.close(); });
 describe("Cost-management.html (migrado a cost.js)", () => {
   it("standalone: calcula el BAC de ejemplo y las funciones onclick inline quedan expuestas en window", async () => {
     const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     // Valores de ejemplo documentados: base 7,100,000 -> BAC 8,079,601 (Clase 3, P70; escalacion por indices P70 = 127,601).
     // Moneda por defecto USD (coherente con el CAPEX del caso DISTRIB+ en Charter/
@@ -64,7 +63,6 @@ describe("Cost-management.html (migrado a cost.js)", () => {
   // línea base nueva.
   async function abrirStandalone() {
     const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 800));
     return dom;
   }
   const change = (dom: any, el: Element) => el.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
@@ -363,7 +361,6 @@ describe("Cost-management.html (migrado a cost.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document, win = dom.window as any;
     expect(doc.querySelectorAll("#coBody tr").length).toBe(2);
     expect(rowOf(doc, "OC-001").textContent).toMatch(/Sin clasificar/);
@@ -396,7 +393,6 @@ describe("Cost-management.html (migrado a cost.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const GPI = (dom.window as any).GPI;
 
     expect((dom.window.document.getElementById("baseCost") as HTMLInputElement).value).toBe("500000"); // seedFromProject
@@ -429,7 +425,6 @@ describe("Cost-management.html (migrado a cost.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const GPI = (dom.window as any).GPI;
 
     (dom.window as any).pullFromCostEstimate();
@@ -453,7 +448,6 @@ describe("Cost-management.html (migrado a cost.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const win = dom.window as any;
 
     // Cuota agotada: solo la escritura de "gpi_db" falla (la sonda de
@@ -603,7 +597,6 @@ describe("Cost-management.html (migrado a cost.js)", () => {
       }
     };
     const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); } });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect((doc.getElementById("contMethod") as HTMLSelectElement).value).toBe("clase_tabla");
     expect(dinero(doc.getElementById("kCont")!.textContent)).toBe(120000);          // clase 3 · P70 = 12 % (igual que antes)
@@ -614,7 +607,6 @@ describe("Cost-management.html (migrado a cost.js)", () => {
   it("persiste en el proyecto: método, correlación, partidas con su fundamento y el resumen de resultados; recargar los conserva", async () => {
     const seedDb = { version: 1, activeId: "p1", projects: { p1: { schema: "gpi.project/v1", meta: { id: "p1", name: "Proyecto Costos", course: "GPI", currency: "USD", createdAt: 1, updatedAt: 1 }, modules: {} } } };
     const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); } });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document, win = dom.window as any;
     fijar(dom, doc, "baseCost", "300000", "input");
     fijar(dom, doc, "contMethod", "rangos_mc");
@@ -631,7 +623,6 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(guardado.contingency.rate).toBeGreaterThan(0);
 
     const dom2 = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", dom.window.localStorage.getItem("gpi_db")); } });
-    await new Promise((r) => setTimeout(r, 800));
     const d2 = dom2.window.document;
     expect((d2.getElementById("contMethod") as HTMLSelectElement).value).toBe("rangos_mc");
     expect(d2.querySelectorAll("#rngBody tr").length).toBe(2);
@@ -649,7 +640,6 @@ describe("Cost-management.html (migrado a cost.js)", () => {
       } } }
     };
     const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); } });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document, win = dom.window as any;
     expect(doc.getElementById("pullRngEst")!.style.display).not.toBe("none");        // conectado a un proyecto
     fijar(dom, doc, "contMethod", "rangos_mc");
@@ -675,7 +665,6 @@ describe("Cost-management.html (migrado a cost.js)", () => {
       changeOrders: []
     } } } } };
     const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); } });
-    await new Promise((r) => setTimeout(r, 900));
     const doc = dom.window.document;
     expect((dom.window as any).__xssFired).toBeUndefined();
     expect(doc.querySelector("#rngBody img")).toBeNull();
@@ -690,7 +679,6 @@ describe("Cost-management.html (migrado a cost.js)", () => {
   });
   const abrirConectado = async (modules: Record<string, unknown>) => {
     const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seedConectado(modules))); } });
-    await new Promise((r) => setTimeout(r, 800));
     return dom;
   };
   const riesgo = (o: Record<string, unknown>) => ({ id: "x", code: "R-00", title: "Riesgo", type: "amenaza", status: "identificado", prob: 3, impCost: 3, ...o });
@@ -796,7 +784,6 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     fijar(dom, doc, "contMethod", "rangos_mc");
     const enCostos = p80(tablaPlazo(doc).textContent!)!;
     const riesgos = await JSDOM.fromURL(base + "Risk_Register.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 600));
     (riesgos.window.document.querySelector('[data-view="analisis"]') as HTMLElement).click();
     const enRiesgos = p80(riesgos.window.document.getElementById("mainArea")!.textContent!)!;
     expect(enRiesgos).toBeTruthy();
@@ -926,7 +913,6 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(win.GPI.getModule("cost").budget.rangeAnalysis.includeRisks).toBe(false);
     expect(win.GPI.getModule("cost").budget.rangeAnalysis.results.events).toBe(0);
     const dom2 = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", dom.window.localStorage.getItem("gpi_db")); } });
-    await new Promise((r) => setTimeout(r, 800));
     expect((dom2.window.document.getElementById("rngRisks") as HTMLInputElement).checked).toBe(false);
   });
 

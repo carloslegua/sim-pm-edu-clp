@@ -62,7 +62,6 @@ const seedDb = {
 describe("Estimar_Costos.html (cost-estimate.js)", () => {
   it("sin proyecto activo (localStorage vacío vía HTTP): arranca en blanco, sin errores", async () => {
     const dom = await JSDOM.fromURL(base + "Estimar_Costos.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 900));
     const doc = dom.window.document;
     expect(doc.getElementById("modeChip")!.textContent).toBe("EDT del proyecto");
     expect(doc.querySelectorAll("#estBody tr").length).toBe(0);
@@ -70,7 +69,6 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
 
   it("modo ejemplo: carga la EDT y las actividades didácticas de DISTRIB+ (mismas que Definir las Actividades), con 21/22 actividades con precio", async () => {
     const dom = await JSDOM.fromURL(base + "Estimar_Costos.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
     (doc.getElementById("btnSample") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 100));
@@ -138,7 +136,6 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedWithMilestone)); }
     });
-    await new Promise((r) => setTimeout(r, 900));
     const doc = dom.window.document;
     const rows = Array.from(doc.querySelectorAll("#estBody tr")).filter((r) => !r.className.includes("total-row"));
     const idOf = (row: Element) => row.querySelector(".n-cell")!.textContent;
@@ -150,7 +147,6 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 900));
     const doc = dom.window.document;
     expect(doc.querySelectorAll(".pkg-row").length).toBe(1);
     expect(doc.querySelectorAll(".act-row").length).toBe(1);
@@ -165,7 +161,6 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 900));
     const doc = dom.window.document;
     const win = dom.window as any;
 
@@ -224,7 +219,6 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedLive)); }
     });
-    await new Promise((r) => setTimeout(r, 900));
     const doc = dom.window.document;
     (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 100));
@@ -254,7 +248,6 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedNoActs)); }
     });
-    await new Promise((r) => setTimeout(r, 900));
     const doc = dom.window.document;
     (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 100));

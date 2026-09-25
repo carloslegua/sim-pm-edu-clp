@@ -5,6 +5,7 @@ import { createServer, type Server } from "node:http";
 import { extname, join } from "node:path";
 import jsdomPkg from "jsdom";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { esperarHasta } from "../helpers/esperar";
 
 const { JSDOM } = jsdomPkg;
 const MIME: Record<string, string> = { ".html": "text/html", ".js": "application/javascript", ".css": "text/css" };
@@ -34,7 +35,7 @@ const abrir = async (seed?: unknown) => {
     runScripts: "dangerously", resources: "usable",
     beforeParse(window: any) { if (seed) window.localStorage.setItem("gpi_db", JSON.stringify(seed)); }
   });
-  await new Promise((r) => setTimeout(r, 600));
+  await esperarHasta(() => dom.window.document.getElementById("mainArea")!.textContent!.trim().length > 0, "que el Registro de riesgos pinte su área principal");
   return dom;
 };
 const vista = async (dom: any, v: string) => { (dom.window.document.querySelector(`[data-view="${v}"]`) as HTMLElement).click(); await new Promise((r) => setTimeout(r, 30)); };
@@ -391,7 +392,6 @@ describe("Risk_Register.html (Registro de riesgos)", () => {
     const seed = proyecto({ risks: { risks: [
       { id: "a", code: "R-01", title: "x", prob: 5, impCost: 5, status: "identificado" }, { id: "b", code: "R-02", title: "y", prob: 1, impCost: 1 }, { id: "c", code: "R-03", title: "z", prob: 5, impCost: 5, status: "cerrado" }] } });
     const dom = await JSDOM.fromURL(base + "Panel_Control.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seed)); } });
-    await new Promise((r) => setTimeout(r, 900));
     const card = Array.from(dom.window.document.querySelectorAll(".mod-card, .card, [data-key]")).find((c) => /Gestión de Riesgos/.test(c.textContent || ""));
     expect(card).toBeTruthy();
     expect(card!.innerHTML).toContain("Risk_Register.html");

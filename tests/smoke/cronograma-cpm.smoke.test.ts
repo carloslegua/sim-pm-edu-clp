@@ -33,7 +33,6 @@ afterAll(() => { server.close(); });
 describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
   it("modo ejemplo DISTRIB+: reproduce el resultado dorado del README (53 días, fin 2026-09-16, 9 actividades críticas) y renderiza Red/Gantt sin errores", async () => {
     const dom = await JSDOM.fromURL(base + "Cronograma_CPM.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
     (doc.getElementById("btnSample") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 300));
@@ -203,7 +202,6 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(doc.querySelectorAll(".act-row").length).toBe(2);
     // sin enlaces: la duración del proyecto es la de la actividad más larga (a2 = 50/10 = 5)
@@ -267,7 +265,6 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(doc.querySelectorAll(".act-row").length).toBe(2);
 
@@ -342,7 +339,6 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seed)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     const inp = doc.getElementById("probTarget") as HTMLInputElement;
     inp.value = plazo; inp.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
@@ -413,7 +409,6 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedEd(startDate))); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     return dom.window.document;
   }
   const esOf = (doc: Document, code: string) => {
@@ -473,7 +468,6 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedWithMilestone)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     const rows = Array.from(doc.querySelectorAll("#cpmBody tr"));
     const idOf = (row: Element) => row.querySelector(".n-cell")!.textContent;
@@ -519,7 +513,6 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedWithMilestone)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
 
     // a1 -> hito -> a2, enlace manual (mismo flujo de "＋ Enlace manual" que usaría un alumno)
@@ -598,7 +591,6 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedLive)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 100));
@@ -623,7 +615,6 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedNoWbs)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 100));
@@ -654,7 +645,6 @@ describe("Cronograma_CPM.html (migrado a cronograma-cpm.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedNoActs)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     (doc.getElementById("btnLoadSampleLive") as HTMLElement).click();
     await new Promise((r) => setTimeout(r, 100));

@@ -33,7 +33,6 @@ afterAll(() => { server.close(); });
 describe("Schedule_Management_Plan.html (migrado a schedule-plan.js)", () => {
   it("standalone (sin proyecto activo): arranca con el ejemplo DISTRIB+ y el checklist RP 38R-06 marca 100%", async () => {
     const dom = await JSDOM.fromURL(base + "Schedule_Management_Plan.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect((doc.getElementById("intro-objective") as HTMLTextAreaElement).value).toContain("Almacén Logístico DISTRIB+");
     expect(doc.getElementById("sbPct")!.textContent).toBe("100%");
@@ -66,7 +65,6 @@ describe("Schedule_Management_Plan.html (migrado a schedule-plan.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect((doc.getElementById("intro-objective") as HTMLTextAreaElement).value).toBe("");
     expect(doc.getElementById("wbsStatusPanel")!.textContent).toContain("1 fase(s), 1 paquete(s)");

@@ -37,7 +37,6 @@ afterAll(() => { server.close(); });
 describe("Enunciado_del_Alcance.html (migrado a scope-statement.js)", () => {
   it("standalone: muestra el banner de modo independiente y carga la demo DISTRIB+ (6 entregables)", async () => {
     const dom = await JSDOM.fromURL(base + "Enunciado_del_Alcance.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(doc.getElementById("banner")!.classList.contains("show")).toBe(true);
     expect(doc.querySelectorAll("table.del tbody tr").length).toBe(6);
@@ -62,7 +61,6 @@ describe("Enunciado_del_Alcance.html (migrado a scope-statement.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect(doc.querySelectorAll("table.del tbody tr").length).toBe(0); // sin datos -> en blanco
 
@@ -87,7 +85,6 @@ describe("Enunciado_del_Alcance.html (migrado a scope-statement.js)", () => {
   } } } });
   const abrir = async (seed: unknown) => {
     const dom = await JSDOM.fromURL(base + "Enunciado_del_Alcance.html", { runScripts: "dangerously", resources: "usable", beforeParse(w: any) { w.localStorage.setItem("gpi_db", JSON.stringify(seed)); } });
-    await new Promise((r) => setTimeout(r, 800));
     return dom;
   };
   const host = (doc: Document) => (doc.getElementById("baselineHost") as HTMLElement).textContent!.replace(/\s+/g, " ");

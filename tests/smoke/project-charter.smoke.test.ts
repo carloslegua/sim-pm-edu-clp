@@ -33,7 +33,6 @@ afterAll(() => { server.close(); });
 describe("Project_Charter.html (migrado a project-charter.js)", () => {
   it("standalone (sin proyecto activo): arranca vacía (0%) y 'Cargar ejemplo' lleva el checklist DISTRIB+ a 100%", async () => {
     const dom = await JSDOM.fromURL(base + "Project_Charter.html", { runScripts: "dangerously", resources: "usable" });
-    await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
     expect(doc.getElementById("sbPct")!.textContent).toBe("0%");
 
@@ -77,7 +76,6 @@ describe("Project_Charter.html (migrado a project-charter.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 800));
     const doc = dom.window.document;
     expect((doc.querySelector('[data-bind="identification.sponsor"]') as HTMLInputElement).value).toBe("Ana Sponsor");
     expect((doc.querySelector('[data-bind="identification.manager"]') as HTMLInputElement).value).toBe("Beto Manager");
@@ -125,7 +123,6 @@ describe("Project_Charter.html (migrado a project-charter.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 600));
     const doc = dom.window.document;
 
     // Otra pestaña (Acta abierta en otra ventana, o el Panel) actualiza la descripción.
@@ -160,7 +157,6 @@ describe("Project_Charter.html (migrado a project-charter.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 600));
     return dom;
   }
   function editarSponsor(dom: any, valor: string) {
@@ -236,7 +232,6 @@ describe("Project_Charter.html (migrado a project-charter.js)", () => {
       runScripts: "dangerously", resources: "usable",
       beforeParse(window: any) { window.localStorage.setItem("gpi_db", JSON.stringify(seedDb)); }
     });
-    await new Promise((r) => setTimeout(r, 500));
     const doc = dom.window.document;
     expect((doc.getElementById("projectTitle") as HTMLInputElement).value).toBe("Proyecto A");
 
