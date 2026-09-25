@@ -9,6 +9,18 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ## [Unreleased]
 
+### Changed
+
+- **El Panel se organiza por los 7 dominios de desempeño del PMBOK 8** — antes agrupaba en las 10
+  áreas de conocimiento del PMBOK 6. Ahora: Gobernanza, Alcance, Cronograma, Finanzas,
+  Interesados, Recursos y Riesgo. Comunicaciones pasa a Interesados; Calidad, Adquisiciones,
+  Cambios y Cierre, a Gobernanza. Los procesos del estándar sin herramienta aparecen como
+  **módulos faltantes**: Gestión del Conocimiento, Validar el Alcance, Gestionar y Monitorear el
+  Compromiso, Estimar los Recursos, Adquirir Recursos y Liderar el Equipo y Monitorear los Recursos
+  (Cierre del Proyecto y Monte Carlo ya lo eran). 28 tarjetas: 20 activas y 8 faltantes. No cambia
+  ninguna clave de módulo ni dato guardado. La lista de procesos proviene de fuentes secundarias:
+  verificar contra la guía de PMI.
+
 ### Added
 
 - **Plan para la Dirección — integra los planes de calidad, comunicaciones y adquisiciones** — las

@@ -9,19 +9,14 @@
 	};
 	var GROUPS = [
 		{
-			key: "integ",
-			name: "Integración",
-			hint: "dirige y unifica el proyecto de principio a fin"
-		},
-		{
-			key: "stake",
-			name: "Interesados",
-			hint: "identificación y compromiso de las partes interesadas"
+			key: "gov",
+			name: "Gobernanza",
+			hint: "autoriza, integra, controla el desempeño y los cambios, asegura la calidad y cierra el proyecto"
 		},
 		{
 			key: "scope",
 			name: "Alcance",
-			hint: "qué incluye y qué no incluye el proyecto"
+			hint: "qué incluye y qué no incluye el proyecto, y su aceptación"
 		},
 		{
 			key: "sched",
@@ -29,14 +24,14 @@
 			hint: "actividades, duraciones y ruta crítica"
 		},
 		{
-			key: "cost",
-			name: "Costo",
+			key: "fin",
+			name: "Finanzas",
 			hint: "estimación, presupuesto y control del gasto"
 		},
 		{
-			key: "qual",
-			name: "Calidad",
-			hint: "requisitos de calidad y su aseguramiento"
+			key: "stake",
+			name: "Interesados",
+			hint: "identificación, compromiso y comunicación con las partes interesadas"
 		},
 		{
 			key: "res",
@@ -44,25 +39,15 @@
 			hint: "equipo, organigrama y asignación de responsabilidades"
 		},
 		{
-			key: "comm",
-			name: "Comunicaciones",
-			hint: "flujo de información entre los involucrados"
-		},
-		{
 			key: "risk",
-			name: "Riesgos",
+			name: "Riesgo",
 			hint: "incertidumbre, respuesta y análisis cuantitativo"
-		},
-		{
-			key: "proc",
-			name: "Adquisiciones",
-			hint: "contratación y gestión de proveedores"
 		}
 	];
 	var MODULES = [
 		{
 			key: "charter",
-			group: "integ",
+			group: "gov",
 			name: "Acta de Constitución",
 			file: "Project_Charter.html",
 			icon: "📜",
@@ -71,7 +56,7 @@
 		},
 		{
 			key: "pmplan",
-			group: "integ",
+			group: "gov",
 			name: "Plan para la Dirección",
 			file: "Plan_Direccion.html",
 			icon: "📘",
@@ -79,8 +64,35 @@
 			desc: "Documento integrador que consolida los planes subsidiarios y las líneas base de alcance, cronograma y costo, verifica que calcen entre sí y registra la aprobación del plan."
 		},
 		{
+			key: "procurement",
+			group: "gov",
+			name: "Gestión de las Adquisiciones",
+			file: "Plan_Adquisiciones.html",
+			icon: "📦",
+			color: "#8f2fd0",
+			desc: "Estrategia de contratación, hacer o comprar, tipos de contrato, criterios de selección y fecha límite de convocatoria contra el cronograma; enlaza la EDT, los riesgos y el OBS."
+		},
+		{
+			key: "quality",
+			group: "gov",
+			name: "Gestión de la Calidad",
+			file: "Plan_Calidad.html",
+			icon: "✔",
+			color: "#00c2a8",
+			desc: "Métricas de calidad, aseguramiento y control por paquete (verifica el criterio de aceptación del diccionario de la EDT) y costo de la calidad (conformidad vs. no conformidad)."
+		},
+		{
+			key: "knowledge",
+			group: "gov",
+			name: "Gestión del Conocimiento",
+			file: null,
+			icon: "🧠",
+			color: "#00967f",
+			desc: "Registro de lecciones aprendidas y del conocimiento del proyecto: captura durante la ejecución y transferencia al cierre."
+		},
+		{
 			key: "changes",
-			group: "integ",
+			group: "gov",
 			name: "Control Integrado de Cambios",
 			file: "Control_Cambios.html",
 			icon: "🔁",
@@ -89,21 +101,12 @@
 		},
 		{
 			key: "closeout",
-			group: "integ",
-			name: "Cierre del Proyecto",
+			group: "gov",
+			name: "Cierre del Proyecto o Fase",
 			file: null,
 			icon: "🏁",
 			color: "#00967f",
 			desc: "Aceptación de entregables, liberación de recursos, lecciones aprendidas y cierre administrativo y contractual."
-		},
-		{
-			key: "stakeholders",
-			group: "stake",
-			name: "Stakeholder Studio",
-			file: "Stakeholder_Studio.html",
-			icon: "◉",
-			color: "#00b6ec",
-			desc: "Registro y análisis de interesados: matriz poder–interés, modelo de prominencia y matriz de compromiso."
 		},
 		{
 			key: "requirements",
@@ -131,6 +134,15 @@
 			icon: "▦",
 			color: "#6c5ce7",
 			desc: "Estructura de desglose del trabajo con costo, duración, avance y diccionario WBS. Siembra sus ramas desde los entregables del Enunciado del Alcance."
+		},
+		{
+			key: "scopeValidation",
+			group: "scope",
+			name: "Validar el Alcance",
+			file: null,
+			icon: "☑",
+			color: "#6c5ce7",
+			desc: "Aceptación formal de los entregables terminados por el cliente o patrocinador, contra los criterios de aceptación del Enunciado y el diccionario de la EDT."
 		},
 		{
 			key: "schedulePlan",
@@ -170,7 +182,7 @@
 		},
 		{
 			key: "cost",
-			group: "cost",
+			group: "fin",
 			name: "Planificar la Gestión Financiera",
 			file: "Cost-management.html",
 			icon: "S/",
@@ -179,7 +191,7 @@
 		},
 		{
 			key: "costEstimate",
-			group: "cost",
+			group: "fin",
 			name: "Estimar los Costos",
 			file: "Estimar_Costos.html",
 			icon: "🧮",
@@ -188,7 +200,7 @@
 		},
 		{
 			key: "evm",
-			group: "cost",
+			group: "fin",
 			name: "Valor Ganado (EVM)",
 			file: "Valor_Ganado.html",
 			icon: "📈",
@@ -196,13 +208,31 @@
 			desc: "Seguimiento del valor ganado: PV sobre la línea base del cronograma, EV con técnica por paquete, AC, CV, SV, CPI, SPI, pronósticos (EAC/ETC/VAC/TCPI) y cronograma ganado (Earned Schedule), con los umbrales de los planes de Costos y del Cronograma."
 		},
 		{
-			key: "quality",
-			group: "qual",
-			name: "Gestión de la Calidad",
-			file: "Plan_Calidad.html",
-			icon: "✔",
-			color: "#00c2a8",
-			desc: "Métricas de calidad, aseguramiento y control por paquete (verifica el criterio de aceptación del diccionario de la EDT) y costo de la calidad (conformidad vs. no conformidad)."
+			key: "stakeholders",
+			group: "stake",
+			name: "Stakeholder Studio",
+			file: "Stakeholder_Studio.html",
+			icon: "◉",
+			color: "#00b6ec",
+			desc: "Registro y análisis de interesados: matriz poder–interés, modelo de prominencia y matriz de compromiso."
+		},
+		{
+			key: "comms",
+			group: "stake",
+			name: "Gestión de las Comunicaciones",
+			file: "Plan_Comunicaciones.html",
+			icon: "📣",
+			color: "#3a86ff",
+			desc: "Matriz de comunicaciones: qué información, a quién (interesados de Stakeholder Studio), quién la emite, cuándo, por qué medio y con qué frecuencia; revisa que a cada interesado le llegue lo que su estrategia exige."
+		},
+		{
+			key: "engagementControl",
+			group: "stake",
+			name: "Gestionar y Monitorear el Compromiso",
+			file: null,
+			icon: "📡",
+			color: "#00b6ec",
+			desc: "Seguimiento periódico del compromiso real de cada interesado y de la eficacia de las comunicaciones frente a lo planificado, con acciones correctivas."
 		},
 		{
 			key: "obs",
@@ -223,13 +253,31 @@
 			desc: "Intersección EDT × OBS a nivel de paquete de trabajo: asigna R/A/C/I y sincroniza el responsable con el WBS."
 		},
 		{
-			key: "comms",
-			group: "comm",
-			name: "Gestión de las Comunicaciones",
-			file: "Plan_Comunicaciones.html",
-			icon: "📣",
-			color: "#3a86ff",
-			desc: "Matriz de comunicaciones: qué información, a quién (interesados de Stakeholder Studio), quién la emite, cuándo, por qué medio y con qué frecuencia; revisa que a cada interesado le llegue lo que su estrategia exige."
+			key: "resEstimate",
+			group: "res",
+			name: "Estimar los Recursos",
+			file: null,
+			icon: "⚙",
+			color: "#2e4374",
+			desc: "Necesidades de recursos (personas, equipos, materiales) por actividad y su calendario de disponibilidad."
+		},
+		{
+			key: "resAcquire",
+			group: "res",
+			name: "Adquirir Recursos",
+			file: null,
+			icon: "🤝",
+			color: "#2e4374",
+			desc: "Obtención y asignación de los recursos estimados al proyecto, con sus fechas y condiciones."
+		},
+		{
+			key: "teamLead",
+			group: "res",
+			name: "Liderar el Equipo y Monitorear los Recursos",
+			file: null,
+			icon: "🧭",
+			color: "#2e4374",
+			desc: "Desarrollo y desempeño del equipo, resolución de conflictos y control de la utilización real de los recursos contra lo planificado."
 		},
 		{
 			key: "risks",
@@ -248,15 +296,6 @@
 			icon: "🎲",
 			color: "#ff6b8b",
 			desc: "Riesgo cuantitativo de costo y plazo: histograma, curva S y tornado."
-		},
-		{
-			key: "procurement",
-			group: "proc",
-			name: "Gestión de las Adquisiciones",
-			file: "Plan_Adquisiciones.html",
-			icon: "📦",
-			color: "#8f2fd0",
-			desc: "Estrategia de contratación, hacer o comprar, tipos de contrato, criterios de selección y fecha límite de convocatoria contra el cronograma; enlaza la EDT, los riesgos y el OBS."
 		}
 	];
 	MODULES = MODULES.concat((Array.isArray(MODULOS_EXTRA) ? MODULOS_EXTRA : []).filter((m) => {

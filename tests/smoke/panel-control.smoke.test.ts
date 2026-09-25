@@ -33,15 +33,23 @@ beforeAll(async () => {
 afterAll(() => { server.close(); });
 
 describe("Panel_Control.html (migrado a panel-control.js)", () => {
-  it("localStorage vacío: ensureSeed crea el proyecto DISTRIB+ y el launcher pinta las 22 tarjetas de módulo (20 activas, 2 'próximamente')", async () => {
+  it("localStorage vacío: ensureSeed crea el proyecto DISTRIB+ y el launcher pinta las 28 tarjetas de módulo en los 7 dominios de PMBOK 8 (20 activas, 8 módulos faltantes)", async () => {
     const dom = await JSDOM.fromURL(base + "Panel_Control.html", { runScripts: "dangerously", resources: "usable" });
     const doc = dom.window.document;
-    await esperarHasta(() => doc.querySelectorAll(".mod-card").length === 22 && doc.querySelectorAll("#projSelect option").length === 1, "que el Panel siembre el proyecto y pinte las 22 tarjetas");
+    await esperarHasta(() => doc.querySelectorAll(".mod-card").length === 28 && doc.querySelectorAll("#projSelect option").length === 1, "que el Panel siembre el proyecto y pinte las 28 tarjetas");
     expect(doc.querySelectorAll("#projSelect option").length).toBe(1);
     expect(doc.querySelector("#projSelect option")!.textContent).toContain("DISTRIB+ S.A.");
-    expect(doc.querySelectorAll(".mod-card").length).toBe(22);
+    expect(doc.querySelectorAll(".mod-card").length).toBe(28);
     expect(doc.querySelectorAll(".mod-card.active").length).toBe(20);   // + Gestión de Riesgos (Risk_Register.html), Valor Ganado (Valor_Ganado.html), Control de Cambios (Control_Cambios.html), Plan para la Dirección (Plan_Direccion.html), Comunicaciones (Plan_Comunicaciones.html), Calidad (Plan_Calidad.html) y Adquisiciones (Plan_Adquisiciones.html)
-    expect(doc.querySelectorAll(".mod-card.soon").length).toBe(2);
+    expect(doc.querySelectorAll(".mod-card.soon").length).toBe(8);
+    // orden y contenido de los dominios de desempeño del PMBOK 8 (no las 10 áreas de conocimiento del PMBOK 6)
+    const sec = Array.from(doc.querySelectorAll("#launchGrid h2.section")).map((h) => h.childNodes[0].textContent!.trim());
+    expect(sec).toEqual(["Gobernanza", "Alcance", "Cronograma", "Finanzas", "Interesados", "Recursos", "Riesgo"]);
+    const dominio = (n: string) => Array.from(doc.querySelectorAll("#launchGrid h2.section")).find((h) => h.childNodes[0].textContent!.trim() === n)!.nextElementSibling!.textContent!;
+    expect(dominio("Gobernanza")).toMatch(/Gestión de la Calidad/); expect(dominio("Gobernanza")).toMatch(/Gestión de las Adquisiciones/); expect(dominio("Gobernanza")).toMatch(/Cierre del Proyecto o Fase/);
+    expect(dominio("Interesados")).toMatch(/Gestión de las Comunicaciones/);   // Comunicaciones cae en Interesados
+    expect(dominio("Finanzas")).toMatch(/Valor Ganado/);
+    expect(dominio("Recursos")).toMatch(/Estimar los Recursos/); expect(dominio("Recursos")).toMatch(/Adquirir Recursos/);   // procesos del dominio sin herramienta: módulo faltante
 
     (doc.getElementById("btnRename") as HTMLElement).click();
     await esperarHasta(() => doc.getElementById("modalInput"), "el cuadro de renombrar");

@@ -74,8 +74,8 @@ const MODULOS_ENTREGADOS: "*" | "auto" | string[] = "*";
 
      key    clave única; también es el nombre de su "rebanada" de datos
             en el proyecto: GPI.getModule("miClave") / GPI.setModule(...)
-     group  área del PMBOK donde aparece la tarjeta: integ · stake ·
-            scope · sched · cost · qual · res · comm · risk · proc
+     group  dominio de desempeño del PMBOK 8 donde aparece la tarjeta:
+            gov · scope · sched · fin · stake · res · risk
      name   título visible de la tarjeta
      file   nombre del archivo .html (debe estar en la MISMA carpeta)
      icon   un emoji o carácter
@@ -98,42 +98,46 @@ const MODULOS_EXTRA: ModuleDef[] = [
 const CUR: Record<string, string> = { USD: "USD $", PEN: "S/", EUR: "€" };
 
 interface GroupDef { key: string; name: string; hint: string; }
-// Áreas de conocimiento / dominios del PMBOK, en orden de despliegue.
+// Dominios de desempeño del PMBOK Guide 8.ª edición, en su orden de publicación (reemplazan a las 10 áreas de conocimiento
+// del PMBOK 6). Cada dominio agrupa procesos sin importar su fase: Comunicaciones cae en Interesados; Calidad, Adquisiciones
+// (estrategia de abastecimiento), Cambios y Cierre, en Gobernanza. Un proceso del dominio sin herramienta construida se
+// lista igual, como módulo faltante (`file: null`), para que el alumno vea el mapa completo del estándar.
 const GROUPS: GroupDef[] = [
-  { key: "integ", name: "Integración", hint: "dirige y unifica el proyecto de principio a fin" },
-  { key: "stake", name: "Interesados", hint: "identificación y compromiso de las partes interesadas" },
-  { key: "scope", name: "Alcance", hint: "qué incluye y qué no incluye el proyecto" },
+  { key: "gov", name: "Gobernanza", hint: "autoriza, integra, controla el desempeño y los cambios, asegura la calidad y cierra el proyecto" },
+  { key: "scope", name: "Alcance", hint: "qué incluye y qué no incluye el proyecto, y su aceptación" },
   { key: "sched", name: "Cronograma", hint: "actividades, duraciones y ruta crítica" },
-  { key: "cost", name: "Costo", hint: "estimación, presupuesto y control del gasto" },
-  { key: "qual", name: "Calidad", hint: "requisitos de calidad y su aseguramiento" },
+  { key: "fin", name: "Finanzas", hint: "estimación, presupuesto y control del gasto" },
+  { key: "stake", name: "Interesados", hint: "identificación, compromiso y comunicación con las partes interesadas" },
   { key: "res", name: "Recursos", hint: "equipo, organigrama y asignación de responsabilidades" },
-  { key: "comm", name: "Comunicaciones", hint: "flujo de información entre los involucrados" },
-  { key: "risk", name: "Riesgos", hint: "incertidumbre, respuesta y análisis cuantitativo" },
-  { key: "proc", name: "Adquisiciones", hint: "contratación y gestión de proveedores" }
+  { key: "risk", name: "Riesgo", hint: "incertidumbre, respuesta y análisis cuantitativo" }
 ];
 
 let MODULES: ModuleDef[] = [
-  // — Integración —
-  { key: "charter", group: "integ", name: "Acta de Constitución", file: "Project_Charter.html", icon: "📜", color: "#00967f",
+  // — Gobernanza — (Iniciar, Integrar planes, Estrategia de abastecimiento, Calidad, Conocimiento, Cambios, Cierre)
+  { key: "charter", group: "gov", name: "Acta de Constitución", file: "Project_Charter.html", icon: "📜", color: "#00967f",
     desc: "Project Charter (PMBOK): propósito, objetivos y criterios de éxito, hitos, presupuesto, supuestos, restricciones, exclusiones y aprobación formal del proyecto." },
-  { key: "pmplan", group: "integ", name: "Plan para la Dirección", file: "Plan_Direccion.html", icon: "📘", color: "#00967f",
+  { key: "pmplan", group: "gov", name: "Plan para la Dirección", file: "Plan_Direccion.html", icon: "📘", color: "#00967f",
     desc: "Documento integrador que consolida los planes subsidiarios y las líneas base de alcance, cronograma y costo, verifica que calcen entre sí y registra la aprobación del plan." },
-  { key: "changes", group: "integ", name: "Control Integrado de Cambios", file: "Control_Cambios.html", icon: "🔁", color: "#00967f",
+  { key: "procurement", group: "gov", name: "Gestión de las Adquisiciones", file: "Plan_Adquisiciones.html", icon: "📦", color: "#8f2fd0",
+    desc: "Estrategia de contratación, hacer o comprar, tipos de contrato, criterios de selección y fecha límite de convocatoria contra el cronograma; enlaza la EDT, los riesgos y el OBS." },
+  { key: "quality", group: "gov", name: "Gestión de la Calidad", file: "Plan_Calidad.html", icon: "✔", color: "#00c2a8",
+    desc: "Métricas de calidad, aseguramiento y control por paquete (verifica el criterio de aceptación del diccionario de la EDT) y costo de la calidad (conformidad vs. no conformidad)." },
+  { key: "knowledge", group: "gov", name: "Gestión del Conocimiento", file: null, icon: "🧠", color: "#00967f",
+    desc: "Registro de lecciones aprendidas y del conocimiento del proyecto: captura durante la ejecución y transferencia al cierre." },
+  { key: "changes", group: "gov", name: "Control Integrado de Cambios", file: "Control_Cambios.html", icon: "🔁", color: "#00967f",
     desc: "Solicitudes de cambio que evalúan a la vez alcance, cronograma, costo, riesgo, calidad y recursos; decisión del CCB con la autoridad que exige (línea base, reservas); y trazabilidad hasta las órdenes de cambio de Costos, las modificaciones de alcance y la línea base del cronograma." },
-  { key: "closeout", group: "integ", name: "Cierre del Proyecto", file: null, icon: "🏁", color: "#00967f",
+  { key: "closeout", group: "gov", name: "Cierre del Proyecto o Fase", file: null, icon: "🏁", color: "#00967f",
     desc: "Aceptación de entregables, liberación de recursos, lecciones aprendidas y cierre administrativo y contractual." },
 
-  // — Interesados —
-  { key: "stakeholders", group: "stake", name: "Stakeholder Studio", file: "Stakeholder_Studio.html", icon: "◉", color: "#00b6ec",
-    desc: "Registro y análisis de interesados: matriz poder–interés, modelo de prominencia y matriz de compromiso." },
-
-  // — Alcance — (orden PMBOK: Recopilar Requisitos → Enunciado del Alcance → Crear la EDT)
+  // — Alcance — (orden PMBOK: Recopilar Requisitos → Enunciado del Alcance → Crear la EDT → Validar)
   { key: "requirements", group: "scope", name: "Recopilar Requisitos", file: "Recopilar_Requisitos.html", icon: "📝", color: "#6c5ce7",
     desc: "Matriz de trazabilidad de requisitos: cada REQ.00X enlaza el RAN del Acta y el interesado que lo origina. Separa la línea base de sus modificaciones de alcance." },
   { key: "scopeStatement", group: "scope", name: "Enunciado del Alcance", file: "Enunciado_del_Alcance.html", icon: "🎯", color: "#6c5ce7",
     desc: "Definir el Alcance (PMBOK): descripción del alcance, entregables (DEL.0X) con criterios de aceptación, y supuestos/restricciones/exclusiones. Es el puente que agrupa los REQ en entregables; la EDT descompone esos entregables, no los requisitos." },
   { key: "wbs", group: "scope", name: "WBS Builder", file: "WBS_Builder.html", icon: "▦", color: "#6c5ce7",
     desc: "Estructura de desglose del trabajo con costo, duración, avance y diccionario WBS. Siembra sus ramas desde los entregables del Enunciado del Alcance." },
+  { key: "scopeValidation", group: "scope", name: "Validar el Alcance", file: null, icon: "☑", color: "#6c5ce7",
+    desc: "Aceptación formal de los entregables terminados por el cliente o patrocinador, contra los criterios de aceptación del Enunciado y el diccionario de la EDT." },
 
   // — Cronograma — (orden: Plan de Gestión → Definir Actividades → PERT → CPM)
   { key: "schedulePlan", group: "sched", name: "Plan de Gestión del Cronograma", file: "Schedule_Management_Plan.html", icon: "📋", color: "#3a86ff",
@@ -145,37 +149,39 @@ let MODULES: ModuleDef[] = [
   { key: "schedule", group: "sched", name: "Cronograma / CPM", file: "Cronograma_CPM.html", icon: "⏱", color: "#00c2a8",
     desc: "Red de precedencias (pegado desde MS Project/Excel), ruta crítica, holguras y diagrama de Gantt." },
 
-  // — Costo —
-  { key: "cost", group: "cost", name: "Planificar la Gestión Financiera", file: "Cost-management.html", icon: "S/", color: "#0093c0",
+  // — Finanzas —
+  { key: "cost", group: "fin", name: "Planificar la Gestión Financiera", file: "Cost-management.html", icon: "S/", color: "#0093c0",
     desc: "Plan de gestión de costos (PMBOK + AACE): moneda, clase de estimado, contingencia e inflación, umbrales CV/CPI, órdenes de cambio y documento BOE. Toma la estimación base de la EDT o de Estimar los Costos." },
-  { key: "costEstimate", group: "cost", name: "Estimar los Costos", file: "Estimar_Costos.html", icon: "🧮", color: "#00967f",
+  { key: "costEstimate", group: "fin", name: "Estimar los Costos", file: "Estimar_Costos.html", icon: "🧮", color: "#00967f",
     desc: "Estimación de costo por paquete de trabajo (Unidad, Cantidad, Precio unitario → Subtotal), importada/exportada desde un .xlsx verificado por Código EDT y nombre contra la EDT. Alimenta el costo real del WBS y la línea base de Planificar la Gestión Financiera." },
-  { key: "evm", group: "cost", name: "Valor Ganado (EVM)", file: "Valor_Ganado.html", icon: "📈", color: "#2e4374",
+  { key: "evm", group: "fin", name: "Valor Ganado (EVM)", file: "Valor_Ganado.html", icon: "📈", color: "#2e4374",
     desc: "Seguimiento del valor ganado: PV sobre la línea base del cronograma, EV con técnica por paquete, AC, CV, SV, CPI, SPI, pronósticos (EAC/ETC/VAC/TCPI) y cronograma ganado (Earned Schedule), con los umbrales de los planes de Costos y del Cronograma." },
 
-  // — Calidad —
-  { key: "quality", group: "qual", name: "Gestión de la Calidad", file: "Plan_Calidad.html", icon: "✔", color: "#00c2a8",
-    desc: "Métricas de calidad, aseguramiento y control por paquete (verifica el criterio de aceptación del diccionario de la EDT) y costo de la calidad (conformidad vs. no conformidad)." },
+  // — Interesados — (identificar, compromiso, comunicaciones)
+  { key: "stakeholders", group: "stake", name: "Stakeholder Studio", file: "Stakeholder_Studio.html", icon: "◉", color: "#00b6ec",
+    desc: "Registro y análisis de interesados: matriz poder–interés, modelo de prominencia y matriz de compromiso." },
+  { key: "comms", group: "stake", name: "Gestión de las Comunicaciones", file: "Plan_Comunicaciones.html", icon: "📣", color: "#3a86ff",
+    desc: "Matriz de comunicaciones: qué información, a quién (interesados de Stakeholder Studio), quién la emite, cuándo, por qué medio y con qué frecuencia; revisa que a cada interesado le llegue lo que su estrategia exige." },
+  { key: "engagementControl", group: "stake", name: "Gestionar y Monitorear el Compromiso", file: null, icon: "📡", color: "#00b6ec",
+    desc: "Seguimiento periódico del compromiso real de cada interesado y de la eficacia de las comunicaciones frente a lo planificado, con acciones correctivas." },
 
   // — Recursos —
   { key: "obs", group: "res", name: "Equipo del Proyecto", file: "OBS_Builder.html", icon: "🗂", color: "#2e4374",
     desc: "Organigrama del equipo del proyecto (OBS): roles, tipo de autoridad y personas asignadas." },
   { key: "raci", group: "res", name: "Matriz RACI", file: "RACI_Matrix.html", icon: "▤", color: "#ff6b8b",
     desc: "Intersección EDT × OBS a nivel de paquete de trabajo: asigna R/A/C/I y sincroniza el responsable con el WBS." },
+  { key: "resEstimate", group: "res", name: "Estimar los Recursos", file: null, icon: "⚙", color: "#2e4374",
+    desc: "Necesidades de recursos (personas, equipos, materiales) por actividad y su calendario de disponibilidad." },
+  { key: "resAcquire", group: "res", name: "Adquirir Recursos", file: null, icon: "🤝", color: "#2e4374",
+    desc: "Obtención y asignación de los recursos estimados al proyecto, con sus fechas y condiciones." },
+  { key: "teamLead", group: "res", name: "Liderar el Equipo y Monitorear los Recursos", file: null, icon: "🧭", color: "#2e4374",
+    desc: "Desarrollo y desempeño del equipo, resolución de conflictos y control de la utilización real de los recursos contra lo planificado." },
 
-  // — Comunicaciones —
-  { key: "comms", group: "comm", name: "Gestión de las Comunicaciones", file: "Plan_Comunicaciones.html", icon: "📣", color: "#3a86ff",
-    desc: "Matriz de comunicaciones: qué información, a quién (interesados de Stakeholder Studio), quién la emite, cuándo, por qué medio y con qué frecuencia; revisa que a cada interesado le llegue lo que su estrategia exige." },
-
-  // — Riesgos —
+  // — Riesgo —
   { key: "risks", group: "risk", name: "Gestión de Riesgos", file: "Risk_Register.html", icon: "⚠", color: "#ff9f1c",
     desc: "Registro de riesgos (PMBOK + AACE): enunciado causa–evento–efecto, RBS, matriz probabilidad–impacto con umbrales del plan, estrategias para amenazas y oportunidades, riesgo residual y valor esperado." },
   { key: "montecarlo", group: "risk", name: "Simulación Monte Carlo", file: null, icon: "🎲", color: "#ff6b8b",
-    desc: "Riesgo cuantitativo de costo y plazo: histograma, curva S y tornado." },
-
-  // — Adquisiciones —
-  { key: "procurement", group: "proc", name: "Gestión de las Adquisiciones", file: "Plan_Adquisiciones.html", icon: "📦", color: "#8f2fd0",
-    desc: "Estrategia de contratación, hacer o comprar, tipos de contrato, criterios de selección y fecha límite de convocatoria contra el cronograma; enlaza la EDT, los riesgos y el OBS." }
+    desc: "Riesgo cuantitativo de costo y plazo: histograma, curva S y tornado." }
 ];
 
 // ─── Aplicación de la configuración de entrega ────────────────────────

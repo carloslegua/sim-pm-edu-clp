@@ -932,6 +932,17 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
 - `MODULES`, `GROUPS`, `MODULOS_ENTREGADOS`, `MODULOS_EXTRA` y
   `probeModules` son la única zona que edita el profesorado para
   entregar módulos a los alumnos (ver CLAUDE.md, regla #4).
+- **Organización por dominios de desempeño del PMBOK 8** (antes, las 10 áreas de
+  conocimiento del PMBOK 6): Gobernanza · Alcance · Cronograma · Finanzas · Interesados ·
+  Recursos · Riesgo. Comunicaciones cae en Interesados; Calidad, Adquisiciones (estrategia
+  de abastecimiento), Cambios, Conocimiento y Cierre, en Gobernanza; Costos y Valor Ganado,
+  en Finanzas. Un proceso del dominio sin herramienta se lista como **módulo faltante**
+  (`file: null`, tarjeta «próximamente»): Gestión del Conocimiento, Cierre del Proyecto o
+  Fase, Validar el Alcance, Gestionar y Monitorear el Compromiso, Estimar los Recursos,
+  Adquirir Recursos, Liderar el Equipo y Monitorear los Recursos, y Simulación Monte Carlo.
+  **Verificar**: la lista de procesos por dominio salió de fuentes secundarias (el PDF de
+  PMI es de pago); contrastarla con la guía antes de ampliar o renombrar. Las claves de
+  los módulos (`key`) no cambiaron, así que los datos guardados no se ven afectados.
 - Único módulo sin modo "funciona sin el núcleo" — de ahí el patrón 3
   de referenciar `GPI` (arriba).
 - El módulo con más lecturas cruzadas de todo el ecosistema:
