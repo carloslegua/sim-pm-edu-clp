@@ -16,7 +16,7 @@ import type * as GpiCore from "../../core/gpi-core";
 import type { EditSession, ProjectMeta } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
 import { normalizeBaseline } from "../../shared/schedule-control";
-import { SAMPLE_START_DATE, sampleScheduleModules } from "../../shared/schedule-sample";
+import { SAMPLE_START_DATE, sampleScheduleModules, sampleSchedulePlan } from "../../shared/schedule-sample";
 import { SAMPLE_PLAN, buildSampleRisks } from "../../shared/risk-sample";
 import { SAMPLE_COST_ORDERS, buildSampleCrs } from "../../shared/change-sample";
 import { fmtDays, makeEngine, resolveTargets, type Engine } from "../../shared/schedule-risk";
@@ -56,7 +56,7 @@ function buildCtx(): Ctx {
     const m = connected ? null : sampleScheduleModules();
     const wbs = connected ? G.getModule("wbs") : (m as NonNullable<typeof m>).wbs;
     c.leaves = G.util.wbsLeaves(wbs).map((l) => ({ id: l.id, code: l.code, name: l.name }));
-    const net = connected ? G.util.activeScheduleNetwork() : G.util.scheduleNetwork(wbs, (m as NonNullable<typeof m>).activities, null, (m as NonNullable<typeof m>).schedule, null, SAMPLE_START_DATE);
+    const net = connected ? G.util.activeScheduleNetwork() : G.util.scheduleNetwork(wbs, (m as NonNullable<typeof m>).activities, null, (m as NonNullable<typeof m>).schedule, sampleSchedulePlan(), SAMPLE_START_DATE);
     if (net) { c.acts = net.nodes.filter((n) => !n.isMilestone).map((n) => ({ id: n.id, code: n.code, name: n.name, leafId: n.leafId })); c.eng = makeEngine(net, G.util.cpm); }
     if (connected) {
       const meta = G.meta(); c.sym = CUR[(meta && meta.currency) || ""] || "$";

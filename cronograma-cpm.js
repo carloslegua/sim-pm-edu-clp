@@ -121,24 +121,29 @@
 	//#endregion
 	//#region src/shared/evm-reference.ts
 	function packageBudgets(i) {
-		const out = {};
+		const out = {}, by = {};
 		i.estimateRows.forEach((r) => {
-			if (r.subtotal && r.subtotal > 0) {
-				const k = out[r.leafId] || (out[r.leafId] = {
-					bac: 0,
-					source: "Estimar los Costos"
-				});
-				k.bac += r.subtotal;
-			}
+			const k = by[r.leafId] || (by[r.leafId] = {
+				sum: 0,
+				complete: true
+			});
+			if (r.subtotal && r.subtotal > 0) k.sum += r.subtotal;
+			else k.complete = false;
 		});
 		i.leaves.forEach((l) => {
-			if (!out[l.id]) {
-				const w = i.wbsCost[l.id] || 0;
-				if (w > 0) out[l.id] = {
-					bac: w,
-					source: "EDT (WBS Builder)"
-				};
-			}
+			const e = by[l.id], w = i.wbsCost[l.id] || 0;
+			if (e && e.complete && e.sum > 0) out[l.id] = {
+				bac: e.sum,
+				source: "Estimar los Costos"
+			};
+			else if (w > 0) out[l.id] = {
+				bac: w,
+				source: "EDT (WBS Builder)"
+			};
+			else if (e && e.sum > 0) out[l.id] = {
+				bac: e.sum,
+				source: "Estimar los Costos (parcial)"
+			};
 		});
 		return out;
 	}

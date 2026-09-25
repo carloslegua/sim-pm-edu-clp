@@ -1,7 +1,7 @@
 // Plan de Adquisiciones: src/shared/procurement-plan.ts y su ejemplo DISTRIB+ (contra el CPM real, la EDT, el OBS y los riesgos).
 import { describe, expect, it } from "vitest";
 import { cpm, scheduleNetwork, wbsCodes } from "../../src/core/gpi-core";
-import { SAMPLE_START_DATE, sampleScheduleModules } from "../../src/shared/schedule-sample";
+import { SAMPLE_START_DATE, sampleScheduleModules, sampleSchedulePlan } from "../../src/shared/schedule-sample";
 import {
   addDays, blankProcurement, criteriaSum, daysBetween, launchBy, nextCode, normalizeItem, normalizeProcurement, procurementFindings, procurementState, summary,
   type ProcData, type ProcFacts, type ProcItem
@@ -83,7 +83,7 @@ describe("procurementFindings", () => {
 
 describe("ejemplo DISTRIB+", () => {
   const cpmDates = (): Record<string, { s: string; f: string }> => {
-    const m = sampleScheduleModules(), net = scheduleNetwork(m.wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE), res = cpm(net.nodes.map((n) => ({ id: n.id, dur: n.dur })), net.links as never, net.calendar, { startDate: SAMPLE_START_DATE });
+    const m = sampleScheduleModules(), net = scheduleNetwork(m.wbs, m.activities, null, m.schedule, sampleSchedulePlan(), SAMPLE_START_DATE), res = cpm(net.nodes.map((n) => ({ id: n.id, dur: n.dur })), net.links as never, net.calendar, { startDate: SAMPLE_START_DATE });
     if (!res.ok) throw new Error("ciclo");
     const codes = wbsCodes(m.wbs), by: Record<string, { s: string; f: string }> = {};
     net.nodes.forEach((n) => { const r = res.rows[n.id]; if (!r || !n.leafId) return; const k = codes[n.leafId]; if (!by[k]) by[k] = { s: r.startDate, f: r.finishDate }; else { if (r.startDate < by[k].s) by[k].s = r.startDate; if (r.finishDate > by[k].f) by[k].f = r.finishDate; } });
@@ -92,7 +92,7 @@ describe("ejemplo DISTRIB+", () => {
   it("5 adquisiciones sin hallazgos a la fecha de corte (aprobación del plan) y con las convocatorias por delante", () => {
     const d = buildSampleProcurement(), f = sampleProcurementFacts();
     expect(d.items).toHaveLength(5); expect(d.asOf).toBe(SAMPLE_AS_OF); expect(procurementFindings(d, f)).toEqual([]); expect(procurementState(d, f)).toBe("verde");
-    expect(d.items.map((i) => launchBy(i))).toEqual(["2026-08-15", "2026-09-13", "2026-09-08", "2026-12-27", "2026-10-01"]);
+    expect(d.items.map((i) => launchBy(i))).toEqual(["2026-08-17", "2026-09-15", "2026-09-10", "2026-12-31", "2026-10-03"]);
   });
   it("las fechas requeridas y los plazos son las del CRONOGRAMA CPM real: fin del paquete de procura y inicio = requerida − plazo del proveedor", () => {
     const d = buildSampleProcurement(), cd = cpmDates(), by = (c: string) => d.items.find((i) => i.code === c)!;

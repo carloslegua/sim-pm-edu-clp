@@ -59,10 +59,10 @@ describe("Cost-management.html — Basis of Estimate (34R-05)", () => {
     const dom = await abrir(), doc = dom.window.document;
     expect(txt(doc, "auto-3.1.6")).toMatch(/Clase 3/);
     expect(txt(doc, "auto-3.16")).toMatch(/\$ 852,000/);
-    expect(txt(doc, "auto-3.17")).toMatch(/5 % de la línea base = \$ 403,980/);
-    expect(txt(doc, "auto-3.5.2")).toMatch(/Escalación: por índices.*\$ 127,601.*tipo de cambio: \$ 0.*contingencia.*excluye ambos/);
+    expect(txt(doc, "auto-3.17")).toMatch(/5 % de la línea base = \$ 404,055/);
+    expect(txt(doc, "auto-3.5.2")).toMatch(/Escalación: por índices.*\$ 129,108.*tipo de cambio: \$ 0.*contingencia.*excluye ambos/);
     expect(txt(doc, "auto-3.3.2")).toMatch(/Moneda del plan: USD/);
-    expect(txt(doc, "auto-3.18")).toMatch(/CAPEX de referencia: \$ 8,500,000.*presupuesto total \$ 8,483,582.*dentro del CAPEX/);
+    expect(txt(doc, "auto-3.18")).toMatch(/CAPEX de referencia: \$ 8,500,000.*presupuesto total \$ 8,485,163.*dentro del CAPEX/);
     expect(txt(doc, "auto-3.14")).toMatch(/R-01/);
     expect(txt(doc, "auto-3.6")).toMatch(/273 d.*inicio 2026-07-06/);
   });

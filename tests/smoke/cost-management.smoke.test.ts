@@ -39,10 +39,10 @@ describe("Cost-management.html (migrado a cost.js)", () => {
   it("standalone: calcula el BAC de ejemplo y las funciones onclick inline quedan expuestas en window", async () => {
     const dom = await JSDOM.fromURL(base + "Cost-management.html", { runScripts: "dangerously", resources: "usable" });
     const doc = dom.window.document;
-    // Valores de ejemplo documentados: base 7,100,000 -> BAC 8,079,601 (Clase 3, P70; escalacion por indices P70 = 127,601).
+    // Valores de ejemplo documentados: base 7,100,000 -> BAC 8,081,108 (Clase 3, P70; escalacion por indices P70 = 129,108).
     // Moneda por defecto USD (coherente con el CAPEX del caso DISTRIB+ en Charter/
     // Alcance/Cronograma, todos en USD -- ver ARCHITECTURE.md, "Dataset de referencia").
-    expect(doc.getElementById("kBAC")!.textContent).toBe("$ 8,079,601");
+    expect(doc.getElementById("kBAC")!.textContent).toBe("$ 8,081,108");
     expect(doc.querySelectorAll("#coBody tr").length).toBe(3); // SAMPLE_CO: riesgo, cambio de alcance, imprevisto
 
     for (const fn of ["save", "recalcCont", "onBaseInput", "pullFromWBS", "pullFromCostEstimate", "addCO", "coStatus", "delCO", "buildDoc", "coEdit", "coBaseline", "coKindHint", "evalVariance"]) {
@@ -135,9 +135,28 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(box.style.display).toBe("none");
   });
 
+  it("REPRO (auditoría, alta): cada orden indica el paquete de la EDT que la ejecuta (Valor Ganado le suma ahí su monto); se asigna también a una orden ya aprobada", async () => {
+    const dom = await abrirStandalone(), doc = dom.window.document;
+    const pk = (id: string) => rowOf(doc, id).querySelector('select[data-f="wbsId"]') as HTMLSelectElement;
+    expect(pk("OC-001").value).toBe("w-4.2"); expect(pk("OC-001").selectedOptions[0].textContent).toBe("4.2 Cimentaciones");   // el refuerzo de cimentación
+    expect(Array.from(doc.querySelectorAll("#coWbs option")).map((o) => o.textContent)).toContain("4.1 Movimiento de tierras");
+    pk("OC-001").value = ""; change(dom, pk("OC-001"));                                                   // aprobada y sin paquete: se avisa
+    expect(rowOf(doc, "OC-001").textContent).toMatch(/Sin paquete: Valor Ganado no puede sumar este monto/);
+    pk("OC-001").value = "w-4.2"; change(dom, pk("OC-001"));
+    expect(rowOf(doc, "OC-001").textContent).not.toMatch(/Sin paquete/);
+    await new Promise((r) => setTimeout(r, 900));
+    const saved = JSON.parse(dom.window.localStorage.getItem("gpi_cost_management_plan") as string).changeOrders.find((o: { id: string }) => o.id === "OC-001");
+    expect(saved).toMatchObject({ wbsId: "w-4.2", wbsCode: "4.2" });
+    // una orden nueva lleva el paquete elegido en el formulario
+    (doc.getElementById("coDesc") as HTMLInputElement).value = "Refuerzo adicional"; (doc.getElementById("coKind") as HTMLSelectElement).value = "imprevisto";
+    (doc.getElementById("coWbs") as HTMLSelectElement).value = "w-4.3"; (doc.getElementById("coCost") as HTMLInputElement).value = "1000";
+    dom.window.eval("addCO()");
+    expect(pk("OC-004").value).toBe("w-4.3");
+  });
+
   it("REPRO (alta): aprobar una orden exige quién aprueba y la autorización del sponsor; y NO cambia la línea base (BAC vigente) hasta incorporarla", async () => {
     const dom = await abrirStandalone(), doc = dom.window.document;
-    expect(kpi(doc, 0)).toBe("$ 8,079,601");                           // BAC vigente = inicial
+    expect(kpi(doc, 0)).toBe("$ 8,081,108");                           // BAC vigente = inicial
     setStatus(dom, doc, "OC-003", "Aprobada");                          // imprevisto con reserva de gestión, sin aprobador ni sponsor
     expect((estadoSel(doc, "OC-003")).value).toBe("Pendiente");
     expect(toast(doc)).toMatch(/quién aprueba/);
@@ -147,16 +166,16 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     setStatus(dom, doc, "OC-003", "Aprobada");
     expect((estadoSel(doc, "OC-003")).value).toBe("Aprobada");
     // aprobar RESERVA la reserva de gestión, pero la línea base sigue igual:
-    expect(kpi(doc, 0)).toBe("$ 8,079,601");                            // BAC vigente: sin cambio (antes: nadie lo distinguía)
+    expect(kpi(doc, 0)).toBe("$ 8,081,108");                            // BAC vigente: sin cambio (antes: nadie lo distinguía)
     expect(kpi(doc, 1)).toBe("$ 90,000");                               // aprobado, pendiente de incorporar
-    expect(kpi(doc, 3)).toBe("$ 313,980");                              // reserva disponible: 403,980 - 90,000
+    expect(kpi(doc, 3)).toBe("$ 314,055");                              // reserva disponible: 404,055 - 90,000
     expect(doc.getElementById("blBody")!.textContent).toMatch(/Sin cambios de línea base/);
 
     // incorporación EXPLÍCITA: crea LB-1 y sube el BAC
     (rowOf(doc, "OC-003").querySelector('button[onclick^="coBaseline"]') as HTMLElement).click();
-    expect(kpi(doc, 0)).toBe("$ 8,169,601");                            // + 90,000
+    expect(kpi(doc, 0)).toBe("$ 8,171,108");                            // + 90,000
     expect(kpi(doc, 1)).toBe("$ 0");
-    expect(doc.getElementById("blBody")!.textContent).toMatch(/LB-1.*OC-003.*8,079,601\.43.*8,169,601\.43.*Comité de cambios/);
+    expect(doc.getElementById("blBody")!.textContent).toMatch(/LB-1.*OC-003.*8,081,108\.\d\d.*8,171,108\.\d\d.*Comité de cambios/);
     expect((estadoSel(doc, "OC-003")).disabled).toBe(true); // ya forma parte de la línea base
     (rowOf(doc, "OC-003").querySelector('button[onclick^="delCO"]') as HTMLElement).click();
     expect(rowOf(doc, "OC-003")).toBeTruthy();                          // no se puede eliminar
@@ -310,9 +329,9 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     setApproval(dom, doc, "OC-002", "Sponsor", true);
     setStatus(dom, doc, "OC-002", "Aprobada");
     expect((estadoSel(doc, "OC-002")).value).toBe("Aprobada");
-    expect(kpi(doc, 3)).toBe("$ 403,980");                              // la reserva de gestión NO se tocó
+    expect(kpi(doc, 3)).toBe("$ 404,055");                              // la reserva de gestión NO se tocó
     (rowOf(doc, "OC-002").querySelector('button[onclick^="coBaseline"]') as HTMLElement).click();
-    expect(kpi(doc, 0)).toBe("$ 8,319,601");                            // + 240,000
+    expect(kpi(doc, 0)).toBe("$ 8,321,108");                            // + 240,000
 
     // un cambio de alcance propuesto con contingencia se rechaza al aprobar
     (doc.getElementById("coDesc") as HTMLInputElement).value = "Nueva bodega";
@@ -486,7 +505,7 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     expect(doc.getElementById("p3")!.textContent).not.toMatch(/según los rangos de exactitud de AACE 18R-97/);
     // por defecto conserva la referencia (y el BAC dorado), pero rotulada como lo que es:
     expect((doc.getElementById("contMethod") as HTMLSelectElement).value).toBe("clase_tabla");
-    expect(doc.getElementById("kBAC")!.textContent).toBe("$ 8,079,601");
+    expect(doc.getElementById("kBAC")!.textContent).toBe("$ 8,081,108");
     expect(doc.getElementById("contPctHint")!.textContent).toMatch(/referencia didáctica.*no proviene de una norma de AACE/);
     expect(doc.getElementById("rangeCard")!.style.display).toBe("none");
   });
@@ -740,9 +759,9 @@ describe("Cost-management.html (migrado a cost.js)", () => {
     fijar(dom, doc, "contMethod", "rangos_mc");
     const panel = doc.getElementById("rngEvents")!, t = panel.textContent!.replace(/\s+/g, " ");
     expect(t).toMatch(/Plazo con los riesgos \(CPM real · reserva de plazo\)/);
-    expect(t).toMatch(/Plan \(sin riesgos\)\s*273 d\s*—\s*2027-07-21/);
+    expect(t).toMatch(/Plan \(sin riesgos\)\s*273 d\s*—\s*2027-07-23/);
     const r = p80(tablaPlazo(doc).textContent!)!;
-    expect(r.dur).toBeGreaterThan(273); expect(r.reserva).toBeCloseTo(r.dur - 273, 0); expect(r.fin > "2027-07-21").toBe(true);
+    expect(r.dur).toBeGreaterThan(273); expect(r.reserva).toBeCloseTo(r.dur - 273, 0); expect(r.fin > "2027-07-23").toBe(true);
     expect(t).toMatch(/6 evento\(s\) retrasan actividades del cronograma/);          // R-01, R-05, R-06, R-07, R-08, R-09
     expect(t).toMatch(/a \$ 1,500 por día/);
     // cada evento con plazo muestra su efecto en el fin del proyecto (todos en la ruta crítica: días del riesgo = días del proyecto)

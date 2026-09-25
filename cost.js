@@ -770,7 +770,7 @@
 			response: "Estudio de suelos ampliado y refuerzo de cimentación (orden de cambio OC-001, financiada con contingencia).",
 			trigger: "Resultados del estudio de suelos (2.1)",
 			responseOwner: "Jefe de Ingeniería",
-			materializedOn: "2026-08-03",
+			materializedOn: "2026-08-31",
 			actualCost: 18e4,
 			actualDelay: 8
 		},
@@ -1247,6 +1247,37 @@
 	//#endregion
 	//#region src/shared/schedule-sample.ts
 	var SAMPLE_START_DATE = "2026-07-06";
+	var SAMPLE_CALENDAR = {
+		workDays: [
+			"Lun",
+			"Mar",
+			"Mié",
+			"Jue",
+			"Vie"
+		],
+		hoursPerDay: 8,
+		holidays: [
+			{
+				date: "2026-07-28",
+				name: "Fiestas Patrias"
+			},
+			{
+				date: "2026-07-29",
+				name: "Fiestas Patrias"
+			},
+			{
+				date: "2026-08-30",
+				name: "Santa Rosa de Lima"
+			}
+		]
+	};
+	function sampleSchedulePlan() {
+		return { calendar: {
+			workDays: SAMPLE_CALENDAR.workDays.slice(),
+			hoursPerDay: SAMPLE_CALENDAR.hoursPerDay,
+			holidays: SAMPLE_CALENDAR.holidays.map((h) => ({ ...h }))
+		} };
+	}
 	var PHASES = [
 		{
 			name: "Dirección de Proyecto",
@@ -2954,7 +2985,7 @@
 	};
 	var SAMPLE_ESC_LOCKS = {
 		"3.1": "2026-09-15",
-		"3.3": "2026-09-28"
+		"3.3": "2026-09-30"
 	};
 	function buildSampleEscPlan(resolve) {
 		const packages = {};
@@ -3619,6 +3650,129 @@
 		"5.2": 48e3,
 		"5.3": 92e3
 	};
+	//#endregion
+	//#region src/shared/evm-reference.ts
+	function packageBudgets(i) {
+		const out = {}, by = {};
+		i.estimateRows.forEach((r) => {
+			const k = by[r.leafId] || (by[r.leafId] = {
+				sum: 0,
+				complete: true
+			});
+			if (r.subtotal && r.subtotal > 0) k.sum += r.subtotal;
+			else k.complete = false;
+		});
+		i.leaves.forEach((l) => {
+			const e = by[l.id], w = i.wbsCost[l.id] || 0;
+			if (e && e.complete && e.sum > 0) out[l.id] = {
+				bac: e.sum,
+				source: "Estimar los Costos"
+			};
+			else if (w > 0) out[l.id] = {
+				bac: w,
+				source: "EDT (WBS Builder)"
+			};
+			else if (e && e.sum > 0) out[l.id] = {
+				bac: e.sum,
+				source: "Estimar los Costos (parcial)"
+			};
+		});
+		return out;
+	}
+	//#endregion
+	//#region src/shared/case-distribplus.ts
+	var SAMPLE_CASE_LEAVES = [
+		{
+			code: "1.1",
+			name: "Acta de constitución",
+			cost: 12e3
+		},
+		{
+			code: "1.2",
+			name: "Plan de gestión del proyecto",
+			cost: 38e3
+		},
+		{
+			code: "1.3",
+			name: "Informes de seguimiento y control",
+			cost: 145e3
+		},
+		{
+			code: "2.1",
+			name: "Estudio de suelos",
+			cost: 28e3
+		},
+		{
+			code: "2.2",
+			name: "Diseño estructural",
+			cost: 165e3
+		},
+		{
+			code: "2.3",
+			name: "Diseño eléctrico y sanitario",
+			cost: 98e3
+		},
+		{
+			code: "2.4",
+			name: "Permisos y licencias municipales",
+			cost: 64e3
+		},
+		{
+			code: "3.1",
+			name: "Estructuras metálicas prefabricadas",
+			cost: 182e4
+		},
+		{
+			code: "3.2",
+			name: "Materiales de construcción",
+			cost: 715e3
+		},
+		{
+			code: "3.3",
+			name: "Equipos eléctricos e instalaciones",
+			cost: 415e3
+		},
+		{
+			code: "4.1",
+			name: "Movimiento de tierras",
+			cost: 38e4
+		},
+		{
+			code: "4.2",
+			name: "Cimentaciones",
+			cost: 735e3
+		},
+		{
+			code: "4.3",
+			name: "Estructura y cobertura",
+			cost: 1165e3
+		},
+		{
+			code: "4.4",
+			name: "Acabados y cerramientos",
+			cost: 55e4
+		},
+		{
+			code: "4.5",
+			name: "Instalaciones MEP",
+			cost: 485e3
+		},
+		{
+			code: "5.1",
+			name: "Pruebas de instalaciones",
+			cost: 145e3
+		},
+		{
+			code: "5.2",
+			name: "Capacitación al cliente",
+			cost: 48e3
+		},
+		{
+			code: "5.3",
+			name: "Acta de entrega y cierre",
+			cost: 92e3
+		}
+	];
 	var str = (v) => v === null || v === void 0 ? "" : String(v);
 	var fin = (v, d = 0) => {
 		const x = Number(v);
@@ -3764,9 +3918,11 @@
 			approver: "CCB",
 			authLevel: "ccb",
 			sponsorAuth: false,
-			approvedOn: "2026-08-03",
+			approvedOn: "2026-09-02",
 			riskId: "rk3",
-			riskCode: "R-03"
+			riskCode: "R-03",
+			wbsId: "w-4.2",
+			wbsCode: "4.2"
 		},
 		{
 			id: "OC-002",
@@ -3777,7 +3933,9 @@
 			status: "Pendiente",
 			kind: "alcance",
 			approver: "",
-			sponsorAuth: false
+			sponsorAuth: false,
+			wbsId: "w-4.5",
+			wbsCode: "4.5"
 		},
 		{
 			id: "OC-003",
@@ -3788,7 +3946,9 @@
 			status: "Pendiente",
 			kind: "imprevisto",
 			approver: "",
-			sponsorAuth: false
+			sponsorAuth: false,
+			wbsId: "w-4.1",
+			wbsCode: "4.1"
 		}
 	];
 	var SAMPLE_RANGES = [
@@ -4101,7 +4261,7 @@
 			if (gpiOn()) net = GPI.util.activeScheduleNetwork();
 			else {
 				const m = sampleScheduleModules();
-				net = GPI.util.scheduleNetwork(m.wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE);
+				net = GPI.util.scheduleNetwork(m.wbs, m.activities, null, m.schedule, sampleSchedulePlan(), SAMPLE_START_DATE);
 			}
 			eng = makeEngine(net, GPI.util.cpm);
 		} catch (e) {
@@ -4499,25 +4659,26 @@
 		}
 		const G = GPI;
 		const rows = G.util.costEstimateRows(G.getModule("costEstimate"), G.getModule("activities"), G.getModule("wbs"));
-		const by = /* @__PURE__ */ new Map();
-		rows.forEach((r) => {
-			if (r.subtotal && r.subtotal > 0) {
-				const k = by.get(r.leafId) || {
-					name: (r.code + " " + r.leafName).trim(),
-					ml: 0
-				};
-				k.ml += r.subtotal;
-				by.set(r.leafId, k);
-			}
-		});
-		if (!by.size) {
+		if (!rows.some((r) => r.subtotal != null && r.subtotal > 0)) {
 			showToast("Aún no hay actividades con Cantidad y Precio unitario cargados en Estimar los Costos.");
 			return;
 		}
-		mergePulled(Array.from(by, ([id, v]) => ({
-			id: "r-" + id,
-			name: v.name,
-			ml: Math.round(v.ml)
+		const wbs = G.getModule("wbs"), leaves = G.util.wbsLeaves(wbs), wbsCost = {};
+		leaves.forEach((l) => {
+			wbsCost[l.id] = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) || 0 : 0;
+		});
+		const pb = packageBudgets({
+			leaves,
+			wbsCost,
+			estimateRows: rows.map((r) => ({
+				leafId: r.leafId,
+				subtotal: r.subtotal
+			}))
+		});
+		mergePulled(leaves.filter((l) => pb[l.id]).map((l) => ({
+			id: "r-" + l.id,
+			name: (l.code + " " + l.name).trim(),
+			ml: Math.round(pb[l.id].bac)
 		})));
 	}
 	function pullRangesFromWbs() {
@@ -4525,7 +4686,7 @@
 			showToast("Abre este módulo desde el Panel de Control para conectar la EDT.");
 			return;
 		}
-		const G = GPI, wbs = G.getModule("wbs");
+		const G = GPI, wbs = G.util.effectiveWbs();
 		const items = G.util.wbsLeaves(wbs).map((lf) => ({
 			id: "r-" + lf.id,
 			name: (lf.code + " " + lf.name).trim(),
@@ -4572,14 +4733,20 @@
 			const leaves = GPI.util.wbsLeaves(wbs);
 			const costOf = {};
 			if (connected) {
-				GPI.util.costEstimateRows(GPI.getModule("costEstimate"), act, wbs).forEach((r) => {
-					if (r.subtotal && r.subtotal > 0) costOf[r.leafId] = (costOf[r.leafId] || 0) + r.subtotal;
-				});
+				const wbsCost = {};
 				leaves.forEach((l) => {
-					if (!costOf[l.id]) {
-						const w = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) : 0;
-						if (w > 0) costOf[l.id] = w;
-					}
+					wbsCost[l.id] = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) || 0 : 0;
+				});
+				const pb = packageBudgets({
+					leaves,
+					wbsCost,
+					estimateRows: GPI.util.costEstimateRows(GPI.getModule("costEstimate"), act, wbs).map((r) => ({
+						leafId: r.leafId,
+						subtotal: r.subtotal
+					}))
+				});
+				Object.keys(pb).forEach((id) => {
+					costOf[id] = pb[id].bac;
 				});
 			} else leaves.forEach((l) => {
 				if (EVM_SAMPLE_COSTS[l.code]) costOf[l.id] = EVM_SAMPLE_COSTS[l.code];
@@ -4958,19 +5125,45 @@
 		return `<select class="mono" style="padding:3px 5px;max-width:150px;margin-top:5px;font-size:11px" data-i="${i}" data-f="authLevel" onchange="coEdit(this)" ${locked ? "disabled" : ""} aria-label="Nivel de autoridad con que se aprueba la orden ${escA(r.id)}">${opts}</select>
     <div class="${!locked && !ok ? "bad-txt" : "muted"}" style="font-size:11px;margin-top:3px" title="${escA(tiersText(pol, (n) => fmt2(n)))}">Política de reservas: requiere <b>${need ? esc(AUTH_LABEL[need]) : "—"}</b>${!locked && !ok ? " ⚠" : ""}</div>`;
 	}
+	function coLeaves() {
+		if (gpiOn()) try {
+			return GPI.util.wbsLeaves(GPI.getModule("wbs")).map((l) => ({
+				id: l.id,
+				code: l.code,
+				name: l.name
+			}));
+		} catch (e) {
+			return [];
+		}
+		return SAMPLE_CASE_LEAVES.map((l) => ({
+			id: "w-" + l.code,
+			code: l.code,
+			name: l.name
+		}));
+	}
+	function coLeafOf(r, leaves) {
+		return leaves.find((l) => l.id === r.wbsId) || (r.wbsCode ? leaves.find((l) => l.code === r.wbsCode) : void 0) || null;
+	}
+	function wbsOptions(leaves, selected) {
+		return `<option value="">— Paquete de la EDT —</option>` + leaves.map((l) => `<option value="${escA(l.id)}" ${l.id === selected ? "selected" : ""}>${esc(l.code + " " + l.name)}</option>`).join("");
+	}
 	function renderCO() {
 		const tb = $("coBody");
 		tb.innerHTML = "";
-		const ctx = riskCtx(), refs = riskRefs(ctx);
+		const ctx = riskCtx(), refs = riskRefs(ctx), leaves = coLeaves();
+		const form = $("coWbs"), keep = form.value;
+		form.innerHTML = wbsOptions(leaves, keep);
 		state.co.forEach((r, i) => {
 			const locked = r.status !== "Pendiente";
 			const usesReserve = r.fund !== FUND_CONT;
 			const linked = r.riskId ? ctx.risks.find((x) => x.id === r.riskId) : void 0;
 			const riskCell = r.kind !== "riesgo" ? "" : !locked ? `<select class="mono" style="padding:3px 5px;max-width:190px;margin-top:5px;font-size:11px" data-i="${i}" data-f="riskId" onchange="coEdit(this)" aria-label="Riesgo vinculado a la orden ${escA(r.id)}">${riskOptions(ctx, r.riskId, r.riskCode)}</select>` : `<div class="${r.riskId ? "muted" : "bad-txt"}" style="font-size:11px;margin-top:4px">${r.riskId ? "↳ " + esc(linked ? linked.code + " · " + linked.title : (r.riskCode || "?") + " (no está en el registro)") : "⚠ sin riesgo vinculado"}</div>`;
+			const leaf = coLeafOf(r, leaves), toBudget = r.status === "Aprobada" && (r.fund === "Contingencia" || !!r.baselined);
+			const pkgCell = `<select class="mono" style="padding:3px 5px;max-width:230px;margin-top:5px;font-size:11px" data-i="${i}" data-f="wbsId" onchange="coEdit(this)" aria-label="Paquete de la EDT de la orden ${escA(r.id)}">${wbsOptions(leaves, leaf ? leaf.id : "")}</select>` + (!leaf && toBudget ? `<div class="bad-txt" style="font-size:11px;margin-top:3px">⚠ Sin paquete: Valor Ganado no puede sumar este monto al presupuesto del trabajo</div>` : "");
 			const tr = document.createElement("tr");
 			tr.innerHTML = `
       <td class="mono">${esc(r.id)}</td>
-      <td>${esc(r.desc)}</td>
+      <td>${esc(r.desc)}${pkgCell}</td>
       <td><span class="pill ${r.kind ? "ok" : "bad"}" title="${escA(r.kind ? CO_KIND_HINT[r.kind] : "Clasifica la orden antes de aprobarla")}">${esc(kindLabel(r.kind))}</span>${riskCell}</td>
       <td class="muted">${esc(r.cause)}</td>
       <td class="num">${fmt2(+r.cost)}</td>
@@ -5061,9 +5254,24 @@
 	}
 	function coEdit(el) {
 		const r = state.co[+el.dataset.i];
-		if (!r || r.status !== "Pendiente") return;
-		userEdited = true;
+		if (!r) return;
 		const f = el.dataset.f;
+		if (f === "wbsId") {
+			const l = coLeaves().find((x) => x.id === el.value);
+			userEdited = true;
+			if (l) {
+				r.wbsId = l.id;
+				r.wbsCode = l.code;
+			} else {
+				delete r.wbsId;
+				delete r.wbsCode;
+			}
+			renderCO();
+			save();
+			return;
+		}
+		if (r.status !== "Pendiente") return;
+		userEdited = true;
 		if (f === "approver") r.approver = el.value.trim();
 		else if (f === "sponsorAuth") r.sponsorAuth = el.checked;
 		else if (f === "authLevel") {
@@ -5127,6 +5335,11 @@
 			approver: "",
 			sponsorAuth: false
 		};
+		const pk = coLeaves().find((l) => l.id === $("coWbs").value);
+		if (pk) {
+			order.wbsId = pk.id;
+			order.wbsCode = pk.code;
+		}
 		if (kindSel.value === "riesgo") {
 			const rid = $("coRisk").value, ref = riskCtx().risks.find((x) => x.id === rid);
 			if (rid) {
@@ -5703,7 +5916,7 @@
 		try {
 			const meta = GPI.meta() || {};
 			if (meta.currency && CUR[meta.currency]) $("cur").value = meta.currency;
-			const wbs = GPI.getModule("wbs");
+			const wbs = GPI.util.effectiveWbs();
 			const roll = GPI.util && wbs ? GPI.util.wbsRollup(wbs) : null;
 			const v = roll && roll.cost > 0 ? Math.round(roll.cost) : 0;
 			$("baseCost").value = String(v);
@@ -5716,7 +5929,7 @@
 			return;
 		}
 		userEdited = true;
-		const wbs = GPI.getModule("wbs");
+		const wbs = GPI.util.effectiveWbs();
 		const roll = GPI.util && wbs ? GPI.util.wbsRollup(wbs) : null;
 		if (!roll || !roll.cost) {
 			showToast("La EDT del proyecto activo aún no tiene costos cargados en WBS Builder.");
@@ -5738,17 +5951,31 @@
 		const wbs = GPI.getModule("wbs");
 		const activities = GPI.getModule("activities");
 		const estimate = GPI.getModule("costEstimate");
-		const total = GPI.util && wbs ? GPI.util.costEstimateTotal(estimate, activities, wbs) : 0;
-		if (!total) {
+		const G = GPI, rows = G.util && wbs ? G.util.costEstimateRows(estimate, activities, wbs) : [];
+		if (!rows.some((r) => r.subtotal != null && r.subtotal > 0)) {
 			showToast("Aún no hay actividades con Cantidad y Precio unitario cargados en Estimar los Costos.");
 			return;
 		}
+		const leaves = G.util.wbsLeaves(wbs), wbsCost = {};
+		leaves.forEach((l) => {
+			wbsCost[l.id] = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) || 0 : 0;
+		});
+		const pb = packageBudgets({
+			leaves,
+			wbsCost,
+			estimateRows: rows.map((r) => ({
+				leafId: r.leafId,
+				subtotal: r.subtotal
+			}))
+		});
+		const total = Object.keys(pb).reduce((s, id) => s + pb[id].bac, 0), fromWbs = Object.keys(pb).filter((id) => pb[id].source !== "Estimar los Costos").length;
 		const v = Math.round(total);
 		$("baseCost").value = String(v);
 		$("actCostP1").value = String(v);
 		save();
 		recalcCont();
 		flash();
+		if (fromWbs) showToast(fromWbs + " paquete(s) sin estimado completo se tomaron con su costo de la EDT.");
 	}
 	var userEdited = false;
 	["input", "change"].forEach((ev) => document.addEventListener(ev, (e) => {

@@ -9,6 +9,23 @@
 import type { WbsModule, ActivitiesModule, ActivityItem, MilestoneItem, ScheduleLink, ScheduleLinkType, ScheduleLagUnit } from "../core/types";
 
 export const SAMPLE_START_DATE = "2026-07-06";
+// Calendario del caso (UNA sola fuente): lunes a viernes, 8 h, con los feriados de ejemplo. Lo usan el «Cargar ejemplo» del
+// Plan de Gestión del Cronograma y los modos independientes que corren el CPM; con él los 273 días laborables terminan el
+// 2027-07-23. Antes el Plan traía lunes a sábado (el CPM terminaba el 2027-05-19) y el resto del caso, lunes a viernes sin
+// feriados (2027-07-21): dos calendarios para el mismo proyecto (auditoría, alta).
+export const SAMPLE_CALENDAR = {
+  workDays: ["Lun", "Mar", "Mié", "Jue", "Vie"],
+  hoursPerDay: 8,
+  holidays: [
+    { date: "2026-07-28", name: "Fiestas Patrias" },
+    { date: "2026-07-29", name: "Fiestas Patrias" },
+    { date: "2026-08-30", name: "Santa Rosa de Lima" }
+  ]
+};
+// El Plan de Gestión del Cronograma del ejemplo, reducido a lo que el CPM lee de él (su calendario).
+export function sampleSchedulePlan(): { calendar: { workDays: string[]; hoursPerDay: number; holidays: Array<{ date: string; name: string }> } } {
+  return { calendar: { workDays: SAMPLE_CALENDAR.workDays.slice(), hoursPerDay: SAMPLE_CALENDAR.hoursPerDay, holidays: SAMPLE_CALENDAR.holidays.map((h) => ({ ...h })) } };
+}
 
 // Fases (nivel 1) y paquetes de trabajo (nivel 2) de la EDT de ejemplo, con sus actividades.
 // Actividad: [nombre, unidad, metrado, rendimiento por equipo, n.º de equipos]; Dur = ceil(metrado / (equipos × rend.)).

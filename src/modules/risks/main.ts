@@ -20,7 +20,7 @@ import type * as GpiCore from "../../core/gpi-core";
 import type { EditSession, ProjectMeta } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
 import { SAMPLE_LINKED_ORDERS, SAMPLE_PLAN, buildSampleRisks } from "../../shared/risk-sample";
-import { SAMPLE_START_DATE, sampleScheduleModules } from "../../shared/schedule-sample";
+import { SAMPLE_START_DATE, sampleScheduleModules, sampleSchedulePlan } from "../../shared/schedule-sample";
 import { delayPhrase, fmtDays, makeEngine, resolveTargets, scheduleImpactOf, type Engine, type Network, type ScheduleImpact } from "../../shared/schedule-risk";
 import { simulateRange, type ScheduleResult } from "../../shared/range-estimating";
 import {
@@ -89,7 +89,7 @@ function getEng(): Engine | null {
   if (!G || !G.util || !G.util.cpm || !G.util.scheduleNetwork) return null;
   try {
     if (connected) net = G.util.activeScheduleNetwork();
-    else { const m = sampleScheduleModules(); net = G.util.scheduleNetwork(m.wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE); }
+    else { const m = sampleScheduleModules(); net = G.util.scheduleNetwork(m.wbs, m.activities, null, m.schedule, sampleSchedulePlan(), SAMPLE_START_DATE); }
     eng = makeEngine(net, G.util.cpm);
   } catch (e) { net = null; eng = null; }
   return eng;

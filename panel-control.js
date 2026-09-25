@@ -422,7 +422,7 @@
 			sponsor: "Gerencia General DISTRIB+",
 			manager: "",
 			startDate: "2026-07-06",
-			endDate: "2027-07-21",
+			endDate: "2027-07-23",
 			currency: "USD",
 			capex: "8500000",
 			description: "Construcción de un almacén logístico para DISTRIB+ S.A. en Lurín. Caso pedagógico compartido por todas las herramientas del curso."
@@ -521,7 +521,7 @@
 			}];
 		}
 		if (key === "wbs") {
-			const w = GPI.getModule("wbs");
+			const w = GPI.util.effectiveWbs();
 			const r = GPI.util.wbsRollup(w);
 			return [{
 				v: r.leafCount,
@@ -649,7 +649,7 @@
 	function renderDashboard() {
 		const meta = GPI.meta();
 		const sh = GPI.getModule("stakeholders")?.stakeholders || [];
-		const wbs = GPI.getModule("wbs");
+		const wbs = GPI.util.effectiveWbs();
 		const roll = GPI.util.wbsRollup(wbs);
 		const cards = [];
 		cards.push("<div class=\"dash-card\"><h4>Resumen</h4>" + kpi(sh.length, "", "interesados registrados") + kpi(roll.leafCount, "", "paquetes de trabajo (hojas de la EDT)") + kpi(money(roll.cost, meta?.currency), "", "costo estimado (suma de hojas)") + "</div>");
@@ -1334,7 +1334,7 @@
 		}
 		let body = "";
 		body += "<h2>1. Datos comunes del proyecto</h2><table class=\"rep-kv\"><tr><td>Código</td><td>" + esc(meta.code || "—") + "</td></tr><tr><td>Cliente</td><td>" + esc(meta.client || "—") + "</td></tr><tr><td>Ubicación</td><td>" + esc(meta.location || "—") + "</td></tr><tr><td>Patrocinador</td><td>" + esc(meta.sponsor || "—") + "</td></tr><tr><td>Director de Proyecto</td><td>" + esc(meta.manager || "—") + "</td></tr><tr><td>Fechas del proyecto</td><td>" + repDate(meta.startDate) + " → " + repDate(meta.endDate) + "</td></tr><tr><td>Presupuesto (CAPEX)</td><td><b>" + money(meta.capex, meta.currency) + "</b></td></tr><tr><td>Descripción</td><td>" + esc(meta.description || "—") + "</td></tr></table>";
-		const stk = GPI.getModule("stakeholders"), wbs = GPI.getModule("wbs"), raci = GPI.getModule("raci");
+		const stk = GPI.getModule("stakeholders"), wbs = GPI.util.effectiveWbs(), raci = GPI.getModule("raci");
 		const charter = GPI.getModule("charter"), plan = GPI.getModule("schedulePlan");
 		const roll = GPI.util.wbsRollup(wbs);
 		const cov = GPI.util.raciCoverage(raci, wbs);

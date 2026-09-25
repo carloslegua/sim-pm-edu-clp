@@ -5,12 +5,12 @@
 //   · 2.4 Permisos: la licencia municipal se retrasa (riesgo R-01): 90 % de gestión, pero con la técnica 0/100 no se gana hasta emitirse.
 //   · 3.1 Estructuras metálicas: la fábrica acumula pedidos (R-08) y el acero sube (R-02): 90 % de avance y por encima de lo presupuestado.
 //   · 1.3 Informes de seguimiento: nivel de esfuerzo (LOE): se gana a medida que pasa el tiempo.
-// Corte 2026-10-30 (día laborable 85): PV 3.439.533 · EV 3.182.500 · AC 3.253.500 → SPI 0,925 (ámbar), CPI 0,978 (verde),
+// Corte 2026-11-03 (día laborable 85 con el calendario del caso, que descansa el 28 y 29 de julio): PV 3.439.533 · EV 3.182.500 · AC 3.253.500 → SPI 0,925 (ámbar), CPI 0,978 (verde),
 // CV −71.000 (ámbar: el peor de los indicadores manda). Los cortes anteriores fijan la curva S. Un test de oro
 // (tests/unit/evm-sample.test.ts) verifica que estas cifras salen de la red y de los costos, no de una copia.
 import type { EvTechnique } from "./evm";
 
-export const EVM_SAMPLE_STATUS_DATE = "2026-10-30";
+export const EVM_SAMPLE_STATUS_DATE = "2026-11-03";
 // Costo del TRABAJO por paquete (Código EDT → costo), el de WBS Builder.
 export const EVM_SAMPLE_COSTS: Record<string, number> = {
   "1.1": 12000, "1.2": 38000, "1.3": 145000, "2.1": 28000, "2.2": 165000, "2.3": 98000, "2.4": 64000,
@@ -23,7 +23,7 @@ export const EVM_SAMPLE_AC: Record<string, number> = { "1.1": 12000, "1.2": 3850
 export const EVM_SAMPLE_TECHNIQUES: Record<string, EvTechnique> = { "1.3": "loe", "2.4": "cero_cien" };
 // Cortes anteriores (quincenales): PV, EV y AC acumulados a cada fecha.
 export const EVM_SAMPLE_REPORTS = [
-  { date: "2026-08-14", offset: 30, pv: 145563, ev: 141000, ac: 144000, cpi: 0.979, spi: 0.969 },
-  { date: "2026-08-31", offset: 41, pv: 238000, ev: 231000, ac: 236500, cpi: 0.977, spi: 0.971 },
-  { date: "2026-09-18", offset: 55, pv: 410375, ev: 398000, ac: 407000, cpi: 0.978, spi: 0.970 }
+  { date: "2026-08-18", offset: 30, pv: 145563, ev: 141000, ac: 144000, cpi: 0.979, spi: 0.969 },
+  { date: "2026-09-02", offset: 41, pv: 238000, ev: 231000, ac: 236500, cpi: 0.977, spi: 0.971 },
+  { date: "2026-09-22", offset: 55, pv: 410375, ev: 398000, ac: 407000, cpi: 0.978, spi: 0.970 }
 ];

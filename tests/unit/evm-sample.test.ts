@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 import { cpm, scheduleNetwork } from "../../src/core/gpi-core";
 import { EVM_SAMPLE_AC, EVM_SAMPLE_COSTS, EVM_SAMPLE_PERCENT, EVM_SAMPLE_REPORTS, EVM_SAMPLE_STATUS_DATE, EVM_SAMPLE_TECHNIQUES } from "../../src/shared/evm-sample";
 import { evmCompute, evmStatus, pvAt, workingDaysThrough, DEFAULT_THRESHOLDS, type EvmPackage } from "../../src/shared/evm";
-import { SAMPLE_START_DATE, sampleScheduleModules } from "../../src/shared/schedule-sample";
+import { SAMPLE_START_DATE, sampleScheduleModules, sampleSchedulePlan } from "../../src/shared/schedule-sample";
 
 const build = () => {
-  const m = sampleScheduleModules(), n = scheduleNetwork(m.wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE);
+  const m = sampleScheduleModules(), n = scheduleNetwork(m.wbs, m.activities, null, m.schedule, sampleSchedulePlan(), SAMPLE_START_DATE);
   const r = cpm(n.nodes.map((x) => ({ id: x.id, dur: x.dur })), n.links as never, n.calendar, {});
   if (!r.ok) throw new Error("ciclo");
   const spans: Record<string, { es: number; ef: number }> = {};
@@ -25,7 +25,7 @@ describe("ejemplo de Valor Ganado (DISTRIB+)", () => {
     expect(Object.values(EVM_SAMPLE_COSTS).reduce((s, v) => s + v, 0)).toBe(7100000);
     const { pkgs } = build(); expect(pkgs.every((p) => p.es !== null && p.ef !== null)).toBe(true);
   });
-  it("al corte 2026-10-30 (día 85): PV 3.439.533 · EV 3.182.500 · AC 3.253.500 → SPI ámbar, CPI verde, CV ámbar", () => {
+  it("al corte 2026-11-03 (día 85 con los feriados del caso): PV 3.439.533 · EV 3.182.500 · AC 3.253.500 → SPI ámbar, CPI verde, CV ámbar", () => {
     const { pkgs, cal, duration } = build(), t = workingDaysThrough(SAMPLE_START_DATE, EVM_SAMPLE_STATUS_DATE, cal);
     expect(t).toBe(85); expect(duration).toBe(273);
     const r = evmCompute({ packages: pkgs, percent: EVM_SAMPLE_PERCENT, ac: EVM_SAMPLE_AC, techniques: EVM_SAMPLE_TECHNIQUES, defaultTechnique: "fisico", statusOffset: t, projectDuration: duration });

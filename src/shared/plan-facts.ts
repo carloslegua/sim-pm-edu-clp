@@ -36,7 +36,7 @@ function baseCostOf(G: GpiApi): number | null {
 const rolesOf = (G: GpiApi): string[] => Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)));
 
 export function gatherQualityFacts(G: GpiApi): QualityFacts {
-  const wbs = G.getModule("wbs"), nodes = rec(wbs && wbs.nodes);
+  const wbs = G.util.effectiveWbs(), nodes = rec(wbs && wbs.nodes);
   return {
     leaves: G.util.wbsLeaves(wbs).map((l) => { const n = rec(nodes[l.id]); return { id: l.id, code: l.code, name: l.name, acceptance: String(n.acceptance || ""), loe: !!n.loe, cost: Number(n.cost) || 0 }; }),
     roles: rolesOf(G), highRiskLeafIds: Array.from(new Set(openRisks(G).filter((r) => r.high).flatMap((r) => r.wbsIds))), baseCost: baseCostOf(G)
@@ -44,7 +44,7 @@ export function gatherQualityFacts(G: GpiApi): QualityFacts {
 }
 
 export function gatherProcurementFacts(G: GpiApi): ProcFacts {
-  const wbs = G.getModule("wbs"), nodes = rec(wbs && wbs.nodes), obs = G.util.obsNodes(G.getModule("obs")), sk = rec(G.getModule("stakeholders")).stakeholders;
+  const wbs = G.util.effectiveWbs(), nodes = rec(wbs && wbs.nodes), obs = G.util.obsNodes(G.getModule("obs")), sk = rec(G.getModule("stakeholders")).stakeholders;
   const cost = G.getModule("cost"), cl = Number(String(cost && cost.estimate && cost.estimate.class).replace(/\D/g, ""));
   return {
     leaves: G.util.wbsLeaves(wbs).map((l) => ({ id: l.id, code: l.code, name: l.name, cost: Number(rec(nodes[l.id]).cost) || 0 })),

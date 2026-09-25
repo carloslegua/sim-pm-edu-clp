@@ -259,7 +259,7 @@ function ensureSeed(): void {
   GPI.createProject({
     name: "DISTRIB+ S.A. — Almacén Lurín", code: "DPLU-2026", client: "DISTRIB+ S.A.",
     location: "Lurín, Lima", sponsor: "Gerencia General DISTRIB+", manager: "",
-    startDate: "2026-07-06", endDate: "2027-07-21", currency: "USD", capex: "8500000",
+    startDate: "2026-07-06", endDate: "2027-07-23", currency: "USD", capex: "8500000",
     description: "Construcción de un almacén logístico para DISTRIB+ S.A. en Lurín. Caso pedagógico compartido por todas las herramientas del curso."
   });
 }
@@ -340,7 +340,7 @@ function statChips(key: string): StatChip[] | null {
     return [{ v: sa.total, l: "entregables (DEL)" }, { v: sa.decompPct + "%", l: "descompuestos en EDT · " + lbS }];
   }
   if (key === "wbs") {
-    const w = GPI.getModule("wbs"); const r = GPI.util.wbsRollup(w);
+    const w = GPI.util.effectiveWbs(); const r = GPI.util.wbsRollup(w);
     return [{ v: r.leafCount, l: "paquetes (hojas)" }, { v: money(r.cost, GPI.meta()?.currency).replace(/^\S+\s/, ''), l: "costo hoja" }];
   }
   if (key === "activities") {
@@ -445,7 +445,7 @@ function renderLauncher(): void {
 function renderDashboard(): void {
   const meta = GPI.meta();
   const sh = GPI.getModule("stakeholders")?.stakeholders || [];
-  const wbs = GPI.getModule("wbs");
+  const wbs = GPI.util.effectiveWbs();
   const roll = GPI.util.wbsRollup(wbs);
   const cards: string[] = [];
 
@@ -1062,7 +1062,7 @@ function buildReport(): void {
     + '<tr><td>Descripción</td><td>' + esc(meta.description || "—") + '</td></tr></table>';
 
   // Indicadores integrados (mismas fuentes que el tablero del Panel)
-  const stk = GPI.getModule("stakeholders"), wbs = GPI.getModule("wbs"), raci = GPI.getModule("raci");
+  const stk = GPI.getModule("stakeholders"), wbs = GPI.util.effectiveWbs(), raci = GPI.getModule("raci");
   const charter = GPI.getModule("charter"), plan = GPI.getModule("schedulePlan");
   const roll = GPI.util.wbsRollup(wbs);
   const cov = GPI.util.raciCoverage(raci, wbs);

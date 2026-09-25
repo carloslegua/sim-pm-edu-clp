@@ -303,7 +303,7 @@ export interface CostModule {
 export interface SchedulePlanCalendar {
   workDays?: string[];
   hoursPerDay?: number;
-  holidays?: string[];
+  holidays?: Array<string | { date?: string; name?: string }>;   // el Plan del Cronograma guarda {date, name}; ver holidayDates()
 }
 
 export interface SchedulePlanModule {

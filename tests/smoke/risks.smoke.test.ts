@@ -318,12 +318,12 @@ describe("Risk_Register.html (Registro de riesgos)", () => {
     await vista(dom, "analisis");
     const t = doc.getElementById("mainArea")!.textContent!.replace(/\s+/g, " ");
     expect(t).toMatch(/Riesgo de plazo — efecto en el fin del proyecto \(CPM\)/);
-    expect(t).toMatch(/base 273 d, fin 2027-07-21/);
-    expect(t).toMatch(/Plan \(sin riesgos\)\s*273 d\s*—\s*2027-07-21/);
+    expect(t).toMatch(/base 273 d, fin 2027-07-23/);
+    expect(t).toMatch(/Plan \(sin riesgos\)\s*273 d\s*—\s*2027-07-23/);
     const p80 = t.match(/P80\s*(\d+(?:\.\d+)?) d\s*([\d.]+) d\s*(\d{4}-\d{2}-\d{2})/)!;
     expect(Number(p80[1])).toBeGreaterThan(273);
     expect(Number(p80[2])).toBeCloseTo(Number(p80[1]) - 273, 0);                         // reserva = P80 − plan
-    expect(p80[3] > "2027-07-21").toBe(true);
+    expect(p80[3] > "2027-07-23").toBe(true);
     expect(t).toMatch(/6 evento\(s\) simulados sobre la red/);                           // los 6 abiertos con plazo: R-01, R-05, R-06, R-07, R-08, R-09
     const filasPlazo = Array.from(doc.querySelectorAll("#mainArea .card table.an")).find((x) => /Fin del proyecto/.test(x.textContent!))!;
     expect(filasPlazo.querySelectorAll("tbody tr").length).toBe(7);                      // 6 riesgos + la suma indicativa

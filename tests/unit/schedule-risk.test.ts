@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { cpm, scheduleNetwork } from "../../src/core/gpi-core";
 import { makeEngine, resolveTargets, scheduleImpactOf, delayPhrase, type Network, type NetNode } from "../../src/shared/schedule-risk";
 import { simulateEvents, simulateRange } from "../../src/shared/range-estimating";
-import { SAMPLE_START_DATE, sampleScheduleModules } from "../../src/shared/schedule-sample";
+import { SAMPLE_START_DATE, sampleScheduleModules, sampleSchedulePlan } from "../../src/shared/schedule-sample";
 import { riskEventsOf, blankRisk, normalizePlan } from "../../src/shared/risk-analysis";
 
 const N = (id: string, dur: number, leafId: string | null = "p"): NetNode => ({ id, code: id, name: "Act " + id, leafId, dur, hasDur: true, isMilestone: false });
@@ -176,7 +176,7 @@ describe("simulación integrada de costo y plazo", () => {
 });
 
 describe("ejemplo DISTRIB+: los riesgos del registro contra la red completa", () => {
-  const m = sampleScheduleModules(), n = scheduleNetwork(m.wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE);
+  const m = sampleScheduleModules(), n = scheduleNetwork(m.wbs, m.activities, null, m.schedule, sampleSchedulePlan(), SAMPLE_START_DATE);
   const e = makeEngine(n, cpm as never)!;
   it("motor sobre la red real: 273 días", () => { expect(e.base).toBe(273); });
   it("la simulación de 10 eventos con CPM real corre en tiempo razonable y es determinista", () => {

@@ -26,6 +26,52 @@
 		};
 	}
 	//#endregion
+	//#region src/shared/cost-estimate-sample.ts
+	var SAMPLE_UNIT_PRICES = {
+		a1: 12e3,
+		a2: 2e4,
+		a3: 3e3,
+		a4: 16250,
+		a5: 5e3,
+		a6: 800,
+		a7: 15e3,
+		a8: 6600,
+		a9: 45e3,
+		a10: 5e3,
+		a11: 35e3,
+		a12: 3500,
+		a13: 4e4,
+		a14: 24e3,
+		a15: 6550,
+		a16: 9750,
+		a17: 850,
+		a18: 35e3,
+		a19: 12e3,
+		a20: 23500,
+		a21: 40,
+		a22: 37,
+		a23: 24,
+		a24: 7,
+		a25: 65,
+		a26: 60,
+		a27: 5,
+		a28: 865,
+		a29: 125,
+		a30: 3500,
+		a31: 6500,
+		a33: 45,
+		a34: 25,
+		a35: 1018.75,
+		a36: 325,
+		a37: 370,
+		a38: 1e3,
+		a39: 25e3,
+		a40: 600,
+		a41: 12e3,
+		a42: 62e3,
+		a43: 3e4
+	};
+	//#endregion
 	//#region src/modules/cost-estimate/main.ts
 	var mode = "live";
 	var stateLive = { byActivity: {} };
@@ -607,50 +653,7 @@
 		};
 	})();
 	function sampleEstimate() {
-		return { byActivity: {
-			a1: 12e3,
-			a2: 2e4,
-			a3: 3e3,
-			a4: 4e3,
-			a5: 800,
-			a6: 800,
-			a7: 15e3,
-			a8: 6600,
-			a9: 45e3,
-			a10: 5e3,
-			a11: 35e3,
-			a12: 4e3,
-			a13: 25e3,
-			a14: 15e3,
-			a15: 6500,
-			a16: 1e4,
-			a17: 850,
-			a18: 35e3,
-			a19: 12e3,
-			a20: 23500,
-			a21: 40,
-			a22: 35,
-			a23: 25,
-			a24: 7,
-			a25: 45,
-			a26: 60,
-			a27: 4.5,
-			a28: 550,
-			a29: 85,
-			a30: 3500,
-			a31: 6500,
-			a33: 45,
-			a34: 25,
-			a35: 800,
-			a36: 350,
-			a37: 320,
-			a38: 350,
-			a39: 18e3,
-			a40: 300,
-			a41: 8e3,
-			a42: 25e3,
-			a43: 15e3
-		} };
+		return { byActivity: { ...SAMPLE_UNIT_PRICES } };
 	}
 	function enterSample() {
 		mode = "sample";

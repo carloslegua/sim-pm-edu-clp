@@ -119,7 +119,7 @@ function sampleState(): CharterState {
     boundaries: "El proyecto abarca desde la aprobación de esta acta hasta la firma del acta de entrega final (dossier de calidad incluido). Incluye la obtención de permisos y licencias municipales de construcción. No incluye la operación logística posterior, la contratación del personal de operación, ni la implementación del sistema de gestión de almacenes (WMS), que corresponden a la organización funcional de DISTRIB+ S.A.",
     objectives: [
       { dim: "Alcance", objective: "Entregar el almacén logístico completo y operativo según la ingeniería aprobada", criteria: "100% de los entregables de la EDT aceptados; dossier de calidad sin observaciones mayores" },
-      { dim: "Cronograma", objective: "Concluir el proyecto en 13 meses (julio de 2026 – julio de 2027)", criteria: "Entrega final a más tardar el 21/07/2027 (273 días laborables); SPI ≥ 0.95 en los cortes de control" },
+      { dim: "Cronograma", objective: "Concluir el proyecto en 13 meses (julio de 2026 – julio de 2027)", criteria: "Entrega final a más tardar el 23/07/2027 (273 días laborables); SPI ≥ 0.95 en los cortes de control" },
       { dim: "Costo", objective: "Ejecutar el proyecto dentro del CAPEX autorizado de USD 8.5 millones", criteria: "Costo final ≤ 100% del presupuesto (contingencia incluida); CPI ≥ 0.95" },
       { dim: "Calidad", objective: "Construir conforme al Reglamento Nacional de Edificaciones y a las especificaciones técnicas", criteria: "Pruebas de instalaciones conformes; cero no conformidades abiertas al cierre" }
     ],
@@ -138,11 +138,11 @@ function sampleState(): CharterState {
     ],
     milestones: [
       { name: "Acta de constitución aprobada", date: "2026-07-08" },
-      { name: "Fin de Ingeniería y Diseño", date: "2026-09-28" },
-      { name: "Fin de Procura (estructuras metálicas en obra)", date: "2026-10-15" },
-      { name: "Permisos y licencias municipales aprobados", date: "2026-11-09" },
-      { name: "Fin de Construcción", date: "2027-06-28" },
-      { name: "Entrega final y acta de cierre", date: "2027-07-21" }
+      { name: "Fin de Ingeniería y Diseño", date: "2026-09-30" },
+      { name: "Fin de Procura (estructuras metálicas en obra)", date: "2026-10-19" },
+      { name: "Permisos y licencias municipales aprobados", date: "2026-11-11" },
+      { name: "Fin de Construcción", date: "2027-06-30" },
+      { name: "Entrega final y acta de cierre", date: "2027-07-23" }
     ],
     budget: {
       amount: "8500000",
@@ -171,7 +171,7 @@ function sampleState(): CharterState {
     ],
     constraints: [
       "CAPEX máximo autorizado: USD 8.5 millones (incluida contingencia).",
-      "Fecha límite de entrega: 21/07/2027, antes de la campaña logística de fin de año de 2027.",
+      "Fecha límite de entrega: 23/07/2027, antes de la campaña logística de fin de año de 2027.",
       "La obra debe ejecutarse sin interrumpir la operación del local vecino de DISTRIB+ S.A.",
       "Cumplimiento obligatorio de la normativa ambiental (OEFA) y laboral (SUNAFIL)."
     ],
@@ -619,7 +619,8 @@ async function importMilestonesFromWbs(): Promise<void> {
     await showAlert("Esta acción requiere un proyecto activo con una EDT cargada. Ábrelo desde el Panel de Control y completa WBS Builder primero.");
     return;
   }
-  const wbs = window.GPI.getModule("wbs");
+  // La EDT efectiva: con cronograma, las fechas del CPM (no las manuales de la EDT, que no se actualizan).
+  const wbs = window.GPI.util.effectiveWbs();
   const phases = window.GPI.util.wbsPhases(wbs || ({} as WbsModule));
   if (!phases.length) {
     await showAlert("El proyecto activo aún no tiene fases en la EDT. Complétala primero en WBS Builder.");

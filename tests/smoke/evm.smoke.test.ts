@@ -53,11 +53,11 @@ const proyecto = (extra: Record<string, unknown> = {}, meta: Record<string, unkn
 });
 
 describe("Valor_Ganado.html (Valor Ganado / EVM)", () => {
-  it("modo independiente: arranca con el ejemplo DISTRIB+ y su cifras salen de la red y de los costos (corte 2026-10-30)", async () => {
+  it("modo independiente: arranca con el ejemplo DISTRIB+ y su cifras salen de la red y de los costos (corte 2026-11-03)", async () => {
     const dom = await abrir(), doc = dom.window.document;
     expect(doc.querySelectorAll("tr.evrow").length).toBe(18);
     const t = top(doc);
-    expect(t).toMatch(/BAC \(trabajo\) \$ 7,100,000/);
+    expect(t).toMatch(/BAC del trabajo \$ 7,100,000/);
     expect(t).toMatch(/PV — planificado \$ 3,439,533 48\.4 % del BAC/);
     expect(t).toMatch(/EV — ganado \$ 3,182,500 44\.8 % del BAC/);
     expect(t).toMatch(/AC — costo real \$ 3,253,500/);
@@ -103,7 +103,7 @@ describe("Valor_Ganado.html (Valor Ganado / EVM)", () => {
 
   it("cambiar la fecha de corte mueve el PV a lo que la línea base pedía a ese día; antes del inicio no hay nada planificado", async () => {
     const dom = await abrir(), doc = dom.window.document;
-    poner(dom, doc.getElementById("statusDate")!, "2026-08-14", "change");                               // día 30: PV 145.563
+    poner(dom, doc.getElementById("statusDate")!, "2026-08-18", "change");                               // día 30 (el calendario del caso descansa el 28 y 29 de julio): PV 145.563
     expect(top(doc)).toMatch(/PV — planificado \$ 145,563/); expect(top(doc)).toMatch(/Tiempo real transcurrido \(AT\) 30 d/);
     poner(dom, doc.getElementById("statusDate")!, "2026-06-01", "change");
     expect(top(doc)).toMatch(/PV — planificado \$ 0/);
@@ -113,19 +113,19 @@ describe("Valor_Ganado.html (Valor Ganado / EVM)", () => {
   it("registrar un corte lo agrega al historial y a la curva S (uno por fecha: repetir la fecha lo reemplaza); se puede quitar", async () => {
     const dom = await abrir(), doc = dom.window.document;
     expect(doc.querySelectorAll("#evHist tbody tr").length).toBe(3);
-    (doc.getElementById("btnRegister") as HTMLElement).click();                                        // corte del 2026-10-30
+    (doc.getElementById("btnRegister") as HTMLElement).click();                                        // corte del 2026-11-03
     expect(doc.querySelectorAll("#evHist tbody tr").length).toBe(4);
-    expect(doc.querySelector("#evHist tbody tr")!.textContent).toMatch(/2026-10-30.*85 d.*\$ 3,439,533.*\$ 3,182,500.*\$ 3,253,500.*0\.98.*0\.93/);   // el más reciente primero
+    expect(doc.querySelector("#evHist tbody tr")!.textContent).toMatch(/2026-11-03.*85 d.*\$ 3,439,533.*\$ 3,182,500.*\$ 3,253,500.*0\.98.*0\.93/);   // el más reciente primero
     (doc.getElementById("btnRegister") as HTMLElement).click();
     expect(doc.querySelectorAll("#evHist tbody tr").length).toBe(4);                                   // misma fecha: reemplaza
-    (doc.querySelector('#evHist [data-del="2026-10-30"]') as HTMLElement).click();
+    (doc.querySelector('#evHist [data-del="2026-11-03"]') as HTMLElement).click();
     expect(doc.querySelectorAll("#evHist tbody tr").length).toBe(3);
   });
 
   it("proyecto conectado: arranca EN BLANCO (nada reportado); el BAC es el costo del trabajo de Estimar los Costos; el PV sale de su red", async () => {
     const dom = await abrir(proyecto()), doc = dom.window.document;
     expect(doc.querySelectorAll("tr.evrow").length).toBe(2);
-    expect(top(doc)).toMatch(/BAC \(trabajo\) S\/ 2,000/);                                            // 10×100 + 5×200
+    expect(top(doc)).toMatch(/BAC del trabajo S\/ 2,000/);                                            // 10×100 + 5×200
     poner(dom, doc.getElementById("statusDate")!, "2026-07-17", "change");                               // 10 días laborables: el paquete 1.1 (a1) debía estar completo
     expect(top(doc)).toMatch(/PV — planificado S\/ 1,000/);
     expect(top(doc)).toMatch(/EV — ganado S\/ 0/);                                                    // sin avance reportado
@@ -153,6 +153,22 @@ describe("Valor_Ganado.html (Valor Ganado / EVM)", () => {
     expect(celda(doc, "1.1", "ev")).toBe("S/ 0");
   });
 
+  it("REPRO (auditoría, alta): una orden aprobada con contingencia pasa al presupuesto de SU paquete; sin paquete se avisa (antes se contaba dos veces)", async () => {
+    const seed = proyecto({ cost: { budget: { computed: { bac: 3000, cont: 1000 } }, changeTotals: { contingencyAvailable: 200 }, changeOrders: [
+      { id: "OC-001", status: "Aprobada", fund: "Contingencia", cost: 500, wbsId: "w1", wbsCode: "1.1" },
+      { id: "OC-002", status: "Aprobada", fund: "Contingencia", cost: 300 },                                           // sin paquete
+      { id: "OC-003", status: "Pendiente", fund: "Contingencia", cost: 900, wbsId: "w2" },                              // pendiente: no
+      { id: "OC-004", status: "Aprobada", fund: "Reserva de gestión", cost: 700, wbsId: "w2" }] } });                  // sin incorporar a la línea base: aún no
+    const dom = await abrir(seed), doc = dom.window.document, t = top(doc);
+    expect(t).toMatch(/BAC del trabajo S\/ 2,500 incluye 1 orden\(es\) de cambio aprobada\(s\)/);                  // 2.000 + 500
+    expect(doc.querySelector("tr.evrow")!.textContent).toMatch(/Estimar los Costos \+ OC-001/);
+    expect(t).toMatch(/sin paquete de trabajo: OC-002 \(300\)/);
+    poner(dom, doc.getElementById("statusDate")!, "2026-07-17", "change");
+    poner(dom, campo(doc, "1.1", "percent"), "100"); poner(dom, campo(doc, "1.1", "ac"), "1500");                    // el refuerzo se gastó: 1.000 + 500
+    expect(top(doc)).toMatch(/CPI 1\.00/);                                                                            // antes: 1.000 / 1.500 = 0,67 (sobrecosto que la contingencia ya cubría)
+    expect(top(doc)).toMatch(/lo ya aprobado con cargo a ella está dentro del BAC del trabajo|Contingencia disponible/);
+  });
+
   it("usa la LÍNEA BASE del cronograma si existe (PV congelado) y lo dice; sin ella avisa que usa el cronograma vigente", async () => {
     const baseline = { frozen: true, version: "LB-1", date: "2026-07-06", snapshot: { projectDuration: 30, startDate: "2026-07-06", finishDate: "2026-08-14", nearCriticalDays: 5, rows: [
       { id: "a1", code: "1.1.1", name: "Excavar", isMilestone: false, dur: 10, es: 0, ef: 20, tf: 0, critical: true },      // la línea base era MÁS lenta que la red actual
@@ -177,7 +193,7 @@ describe("Valor_Ganado.html (Valor Ganado / EVM)", () => {
     schedule: { linkCounter: 2, import: null, baseline, links: [{ id: "L1", from: "a1", to: "a2", type: "FS", lag: 0, lagUnit: "d" }] }, costEstimate: { byActivity: estimate },
     evm: { statusDate: "2026-07-17", percent: { w1: 50 }, ac: { w1: 600 }, techniques: {}, reports: [] }
   }, meta);
-  const cifras = (doc: Document) => { const t = top(doc), g = (re: RegExp) => (t.match(re) || [])[1] || "—"; return { bac: g(/BAC \(trabajo\) \S+ ([\d,]+)/), pv: g(/PV — planificado \S+ ([\d,]+)/), ev: g(/EV — ganado \S+ ([\d,]+)/), cpi: g(/CPI ([\d.]+)/) }; };
+  const cifras = (doc: Document) => { const t = top(doc), g = (re: RegExp) => (t.match(re) || [])[1] || "—"; return { bac: g(/BAC del trabajo \S+ ([\d,]+)/), pv: g(/PV — planificado \S+ ([\d,]+)/), ev: g(/EV — ganado \S+ ([\d,]+)/), cpi: g(/CPI ([\d.]+)/) }; };
 
   it("REPRO (alta) con la línea base CONGELADA: duplicar la estimación NO cambia el CPI (0,83 se queda en 0,83, sigue ROJO) y se avisa qué difiere", async () => {
     const base = cifras((await abrir(conBase(lb(REF), { a1: 100, a2: 200 }))).window.document);
@@ -223,7 +239,7 @@ describe("Valor_Ganado.html (Valor Ganado / EVM)", () => {
     const dom = await abrir(proyecto()), doc = dom.window.document;
     (doc.getElementById("btnSample") as HTMLElement).click(); await esperar(30);
     (doc.getElementById("modalConfirmBtn") as HTMLElement).click(); await esperar(50);
-    expect((doc.getElementById("statusDate") as HTMLInputElement).value).toBe("2026-10-30");
+    expect((doc.getElementById("statusDate") as HTMLInputElement).value).toBe("2026-11-03");
     expect((campo(doc, "1.1", "percent") as HTMLInputElement).value).toBe("100");                       // 1.1 existe en el ejemplo y en el proyecto
     expect((campo(doc, "1.1", "ac") as HTMLInputElement).value).toBe("12000");
     expect(doc.querySelectorAll("#evHist tbody tr").length).toBe(3);

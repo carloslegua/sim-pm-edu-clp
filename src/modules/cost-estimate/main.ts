@@ -33,6 +33,7 @@
 import type * as GpiCore from "../../core/gpi-core";
 import type { ActivitiesModule, ActivityItem, CostEstimateModule, EditSession, MilestoneItem, ProjectMeta, WbsModule } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
+import { SAMPLE_UNIT_PRICES } from "../../shared/cost-estimate-sample";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -527,35 +528,9 @@ const SAMPLE_ACTIVITIES: ActivitiesModule = (function () {
   return { byLeaf: by, idCounter: n + 1, milestones };
 })();
 
-// Precio unitario de ejemplo por actividad (ids a1..a43, ver SAMPLE_ACTIVITIES
-// arriba). No apunta a reproducir el costo total del WBS de ejemplo (son
-// precios ilustrativos por unidad, no calibrados contra ese total) -- ver
-// ARCHITECTURE.md para el total resultante. La actividad "Instalación de
-// cobertura TR-4" (a20) se deja deliberadamente SIN precio: es el único
-// paquete (4.3 Estructura y cobertura) que queda "parcial" en el ejemplo,
-// para demostrar ese estado en la UI y en el bloqueo de Costo del WBS.
+// Precios unitarios del ejemplo: src/shared/cost-estimate-sample.ts (calibrados contra el costo de cada paquete de la EDT).
 function sampleEstimate(): EstimateState {
-  const byActivity: Record<string, number> = {
-    a1: 12000,                          // Acta de constitución (doc x1)
-    a2: 20000, a3: 3000,                // Plan de gestión (doc x1) + Planes subsidiarios (doc x6)
-    a4: 4000, a5: 800,                  // Informes mensuales (doc x4) + Reuniones de control (reunión x16)
-    a6: 800, a7: 15000, a8: 6600,       // Calicatas (und x8) + Ensayos (glb x1) + Informe geotécnico (doc x1)
-    a9: 45000, a10: 5000,               // Memoria de cálculo estructural (doc x1) + Planos estructurales (lám x24)
-    a11: 35000, a12: 4000,              // Memoria eléctrica/sanitaria (doc x1) + Planos eléctricos/sanitarios (lám x18)
-    a13: 25000, a14: 15000,             // Licencia de edificación (trámite x1) + Certificado ITSE (trámite x1)
-    a15: 6500, a16: 10000,              // Fabricación estructuras (ton x260) + Transporte a obra (viaje x12)
-    a17: 850, a18: 35000,               // Cemento y agregados (ton x800) + Materiales varios (glb x1)
-    a19: 12000, a20: 23500,             // Tableros y equipos eléctricos (und x15) + Equipos sanitarios (und x10)
-    a21: 40, a22: 35, a23: 25, a24: 7,  // Movimiento de tierras (4 actividades, m³/m²)
-    a25: 45, a26: 60, a27: 4.5, a28: 550, a29: 85, // Cimentaciones (5 actividades)
-    a30: 3500, a31: 6500,               // Estructura y cobertura (2 de 3 -- a32 sin precio, a propósito)
-    a33: 45, a34: 25, a35: 800,         // Acabados y cerramientos (3 actividades)
-    a36: 350, a37: 320,                 // Instalaciones MEP (2 actividades)
-    a38: 350, a39: 18000,               // Pruebas de instalaciones (2 actividades)
-    a40: 300, a41: 8000,                // Capacitación al cliente (2 actividades)
-    a42: 25000, a43: 15000              // Acta de entrega y cierre (2 actividades)
-  };
-  return { byActivity };
+  return { byActivity: { ...SAMPLE_UNIT_PRICES } };
 }
 
 function enterSample(): void {

@@ -158,7 +158,8 @@ const parse = (s: string): Date | null => { const m = /^(\d{4})-(\d{2})-(\d{2})/
 export function workingDaysThrough(startISO: string, dateISO: string, cal: EvmCalendar | null | undefined): number {
   const s = parse(startISO), e = parse(dateISO); if (!s || !e || e.getTime() < s.getTime()) return 0;
   const work: Record<number, boolean> = {}; ((cal && cal.workDayIdx && cal.workDayIdx.length) ? cal.workDayIdx : [1, 2, 3, 4, 5]).forEach((d) => { work[d] = true; });
-  const hol: Record<string, boolean> = {}; ((cal && cal.holidays) || []).forEach((h) => { hol[String(h).slice(0, 10)] = true; });
+  // Feriados como "YYYY-MM-DD" o como {date, name} (así los guarda el Plan del Cronograma).
+  const hol: Record<string, boolean> = {}; ((cal && cal.holidays) || []).forEach((h: unknown) => { const d = (typeof h === "string" ? h : h && typeof h === "object" ? String((h as { date?: unknown }).date || "") : "").slice(0, 10); if (d) hol[d] = true; });
   let n = 0; const d = new Date(s.getTime()), guard = 20000;
   for (let i = 0; i < guard && d.getTime() <= e.getTime(); i++) { if (work[d.getUTCDay()] && !hol[isoOf(d)]) n++; d.setUTCDate(d.getUTCDate() + 1); }
   return n;

@@ -45,6 +45,8 @@ export interface CoOrder {
   // Vínculo con el Registro de Riesgos (solo tiene sentido si kind = "riesgo"): id del riesgo y su código (foto,
   // para mostrarlo aunque el registro no esté a mano).
   riskId?: string; riskCode?: string;
+  // Paquete de la EDT que ejecuta el cambio (opcional): Valor Ganado suma ahí el monto de la orden aprobada (ver evm-reference.ts).
+  wbsId?: string; wbsCode?: string;
   [key: string]: unknown;
 }
 export interface CoBudget { cont: number; mgmt: number; bac: number; }

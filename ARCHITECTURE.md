@@ -1358,13 +1358,25 @@ todo texto interpolado escapado). Con un proyecto activo arranca **en blanco**
   el estado es el peor indicador. La sobrecosto pronosticado (VAC típico) se compara con la
   contingencia disponible de Costos. Una variación fuera de umbral dispara análisis,
   pronóstico y decisión de respuesta: no obliga a un cambio de línea base.
+- **Órdenes de cambio aprobadas en el presupuesto del trabajo** (auditoría 2026-09-25, alta;
+  `approvedTransfers` en `src/shared/evm-reference.ts`). El «BAC del trabajo» del EVM no es la
+  «línea base de costos» de Costos (esta incluye la contingencia y la escalación). Una orden de
+  Costos aprobada con cargo a la contingencia, o una con reserva de gestión o fondos adicionales ya
+  incorporada con una versión LB-n, suma su monto al BAC del paquete que la ejecuta (campo opcional
+  `wbsId`/`wbsCode` de la orden, que se elige en Costos) y se distribuye en el tiempo como el resto.
+  Antes el gasto de la orden entraba al costo real como sobrecosto y el VAC se comparaba con una
+  contingencia que ya la había descontado: la misma orden se contaba dos veces. Se aplica sobre la
+  referencia elegida (congelada o vigente), después de medir su deriva; una orden aprobada sin paquete
+  se avisa en el EVM y en Costos. El presupuesto por paquete usa la misma regla que WBS Builder:
+  Estimar los Costos solo si el estimado del paquete está completo; si no, el costo de la EDT.
 - **Historial de cortes** (`reports`, uno por fecha) y curva S (PV, EV, AC). Avisos de
   calidad de datos: sin línea base, paquetes sin actividades, avance sin reportar,
   LOE alto, EV ≫ PV (avance de otra fecha), EV > BAC.
 - **Ejemplo DISTRIB+ ampliado, mismo caso** (`src/shared/evm-sample.ts`): 18 paquetes de
-  WBS Builder (Σ 7.100.000), red de 273 d; corte **2026-10-30 (día 85)**: PV 3.439.533 ·
-  EV 3.182.500 · AC 3.253.500 → **SPI 0,925 (ámbar), CPI 0,978 (verde), CV −71.000
-  (ámbar)**, EAC típico 7.258.397, fin pronosticado ≈ 2027-08-16 (plan 2027-07-21). La
+  WBS Builder (Σ 7.100.000), red de 273 d; corte **2026-11-03 (día 85 con el calendario
+  del caso)**: PV 3.439.533 · EV 3.182.500 · AC 3.253.500 → **SPI 0,925 (ámbar), CPI 0,978
+  (verde), CV −71.000 (ámbar)**, EAC típico 7.258.397, fin pronosticado ≈ 2027-08-18 (plan
+  2027-07-23). La
   historia cuadra con los riesgos: 2.4 Permisos (licencia retrasada, R-01) con 0/100 no
   gana hasta emitirse; 3.1 Estructuras (R-08 fabricación y R-02 acero) al 90 % y sobre el
   presupuesto; 1.3 Informes es LOE. Prueba de oro `evm-sample.test.ts`; smoke (12) y e2e en
@@ -1599,7 +1611,8 @@ avisa, sin inventar nada (regla #5).
 - **Límites declarados**: no sustituye el contenido de los planes subsidiarios (los muestra
   resumidos); el «Objetivo de negocio» de la matriz es el RAN del Acta al que responde el
   requisito. Smoke (6) y e2e (2) en Chrome real: sobre el proyecto armado con los botones reales lee
-  la misma red que Cronograma/CPM (273 d, fin 2027-07-21).
+  la misma red que Cronograma/CPM (273 d; fin 2027-07-21 sin el Plan del Cronograma, que usa el
+  calendario provisional lunes a viernes sin feriados, y 2027-07-23 con el calendario del caso).
 
 **Risk_Register.html** (módulo `risks`, PMBOK + AACE) — primer módulo
 **nuevo** posterior a la migración (no es un port): patrón de Stakeholder
@@ -1684,7 +1697,8 @@ el CPM real (ver abajo).
     independiente los módulos le pasan la **red DISTRIB+ completa** de
     `src/shared/schedule-sample.ts` (43 actividades, 3 hitos, 51 enlaces), copia de la
     que siembran «Definir las Actividades» y Cronograma/CPM; la **prueba de oro**
-    `tests/unit/schedule-sample.test.ts` (273 d, 34 críticos, fin 2027-07-21) impide
+    `tests/unit/schedule-sample.test.ts` (273 d, 34 críticos, fin 2027-07-23 con el
+    calendario del caso, `SAMPLE_CALENDAR` / `sampleSchedulePlan()`) impide
     que se desalinee, y el e2e `risk-schedule-integration.spec.ts` la contrasta en
     Chrome real con el proyecto armado con los botones reales.
   - **Hallazgos** R19 (impacto en plazo que no se puede ubicar), R20 (la holgura
@@ -2097,7 +2111,20 @@ Estimating»; la RP 118R-21 cubre rangos + Monte Carlo de riesgos inherentes) y
     `cpmLocksDates` bloquea entonces los campos de fecha y duración en
     la UI ("🔗 Tomado del Cronograma"). Sin esa ruta crítica calculable,
     los campos siguen editables a mano y se etiquetan "📐 Estimado".
-    Mismo patrón que RACI→Responsable, pero para fechas.
+    Mismo patrón que RACI→Responsable, pero para fechas. La red es la MISMA
+    que la de Cronograma/CPM (`scheduleNetwork`: actividades + hitos y sus
+    enlaces): hasta el 2026-09-25 se armaba sin los hitos y los enlaces que
+    pasan por ellos se perdían (con el caso completo la EDT terminaba el
+    2027-04-06 en vez del fin del CPM).
+  - **Datos derivados = se calculan al leer, no se guardan**: los Responsables
+    (RACI), las fechas (CPM) y el costo (Estimar los Costos) que muestra WBS
+    Builder no se persisten en la EDT (la sesión los toma como «lo cargado»).
+    Quien resuma la EDT —Panel, Acta («Importar hitos»), Plan del Cronograma,
+    Costos («Traer de la EDT»), Plan para la Dirección, Calidad, Adquisiciones—
+    debe leerla con `GPI.util.effectiveWbs()`, que aplica las tres
+    derivaciones al proyecto activo; `getModule("wbs")` devuelve los valores
+    manuales, que nadie actualiza (auditoría 2026-09-25, alta: el Panel veía un
+    proyecto que terminaba el 2026-11-06).
   - **Costo**: el costo vive a nivel de ACTIVIDAD, no de paquete — un
     paquete no tiene Unidad/Cantidad propias. Si el paquete tiene
     actividades definidas (`activities`) y TODAS ellas tienen un
@@ -2285,15 +2312,17 @@ Estimating»; la RP 118R-21 cubre rangos + Monte Carlo de riesgos inherentes) y
   - **Ejemplo DISTRIB+ ampliado** (mismos 18 paquetes y la red de 273 d): base de
     precios 2026-07-01; composición por paquete (Dirección e Ingeniería: mano de
     obra; Procura: materiales/equipos; MEP: subcontrato…); precios fijados en 3.1
-    Estructuras metálicas (2026-09-15) y 3.3 Equipos eléctricos (2026-09-28).
-    Cifras de oro (`escalation-sample.test.ts`): escalación central sobre el costo
-    base **81.463** (1,15 %; fecha media del gasto 2026-12-19; por año 22.819 en
-    2026 y 58.644 en 2027); con el retraso del cronograma y la contingencia
-    escalada, central 91.239, **P70 = 127.601** (financiado), P50 115.270, P80
-    135.352, P90 146.622 — el central equivale al P12: con el retraso probable del
-    caso, escalar más que el central es lo esperable. El BAC del ejemplo pasa de
-    8.075.181 (método simple) a **8.079.601** y el presupuesto total (con la
-    reserva de gestión) a **8.483.582**. **Las tasas ilustrativas se calibraron para
+    Estructuras metálicas (2026-09-15) y 3.3 Equipos eléctricos (2026-09-30, al
+    iniciar su compra). Cifras de oro (`escalation-sample.test.ts`, con el calendario
+    del caso): escalación central sobre el costo base **82.489** (1,16 %; fecha media
+    del gasto 2026-12-21; por año 22.319 en 2026 y 60.170 en 2027); con el retraso del
+    cronograma y la contingencia escalada, central 92.388, **P70 = 129.108**
+    (financiado), P50 116.648, P80 136.949, P90 148.351 — el central equivale al P12:
+    con el retraso probable del caso, escalar más que el central es lo esperable. El
+    BAC del ejemplo es **8.081.108** y el presupuesto total (con la reserva de gestión)
+    **8.485.163**, dentro del CAPEX de 8.500.000. (Antes del calendario único del caso,
+    2026-09-25, eran 81.463 / 127.601 / 8.079.601 / 8.483.582: el gasto se corre dos días
+    por los feriados del 28 y 29 de julio.) **Las tasas ilustrativas se calibraron para
     que el caso siga coherente**: con tasas mayores el total superaba el CAPEX de
     USD 8,5 M que fijan el Acta y el Enunciado (la BOE lo concilia y lo avisa, B6).
   - Pruebas: `escalation.test.ts` (28, fórmulas analíticas), `escalation-sample
@@ -2924,7 +2953,7 @@ vez que se agrega o toca un módulo:
 
 - **Proyecto**: "DISTRIB+ S.A. — Almacén Lurín" (Lima), 12.000 m² en
   Lurín. Código de manager `DPLU-2026`. Inicio **2026-07-06**, cierre
-  **2027-07-21** (fin de la ruta crítica del CPM: 273 días laborables). CAPEX **USD 8.500.000** (moneda del proyecto: USD en
+  **2027-07-23** (fin de la ruta crítica del CPM: 273 días laborables con el calendario del caso). CAPEX **USD 8.500.000** (moneda del proyecto: USD en
   todos los módulos que la mencionan — `cost` debe arrancar en USD por
   defecto también, no en PEN, aunque su monto base 7.100.000 numérico
   coincida con el total del WBS).
@@ -2961,17 +2990,19 @@ vez que se agrega o toca un módulo:
   actividad** (no por paquete — corregido tras la primera versión de
   este módulo). Reutiliza literalmente `SAMPLE_WBS` y
   `sampleActivities()` de `activities/main.ts` (mismos 18 paquetes,
-  TODOS con actividades) — esto ya no reproduce el total del WBS
-  (S/ 7.100.000), que quedó calibrado a nivel de paquete antes de la
-  corrección a nivel de actividad; los precios de ejemplo son
-  ilustrativos por unidad, no recalibrados contra ese total. La
-  actividad "Instalación de cobertura TR-4" del paquete 4.3 se deja
-  deliberadamente sin precio, para demostrar el estado "parcial" en la
-  UI — 4.3 es el único de los 18 paquetes que NO queda con estimado
-  completo (y por lo tanto el único cuyo Costo no se bloquea en WBS
-  Builder en modo ejemplo). Resultado: **42/43 actividades con precio
-  (98%), 17/18 paquetes con estimado completo, total S/ 6.160.500**. Ver
-  `sampleEstimate()` para el precio unitario exacto de cada actividad
+  TODOS con actividades). Los precios (`src/shared/cost-estimate-sample.ts`)
+  están **calibrados contra el costo de cada paquete de la EDT** (auditoría,
+  2026-09-25): cada paquete con estimado completo suma exactamente su costo
+  en WBS Builder, así que cargar este ejemplo no cambia ningún costo, el costo
+  base de Costos ni el valor ganado (antes sumaban 6.160.500 y 10 de 18
+  paquetes diferían). La actividad "Instalación de cobertura TR-4" del paquete
+  4.3 se deja deliberadamente sin precio, para demostrar el estado "parcial" en
+  la UI — 4.3 es el único de los 18 paquetes que NO queda con estimado completo
+  (y por lo tanto conserva su costo de la EDT, 1.165.000: sus otras dos
+  actividades suman 792.000). Resultado: **42/43 actividades con precio (98%),
+  17/18 paquetes con estimado completo, total del estimado S/ 6.727.000 (= 7.100.000
+  − los 373.000 que le faltan a 4.3)**; prueba de oro `tests/unit/effective-wbs.test.ts`.
+  Ver `SAMPLE_UNIT_PRICES` para el precio unitario exacto de cada actividad
   (ids `a1`…`a43` — la numeración de ids NO coincide entre este archivo
   y `activities/main.ts`: cada uno construye su propia copia local en
   orden distinto, y el emparejamiento entre ambos para "Cargar ejemplo
@@ -3017,7 +3048,16 @@ vez que se agrega o toca un módulo:
   códigos (Costos ya cita R-03).
 - **Adquisiciones** (`procurement`, `src/shared/procurement-sample.ts`): PR-01…PR-05 sobre 3.1, 3.2,
   3.3, 4.5 y 4.1/4.2; fechas requeridas y plazos = las del CPM; valor = costo de la EDT; proveedores
-  = Proveedor A/B/C y Subcontrata MEP del OBS; fecha de corte 2026-08-03 (aprobación del plan).
+  = Proveedor A/B/C y Subcontrata MEP del OBS; fecha de corte 2026-08-05 (aprobación del plan).
+- **Calendario del caso** (`SAMPLE_CALENDAR` / `sampleSchedulePlan()` en `src/shared/schedule-sample.ts`,
+  UNA sola fuente): lunes a viernes, 8 h, feriados 2026-07-28, 2026-07-29 (Fiestas Patrias) y
+  2026-08-30 (Santa Rosa de Lima, domingo). Lo usan el «Cargar ejemplo» del Plan de Gestión del
+  Cronograma y los modos independientes que corren el CPM. Antes el Plan traía lunes a sábado (fin del
+  CPM 2027-05-19) y el resto del caso, lunes a viernes sin feriados (2027-07-21); además los feriados
+  del Plan (`{date, name}`) nunca se aplicaban (`holidayDates()` del núcleo los normaliza).
+- **Órdenes de cambio de Costos** (solo modo independiente): OC-001 refuerzo de cimentación (R-03,
+  contingencia, aprobada el 2026-09-02, paquete **4.2**), OC-002 ampliación de sala eléctrica (4.5) y
+  OC-003 demolición de losa (4.1); mismos paquetes que CR-001…003 de Control de Cambios.
 - **Calidad** (`quality`, `src/shared/quality-sample.ts`): QC-01…QC-17 (un control por paquete
   1.1…5.3 salvo 1.3 LOE, con el criterio del diccionario de `wbs-sample.ts`), QM-01…QM-05,
   responsables = puestos del OBS (nombre exacto) y costo de la calidad ilustrativo de 350.000.
@@ -3032,17 +3072,19 @@ vez que se agrega o toca un módulo:
   ids en vez de inventar los suyos.
 - **Hitos/fechas clave** (`schedule-plan`, `charter`, Panel, Enunciado del
   Alcance: **alineados con el CPM real**, fecha de cada hito = el fin del
-  paquete que lo cierra): aprobación del plan 2026-08-03 (1.2), fin
-  Ingeniería 2026-09-28 (2.2), estructuras metálicas en obra 2026-10-15 (3.1),
-  fin Procura 2026-11-02 (lo cierra 3.2), permisos 2026-11-09 (2.4; habilita el
-  inicio de 4.1), fin cimentaciones 2027-02-02 (4.2, hito H2), fin Construcción
-  2027-06-28 (4.4), entrega final **2027-07-21** (5.3, hito H3). Feriados de
-  ejemplo: 2026-07-28/29, 2026-08-30. *Antes* estos hitos usaban las fechas
+  paquete que lo cierra, con el calendario del caso): aprobación del plan
+  2026-08-05 (1.2), fin Ingeniería 2026-09-30 (2.2), estructuras metálicas en obra
+  2026-10-19 (3.1), fin Procura 2026-11-04 (lo cierra 3.2), permisos 2026-11-11
+  (2.4; habilita el inicio de 4.1), fin cimentaciones 2027-02-04 (4.2, hito H2), fin
+  Construcción 2027-06-30 (4.4), entrega final **2027-07-23** (5.3, hito H3). El
+  estudio de suelos (2.1) termina el 2026-08-31: R-03 se materializa ese día y
+  CR-001 / OC-001 se deciden el 2026-09-02. *Antes* estos hitos usaban las fechas
   ilustrativas del WBS Builder manual (cierre 2026-11-06, «4 meses») y NO
   coincidían con el CPM; un integrador (Plan para la Dirección) lo dejó en
   evidencia y se alinearon. Las fechas manuales de los 18 paquetes del WBS
   Builder independiente siguen siendo un estimado manual (con actividades y
-  Cronograma/CPM el proyecto real las reemplaza por las del CPM).
+  Cronograma/CPM el proyecto real las reemplaza por las del CPM; quien resume la
+  EDT la lee con `GPI.util.effectiveWbs()`, nunca con `getModule("wbs")`).
 - **Cronograma / CPM del proyecto real** (`cronograma-cpm`,
   `SAMPLE_LINK_PLAN` — ver su sección más arriba): 51 enlaces que cubren
   las 43 actividades reales sembradas por "Cargar ejemplo en el proyecto"
@@ -3050,7 +3092,8 @@ vez que se agrega o toca un módulo:
   reales de duración 0. Con el proyecto DISTRIB+ completo (WBS +
   actividades + hitos + estos enlaces) e inicio 2026-07-06: **273 días
   laborables, 34 actividades críticas (31 actividades + los 3 hitos, los
-  tres cayeron en la ruta crítica), fin 2027-07-21** — la duración y la
+  tres cayeron en la ruta crítica), fin 2027-07-23 con el calendario del caso**
+  (2027-07-21 si el proyecto aún no tiene Plan del Cronograma) — la duración y la
   fecha de fin no cambian al agregar los hitos (duración 0 no suma
   tiempo), solo crece el conteo de "críticas". Estas fechas son las que
   realmente calcula el CPM sobre la red completa; los hitos de

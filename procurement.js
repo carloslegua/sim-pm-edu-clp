@@ -225,7 +225,7 @@
 	}
 	var rolesOf = (G) => Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)));
 	function gatherProcurementFacts(G) {
-		const wbs = G.getModule("wbs"), nodes = rec$1(wbs && wbs.nodes), obs = G.util.obsNodes(G.getModule("obs")), sk = rec$1(G.getModule("stakeholders")).stakeholders;
+		const wbs = G.util.effectiveWbs(), nodes = rec$1(wbs && wbs.nodes), obs = G.util.obsNodes(G.getModule("obs")), sk = rec$1(G.getModule("stakeholders")).stakeholders;
 		const cost = G.getModule("cost"), cl = Number(String(cost && cost.estimate && cost.estimate.class).replace(/\D/g, ""));
 		return {
 			leaves: G.util.wbsLeaves(wbs).map((l) => ({
@@ -659,7 +659,7 @@
 			response: "Estudio de suelos ampliado y refuerzo de cimentación (orden de cambio OC-001, financiada con contingencia).",
 			trigger: "Resultados del estudio de suelos (2.1)",
 			responseOwner: "Jefe de Ingeniería",
-			materializedOn: "2026-08-03",
+			materializedOn: "2026-08-31",
 			actualCost: 18e4,
 			actualDelay: 8
 		},
@@ -960,7 +960,7 @@
 	}
 	//#endregion
 	//#region src/shared/procurement-sample.ts
-	var SAMPLE_AS_OF = "2026-08-03";
+	var SAMPLE_AS_OF = "2026-08-05";
 	var SAMPLE_SUPPLIERS = [
 		"Proveedor A",
 		"Proveedor B",
@@ -1016,8 +1016,8 @@
 			"Concurso por calidad y costo",
 			CRITERIA(35, 35, 20, 10),
 			182e4,
-			"2026-10-15",
-			16,
+			"2026-10-19",
+			18,
 			45,
 			"Proveedor A",
 			"Convocada",
@@ -1038,7 +1038,7 @@
 			"Concurso de precios",
 			CRITERIA(50, 20, 20, 10),
 			715e3,
-			"2026-11-02",
+			"2026-11-04",
 			20,
 			30,
 			"Proveedor B",
@@ -1056,8 +1056,8 @@
 			"Invitación restringida",
 			CRITERIA(40, 30, 20, 10),
 			415e3,
-			"2026-10-09",
-			11,
+			"2026-10-13",
+			13,
 			20,
 			"Proveedor C",
 			"Planificada",
@@ -1074,8 +1074,8 @@
 			"Invitación restringida",
 			CRITERIA(40, 30, 10, 20),
 			485e3,
-			"2027-04-14",
-			48,
+			"2027-04-16",
+			46,
 			60,
 			"Subcontrata MEP",
 			"Planificada",
@@ -1092,7 +1092,7 @@
 			"Concurso de precios",
 			CRITERIA(50, 30, 10, 10),
 			95e3,
-			"2026-11-10",
+			"2026-11-12",
 			10,
 			30,
 			"",

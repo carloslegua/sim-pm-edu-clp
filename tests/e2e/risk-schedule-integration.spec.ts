@@ -2,7 +2,7 @@
 // y Cronograma/CPM), no una copia. Lo que ningún smoke jsdom puede probar de punta a punta:
 //  1. El proyecto DISTRIB+ se arma con los botones reales «Cargar ejemplo» de WBS Builder, Definir las Actividades y
 //     Cronograma/CPM; la red que GPI.util.activeScheduleNetwork() lee de ese proyecto da lo mismo que Cronograma
-//     (273 días laborables, 34 nodos críticos, fin 2027-07-21).
+//     (273 días laborables, 34 nodos críticos, fin 2027-07-23).
 //  2. Esa red es idéntica a la del ejemplo COMPARTIDO de los modos independientes (shared/schedule-sample.ts): el Registro de
 //     Riesgos da el mismo P80 con el proyecto real que en modo independiente (mismos eventos, misma red, misma semilla).
 //  3. Costos, sobre el mismo proyecto, muestra ese mismo plazo (misma simulación).
@@ -24,6 +24,7 @@ test("Riesgos y Costos usan la red REAL del proyecto: coincide con Cronograma/CP
   await cargar(page, "/WBS_Builder.html", "#btnSample", "#modalConfirmBtn");            // EDT: 18 paquetes
   await cargar(page, "/Activity_Definition.html", "#btnLoadSampleLive", "#modalOk");    // 43 actividades y 3 hitos
   await cargar(page, "/Cronograma_CPM.html", "#btnLoadSampleLive", "#modalOk");         // los enlaces
+  await cargar(page, "/Schedule_Management_Plan.html", "#btnSample", "#modalConfirmBtn");   // el calendario del caso (el mismo del modo independiente)
 
   // 1) la red del proyecto, leída por el núcleo, es la de Cronograma/CPM
   await page.goto("/Risk_Register.html");
@@ -33,9 +34,9 @@ test("Riesgos y Costos usan la red REAL del proyecto: coincide con Cronograma/CP
     const st = G.util.scheduleStats();
     return { nodos: net.nodes.length, enlaces: net.links.length, sinDur: net.nodes.filter((n: any) => !n.hasDur).length, dur: r.projectDuration, criticos: r.criticalIds.length, fin: r.projectFinishDate, panelDur: st.projectDuration, panelCriticas: st.criticalCount, panelFin: st.finishDate };
   });
-  expect(red).toEqual({ nodos: 46, enlaces: 51, sinDur: 0, dur: 273, criticos: 34, fin: "2027-07-21",
+  expect(red).toEqual({ nodos: 46, enlaces: 51, sinDur: 0, dur: 273, criticos: 34, fin: "2027-07-23",
     // el indicador del Panel (scheduleStats) lee la MISMA red: antes ignoraba los hitos y daba 195 d / 22 críticas / 2027-04-02
-    panelDur: 273, panelCriticas: 34, panelFin: "2027-07-21" });
+    panelDur: 273, panelCriticas: 34, panelFin: "2027-07-23" });
 
   // 2) el Registro de Riesgos del proyecto REAL (ejemplo cargado con su botón) y el modo independiente dan el mismo plazo
   await page.locator("#btnSample").click(); await page.locator("#modalConfirmBtn").click();
@@ -44,7 +45,7 @@ test("Riesgos y Costos usan la red REAL del proyecto: coincide con Cronograma/CP
   await expect(page.locator(".calc").first()).toContainText("2.4.1");                      // el trámite de licencia, actividad crítica del proyecto real
   await expect(page.locator(".calc").first()).toContainText("crítica");
   await page.locator('[data-view="analisis"]').click();
-  await expect(page.locator("#mainArea")).toContainText("base 273 d, fin 2027-07-21");
+  await expect(page.locator("#mainArea")).toContainText("base 273 d, fin 2027-07-23");
   const real = p80(await page.locator("#mainArea").innerText());
   expect(real).not.toBeNull();
   expect(real!.dur).toBeGreaterThan(273);
@@ -54,7 +55,7 @@ test("Riesgos y Costos usan la red REAL del proyecto: coincide con Cronograma/CP
   const solo = await limpio.newPage();
   await solo.goto("/Risk_Register.html");
   await solo.locator('[data-view="analisis"]').click();
-  await expect(solo.locator("#mainArea")).toContainText("base 273 d, fin 2027-07-21");
+  await expect(solo.locator("#mainArea")).toContainText("base 273 d, fin 2027-07-23");
   expect(p80(await solo.locator("#mainArea").innerText())).toEqual(real);                  // idéntico: misma red, mismos eventos, misma semilla
   await limpio.close();
 

@@ -111,26 +111,62 @@
 	//#endregion
 	//#region src/shared/evm-reference.ts
 	function packageBudgets(i) {
-		const out = {};
+		const out = {}, by = {};
 		i.estimateRows.forEach((r) => {
-			if (r.subtotal && r.subtotal > 0) {
-				const k = out[r.leafId] || (out[r.leafId] = {
-					bac: 0,
-					source: "Estimar los Costos"
-				});
-				k.bac += r.subtotal;
-			}
+			const k = by[r.leafId] || (by[r.leafId] = {
+				sum: 0,
+				complete: true
+			});
+			if (r.subtotal && r.subtotal > 0) k.sum += r.subtotal;
+			else k.complete = false;
 		});
 		i.leaves.forEach((l) => {
-			if (!out[l.id]) {
-				const w = i.wbsCost[l.id] || 0;
-				if (w > 0) out[l.id] = {
-					bac: w,
-					source: "EDT (WBS Builder)"
-				};
-			}
+			const e = by[l.id], w = i.wbsCost[l.id] || 0;
+			if (e && e.complete && e.sum > 0) out[l.id] = {
+				bac: e.sum,
+				source: "Estimar los Costos"
+			};
+			else if (w > 0) out[l.id] = {
+				bac: w,
+				source: "EDT (WBS Builder)"
+			};
+			else if (e && e.sum > 0) out[l.id] = {
+				bac: e.sum,
+				source: "Estimar los Costos (parcial)"
+			};
 		});
 		return out;
+	}
+	function approvedTransfers(orders, leaves) {
+		const byLeaf = {}, applied = [], unassigned = [];
+		const byId = {}, byCode = {};
+		leaves.forEach((l) => {
+			byId[l.id] = l.id;
+			byCode[l.code] = l.id;
+		});
+		(Array.isArray(orders) ? orders : []).forEach((o) => {
+			if (!o || typeof o !== "object") return;
+			const x = o, amount = Number(x.cost) || 0, fund = String(x.fund || ""), baselined = x.baselined ? String(x.baselined) : null;
+			if (x.status !== "Aprobada" || !amount || !(fund === "Contingencia" || baselined)) return;
+			const leafId = (x.wbsId ? byId[String(x.wbsId)] : void 0) || (x.wbsCode ? byCode[String(x.wbsCode)] : void 0) || null;
+			const t = {
+				id: String(x.id || ""),
+				leafId,
+				code: String(x.wbsCode || ""),
+				amount,
+				fund,
+				baselined
+			};
+			if (leafId) {
+				byLeaf[leafId] = (byLeaf[leafId] || 0) + amount;
+				applied.push(t);
+			} else unassigned.push(t);
+		});
+		return {
+			byLeaf,
+			applied,
+			unassigned
+		};
 	}
 	function referenceDrift(frozen, frozenStart, liveStart, live) {
 		const out = [];
@@ -151,6 +187,37 @@
 	//#endregion
 	//#region src/shared/schedule-sample.ts
 	var SAMPLE_START_DATE = "2026-07-06";
+	var SAMPLE_CALENDAR = {
+		workDays: [
+			"Lun",
+			"Mar",
+			"Mié",
+			"Jue",
+			"Vie"
+		],
+		hoursPerDay: 8,
+		holidays: [
+			{
+				date: "2026-07-28",
+				name: "Fiestas Patrias"
+			},
+			{
+				date: "2026-07-29",
+				name: "Fiestas Patrias"
+			},
+			{
+				date: "2026-08-30",
+				name: "Santa Rosa de Lima"
+			}
+		]
+	};
+	function sampleSchedulePlan() {
+		return { calendar: {
+			workDays: SAMPLE_CALENDAR.workDays.slice(),
+			hoursPerDay: SAMPLE_CALENDAR.hoursPerDay,
+			holidays: SAMPLE_CALENDAR.holidays.map((h) => ({ ...h }))
+		} };
+	}
 	var PHASES = [
 		{
 			name: "Dirección de Proyecto",
@@ -960,7 +1027,7 @@
 	}
 	//#endregion
 	//#region src/shared/evm-sample.ts
-	var EVM_SAMPLE_STATUS_DATE = "2026-10-30";
+	var EVM_SAMPLE_STATUS_DATE = "2026-11-03";
 	var EVM_SAMPLE_COSTS = {
 		"1.1": 12e3,
 		"1.2": 38e3,
@@ -1011,7 +1078,7 @@
 	};
 	var EVM_SAMPLE_REPORTS = [
 		{
-			date: "2026-08-14",
+			date: "2026-08-18",
 			offset: 30,
 			pv: 145563,
 			ev: 141e3,
@@ -1020,7 +1087,7 @@
 			spi: .969
 		},
 		{
-			date: "2026-08-31",
+			date: "2026-09-02",
 			offset: 41,
 			pv: 238e3,
 			ev: 231e3,
@@ -1029,7 +1096,7 @@
 			spi: .971
 		},
 		{
-			date: "2026-09-18",
+			date: "2026-09-22",
 			offset: 55,
 			pv: 410375,
 			ev: 398e3,
@@ -1239,7 +1306,8 @@
 		});
 		const hol = {};
 		(cal && cal.holidays || []).forEach((h) => {
-			hol[String(h).slice(0, 10)] = true;
+			const d = (typeof h === "string" ? h : h && typeof h === "object" ? String(h.date || "") : "").slice(0, 10);
+			if (d) hol[d] = true;
 		});
 		let n = 0;
 		const d = new Date(s.getTime()), guard = 2e4;
@@ -1346,7 +1414,9 @@
 			bacBudget: null,
 			issues: [],
 			frozen: false,
-			notes: []
+			notes: [],
+			transfers: [],
+			unassigned: []
 		};
 	}
 	var ctx = emptyCtx(false);
@@ -1369,7 +1439,7 @@
 			const m = connected ? null : sampleScheduleModules();
 			const act = connected ? G.getModule("activities") : m.activities;
 			const sched = connected ? G.getModule("schedule") : m.schedule;
-			const net = connected ? G.util.activeScheduleNetwork() : G.util.scheduleNetwork(wbs, act, null, sched, null, SAMPLE_START_DATE);
+			const net = connected ? G.util.activeScheduleNetwork() : G.util.scheduleNetwork(wbs, act, null, sched, sampleSchedulePlan(), SAMPLE_START_DATE);
 			if (connected) {
 				const meta = G.meta();
 				c.sym = CUR[meta && meta.currency || ""] || "$";
@@ -1484,6 +1554,20 @@
 					source: "Línea base " + bl.version
 				}));
 			} else if (bl) c.notes.push("La línea base " + bl.version + " se fijó antes de que el presupuesto por paquete, la fecha de inicio y el calendario se congelaran con ella: esos datos se leen de lo editable hoy y cambiarán si alguien edita la estimación o la fecha de inicio (los índices cambian sin que exista otra línea base). Fija una nueva versión de la línea base (con motivo y aprobación) en Cronograma/CPM para congelarlos.");
+			if (connected) {
+				const tr = approvedTransfers(rec(G.getModule("cost")).changeOrders, c.pkgs.map((p) => ({
+					id: p.id,
+					code: p.code
+				})));
+				c.pkgs = c.pkgs.map((p) => tr.byLeaf[p.id] ? {
+					...p,
+					bac: p.bac + tr.byLeaf[p.id],
+					source: p.source + " + " + tr.applied.filter((t) => t.leafId === p.id).map((t) => t.id).join(", ")
+				} : p);
+				c.transfers = tr.applied;
+				c.unassigned = tr.unassigned;
+				if (tr.unassigned.length) c.notes.push("Orden(es) de cambio aprobada(s) sin paquete de trabajo: " + tr.unassigned.map((t) => t.id + " (" + Math.round(t.amount).toLocaleString("es-PE") + ")").join(", ") + ". Su monto no se puede sumar al presupuesto de ningún paquete: su gasto aparecerá como sobrecosto. Indica el paquete en Costos.");
+			}
 			if (!c.pkgs.length) c.issues.push(connected ? "Ningún paquete de trabajo tiene costo: carga la estimación en Estimar los Costos o el costo de los paquetes en WBS Builder." : "El ejemplo no tiene paquetes.");
 			if (connected) {
 				const cost = rec(G.getModule("cost")), plan = rec(cost.plan), th = rec(plan.thresholds);
@@ -1575,7 +1659,7 @@
 	}
 	function notesCard(C) {
 		return `<div class="card"><h3>Cómo se calcula (y sus límites)</h3><ul class="small" style="margin:0 0 0 18px;line-height:1.6;color:var(--ink-1)">
-    <li><b>BAC</b> = el costo del <b>trabajo</b> por paquete (Estimar los Costos o EDT). No incluye contingencia ni reserva de gestión: esas se comparan con el sobrecosto pronosticado (VAC).</li>
+    <li><b>BAC del trabajo</b> = el costo de cada paquete (Estimar los Costos si su estimado está completo; si no, la EDT) <b>más las órdenes de cambio aprobadas que ya pasaron a él</b>: la contingencia usada, y la reserva de gestión o los fondos adicionales incorporados con una versión LB-n${C.transfers.length ? " (aquí: " + esc(C.transfers.map((t) => t.id + " " + money(t.amount)).join(", ")) + ")" : ""}. La contingencia que queda sin usar y la reserva de gestión no se distribuyen al trabajo: se comparan con el sobrecosto pronosticado (VAC). No es el mismo total que la línea base de costos de Costos, que incluye además la contingencia y la escalación.</li>
     <li><b>PV</b>: el costo de cada paquete se reparte <b>linealmente</b> entre el inicio más temprano y el fin más tardío de sus actividades en ${C.baseline ? "la <b>línea base " + esc(C.baseline.version) + "</b> del cronograma" + (C.frozen ? " (con el presupuesto por paquete, la fecha de inicio y el calendario <b>congelados</b> en ella)" : "") : "el cronograma vigente (fija la línea base en Cronograma/CPM para congelarlo)"}.</li>
     <li><b>EV</b> según la técnica de cada paquete: 0/100, 50/50, % físico o LOE (se gana con el tiempo: no mide desempeño). «Hitos ponderados» y «Apportioned effort» del plan se aplican como % físico.</li>
     <li><b>Cronograma ganado</b> (Earned Schedule): el SPI en dinero tiende a 1 al final aunque el proyecto termine tarde; ES/AT y la duración pronosticada lo evitan.</li>
@@ -1585,7 +1669,7 @@
 		const st = evmStatus(R, C.thresholds), kp = (l, v, s, lv = null, extra = "") => `<div class="kpi ${lv || ""}"><div class="l">${l}</div><div class="v ${extra}">${v}</div><div class="s">${s}</div></div>`;
 		const T = C.thresholds;
 		const kpis = `<div class="kpis">
-    ${kp("BAC (trabajo)", money(R.bac), "presupuesto del trabajo")}
+    ${kp("BAC del trabajo", money(R.bac), C.transfers.length ? "incluye " + C.transfers.length + " orden(es) de cambio aprobada(s)" : "presupuesto del trabajo")}
     ${kp("PV — planificado", money(R.pv), R.percentPlanned.toFixed(1) + " % del BAC")}
     ${kp("EV — ganado", money(R.ev), R.percentComplete.toFixed(1) + " % del BAC")}
     ${kp("AC — costo real", money(R.ac), R.percentSpent.toFixed(1) + " % del BAC")}
@@ -1595,7 +1679,7 @@
     ${kp("SV", signed(R.sv), R.svPct === null ? "—" : (R.svPct > 0 ? "+" : "") + R.svPct.toFixed(1) + " % del PV · verde ≥ " + T.svGreenPct + " %", st.sv, cls(R.sv))}</div>`;
 		const banner = st.cost || st.schedule ? `<div class="${st.cost === "rojo" || st.schedule === "rojo" ? "warn-box" : "note-box"}" style="margin:0 0 14px"><b>Estado:</b> costo ${lvlPill(st.cost)} · plazo ${lvlPill(st.schedule)}. ${st.cost === "verde" && st.schedule === "verde" ? "Dentro de tolerancia: continuar el monitoreo con la frecuencia del plan." : "Una variación fuera de umbral dispara el análisis de la causa, la actualización del pronóstico y una decisión de respuesta (acción correctiva, uso de la contingencia o solicitud de cambio): no obliga por sí sola a un cambio de línea base."}</div>` : "";
 		const f = (x) => money(x);
-		const contNote = C.contAvail !== null && R.vac.typical !== null && R.vac.typical < 0 ? `El sobrecosto pronosticado (típico) es <b>${money(-R.vac.typical)}</b>; la contingencia disponible es <b>${money(C.contAvail)}</b>: ${-R.vac.typical <= C.contAvail ? "la <b>cubre</b>" : "<b>NO alcanza</b>: hay que escalar (reserva de gestión o cambio de línea base)"}.` : C.contAvail !== null ? `Contingencia disponible: ${money(C.contAvail)}.` : "";
+		const contNote = C.contAvail !== null && R.vac.typical !== null && R.vac.typical < 0 ? `El sobrecosto pronosticado (típico) es <b>${money(-R.vac.typical)}</b>; la contingencia disponible es <b>${money(C.contAvail)}</b>${C.transfers.some((t) => t.fund === "Contingencia") ? " (lo ya aprobado con cargo a ella está dentro del BAC del trabajo)" : ""}: ${-R.vac.typical <= C.contAvail ? "la <b>cubre</b>" : "<b>NO alcanza</b>: hay que escalar (reserva de gestión o cambio de línea base)"}.` : C.contAvail !== null ? `Contingencia disponible: ${money(C.contAvail)}.` : "";
 		const forecast = `<div class="card"><h3>Pronóstico de costo</h3><table class="an"><thead><tr><th class="l">Supuesto</th><th>EAC</th><th>ETC</th><th>VAC</th></tr></thead><tbody>
     <tr><td>Típico: la variación actual se repite (BAC / CPI)</td><td class="num">${f(R.eac.typical)}</td><td class="num">${f(R.etc.typical)}</td><td class="num ${R.vac.typical === null ? "" : cls(R.vac.typical)}">${R.vac.typical === null ? "—" : signed(R.vac.typical)}</td></tr>
     <tr><td>Atípico: fue un hecho aislado (AC + BAC − EV)</td><td class="num">${f(R.eac.atypical)}</td><td class="num">${f(R.etc.atypical)}</td><td class="num ${cls(R.vac.atypical)}">${signed(R.vac.atypical)}</td></tr>
@@ -1888,7 +1972,7 @@
 		$("btnExportCsv").addEventListener("click", exportCsv);
 		$("btnPrint").addEventListener("click", () => window.print());
 		$("btnSample").addEventListener("click", () => {
-			showConfirm("Esto reemplazará el seguimiento actual con el caso de ejemplo DISTRIB+ S.A. (avance y costo real al 2026-10-30). ¿Continuar?", "Cargar ejemplo").then((ok) => {
+			showConfirm("Esto reemplazará el seguimiento actual con el caso de ejemplo DISTRIB+ S.A. (avance y costo real al 2026-11-03). ¿Continuar?", "Cargar ejemplo").then((ok) => {
 				if (!ok) return;
 				ctxDirty = true;
 				loadSample();

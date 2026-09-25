@@ -39,20 +39,20 @@ const tasa = (doc: Document, acc: string, y: string) => campo(doc, `[data-e="rat
 const aviso = (doc: Document, code: string) => Array.from(doc.querySelectorAll("#escResults .esc-adv li")).find((l) => l.textContent!.includes(code));
 
 describe("Cost-management.html — escalación por índices (58R-10 / 68R-11)", () => {
-  it("ejemplo DISTRIB+: por índices, cuentas y años; escalación financiada P70 = 127,601 y el BAC la suma", async () => {
+  it("ejemplo DISTRIB+: por índices, cuentas y años; escalación financiada P70 = 129,108 y el BAC la suma", async () => {
     const dom = await abrir(), doc = dom.window.document;
     expect((doc.getElementById("escMethod") as HTMLSelectElement).value).toBe("indices");
     expect(doc.getElementById("escCard")!.style.display).toBe("block"); expect(doc.getElementById("escSimpleWrap")!.style.display).toBe("none");
-    expect(txt(doc, "kEsc")).toBe("$ 127,601"); expect(txt(doc, "kFx")).toBe("$ 0"); expect(txt(doc, "kBAC")).toBe("$ 8,079,601");
+    expect(txt(doc, "kEsc")).toBe("$ 129,108"); expect(txt(doc, "kFx")).toBe("$ 0"); expect(txt(doc, "kBAC")).toBe("$ 8,081,108");
     expect(txt(doc, "kEscCap")).toBe("P70 de la simulación");
     const r = txt(doc, "escResults");
-    expect(r).toMatch(/Escalación central\$ 91,239/); expect(r).toMatch(/Financiada\$ 127,601/);
-    expect(r).toMatch(/P50\$ 115,270/); expect(r).toMatch(/P80\$ 135,352/); expect(r).toMatch(/P90\$ 146,622/);
-    // por cuenta (del costo base): Σ = 81,463; de la contingencia (852,000) salen 9,776 al central
+    expect(r).toMatch(/Escalación central\$ 92,388/); expect(r).toMatch(/Financiada\$ 129,108/);
+    expect(r).toMatch(/P50\$ 116,648/); expect(r).toMatch(/P80\$ 136,949/); expect(r).toMatch(/P90\$ 148,351/);
+    // por cuenta (del costo base): Σ = 82,489; de la contingencia (852,000) salen 9,899 al central
     ["Mano de obra", "Materiales", "Equipos", "Subcontratos"].forEach((c) => expect(r).toContain(c));
-    expect(r).toMatch(/Mano de obra\$ 2,158,750\$ 32,426/); expect(r).toMatch(/Materiales\$ 2,721,750\$ 18,148/);
-    expect(r).toMatch(/2026\$ 4,023,415\$ 22,819/); expect(r).toMatch(/2027\$ 3,076,585\$ 58,644/);
-    expect(r).toMatch(/\$ 13,672 corresponde a la contingencia/);
+    expect(r).toMatch(/Mano de obra\$ 2,158,750\$ 32,851/); expect(r).toMatch(/Materiales\$ 2,721,750\$ 18,321/);
+    expect(r).toMatch(/2026\$ 3,955,385\$ 22,319/); expect(r).toMatch(/2027\$ 3,144,615\$ 60,170/);
+    expect(r).toMatch(/\$ 13,833 corresponde a la contingencia/);
     expect(Number((r.match(/El pronóstico central equivale al P(\d+)/) || [])[1])).toBeLessThan(20);                                   // el retraso del cronograma hace probable escalar más que el central
     expect(r).toMatch(/con el retraso del cronograma del análisis integrado de riesgo/);
     expect(doc.querySelectorAll('#escResults svg.rng-svg').length).toBe(1);
@@ -66,7 +66,7 @@ describe("Cost-management.html — escalación por índices (58R-10 / 68R-11)", 
     expect(aviso(doc, "X14")!.textContent).toMatch(/precio del acero/);
     // régimen flotante: el tipo de cambio es su propia línea y la escalación no cambia
     poner(dom, doc.getElementById("fxMode")!, "float");
-    expect(txt(doc, "kEsc")).toBe("$ 127,601"); expect(txt(doc, "kFx")).toBe("$ 170,400");         // 7,100,000 × 30 % × 8 %
+    expect(txt(doc, "kEsc")).toBe("$ 129,108"); expect(txt(doc, "kFx")).toBe("$ 170,400");         // 7,100,000 × 30 % × 8 %
     expect(dinero(txt(doc, "kBAC"))).toBe(7100000 + 852000 + Math.round(dinero(txt(doc, "kEsc"))) + 170400);
   });
 
@@ -93,12 +93,12 @@ describe("Cost-management.html — escalación por índices (58R-10 / 68R-11)", 
 
   it("qué escalación se financia: central o un percentil de la simulación; escalar la contingencia se puede apagar", async () => {
     const dom = await abrir(), doc = dom.window.document, prov = campo(doc, '[data-e="prov"]');
-    poner(dom, prov, "central"); expect(txt(doc, "kEsc")).toBe("$ 91,239"); expect(txt(doc, "kEscCap")).toBe("pronóstico central");
-    poner(dom, campo(doc, '[data-e="prov"]'), "p90"); expect(txt(doc, "kEsc")).toBe("$ 146,622");
+    poner(dom, prov, "central"); expect(txt(doc, "kEsc")).toBe("$ 92,388"); expect(txt(doc, "kEscCap")).toBe("pronóstico central");
+    poner(dom, campo(doc, '[data-e="prov"]'), "p90"); expect(txt(doc, "kEsc")).toBe("$ 148,351");
     poner(dom, campo(doc, '[data-e="prov"]'), "central");
     const on = campo(doc, '[data-e="onCont"]') as HTMLInputElement;
     on.checked = false; on.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
-    expect(txt(doc, "kEsc")).toBe("$ 81,463");                                                       // solo el costo base
+    expect(txt(doc, "kEsc")).toBe("$ 82,489");                                                       // solo el costo base
     expect(aviso(doc, "X12")).toBeTruthy();
     expect(txt(doc, "escResults")).not.toMatch(/corresponde a la contingencia/);
   });

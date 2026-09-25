@@ -16,8 +16,8 @@ import type * as GpiCore from "../../core/gpi-core";
 import type { EditSession, ProjectMeta } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
 import { normalizeBaseline, type EvmReference } from "../../shared/schedule-control";
-import { packageBudgets, referenceDrift } from "../../shared/evm-reference";
-import { SAMPLE_START_DATE, sampleScheduleModules } from "../../shared/schedule-sample";
+import { approvedTransfers, packageBudgets, referenceDrift, type BudgetTransfer } from "../../shared/evm-reference";
+import { SAMPLE_START_DATE, sampleScheduleModules, sampleSchedulePlan } from "../../shared/schedule-sample";
 import { EVM_SAMPLE_AC, EVM_SAMPLE_COSTS, EVM_SAMPLE_PERCENT, EVM_SAMPLE_REPORTS, EVM_SAMPLE_STATUS_DATE, EVM_SAMPLE_TECHNIQUES } from "../../shared/evm-sample";
 import {
   DEFAULT_THRESHOLDS, TECHNIQUES, TECHNIQUE_LABEL, evmCompute, evmStatus, normalizeReports, techniqueFromPlan, workingDaysThrough,
@@ -58,10 +58,12 @@ interface Ctx {
   cont: number | null; contAvail: number | null; bacBudget: number | null; issues: string[];
   frozen: boolean;    // el presupuesto por paquete, el inicio y el calendario vienen CONGELADOS con la línea base (no de datos editables)
   notes: string[];    // avisos sobre la referencia (línea base antigua sin congelar, o datos vigentes que ya difieren de lo congelado)
+  transfers: BudgetTransfer[];    // órdenes de cambio aprobadas sumadas al presupuesto de su paquete
+  unassigned: BudgetTransfer[];   // órdenes aprobadas sin paquete (no se pueden asignar)
 }
 const CUR: Record<string, string> = { USD: "$", PEN: "S/", EUR: "€" };
 function emptyCtx(connected: boolean): Ctx {
-  return { connected, sym: "$", pkgs: [], startDate: "", calendar: { workDayIdx: [1, 2, 3, 4, 5], holidays: [] }, duration: 0, baseline: null, newSinceBaseline: 0, thresholds: { ...DEFAULT_THRESHOLDS }, defaultTech: "fisico", techLabel: "% físico avanzado", techApprox: false, cont: null, contAvail: null, bacBudget: null, issues: [], frozen: false, notes: [] };
+  return { connected, sym: "$", pkgs: [], startDate: "", calendar: { workDayIdx: [1, 2, 3, 4, 5], holidays: [] }, duration: 0, baseline: null, newSinceBaseline: 0, thresholds: { ...DEFAULT_THRESHOLDS }, defaultTech: "fisico", techLabel: "% físico avanzado", techApprox: false, cont: null, contAvail: null, bacBudget: null, issues: [], frozen: false, notes: [], transfers: [], unassigned: [] };
 }
 let ctx: Ctx = emptyCtx(false), ctxDirty = true;
 function getCtx(): Ctx { if (ctxDirty) { ctx = buildCtx(); ctxDirty = false; } return ctx; }
@@ -73,7 +75,7 @@ function buildCtx(): Ctx {
     const m = connected ? null : sampleScheduleModules();
     const act = connected ? G.getModule("activities") : (m as NonNullable<typeof m>).activities;
     const sched = connected ? G.getModule("schedule") : (m as NonNullable<typeof m>).schedule;
-    const net = connected ? G.util.activeScheduleNetwork() : G.util.scheduleNetwork(wbs, act, null, sched, null, SAMPLE_START_DATE);
+    const net = connected ? G.util.activeScheduleNetwork() : G.util.scheduleNetwork(wbs, act, null, sched, sampleSchedulePlan(), SAMPLE_START_DATE);
     if (connected) { const meta = G.meta(); c.sym = CUR[(meta && meta.currency) || ""] || "$"; }
     if (!net) { c.issues.push(connected ? "El proyecto aún no tiene actividades: define la EDT, las actividades y sus enlaces (Cronograma/CPM) para distribuir el costo en el tiempo." : "No se pudo armar el cronograma del ejemplo."); return c; }
     c.startDate = net.startDate || (connected ? "" : SAMPLE_START_DATE);
@@ -110,6 +112,15 @@ function buildCtx(): Ctx {
       c.frozen = true; c.startDate = bl.snapshot.startDate || c.startDate; c.calendar = { workDayIdx: ev.calendar.workDayIdx.slice(), holidays: ev.calendar.holidays.slice() };
       c.pkgs = ev.packages.map((p) => ({ id: p.id, code: p.code, name: p.name, bac: p.bac, es: p.es, ef: p.ef, source: "Línea base " + bl.version }));
     } else if (bl) c.notes.push("La línea base " + bl.version + " se fijó antes de que el presupuesto por paquete, la fecha de inicio y el calendario se congelaran con ella: esos datos se leen de lo editable hoy y cambiarán si alguien edita la estimación o la fecha de inicio (los índices cambian sin que exista otra línea base). Fija una nueva versión de la línea base (con motivo y aprobación) en Cronograma/CPM para congelarlos.");
+    // Órdenes de cambio aprobadas que pasaron al presupuesto del trabajo (contingencia usada, o reserva/fondos incorporados con LB-n): su monto
+    // se suma al BAC del paquete que las ejecuta. Sin esto la misma orden se contaba dos veces: como sobrecosto en el costo real y como
+    // contingencia ya consumida (auditoría, alta). Se aplican sobre la referencia elegida (congelada o vigente), después de medir su deriva.
+    if (connected) {
+      const tr = approvedTransfers(rec(G.getModule("cost")).changeOrders, c.pkgs.map((p) => ({ id: p.id, code: p.code })));
+      c.pkgs = c.pkgs.map((p) => (tr.byLeaf[p.id] ? { ...p, bac: p.bac + tr.byLeaf[p.id], source: p.source + " + " + tr.applied.filter((t) => t.leafId === p.id).map((t) => t.id).join(", ") } : p));
+      c.transfers = tr.applied; c.unassigned = tr.unassigned;
+      if (tr.unassigned.length) c.notes.push("Orden(es) de cambio aprobada(s) sin paquete de trabajo: " + tr.unassigned.map((t) => t.id + " (" + Math.round(t.amount).toLocaleString("es-PE") + ")").join(", ") + ". Su monto no se puede sumar al presupuesto de ningún paquete: su gasto aparecerá como sobrecosto. Indica el paquete en Costos.");
+    }
     if (!c.pkgs.length) c.issues.push(connected ? "Ningún paquete de trabajo tiene costo: carga la estimación en Estimar los Costos o el costo de los paquetes en WBS Builder." : "El ejemplo no tiene paquetes.");
     // Planes: técnica de valor ganado y umbrales del plan de costos; SV/SPI del plan del cronograma.
     if (connected) {
@@ -182,7 +193,7 @@ function histCard(): string {
 }
 function notesCard(C: Ctx): string {
   return `<div class="card"><h3>Cómo se calcula (y sus límites)</h3><ul class="small" style="margin:0 0 0 18px;line-height:1.6;color:var(--ink-1)">
-    <li><b>BAC</b> = el costo del <b>trabajo</b> por paquete (Estimar los Costos o EDT). No incluye contingencia ni reserva de gestión: esas se comparan con el sobrecosto pronosticado (VAC).</li>
+    <li><b>BAC del trabajo</b> = el costo de cada paquete (Estimar los Costos si su estimado está completo; si no, la EDT) <b>más las órdenes de cambio aprobadas que ya pasaron a él</b>: la contingencia usada, y la reserva de gestión o los fondos adicionales incorporados con una versión LB-n${C.transfers.length ? " (aquí: " + esc(C.transfers.map((t) => t.id + " " + money(t.amount)).join(", ")) + ")" : ""}. La contingencia que queda sin usar y la reserva de gestión no se distribuyen al trabajo: se comparan con el sobrecosto pronosticado (VAC). No es el mismo total que la línea base de costos de Costos, que incluye además la contingencia y la escalación.</li>
     <li><b>PV</b>: el costo de cada paquete se reparte <b>linealmente</b> entre el inicio más temprano y el fin más tardío de sus actividades en ${C.baseline ? "la <b>línea base " + esc(C.baseline.version) + "</b> del cronograma" + (C.frozen ? " (con el presupuesto por paquete, la fecha de inicio y el calendario <b>congelados</b> en ella)" : "") : "el cronograma vigente (fija la línea base en Cronograma/CPM para congelarlo)"}.</li>
     <li><b>EV</b> según la técnica de cada paquete: 0/100, 50/50, % físico o LOE (se gana con el tiempo: no mide desempeño). «Hitos ponderados» y «Apportioned effort» del plan se aplican como % físico.</li>
     <li><b>Cronograma ganado</b> (Earned Schedule): el SPI en dinero tiende a 1 al final aunque el proyecto termine tarde; ES/AT y la duración pronosticada lo evitan.</li>
@@ -192,7 +203,7 @@ function topHtml(C: Ctx, R: EvmResult): string {
   const st = evmStatus(R, C.thresholds), kp = (l: string, v: string, s: string, lv: Level | null = null, extra = ""): string => `<div class="kpi ${lv || ""}"><div class="l">${l}</div><div class="v ${extra}">${v}</div><div class="s">${s}</div></div>`;
   const T = C.thresholds;
   const kpis = `<div class="kpis">
-    ${kp("BAC (trabajo)", money(R.bac), "presupuesto del trabajo")}
+    ${kp("BAC del trabajo", money(R.bac), C.transfers.length ? "incluye " + C.transfers.length + " orden(es) de cambio aprobada(s)" : "presupuesto del trabajo")}
     ${kp("PV — planificado", money(R.pv), R.percentPlanned.toFixed(1) + " % del BAC")}
     ${kp("EV — ganado", money(R.ev), R.percentComplete.toFixed(1) + " % del BAC")}
     ${kp("AC — costo real", money(R.ac), R.percentSpent.toFixed(1) + " % del BAC")}
@@ -204,7 +215,7 @@ function topHtml(C: Ctx, R: EvmResult): string {
   // pronósticos
   const f = (x: number | null): string => money(x);
   const contNote = C.contAvail !== null && R.vac.typical !== null && R.vac.typical < 0
-    ? `El sobrecosto pronosticado (típico) es <b>${money(-R.vac.typical)}</b>; la contingencia disponible es <b>${money(C.contAvail)}</b>: ${-R.vac.typical <= C.contAvail ? "la <b>cubre</b>" : "<b>NO alcanza</b>: hay que escalar (reserva de gestión o cambio de línea base)"}.`
+    ? `El sobrecosto pronosticado (típico) es <b>${money(-R.vac.typical)}</b>; la contingencia disponible es <b>${money(C.contAvail)}</b>${C.transfers.some((t) => t.fund === "Contingencia") ? " (lo ya aprobado con cargo a ella está dentro del BAC del trabajo)" : ""}: ${-R.vac.typical <= C.contAvail ? "la <b>cubre</b>" : "<b>NO alcanza</b>: hay que escalar (reserva de gestión o cambio de línea base)"}.`
     : C.contAvail !== null ? `Contingencia disponible: ${money(C.contAvail)}.` : "";
   const forecast = `<div class="card"><h3>Pronóstico de costo</h3><table class="an"><thead><tr><th class="l">Supuesto</th><th>EAC</th><th>ETC</th><th>VAC</th></tr></thead><tbody>
     <tr><td>Típico: la variación actual se repite (BAC / CPI)</td><td class="num">${f(R.eac.typical)}</td><td class="num">${f(R.etc.typical)}</td><td class="num ${R.vac.typical === null ? "" : cls(R.vac.typical)}">${R.vac.typical === null ? "—" : signed(R.vac.typical)}</td></tr>
@@ -346,7 +357,7 @@ function wireToolbar(): void {
   $("btnExportCsv").addEventListener("click", exportCsv);
   $("btnPrint").addEventListener("click", () => window.print());
   $("btnSample").addEventListener("click", () => {
-    showConfirm("Esto reemplazará el seguimiento actual con el caso de ejemplo DISTRIB+ S.A. (avance y costo real al 2026-10-30). ¿Continuar?", "Cargar ejemplo").then((ok) => { if (!ok) return; ctxDirty = true; loadSample(); render(); save(); setStatus("Caso de ejemplo cargado."); });
+    showConfirm("Esto reemplazará el seguimiento actual con el caso de ejemplo DISTRIB+ S.A. (avance y costo real al 2026-11-03). ¿Continuar?", "Cargar ejemplo").then((ok) => { if (!ok) return; ctxDirty = true; loadSample(); render(); save(); setStatus("Caso de ejemplo cargado."); });
   });
   $("btnReset").addEventListener("click", () => {
     showConfirm("Esto borrará el avance, los costos reales y el historial de cortes. ¿Continuar?", "Nuevo seguimiento").then((ok) => { if (ok) { data = blankData(); render(); save(); setStatus("Seguimiento nuevo iniciado."); } });

@@ -1451,7 +1451,7 @@
 	}
 	var rolesOf = (G) => Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)));
 	function gatherQualityFacts(G) {
-		const wbs = G.getModule("wbs"), nodes = rec$4(wbs && wbs.nodes);
+		const wbs = G.util.effectiveWbs(), nodes = rec$4(wbs && wbs.nodes);
 		return {
 			leaves: G.util.wbsLeaves(wbs).map((l) => {
 				const n = rec$4(nodes[l.id]);
@@ -1470,7 +1470,7 @@
 		};
 	}
 	function gatherProcurementFacts(G) {
-		const wbs = G.getModule("wbs"), nodes = rec$4(wbs && wbs.nodes), obs = G.util.obsNodes(G.getModule("obs")), sk = rec$4(G.getModule("stakeholders")).stakeholders;
+		const wbs = G.util.effectiveWbs(), nodes = rec$4(wbs && wbs.nodes), obs = G.util.obsNodes(G.getModule("obs")), sk = rec$4(G.getModule("stakeholders")).stakeholders;
 		const cost = G.getModule("cost"), cl = Number(String(cost && cost.estimate && cost.estimate.class).replace(/\D/g, ""));
 		return {
 			leaves: G.util.wbsLeaves(wbs).map((l) => ({
@@ -2577,7 +2577,7 @@
 		const f = emptyFacts(todayISO());
 		const m = G.active(), meta = rec(m && m.meta), mods = rec(m && m.modules);
 		try {
-			const charter = G.getModule("charter"), wbs = G.getModule("wbs"), req = G.getModule("requirements"), scope = G.getModule("scopeStatement");
+			const charter = G.getModule("charter"), wbs = G.util.effectiveWbs(), req = G.getModule("requirements"), scope = G.getModule("scopeStatement");
 			const sched = G.getModule("schedule"), sp = G.getModule("schedulePlan"), cost = G.getModule("cost"), rk = G.getModule("risks");
 			const ca = G.util.charterAudit(charter), ends = arr(charter && charter.milestones).map((x) => str(x.date)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
 			f.charter = {
@@ -2934,7 +2934,7 @@
 	function buildSections() {
 		const C = getCtx(), f = factsNow(), G = window.GPI, out = [];
 		const meta = C.meta;
-		const charter = G.getModule("charter"), wbs = G.getModule("wbs"), req = G.getModule("requirements"), scope = G.getModule("scopeStatement");
+		const charter = G.getModule("charter"), wbs = G.util.effectiveWbs(), req = G.getModule("requirements"), scope = G.getModule("scopeStatement");
 		const cost = G.getModule("cost"), sp = G.getModule("schedulePlan"), sched = G.getModule("schedule"), sym = {
 			USD: "$",
 			PEN: "S/",

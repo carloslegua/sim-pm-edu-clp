@@ -25,6 +25,7 @@
 import type * as GpiCore from "../../core/gpi-core";
 import type { EditSession, ObsModule, ProjectMeta, RaciModule, SchedulePlanModule, WbsModule } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
+import { SAMPLE_CALENDAR } from "../../shared/schedule-sample";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global { interface Window { GPI?: GpiApi; } }
@@ -112,16 +113,13 @@ function sampleState(): ScheduleState {
       rule: "El identificador de cada actividad hereda el código jerárquico de la EDT (p. ej. 4.2 = Cimentaciones, dentro de 4. Construcción). No existe una numeración de actividades independiente.",
       activityIdPattern: "EDT.### — mismo código que expone WBS Builder."
     },
+    // El calendario del caso es UNO solo (shared/schedule-sample.ts): el mismo con que corren el CPM los demás módulos.
     calendar: {
-      workDays: ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
-      hoursPerDay: 9,
-      workingTimes: [{ from: "08:00", to: "12:00" }, { from: "13:00", to: "18:00" }],
-      holidays: [
-        { date: "2026-07-28", name: "Fiestas Patrias" },
-        { date: "2026-07-29", name: "Fiestas Patrias" },
-        { date: "2026-08-30", name: "Santa Rosa de Lima" }
-      ],
-      notes: "Calendario 6x1 (lunes a sábado) para el personal de obra en Construcción; Dirección de Proyecto e Ingeniería usan calendario 5x2. Ambos calendarios se modelan en la herramienta de programación."
+      workDays: SAMPLE_CALENDAR.workDays.slice(),
+      hoursPerDay: SAMPLE_CALENDAR.hoursPerDay,
+      workingTimes: [{ from: "08:00", to: "12:00" }, { from: "13:00", to: "17:00" }],
+      holidays: SAMPLE_CALENDAR.holidays.map((h) => ({ ...h })),
+      notes: "Calendario 5x2 (lunes a viernes, 8 h) para todo el proyecto: la red se programa con un solo calendario. Los trabajos de obra en sábado se tratan como horas extra de recuperación y no se programan."
     },
     durationEstimating: {
       method: "tres_valores",
@@ -145,12 +143,12 @@ function sampleState(): ScheduleState {
       updateFrequency: "Corte semanal, todos los viernes a las 17:00 (hora Lima); consolidación quincenal para el Comité de Obra."
     },
     milestones: [
-      { name: "Aprobación del Plan de Gestión del Proyecto", date: "2026-08-03", type: "interno", constraint: "FNLT", notes: "Cierra el paquete del Plan de gestión (1.2): línea base inicial." },
-      { name: "Fin de Ingeniería y Diseño", date: "2026-09-28", type: "interno", constraint: "FNLT", notes: "" },
-      { name: "Fin de Procura (entrega de estructuras, materiales y equipos)", date: "2026-11-02", type: "contractual", constraint: "FNLT", notes: "Lo cierra el paquete de materiales de construcción (Proveedor B, 3.2); las estructuras metálicas (Proveedor A) se entregan el 15/10 y los equipos eléctricos (Proveedor C) el 09/10." },
-      { name: "Permisos y licencias municipales aprobados", date: "2026-11-09", type: "regulatorio", constraint: "FNET", notes: "Habilita el inicio de movimiento de tierras (4.1)." },
-      { name: "Fin de cimentaciones", date: "2027-02-02", type: "interno", constraint: "FNLT", notes: "Hito H2 de la red del cronograma." },
-      { name: "Entrega final y acta de cierre", date: "2027-07-21", type: "contractual", constraint: "FNLT", notes: "Fin de Pruebas y Puesta en Marcha (5.3); cierre contractual con el cliente. Es el fin de la ruta crítica del cronograma CPM (273 días laborables)." }
+      { name: "Aprobación del Plan de Gestión del Proyecto", date: "2026-08-05", type: "interno", constraint: "FNLT", notes: "Cierra el paquete del Plan de gestión (1.2): línea base inicial." },
+      { name: "Fin de Ingeniería y Diseño", date: "2026-09-30", type: "interno", constraint: "FNLT", notes: "" },
+      { name: "Fin de Procura (entrega de estructuras, materiales y equipos)", date: "2026-11-04", type: "contractual", constraint: "FNLT", notes: "Lo cierra el paquete de materiales de construcción (Proveedor B, 3.2); las estructuras metálicas (Proveedor A) se entregan el 19/10 y los equipos eléctricos (Proveedor C) el 13/10." },
+      { name: "Permisos y licencias municipales aprobados", date: "2026-11-11", type: "regulatorio", constraint: "FNET", notes: "Habilita el inicio de movimiento de tierras (4.1)." },
+      { name: "Fin de cimentaciones", date: "2027-02-04", type: "interno", constraint: "FNLT", notes: "Hito H2 de la red del cronograma." },
+      { name: "Entrega final y acta de cierre", date: "2027-07-23", type: "contractual", constraint: "FNLT", notes: "Fin de Pruebas y Puesta en Marcha (5.3); cierre contractual con el cliente. Es el fin de la ruta crítica del cronograma CPM (273 días laborables)." }
     ],
     scheduleReserve: {
       pct: 8,
@@ -633,7 +631,8 @@ function diffDaysIso(a: string, b: string): number {
 function updateMetaPanels(): void {
   const hasGpi = typeof window.GPI !== "undefined" && !!window.GPI.available && window.GPI.available();
   const meta = hasGpi ? window.GPI!.meta() : null;
-  const wbs: WbsModule | null = hasGpi ? (window.GPI!.getModule("wbs") ?? null) : null;
+  // EDT efectiva: con cronograma, fechas del CPM y costos de Estimar los Costos (los valores manuales de la EDT no se actualizan).
+  const wbs: WbsModule | null = hasGpi ? (window.GPI!.util.effectiveWbs() ?? null) : null;
   const raci: RaciModule | null = hasGpi ? (window.GPI!.getModule("raci") ?? null) : null;
 
   // 1. Introducción — datos comunes del proyecto
@@ -753,7 +752,7 @@ function wireImportMilestones(): void {
       await showAlert("Esta acción requiere un proyecto activo con una EDT cargada. Ábrelo desde el Panel de Control y completa WBS Builder primero.");
       return;
     }
-    const wbs = window.GPI.getModule("wbs");
+    const wbs = window.GPI.util.effectiveWbs();   // fechas del CPM donde ya hay cronograma
     const phases = window.GPI.util.wbsPhases(wbs || ({} as WbsModule));
     if (!phases.length) {
       await showAlert("El proyecto activo aún no tiene fases en la EDT. Complétala primero en WBS Builder.");

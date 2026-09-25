@@ -196,7 +196,7 @@
   .rng-dot{fill:var(--cyan-600);stroke:#fff;stroke-width:2}
   .rng-tick{font-family:var(--mono);font-size:10px;fill:var(--muted)}
   .rng-cap{font-family:var(--mono);font-size:10.5px;fill:var(--ink);font-weight:600}
-  .co-form{display:grid;grid-template-columns:1.5fr 1.2fr 1fr .8fr 1fr auto;gap:10px;align-items:end;background:#fbfdfe;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:16px}
+  .co-form{display:grid;grid-template-columns:1.4fr 1.1fr .9fr .8fr 1fr 1.2fr auto;gap:10px;align-items:end;background:#fbfdfe;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:16px}
   .co-form label{display:block;margin:0}
   .co-form label span{display:block;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.03em;text-transform:uppercase;margin-bottom:4px}
   @media(max-width:820px){.co-form{grid-template-columns:1fr 1fr}.co-form .co-add{grid-column:1/-1}}
@@ -593,6 +593,7 @@
               <option>Financiamiento adicional</option>
             </select>
           </label>
+          <label><span>Paquete de la EDT</span><select id="coWbs" class="mono" title="El paquete de trabajo que ejecuta el cambio: al aprobarse, su monto pasa al presupuesto de ese paquete en Valor Ganado"></select></label>
           <div class="co-add"><button class="btn primary" style="width:100%" onclick="addCO()">+ Agregar</button></div>
         </div>
         <div class="note" id="coKindHint" style="margin:-6px 0 14px">Clasifica el cambio: la naturaleza no decide por sí sola la fuente de fondos.</div>

@@ -1,6 +1,6 @@
 // Referencia de valor ganado congelada con la línea base: src/shared/evm-reference.ts y su lectura tolerante en schedule-control.ts.
 import { describe, expect, it } from "vitest";
-import { buildEvmReference, packageBudgets, packageSpans, referenceDrift, type RefInput } from "../../src/shared/evm-reference";
+import { approvedTransfers, buildEvmReference, packageBudgets, packageSpans, referenceDrift, type RefInput } from "../../src/shared/evm-reference";
 import { normalizeBaseline, normalizeEvmReference } from "../../src/shared/schedule-control";
 
 const input = (): RefInput => ({
@@ -15,8 +15,35 @@ describe("packageBudgets / packageSpans", () => {
   it("BAC = Estimar los Costos (suma de las actividades del paquete); sin estimado, el costo de la EDT; sin ninguno, sin BAC", () => {
     expect(packageBudgets(input())).toEqual({ w1: { bac: 1000, source: "Estimar los Costos" }, w2: { bac: 300, source: "EDT (WBS Builder)" } });
   });
+  it("REPRO (auditoría, alta): un estimado PARCIAL no es el presupuesto del paquete (misma regla que WBS Builder): se usa el costo de la EDT", () => {
+    const i = input(); i.estimateRows = [{ leafId: "w1", subtotal: 600 }, { leafId: "w1", subtotal: null }, { leafId: "w2", subtotal: 80 }];
+    // w1: una actividad sin precio → EDT (5); w2: completo → 80; w3 sin EDT ni estimado → sin BAC
+    expect(packageBudgets(i)).toEqual({ w1: { bac: 5, source: "EDT (WBS Builder)" }, w2: { bac: 80, source: "Estimar los Costos" } });
+    i.wbsCost.w1 = 0;                                                                                     // sin costo en la EDT, el parcial es lo único que hay
+    expect(packageBudgets(i).w1).toEqual({ bac: 600, source: "Estimar los Costos (parcial)" });
+  });
   it("inicio más temprano y fin más tardío de las actividades de cada paquete; los hitos no cuentan", () => {
     expect(packageSpans(input())).toEqual({ w1: { es: 0, ef: 10 }, w2: { es: 10, ef: 15 } });
+  });
+});
+
+describe("approvedTransfers: órdenes de cambio que pasan al presupuesto del trabajo (auditoría, alta)", () => {
+  const leaves = [{ id: "w-4.2", code: "4.2" }, { id: "w-4.5", code: "4.5" }, { id: "w-4.1", code: "4.1" }];
+  it("contingencia aprobada → al paquete; reserva/fondos solo si se incorporaron (LB-n); pendientes y rechazadas no", () => {
+    const r = approvedTransfers([
+      { id: "OC-001", status: "Aprobada", fund: "Contingencia", cost: 180000, wbsId: "w-4.2" },
+      { id: "OC-002", status: "Aprobada", fund: "Financiamiento adicional", cost: 240000, wbsId: "w-4.5" },                       // aprobada sin incorporar: aún no
+      { id: "OC-003", status: "Aprobada", fund: "Reserva de gestión", cost: 90000, wbsCode: "4.1", baselined: "LB-1" },           // por código (id cambió)
+      { id: "OC-004", status: "Pendiente", fund: "Contingencia", cost: 50000, wbsId: "w-4.2" },
+      { id: "OC-005", status: "Rechazada", fund: "Contingencia", cost: 70000, wbsId: "w-4.2" }
+    ], leaves);
+    expect(r.byLeaf).toEqual({ "w-4.2": 180000, "w-4.1": 90000 });
+    expect(r.applied.map((t) => t.id)).toEqual(["OC-001", "OC-003"]); expect(r.unassigned).toEqual([]);
+  });
+  it("una orden aprobada sin paquete (o con uno que ya no existe) no se asigna: se lista para corregirla", () => {
+    const r = approvedTransfers([{ id: "OC-001", status: "Aprobada", fund: "Contingencia", cost: 180000 }, { id: "OC-009", status: "Aprobada", fund: "Contingencia", cost: 1, wbsId: "borrado", wbsCode: "9.9" }], leaves);
+    expect(r.byLeaf).toEqual({}); expect(r.unassigned.map((t) => t.id)).toEqual(["OC-001", "OC-009"]);
+    expect(approvedTransfers(null, leaves)).toEqual({ byLeaf: {}, applied: [], unassigned: [] });   // Costos sin órdenes (o datos basura)
   });
 });
 

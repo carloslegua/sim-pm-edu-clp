@@ -23,11 +23,11 @@ export const SAMPLE_COST_ORDERS = [
 ];
 export const SAMPLE_CRS: SampleCr[] = [
   { code: "CR-001", title: "Refuerzo de cimentación por hallazgo geotécnico", description: "El estudio de suelos ampliado detecta estratos de baja capacidad portante: se refuerza la cimentación (riesgo R-03 materializado).",
-    requester: "Jefe de Ingeniería", requestedOn: "2026-08-01", origin: "Riesgo materializado", type: "Acción correctiva", wbs: ["4.2"], riskCodes: ["R-03"],
+    requester: "Jefe de Ingeniería", requestedOn: "2026-08-31", origin: "Riesgo materializado", type: "Acción correctiva", wbs: ["4.2"], riskCodes: ["R-03"],
     impact: { scope: im("sin_impacto", "El refuerzo mantiene el entregable: la cimentación cumple lo especificado con otra solución."), schedule: im("con_impacto"), cost: im("con_impacto"),
       risk: im("con_impacto"), quality: im("con_impacto", "Ensayos adicionales de compactación y de resistencia del concreto."), resources: im("sin_impacto", "Misma cuadrilla; más horas.") } as ChangeRequest["impact"],
     daysDelta: 8, costDelta: 180000, fund: "Contingencia", orderIds: ["OC-001"],
-    status: "Aprobada", decidedOn: "2026-08-03", approver: "CCB", authLevel: "ccb", rationale: "Riesgo identificado que ocurrió; se atiende con la contingencia (dentro de la línea base). Lo autoriza el CCB por su monto y porque mueve el fin del proyecto." },
+    status: "Aprobada", decidedOn: "2026-09-02", approver: "CCB", authLevel: "ccb", rationale: "Riesgo identificado que ocurrió; se atiende con la contingencia (dentro de la línea base). Lo autoriza el CCB por su monto y porque mueve el fin del proyecto." },
   { code: "CR-002", title: "Ampliación de sala eléctrica solicitada por el cliente", description: "El cliente pide ampliar la sala eléctrica con dos tableros adicionales.",
     requester: "DISTRIB+ (cliente)", requestedOn: "2026-09-01", origin: "Solicitud del cliente", type: "Actualización de la línea base o del plan", wbs: ["4.5"], riskCodes: [],
     impact: { scope: im("con_impacto", "Amplía el alcance de Instalaciones MEP con dos tableros y su cableado."), schedule: im("con_impacto"), cost: im("con_impacto"),

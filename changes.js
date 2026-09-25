@@ -111,6 +111,37 @@
 	//#endregion
 	//#region src/shared/schedule-sample.ts
 	var SAMPLE_START_DATE = "2026-07-06";
+	var SAMPLE_CALENDAR = {
+		workDays: [
+			"Lun",
+			"Mar",
+			"Mié",
+			"Jue",
+			"Vie"
+		],
+		hoursPerDay: 8,
+		holidays: [
+			{
+				date: "2026-07-28",
+				name: "Fiestas Patrias"
+			},
+			{
+				date: "2026-07-29",
+				name: "Fiestas Patrias"
+			},
+			{
+				date: "2026-08-30",
+				name: "Santa Rosa de Lima"
+			}
+		]
+	};
+	function sampleSchedulePlan() {
+		return { calendar: {
+			workDays: SAMPLE_CALENDAR.workDays.slice(),
+			hoursPerDay: SAMPLE_CALENDAR.hoursPerDay,
+			holidays: SAMPLE_CALENDAR.holidays.map((h) => ({ ...h }))
+		} };
+	}
 	var PHASES = [
 		{
 			name: "Dirección de Proyecto",
@@ -1246,7 +1277,7 @@
 			response: "Estudio de suelos ampliado y refuerzo de cimentación (orden de cambio OC-001, financiada con contingencia).",
 			trigger: "Resultados del estudio de suelos (2.1)",
 			responseOwner: "Jefe de Ingeniería",
-			materializedOn: "2026-08-03",
+			materializedOn: "2026-08-31",
 			actualCost: 18e4,
 			actualDelay: 8
 		},
@@ -1919,7 +1950,7 @@
 			title: "Refuerzo de cimentación por hallazgo geotécnico",
 			description: "El estudio de suelos ampliado detecta estratos de baja capacidad portante: se refuerza la cimentación (riesgo R-03 materializado).",
 			requester: "Jefe de Ingeniería",
-			requestedOn: "2026-08-01",
+			requestedOn: "2026-08-31",
 			origin: "Riesgo materializado",
 			type: "Acción correctiva",
 			wbs: ["4.2"],
@@ -1937,7 +1968,7 @@
 			fund: "Contingencia",
 			orderIds: ["OC-001"],
 			status: "Aprobada",
-			decidedOn: "2026-08-03",
+			decidedOn: "2026-09-02",
 			approver: "CCB",
 			authLevel: "ccb",
 			rationale: "Riesgo identificado que ocurrió; se atiende con la contingencia (dentro de la línea base). Lo autoriza el CCB por su monto y porque mueve el fin del proyecto."
@@ -2150,7 +2181,7 @@
 				code: l.code,
 				name: l.name
 			}));
-			const net = connected ? G.util.activeScheduleNetwork() : G.util.scheduleNetwork(wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE);
+			const net = connected ? G.util.activeScheduleNetwork() : G.util.scheduleNetwork(wbs, m.activities, null, m.schedule, sampleSchedulePlan(), SAMPLE_START_DATE);
 			if (net) {
 				c.acts = net.nodes.filter((n) => !n.isMilestone).map((n) => ({
 					id: n.id,

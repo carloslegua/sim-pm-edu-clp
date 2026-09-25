@@ -137,7 +137,10 @@ src/shared/change-sample.ts      → (se inlinea en changes.js) ejemplo DISTRIB+
 src/shared/case-distribplus.ts   → (solo lectura) puestos del OBS y 18 paquetes de la EDT del caso DISTRIB+ para el modo
                                     independiente de los módulos nuevos; prueba contra el caso en tests/unit
 src/shared/evm-reference.ts      → (se inlinea en cronograma-cpm.js y evm.js) referencia de valor ganado que se congela con la línea base LB-n:
-                                    presupuesto por paquete, fechas por paquete, calendario; y su diferencia con lo vigente
+                                    presupuesto por paquete, fechas por paquete, calendario; y su diferencia con lo vigente;
+                                    órdenes de cambio aprobadas que pasan al presupuesto del paquete (approvedTransfers)
+src/shared/cost-estimate-sample.ts → (se inlinea en cost-estimate.js) precios del ejemplo de Estimar los Costos,
+                                    calibrados contra el costo de cada paquete de la EDT (prueba en tests/unit/effective-wbs.test.ts)
 src/shared/scope-baseline.ts     → (se inlinea en scope-statement.js y plan-direccion.js) línea base del alcance: enunciado + EDT + diccionario
                                     versionados juntos, archivo de versiones y comparación de lo aprobado con el trabajo en edición
 src/shared/requirements-baseline.ts → (se inlinea en requirements.js) versiones de la línea base de requisitos: archiva cada versión
@@ -176,9 +179,10 @@ src/shared/schedule-control.ts   → (se inlinea en cronograma-cpm.js y gpi-core
                                     base LB-n, variación y umbrales del Plan del Cronograma
 src/shared/schedule-risk.ts      → (se inlinea en risks.js y cost.js) riesgo de plazo: motor sobre el CPM
                                     del núcleo, ubicación de un riesgo en actividades, efecto en el fin
-src/shared/schedule-sample.ts    → (se inlinea en risks.js y cost.js) red DISTRIB+ completa (43 act.,
-                                    3 hitos, 51 enlaces) para los modos independientes; prueba de oro
-                                    en tests/unit/schedule-sample.test.ts (273 d, 34 críticos)
+src/shared/schedule-sample.ts    → (se inlinea en risks.js, cost.js, evm.js, changes.js y schedule-plan.js) red DISTRIB+
+                                    completa (43 act., 3 hitos, 51 enlaces) y el CALENDARIO único del caso (SAMPLE_CALENDAR:
+                                    lunes a viernes + feriados); prueba de oro en tests/unit/schedule-sample.test.ts
+                                    (273 d, 34 críticos, fin 2027-07-23)
 src/shared/stakeholder-engagement.ts → (se inlinea en stakeholder-studio.js) matriz de compromiso
                                     de interesados: brecha, prioridad, hallazgos
 src/shared/write-session.ts      → (se inlinea en cada IIFE) guardado con sesión de

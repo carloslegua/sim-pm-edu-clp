@@ -2,7 +2,8 @@
 // Actividades y Cronograma/CPM. Lo que ningún smoke jsdom prueba de punta a punta:
 //  1. Con un proyecto en blanco Costos arranca por índices SIN datos de ejemplo y dice qué falta (fecha base, pronósticos).
 //  2. El costo y las fechas REALES del proyecto dan la misma distribución del gasto en el tiempo que el ejemplo independiente: la fecha media
-//     ponderada del gasto (2026-12-19) y el costo base por año (4.023.415 en 2026 · 3.076.585 en 2027) son una huella de los 18 paquetes.
+//     ponderada del gasto (2026-12-21) y el costo base por año (3.955.385 en 2026 · 3.144.615 en 2027) son una huella de los 18 paquetes
+//     con el calendario del caso (el del Plan del Cronograma, que se carga también).
 //  3. Lo que el alumno ingresa (fecha base, pronósticos, composición, fijación de precio) se guarda y sobrevive a una recarga REAL.
 //  4. La simulación usa el retraso del análisis integrado de riesgo cuando el proyecto tiene Registro de Riesgos.
 import { test, expect, type Page } from "@playwright/test";
@@ -24,6 +25,7 @@ test("escalación por índices sobre el proyecto real: mismo gasto en el tiempo 
   await cargar(page, "/WBS_Builder.html", "#btnSample", "#modalConfirmBtn");
   await cargar(page, "/Activity_Definition.html", "#btnLoadSampleLive", "#modalOk");
   await cargar(page, "/Cronograma_CPM.html", "#btnLoadSampleLive", "#modalOk");
+  await cargar(page, "/Schedule_Management_Plan.html", "#btnSample", "#modalConfirmBtn");   // el calendario del caso (lunes a viernes, feriados)
 
   // 1) Costos del proyecto: en blanco, por índices, sin nada del ejemplo
   await page.goto("/Cost-management.html");
@@ -54,16 +56,16 @@ test("escalación por índices sobre el proyecto real: mismo gasto en el tiempo 
 
   // el gasto en el tiempo es EL MISMO que el del ejemplo independiente (huella: fecha media y costo base por año)
   const res = await txt(page, "#escResults");
-  expect(res).toContain("fecha media del gasto 2026-12-19");
-  expect(res).toMatch(/2026\s*\$ 4,023,415/); expect(res).toMatch(/2027\s*\$ 3,076,585/);
+  expect(res).toContain("fecha media del gasto 2026-12-21");
+  expect(res).toMatch(/2026\s*\$ 3,955,385/); expect(res).toMatch(/2027\s*\$ 3,144,615/);
   const limpio = await browser.newContext({ baseURL: "http://127.0.0.1:4173" });
   const solo = await limpio.newPage();
   await solo.goto("/Cost-management.html");
   await solo.locator('.tab[data-p="p3"]').click();
   const resSolo = await txt(solo, "#escResults");
-  expect(resSolo).toContain("fecha media del gasto 2026-12-19");
-  expect(resSolo).toMatch(/2026\s*\$ 4,023,415/); expect(resSolo).toMatch(/2027\s*\$ 3,076,585/);
-  await expect(solo.locator("#kEsc")).toHaveText("$ 127,601");                // el ejemplo: P70 con el retraso del cronograma
+  expect(resSolo).toContain("fecha media del gasto 2026-12-21");
+  expect(resSolo).toMatch(/2026\s*\$ 3,955,385/); expect(resSolo).toMatch(/2027\s*\$ 3,144,615/);
+  await expect(solo.locator("#kEsc")).toHaveText("$ 129,108");                // el ejemplo: P70 con el retraso del cronograma
   await limpio.close();
 
   // sin Registro de Riesgos no hay retraso que simular; se dice

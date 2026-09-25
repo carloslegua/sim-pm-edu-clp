@@ -30,8 +30,8 @@ export const SAMPLE_ESC_MIX: Record<string, Record<string, number>> = {
   "5.1": { labor: 100 }, "5.2": { labor: 100 }, "5.3": { labor: 100 }                                          // Pruebas, capacitación y cierre
 };
 // Precio FIJADO por contrato: el índice deja de correr desde esa fecha. Estructuras metálicas (Proveedor A): contrato de suministro a precio
-// fijo firmado el 2026-09-15, antes de la fabricación (inicia el 2026-09-29); equipos eléctricos (Proveedor C): al iniciar su compra.
-export const SAMPLE_ESC_LOCKS: Record<string, string> = { "3.1": "2026-09-15", "3.3": "2026-09-28" };
+// fijo firmado el 2026-09-15, antes de la fabricación (inicia el 2026-10-01); equipos eléctricos (Proveedor C): al iniciar su compra.
+export const SAMPLE_ESC_LOCKS: Record<string, string> = { "3.1": "2026-09-15", "3.3": "2026-09-30" };
 
 // El plan del ejemplo; `resolve` convierte un Código EDT en el id del paquete de la EDT de quien lo use ("" si no existe: se omite).
 export function buildSampleEscPlan(resolve: (code: string) => string): EscPlan {

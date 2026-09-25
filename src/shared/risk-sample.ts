@@ -33,7 +33,7 @@ export const SAMPLE_RISKS: SampleRisk[] = [
     cause: "el estudio de suelos detecta estratos de baja capacidad portante", event: "se debe reforzar la cimentación", effect: "aumenta el costo y se extiende la ejecución de cimentaciones",
     prob: 3, impCost: 3, impTime: 3, impScope: 1, costImpact: { low: 90000, likely: 180000, high: 350000 }, timeImpact: { low: 5, likely: 10, high: 20 },
     strategy: "mitigar", response: "Estudio de suelos ampliado y refuerzo de cimentación (orden de cambio OC-001, financiada con contingencia).", trigger: "Resultados del estudio de suelos (2.1)", responseOwner: "Jefe de Ingeniería",
-    materializedOn: "2026-08-03", actualCost: 180000, actualDelay: 8 },
+    materializedOn: "2026-08-31", actualCost: 180000, actualDelay: 8 },
   { code: "R-04", title: "Fluctuación del tipo de cambio", type: "amenaza", category: "Externo", owner: "Director de Proyecto", proximity: "media", status: "monitoreo", wbs: ["3.1", "3.3"],
     cause: "el 30 % del costo está denominado en moneda extranjera (estructuras y equipos importados)", event: "el tipo de cambio sube por encima de la banda prevista", effect: "aumenta el costo en moneda local de la procura",
     prob: 3, impCost: 3, impTime: 1, impScope: 1, costImpact: { low: 150000, likely: 300000, high: 600000 },

@@ -11,6 +11,34 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Los 4 hallazgos altos de la auditoría integral (2026-09-25)**:
+  - **S2 — La EDT guardaba datos derivados que nadie actualizaba.** WBS Builder muestra las fechas del CPM
+    y el costo de Estimar los Costos, pero no los guarda; el Panel, «Importar hitos desde la EDT» del Acta
+    y del Plan del Cronograma, Costos («Traer de la EDT»), el Plan para la Dirección, Calidad y Adquisiciones
+    leían los valores manuales (con el ejemplo, un proyecto que terminaba el 2026-11-06). Ahora leen
+    `GPI.util.effectiveWbs()`. Además `applyScheduleToWbs` usaba una red sin hitos (la EDT terminaba el
+    2027-04-06): ahora usa la misma red que Cronograma/CPM.
+  - **M1 — El caso tenía dos calendarios.** El Plan del Cronograma de ejemplo trabajaba lunes a sábado (fin
+    2027-05-19) y el resto del caso lunes a viernes sin feriados (2027-07-21). Hay un solo calendario del
+    caso (`SAMPLE_CALENDAR`: lunes a viernes con los feriados del 28 y 29 de julio y del 30 de agosto), que
+    usan el Plan y los modos independientes. **Los feriados del Plan nunca se aplicaban**: se guardan como
+    `{date, name}` y el núcleo esperaba texto; `holidayDates()` los normaliza. Con el calendario único los
+    273 días laborables terminan el **2027-07-23**, y se recalcularon las fechas del Acta, del Plan, de
+    Adquisiciones (fecha de corte 2026-08-05), del Valor Ganado (corte 2026-11-03, sigue siendo el día 85)
+    y de la escalación (P70 129.108; BAC 8.081.108; total 8.485.163, dentro del CAPEX). R-03 se materializa
+    al terminar el estudio de suelos (2026-08-31), no antes de empezarlo; CR-001 y OC-001 se deciden el 2026-09-02.
+  - **M2 — El ejemplo de Estimar los Costos no cuadraba con la EDT** (6.160.500 frente a 7.100.000; 10 de 18
+    paquetes distintos). Los precios (`src/shared/cost-estimate-sample.ts`) están calibrados: cada paquete
+    completo suma su costo de la EDT y cargar el ejemplo ya no cambia ningún costo. El presupuesto por paquete
+    usa en todos lados la regla de WBS Builder: el estimado solo si está completo; si no, el costo de la EDT
+    (Valor Ganado, la escalación y «Traer de Estimar los Costos» tomaban un estimado parcial).
+  - **M13 — Valor Ganado contaba dos veces la contingencia usada.** Una orden aprobada con cargo a la
+    contingencia (o con reserva o fondos incorporados con LB-n) suma su monto al presupuesto del paquete que
+    la ejecuta. Campo nuevo y opcional `wbsId`/`wbsCode` en las órdenes de Costos, con selector en el
+    formulario y en la tabla; una orden aprobada sin paquete se avisa. El KPI se llama «BAC del trabajo».
+  - Pruebas: `effective-wbs.test.ts` (5), `evm-reference.test.ts` (+3), `schedule-sample.test.ts` (+1), smoke
+    en Costos y Valor Ganado, e2e `effective-wbs.spec.ts`; los e2e del caso cargan también el Plan del
+    Cronograma (el calendario del caso). Las cifras de oro se recalcularon con el motor real.
 - **Las tarjetas del Panel se veían desordenadas: la etiqueta de estado se superponía al nombre** — la
   etiqueta («próximamente», «vacío», «con datos») estaba fuera del flujo (`position:absolute`, esquina
   superior derecha) y tapaba los nombres largos, como «Liderar el Equipo y Monitorear los Recursos».

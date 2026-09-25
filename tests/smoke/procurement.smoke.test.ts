@@ -51,20 +51,20 @@ const proyecto = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe("Plan_Adquisiciones.html (Plan de Gestión de las Adquisiciones)", () => {
-  it("modo independiente: muestra el ejemplo DISTRIB+ (5 adquisiciones, fecha de corte 2026-08-03, sin hallazgos)", async () => {
+  it("modo independiente: muestra el ejemplo DISTRIB+ (5 adquisiciones, fecha de corte 2026-08-05, sin hallazgos)", async () => {
     const dom = await abrir(), doc = dom.window.document;
-    expect(doc.querySelectorAll("details.pr").length).toBe(5); expect((doc.getElementById("asOf") as HTMLInputElement).value).toBe("2026-08-03");
+    expect(doc.querySelectorAll("details.pr").length).toBe(5); expect((doc.getElementById("asOf") as HTMLInputElement).value).toBe("2026-08-05");
     const k = txt(doc, "kpis"); expect(k).toMatch(/5 Adquisiciones planificadas/); expect(k).toMatch(/\$ 3,530,000|\$ 3\.530\.000/); expect(k).toMatch(/50 % del costo base/); expect(k).toMatch(/En orden/);
     expect(txt(doc, "finds")).toMatch(/Sin hallazgos/);
     expect(limpio(ficha(doc, "PR-01").querySelector("summary")!.innerHTML)).toMatch(/Estructuras metálicas prefabricadas.*Convocada.*en curso/);
-    expect(limpio(ficha(doc, "PR-02").querySelector("summary")!.innerHTML)).toMatch(/convocar antes del 2026-09-13/);
+    expect(limpio(ficha(doc, "PR-02").querySelector("summary")!.innerHTML)).toMatch(/convocar antes del 2026-09-15/);
   });
 
   it("cambiar la fecha de corte: la convocatoria de PR-02 vence y el plan pasa a riesgo (se guarda con el plan)", async () => {
     const dom = await abrir(), doc = dom.window.document, w = dom as any;
     poner(w, doc.getElementById("asOf")!, "2026-10-01", "change");
-    expect(limpio(ficha(doc, "PR-02").querySelector("summary")!.innerHTML)).toMatch(/convocar YA · venció 2026-09-13/);
-    expect(txt(doc, "finds")).toMatch(/P1 .*PR-02.*debió lanzarse el 2026-09-13.*hace 18 días/); expect(txt(doc, "kpis")).toMatch(/Con riesgos/);
+    expect(limpio(ficha(doc, "PR-02").querySelector("summary")!.innerHTML)).toMatch(/convocar YA · venció 2026-09-15/);
+    expect(txt(doc, "finds")).toMatch(/P1 .*PR-02.*debió lanzarse el 2026-09-15.*hace 16 días/); expect(txt(doc, "kpis")).toMatch(/Con riesgos/);
   });
 
   it("proyecto conectado: arranca EN BLANCO (regla de oro); agregar una adquisición completa los hallazgos al editar y se guarda", async () => {

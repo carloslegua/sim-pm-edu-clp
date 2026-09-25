@@ -1279,15 +1279,15 @@ var GPI = (function(exports) {
 			lockedLeafIds: []
 		};
 		const byLeaf = activities && activities.byLeaf || {};
-		const nodes = pertStats(pert || null, activities || null, wbs).rows.map((r) => ({
-			id: r.id,
-			dur: r.dur || 0
-		}));
-		if (!nodes.length) return {
+		const net = scheduleNetwork(wbs, activities || null, pert || null, schedule || null, schedulePlan || null, meta.startDate);
+		if (!net.nodes.some((n) => !n.isMilestone)) return {
 			wbs: out,
 			lockedLeafIds: []
 		};
-		const result = cpm(nodes, schedule && Array.isArray(schedule.links) ? schedule.links : [], projectCalendar(schedulePlan), { startDate: meta.startDate });
+		const result = cpm(net.nodes.map((n) => ({
+			id: n.id,
+			dur: n.dur
+		})), net.links, net.calendar, { startDate: meta.startDate });
 		if (!result.ok) return {
 			wbs: out,
 			lockedLeafIds: []
@@ -1369,6 +1369,13 @@ var GPI = (function(exports) {
 			wbs: out,
 			lockedLeafIds
 		};
+	}
+	function effectiveWbs(p) {
+		const proj = p === void 0 ? active() : p;
+		const m = proj && isPlainObject(proj.modules) ? proj.modules : null, wbs = m ? m.wbs : null;
+		if (!proj || !m || !wbs || !isPlainObject(wbs.nodes) || !wbs.rootId) return wbs || null;
+		const sched = applyScheduleToWbs(applyRaciToWbs(wbs, m.raci || null, m.obs || null), m.activities || null, m.pert || null, m.schedule || null, m.schedulePlan || null, proj.meta).wbs;
+		return applyCostEstimateToWbs(sched, m.costEstimate || null, m.activities || null).wbs;
 	}
 	function wbsPhases(wbs) {
 		if (!wbs || !wbs.nodes || !wbs.rootId || !wbs.nodes[wbs.rootId]) return [];
@@ -2634,9 +2641,12 @@ var GPI = (function(exports) {
 				5
 			],
 			hoursPerDay: Number(cal.hoursPerDay) || 8,
-			holidays: Array.isArray(cal.holidays) ? cal.holidays.slice() : [],
+			holidays: holidayDates(cal.holidays),
 			provisional: false
 		};
+	}
+	function holidayDates(list) {
+		return (Array.isArray(list) ? list : []).map((h) => (typeof h === "string" ? h : h && typeof h === "object" ? String(h.date || "") : "").slice(0, 10)).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s));
 	}
 	function makeRealTimeAxis(start, calendar) {
 		const DAY = 864e5, EPS = 1e-9;
@@ -2651,8 +2661,8 @@ var GPI = (function(exports) {
 			work[d] = true;
 		});
 		const hol = {};
-		(calendar.holidays || []).forEach((h) => {
-			hol[String(h).slice(0, 10)] = true;
+		holidayDates(calendar.holidays).forEach((h) => {
+			hol[h] = true;
 		});
 		const isWork = (s) => !!work[((s + 4) % 7 + 7) % 7] && !hol[(/* @__PURE__ */ new Date(s * DAY)).toISOString().slice(0, 10)];
 		const nextWork = (s) => {
@@ -3053,8 +3063,8 @@ var GPI = (function(exports) {
 			work[d] = true;
 		});
 		const hol = {};
-		(cal.holidays || []).forEach((h) => {
-			hol[String(h).slice(0, 10)] = true;
+		holidayDates(cal.holidays).forEach((h) => {
+			hol[h] = true;
 		});
 		function iso(d) {
 			return d.toISOString().slice(0, 10);
@@ -3202,6 +3212,8 @@ var GPI = (function(exports) {
 		applyScheduleToWbs,
 		costEstimateRows,
 		costEstimateTotal,
+		effectiveWbs,
+		holidayDates,
 		applyCostEstimateToWbs,
 		wbsPhases,
 		activitiesStats,
@@ -3334,10 +3346,12 @@ var GPI = (function(exports) {
 	exports.deleteProject = deleteProject;
 	exports.describeWrite = describeWrite;
 	exports.duplicateProject = duplicateProject;
+	exports.effectiveWbs = effectiveWbs;
 	exports.esc = esc;
 	exports.exportActive = exportActive;
 	exports.getModule = getModule;
 	exports.hasUnsavedChanges = hasUnsavedChanges;
+	exports.holidayDates = holidayDates;
 	exports.importProject = importProject;
 	exports.ingestToolExport = ingestToolExport;
 	exports.installStorageNotice = installStorageNotice;

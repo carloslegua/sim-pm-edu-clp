@@ -6,7 +6,7 @@ import {
   compareBaseline, deviationPct, makeSnapshot, needsSponsor, nextVersion, normalizeBaseline, planOf, scheduleHealth,
   type CtlLink, type CtlNode, type CtlPlan
 } from "../../src/shared/schedule-control";
-import { SAMPLE_START_DATE, sampleScheduleModules } from "../../src/shared/schedule-sample";
+import { SAMPLE_START_DATE, sampleScheduleModules, sampleSchedulePlan } from "../../src/shared/schedule-sample";
 
 const N = (id: string, dur: number, o: Partial<CtlNode> = {}): CtlNode => ({ id, code: id, name: "Act " + id, isMilestone: false, hasDur: true, dur, ...o });
 const L = (from: string, to: string, type = "FS", lag = 0): CtlLink => ({ from, to, type, lag, lagUnit: "d" });
@@ -77,7 +77,7 @@ describe("salud de la red", () => {
     expect(h.evaluated).toBe(h.checks.filter((c) => c.pass !== null).length);
   });
   it("red DISTRIB+ completa: lo que enseña (desfases SS y holguras enormes en Procura), sin adelantos", () => {
-    const m = sampleScheduleModules(), n = scheduleNetwork(m.wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE);
+    const m = sampleScheduleModules(), n = scheduleNetwork(m.wbs, m.activities, null, m.schedule, sampleSchedulePlan(), SAMPLE_START_DATE);
     const nodes: CtlNode[] = n.nodes.map((x) => ({ id: x.id, code: x.code, name: x.name, isMilestone: x.isMilestone, hasDur: x.hasDur, dur: x.dur }));
     const links = n.links as unknown as CtlLink[], r = run(nodes, links);
     const h = scheduleHealth(nodes, links, r.rows, planOf({ criticalPath: { nearCriticalThresholdDays: 5 } }));

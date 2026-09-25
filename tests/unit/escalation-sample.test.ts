@@ -5,10 +5,10 @@ import { addWorkingDays, cpm, parseISO, scheduleNetwork, wbsLeaves } from "../..
 import { EVM_SAMPLE_COSTS } from "../../src/shared/evm-sample";
 import { escalate, simulateEscalation, type EscPackage } from "../../src/shared/escalation";
 import { SAMPLE_BASE_DATE, SAMPLE_ESC_LOCKS, SAMPLE_ESC_MIX, buildSampleEscPlan } from "../../src/shared/escalation-sample";
-import { SAMPLE_START_DATE, sampleScheduleModules } from "../../src/shared/schedule-sample";
+import { SAMPLE_START_DATE, sampleScheduleModules, sampleSchedulePlan } from "../../src/shared/schedule-sample";
 
 function paquetes(): EscPackage[] {
-  const m = sampleScheduleModules(), net = scheduleNetwork(m.wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE)!;
+  const m = sampleScheduleModules(), net = scheduleNetwork(m.wbs, m.activities, null, m.schedule, sampleSchedulePlan(), SAMPLE_START_DATE)!;
   const res = cpm(net.nodes.map((n) => ({ id: n.id, dur: n.dur })), net.links, net.calendar as never, {});
   if (!res.ok) throw new Error("ciclo");
   const idx: Record<string, { es: number; ef: number }> = {};
@@ -26,9 +26,9 @@ describe("escalation-sample: caso DISTRIB+", () => {
     Object.entries(SAMPLE_ESC_MIX).forEach(([c, m]) => expect(Object.values(m).reduce((s, x) => s + x, 0), c).toBe(100));
     Object.keys(SAMPLE_ESC_LOCKS).forEach((c) => expect(codes).toContain(c));
   });
-  it("las fechas de la red: inicia el 2026-07-06 y termina el 2027-07-21; la fecha base de precios (2026-07-01) es anterior al primer gasto", () => {
+  it("las fechas de la red: inicia el 2026-07-06 y termina el 2027-07-23 (calendario del caso, con sus feriados); la fecha base de precios (2026-07-01) es anterior al primer gasto", () => {
     const p = paquetes(), first = p.map((x) => x.start as string).sort()[0], last = p.map((x) => x.end as string).sort().reverse()[0];
-    expect([first, last]).toEqual(["2026-07-06", "2027-07-21"]);
+    expect([first, last]).toEqual(["2026-07-06", "2027-07-23"]);
     expect(SAMPLE_BASE_DATE < first).toBe(true);
     expect(p.reduce((s, x) => s + x.cost, 0)).toBe(7100000);
   });
@@ -36,21 +36,21 @@ describe("escalation-sample: caso DISTRIB+", () => {
     const p = paquetes();
     Object.entries(SAMPLE_ESC_LOCKS).forEach(([c, d]) => { const k = p.find((x) => x.code === c) as EscPackage; expect(d <= (k.start as string), c).toBe(true); expect(d > SAMPLE_BASE_DATE, c).toBe(true); });
   });
-  it("prueba de oro: escalación central sobre el costo base = 81,463 (1,15 %), por cuenta y por año, con fecha media del gasto 2026-12-19", () => {
+  it("prueba de oro: escalación central sobre el costo base = 82,489 (1,16 %), por cuenta y por año, con fecha media del gasto 2026-12-21", () => {
     const r = escalate(plan(), paquetes());
-    expect(Math.round(r.esc)).toBe(81463);
-    expect(r.factor).toBeCloseTo(0.0114736, 6);
-    expect(r.byAccount.map((a) => [a.id, Math.round(a.esc)])).toEqual([["labor", 32426], ["material", 18148], ["equipment", 5936], ["subcontract", 24954]]);
-    expect(r.byYear.map((y) => [y.year, Math.round(y.esc)])).toEqual([[2026, 22819], [2027, 58644]]);
-    expect(r.midDate).toBe("2026-12-19");
+    expect(Math.round(r.esc)).toBe(82489);
+    expect(r.factor).toBeCloseTo(0.0116181, 6);
+    expect(r.byAccount.map((a) => [a.id, Math.round(a.esc)])).toEqual([["labor", 32851], ["material", 18321], ["equipment", 6038], ["subcontract", 25279]]);
+    expect(r.byYear.map((y) => [y.year, Math.round(y.esc)])).toEqual([[2026, 22319], [2027, 60170]]);
+    expect(r.midDate).toBe("2026-12-21");
     expect(r.advisories.filter((a) => a.severity !== "info").map((a) => a.code)).toEqual([]);
     // el precio fijado de 3.1 recorta su escalación: con el 25,6 % del costo aporta menos del 11 % de la escalación
     const k31 = r.byPackage.find((p) => p.code === "3.1")!;
     expect(k31.locked).toBe(true); expect(k31.esc / r.esc).toBeLessThan(0.11);
   });
-  it("prueba de oro de la simulación SIN retraso: P50 1,30 % y P90 1,62 % del costo; el central cae en el 20–30 % (el riesgo de la tasa es hacia arriba)", () => {
+  it("prueba de oro de la simulación SIN retraso: P50 1,31 % y P90 1,64 % del costo; el central cae en el 20–30 % (el riesgo de la tasa es hacia arriba)", () => {
     const s = simulateEscalation(plan(), paquetes(), { iterations: 10000 })!;
-    expect(s.p[50]).toBeCloseTo(0.0129737, 5); expect(s.p[90]).toBeCloseTo(0.0161832, 5);
+    expect(s.p[50]).toBeCloseTo(0.0131348, 5); expect(s.p[90]).toBeCloseTo(0.0163780, 5);
     expect(s.mean).toBeGreaterThan(s.det);
     expect(s.probAtOrBelowDet).toBeGreaterThan(0.2); expect(s.probAtOrBelowDet).toBeLessThan(0.3);
     expect(s.withDelay).toBe(false); expect(s.uncertainAccounts).toBe(4);

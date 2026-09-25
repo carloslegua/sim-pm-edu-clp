@@ -95,7 +95,7 @@ describe("Estimar_Costos.html (cost-estimate.js)", () => {
     // Es el ÚNICO paquete sin estimado completo -- todos los demás lo tienen.
     // Los hitos NUNCA cuentan aquí (ni en el total ni en la cobertura).
     expect(doc.getElementById("sbPkg")!.textContent).toBe("17/18 paquetes con estimado completo");
-    expect(doc.getElementById("sbTotal")!.textContent).toBe("6,160,500");
+    expect(doc.getElementById("sbTotal")!.textContent).toBe("6,727,000");   // 7.100.000 − los 373.000 que le faltan a 4.3: cada paquete completo suma su costo de la EDT
     expect(doc.getElementById("missList")!.textContent).toMatch(/Todos los paquetes de trabajo tienen actividades definidas/);
   });
 

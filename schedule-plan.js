@@ -26,6 +26,32 @@
 		};
 	}
 	//#endregion
+	//#region src/shared/schedule-sample.ts
+	var SAMPLE_CALENDAR = {
+		workDays: [
+			"Lun",
+			"Mar",
+			"Mié",
+			"Jue",
+			"Vie"
+		],
+		hoursPerDay: 8,
+		holidays: [
+			{
+				date: "2026-07-28",
+				name: "Fiestas Patrias"
+			},
+			{
+				date: "2026-07-29",
+				name: "Fiestas Patrias"
+			},
+			{
+				date: "2026-08-30",
+				name: "Santa Rosa de Lima"
+			}
+		]
+	};
+	//#endregion
 	//#region src/modules/schedule-plan/main.ts
 	var FIXED_TOOL = "Microsoft Project (MS Project)";
 	function defaultThresholds() {
@@ -148,37 +174,17 @@
 				activityIdPattern: "EDT.### — mismo código que expone WBS Builder."
 			},
 			calendar: {
-				workDays: [
-					"Lun",
-					"Mar",
-					"Mié",
-					"Jue",
-					"Vie",
-					"Sáb"
-				],
-				hoursPerDay: 9,
+				workDays: SAMPLE_CALENDAR.workDays.slice(),
+				hoursPerDay: SAMPLE_CALENDAR.hoursPerDay,
 				workingTimes: [{
 					from: "08:00",
 					to: "12:00"
 				}, {
 					from: "13:00",
-					to: "18:00"
+					to: "17:00"
 				}],
-				holidays: [
-					{
-						date: "2026-07-28",
-						name: "Fiestas Patrias"
-					},
-					{
-						date: "2026-07-29",
-						name: "Fiestas Patrias"
-					},
-					{
-						date: "2026-08-30",
-						name: "Santa Rosa de Lima"
-					}
-				],
-				notes: "Calendario 6x1 (lunes a sábado) para el personal de obra en Construcción; Dirección de Proyecto e Ingeniería usan calendario 5x2. Ambos calendarios se modelan en la herramienta de programación."
+				holidays: SAMPLE_CALENDAR.holidays.map((h) => ({ ...h })),
+				notes: "Calendario 5x2 (lunes a viernes, 8 h) para todo el proyecto: la red se programa con un solo calendario. Los trabajos de obra en sábado se tratan como horas extra de recuperación y no se programan."
 			},
 			durationEstimating: {
 				method: "tres_valores",
@@ -231,42 +237,42 @@
 			milestones: [
 				{
 					name: "Aprobación del Plan de Gestión del Proyecto",
-					date: "2026-08-03",
+					date: "2026-08-05",
 					type: "interno",
 					constraint: "FNLT",
 					notes: "Cierra el paquete del Plan de gestión (1.2): línea base inicial."
 				},
 				{
 					name: "Fin de Ingeniería y Diseño",
-					date: "2026-09-28",
+					date: "2026-09-30",
 					type: "interno",
 					constraint: "FNLT",
 					notes: ""
 				},
 				{
 					name: "Fin de Procura (entrega de estructuras, materiales y equipos)",
-					date: "2026-11-02",
+					date: "2026-11-04",
 					type: "contractual",
 					constraint: "FNLT",
-					notes: "Lo cierra el paquete de materiales de construcción (Proveedor B, 3.2); las estructuras metálicas (Proveedor A) se entregan el 15/10 y los equipos eléctricos (Proveedor C) el 09/10."
+					notes: "Lo cierra el paquete de materiales de construcción (Proveedor B, 3.2); las estructuras metálicas (Proveedor A) se entregan el 19/10 y los equipos eléctricos (Proveedor C) el 13/10."
 				},
 				{
 					name: "Permisos y licencias municipales aprobados",
-					date: "2026-11-09",
+					date: "2026-11-11",
 					type: "regulatorio",
 					constraint: "FNET",
 					notes: "Habilita el inicio de movimiento de tierras (4.1)."
 				},
 				{
 					name: "Fin de cimentaciones",
-					date: "2027-02-02",
+					date: "2027-02-04",
 					type: "interno",
 					constraint: "FNLT",
 					notes: "Hito H2 de la red del cronograma."
 				},
 				{
 					name: "Entrega final y acta de cierre",
-					date: "2027-07-21",
+					date: "2027-07-23",
 					type: "contractual",
 					constraint: "FNLT",
 					notes: "Fin de Pruebas y Puesta en Marcha (5.3); cierre contractual con el cliente. Es el fin de la ruta crítica del cronograma CPM (273 días laborables)."
@@ -1155,7 +1161,7 @@
 	function updateMetaPanels() {
 		const hasGpi = typeof window.GPI !== "undefined" && !!window.GPI.available && window.GPI.available();
 		const meta = hasGpi ? window.GPI.meta() : null;
-		const wbs = hasGpi ? window.GPI.getModule("wbs") ?? null : null;
+		const wbs = hasGpi ? window.GPI.util.effectiveWbs() ?? null : null;
 		const raci = hasGpi ? window.GPI.getModule("raci") ?? null : null;
 		const introPanel = document.getElementById("introMetaPanel");
 		if (hasGpi && window.GPI.active()) introPanel.innerHTML = "<b>Proyecto activo:</b> " + esc(meta?.name || "—") + (meta?.code ? " · " + esc(meta.code) : "") + "<br><b>Cliente:</b> " + esc(meta?.client || "—") + " · <b>Ubicación:</b> " + esc(meta?.location || "—") + "<br><b>Vigencia:</b> " + esc(meta?.startDate || "—") + " → " + esc(meta?.endDate || "—") + " · <b>CAPEX:</b> " + moneyFmt(meta?.capex, meta?.currency);
@@ -1263,7 +1269,7 @@
 				await showAlert("Esta acción requiere un proyecto activo con una EDT cargada. Ábrelo desde el Panel de Control y completa WBS Builder primero.");
 				return;
 			}
-			const wbs = window.GPI.getModule("wbs");
+			const wbs = window.GPI.util.effectiveWbs();
 			const phases = window.GPI.util.wbsPhases(wbs || {});
 			if (!phases.length) {
 				await showAlert("El proyecto activo aún no tiene fases en la EDT. Complétala primero en WBS Builder.");

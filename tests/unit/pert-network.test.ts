@@ -1,7 +1,7 @@
 // PERT sobre la red completa (ramas paralelas): src/shared/pert-network.ts. Usa el CPM real del núcleo.
 import { describe, expect, it } from "vitest";
 import { cpm, pertCriticalChain, scheduleNetwork } from "../../src/core/gpi-core";
-import { SAMPLE_START_DATE, sampleScheduleModules } from "../../src/shared/schedule-sample";
+import { SAMPLE_START_DATE, sampleScheduleModules, sampleSchedulePlan } from "../../src/shared/schedule-sample";
 import { PERT_SIM_ITERATIONS, isTriple, probWithin, samplePert, simulatePertNetwork, type SimAct } from "../../src/shared/pert-network";
 import { mulberry32 } from "../../src/shared/range-estimating";
 import type { CpmFn, NetLink } from "../../src/shared/schedule-risk";
@@ -54,7 +54,7 @@ describe("simulatePertNetwork", () => {
     expect(simulatePertNetwork([act("a", 1, 2, 3), act("b", 1, 2, 3)], [{ from: "a", to: "b", type: "FS" }, { from: "b", to: "a", type: "FS" }], null, CPM)).toBeNull();
   });
   it("red DISTRIB+ completa (43 actividades, 51 enlaces): 2 000 iteraciones en pocos segundos (sin fechas, ~150× más rápido que con ellas) y con media coherente", () => {
-    const m = sampleScheduleModules(), net = scheduleNetwork(m.wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE);
+    const m = sampleScheduleModules(), net = scheduleNetwork(m.wbs, m.activities, null, m.schedule, sampleSchedulePlan(), SAMPLE_START_DATE);
     const acts: SimAct[] = net.nodes.filter((n) => !n.isMilestone).map((n) => ({ id: n.id, dur: n.dur, o: n.dur * 0.8, m: n.dur, p: n.dur * 1.5 }));
     const t0 = Date.now(), r = simulatePertNetwork(acts, net.links as unknown as NetLink[], net.calendar, CPM)!, ms = Date.now() - t0;
     expect(ms).toBeLessThan(4000);                                     // con fechas tardaba ~22 s y congelaba la pantalla

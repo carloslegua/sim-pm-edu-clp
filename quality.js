@@ -225,7 +225,7 @@
 	}
 	var rolesOf = (G) => Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)));
 	function gatherQualityFacts(G) {
-		const wbs = G.getModule("wbs"), nodes = rec$1(wbs && wbs.nodes);
+		const wbs = G.util.effectiveWbs(), nodes = rec$1(wbs && wbs.nodes);
 		return {
 			leaves: G.util.wbsLeaves(wbs).map((l) => {
 				const n = rec$1(nodes[l.id]);
@@ -726,7 +726,7 @@
 			response: "Estudio de suelos ampliado y refuerzo de cimentación (orden de cambio OC-001, financiada con contingencia).",
 			trigger: "Resultados del estudio de suelos (2.1)",
 			responseOwner: "Jefe de Ingeniería",
-			materializedOn: "2026-08-03",
+			materializedOn: "2026-08-31",
 			actualCost: 18e4,
 			actualDelay: 8
 		},

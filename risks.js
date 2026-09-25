@@ -744,7 +744,7 @@
 			response: "Estudio de suelos ampliado y refuerzo de cimentación (orden de cambio OC-001, financiada con contingencia).",
 			trigger: "Resultados del estudio de suelos (2.1)",
 			responseOwner: "Jefe de Ingeniería",
-			materializedOn: "2026-08-03",
+			materializedOn: "2026-08-31",
 			actualCost: 18e4,
 			actualDelay: 8
 		},
@@ -1054,6 +1054,37 @@
 	//#endregion
 	//#region src/shared/schedule-sample.ts
 	var SAMPLE_START_DATE = "2026-07-06";
+	var SAMPLE_CALENDAR = {
+		workDays: [
+			"Lun",
+			"Mar",
+			"Mié",
+			"Jue",
+			"Vie"
+		],
+		hoursPerDay: 8,
+		holidays: [
+			{
+				date: "2026-07-28",
+				name: "Fiestas Patrias"
+			},
+			{
+				date: "2026-07-29",
+				name: "Fiestas Patrias"
+			},
+			{
+				date: "2026-08-30",
+				name: "Santa Rosa de Lima"
+			}
+		]
+	};
+	function sampleSchedulePlan() {
+		return { calendar: {
+			workDays: SAMPLE_CALENDAR.workDays.slice(),
+			hoursPerDay: SAMPLE_CALENDAR.hoursPerDay,
+			holidays: SAMPLE_CALENDAR.holidays.map((h) => ({ ...h }))
+		} };
+	}
 	var PHASES = [
 		{
 			name: "Dirección de Proyecto",
@@ -2308,7 +2339,7 @@
 			if (connected) net = G.util.activeScheduleNetwork();
 			else {
 				const m = sampleScheduleModules();
-				net = G.util.scheduleNetwork(m.wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE);
+				net = G.util.scheduleNetwork(m.wbs, m.activities, null, m.schedule, sampleSchedulePlan(), SAMPLE_START_DATE);
 			}
 			eng = makeEngine(net, G.util.cpm);
 		} catch (e) {

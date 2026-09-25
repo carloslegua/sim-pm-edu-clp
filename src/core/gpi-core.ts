@@ -970,10 +970,12 @@ export function applyScheduleToWbs(
   const out = wbs ? (JSON.parse(JSON.stringify(wbs)) as WbsModule) : (wbs as unknown as WbsModule);
   if (!wbs || !wbs.nodes || !meta || !meta.startDate) return { wbs: out, lockedLeafIds: [] };
   const byLeaf = (activities && activities.byLeaf) || {};
-  const nodes: CpmNode[] = pertStats(pert || null, activities || null, wbs).rows.map((r) => ({ id: r.id, dur: r.dur || 0 }));
-  if (!nodes.length) return { wbs: out, lockedLeafIds: [] };
-  const links = (schedule && Array.isArray(schedule.links)) ? schedule.links : [];
-  const result = cpm(nodes, links, projectCalendar(schedulePlan), { startDate: meta.startDate });
+  // La MISMA red que Cronograma/CPM (scheduleNetwork: actividades + HITOS, con sus enlaces). Antes se armaba solo con las actividades
+  // y los enlaces que pasan por un hito se perdían: con el ejemplo DISTRIB+ la EDT terminaba el 2027-04-06 en vez del fin del CPM
+  // (auditoría, alta; el mismo error que ya se había corregido en scheduleStats para el Panel).
+  const net = scheduleNetwork(wbs, activities || null, pert || null, schedule || null, schedulePlan || null, meta.startDate);
+  if (!net.nodes.some((n) => !n.isMilestone)) return { wbs: out, lockedLeafIds: [] };
+  const result = cpm(net.nodes.map((n) => ({ id: n.id, dur: n.dur })), net.links, net.calendar, { startDate: meta.startDate });
   if (!result.ok) return { wbs: out, lockedLeafIds: [] };
   const lockedLeafIds: string[] = [];
   Object.keys(byLeaf).forEach((leafId) => {
@@ -1057,6 +1059,20 @@ export function applyCostEstimateToWbs(wbs?: WbsModule | null, estimate?: CostEs
     lockedLeafIds.push(leafId);
   });
   return { wbs: out, lockedLeafIds };
+}
+
+// La EDT EFECTIVA del proyecto activo (auditoría, alta): la misma que muestra WBS Builder -- los Responsables salen de la
+// Matriz RACI, las fechas del CPM y el costo de Estimar los Costos (cada uno solo donde corresponde; el resto conserva lo
+// que se cargó a mano). Esos valores son DERIVADOS y no se guardan en la EDT: quien resume la EDT (Panel, Acta, Plan del
+// Cronograma, Costos, Plan para la Dirección, Calidad, Adquisiciones) debe leerla por aquí y no con getModule("wbs"), o
+// ve la copia manual (con el ejemplo DISTRIB+, un cronograma que terminaba el 2026-11-06 en vez del fin del CPM).
+export function effectiveWbs(p?: GpiProject | null): WbsModule | null {
+  const proj = p === undefined ? active() : p;
+  const m = proj && isPlainObject(proj.modules) ? proj.modules : null, wbs = m ? (m.wbs as WbsModule | null | undefined) : null;
+  if (!proj || !m || !wbs || !isPlainObject(wbs.nodes) || !wbs.rootId) return wbs || null;
+  const raci = applyRaciToWbs(wbs, m.raci || null, m.obs || null) as WbsModule;
+  const sched = applyScheduleToWbs(raci, m.activities || null, m.pert || null, m.schedule || null, m.schedulePlan || null, proj.meta).wbs;
+  return applyCostEstimateToWbs(sched, m.costEstimate || null, m.activities || null).wbs;
 }
 
 export interface WbsPhaseRow { id: string; name: string; start: string; end: string; cost: number; }
@@ -2081,9 +2097,17 @@ export function projectCalendar(sp?: SchedulePlanModule | null): ProjectCalendar
   return {
     workDayIdx: days.length ? days : [1, 2, 3, 4, 5],
     hoursPerDay: Number(cal.hoursPerDay) || 8,
-    holidays: Array.isArray(cal.holidays) ? cal.holidays.slice() : [],
+    holidays: holidayDates(cal.holidays),
     provisional: false
   };
+}
+// Feriados como fechas ISO. El Plan de Gestión del Cronograma los guarda como {date, name}; el CPM, el valor ganado y
+// addWorkingDays esperan "YYYY-MM-DD": antes se pasaban los objetos tal cual y String(objeto) no es una fecha, así que
+// NINGÚN feriado se aplicaba (auditoría, alta). Acepta ambas formas y descarta lo que no sea una fecha.
+export function holidayDates(list: unknown): string[] {
+  return (Array.isArray(list) ? list : [])
+    .map((h) => (typeof h === "string" ? h : h && typeof h === "object" ? String((h as { date?: unknown }).date || "") : "").slice(0, 10))
+    .filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s));
 }
 
 // Eje de tiempo REAL del calendario, para los desfases en días transcurridos
@@ -2109,7 +2133,7 @@ function makeRealTimeAxis(start: Date, calendar: { workDayIdx?: number[]; holida
   const DAY = 86400000, EPS = 1e-9;
   const work: Record<number, boolean> = {};
   (calendar.workDayIdx && calendar.workDayIdx.length ? calendar.workDayIdx : [1, 2, 3, 4, 5]).forEach((d) => { work[d] = true; });
-  const hol: Record<string, boolean> = {}; (calendar.holidays || []).forEach((h) => { hol[String(h).slice(0, 10)] = true; });
+  const hol: Record<string, boolean> = {}; holidayDates(calendar.holidays).forEach((h) => { hol[h] = true; });
   const isWork = (s: number): boolean => !!work[((s + 4) % 7 + 7) % 7] && !hol[new Date(s * DAY).toISOString().slice(0, 10)]; // 1970-01-01 fue jueves
   const nextWork = (s: number): number => { while (!isWork(s)) s++; return s; };
   const prevWork = (s: number): number => { while (!isWork(s)) s--; return s; };
@@ -2402,7 +2426,7 @@ export function addWorkingDays(date: Date | null, n: number, calendar?: { workDa
   if (!date) return "";
   const cal = calendar || { workDayIdx: [1, 2, 3, 4, 5], holidays: [] };
   const work: Record<number, boolean> = {}; (cal.workDayIdx || [1, 2, 3, 4, 5]).forEach((d) => { work[d] = true; });
-  const hol: Record<string, boolean> = {}; (cal.holidays || []).forEach((h) => { hol[String(h).slice(0, 10)] = true; });
+  const hol: Record<string, boolean> = {}; holidayDates(cal.holidays).forEach((h) => { hol[h] = true; });
   function iso(d: Date): string { return d.toISOString().slice(0, 10); }
   function isWork(d: Date): boolean { return !!work[d.getUTCDay()] && !hol[iso(d)]; }
   const d = new Date(date.getTime());
@@ -2559,7 +2583,7 @@ export function activeScheduleNetwork(): ScheduleNetwork | null {
 
 export const util = {
   wbsRollup, wbsResources, wbsCodes, wbsLeaves, obsNodes, obsLabel,
-  raciResponsibleIds, applyRaciToWbs, applyScheduleToWbs, costEstimateRows, costEstimateTotal,
+  raciResponsibleIds, applyRaciToWbs, applyScheduleToWbs, costEstimateRows, costEstimateTotal, effectiveWbs, holidayDates,
   applyCostEstimateToWbs, wbsPhases, activitiesStats, pertStats,
   pertProbability, pertCriticalChain, charterAudit, schedulePlanAudit, raciCoverage, raciAudit,
   costSummary, riskPortfolio, pad2, charterRans, requirementsAudit, reqByWbsLeaf,

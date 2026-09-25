@@ -35,7 +35,7 @@ test("Adquisiciones sobre la EDT, el OBS y los riesgos reales: en blanco, ejempl
   // la fecha de corte manda: pasada la fecha límite de PR-02 sin convocarla, es un riesgo
   await page.locator("#asOf").fill("2026-10-01");
   await expect(page.locator("#finds")).toContainText("PR-02");
-  await expect(page.locator("#finds")).toContainText("debió lanzarse el 2026-09-13");
+  await expect(page.locator("#finds")).toContainText("debió lanzarse el 2026-09-15");
   await expect(page.locator("#kpis")).toContainText("Con riesgos");
   await page.waitForTimeout(1300);
 

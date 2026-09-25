@@ -12,7 +12,7 @@ const cargar = async (page: Page, url: string, boton: string, confirmar: string)
 const cifras = async (page: Page) => {
   const t = (await page.locator("#evTop").innerText()).replace(/\s+/g, " ");   // innerText aplica el text-transform de las etiquetas (mayúsculas)
   const g = (re: RegExp) => { const m = t.match(re); return m ? m[1] : "—"; };            // en blanco no hay CPI ni SPI
-  return { bac: g(/BAC \(trabajo\)\s*[^\d]*([\d,]+)/i), pv: g(/PV — planificado\s*[^\d]*([\d,]+)/i), ev: g(/EV — ganado\s*[^\d]*([\d,]+)/i), ac: g(/AC — costo real\s*[^\d]*([\d,]+)/i), cpi: g(/CPI\s*([\d.]+)/i), spi: g(/SPI\s*([\d.]+)/i) };
+  return { bac: g(/BAC del trabajo\s*[^\d]*([\d,]+)/i), pv: g(/PV — planificado\s*[^\d]*([\d,]+)/i), ev: g(/EV — ganado\s*[^\d]*([\d,]+)/i), ac: g(/AC — costo real\s*[^\d]*([\d,]+)/i), cpi: g(/CPI\s*([\d.]+)/i), spi: g(/SPI\s*([\d.]+)/i) };
 };
 
 test("Valor Ganado sobre el proyecto real (con línea base) = ejemplo independiente; el Panel abre el módulo", async ({ page, browser }) => {
@@ -22,6 +22,7 @@ test("Valor Ganado sobre el proyecto real (con línea base) = ejemplo independie
   await cargar(page, "/WBS_Builder.html", "#btnSample", "#modalConfirmBtn");
   await cargar(page, "/Activity_Definition.html", "#btnLoadSampleLive", "#modalOk");
   await cargar(page, "/Cronograma_CPM.html", "#btnLoadSampleLive", "#modalOk");
+  await cargar(page, "/Schedule_Management_Plan.html", "#btnSample", "#modalConfirmBtn");   // el calendario del caso: el corte 2026-11-03 es el día 85
 
   // línea base del cronograma (LB-1): de ella sale el PV
   await page.goto("/Cronograma_CPM.html");

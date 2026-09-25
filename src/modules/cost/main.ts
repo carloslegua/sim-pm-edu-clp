@@ -38,7 +38,7 @@ import {
 } from "../../shared/risk-analysis";
 import { SAMPLE_PLAN as SAMPLE_RISK_PLAN, buildSampleRisks } from "../../shared/risk-sample";
 import { ACCURACY_SOURCE, accuracyOriginText, accuracyRange, appliedAccuracy, classAdvisory, definitionMaturity, normalizeAccuracyOverride, overrideProblem, pct as pctTxt, publishedBandText, type AccuracyOverride, type EstimateClass, type MaturityInput } from "../../shared/estimate-class";
-import { SAMPLE_START_DATE, sampleScheduleModules } from "../../shared/schedule-sample";
+import { SAMPLE_START_DATE, sampleScheduleModules, sampleSchedulePlan } from "../../shared/schedule-sample";
 import { fmtDays, makeEngine, resolveTargets, type Engine, type Network } from "../../shared/schedule-risk";
 import {
   analyzeChangeOrders, contingencyByRisk, orderEffect, planBaselining, requiredAuthority, validateApproval,
@@ -54,6 +54,8 @@ import { buildSampleEscPlan } from "../../shared/escalation-sample";
 import { CHECKLIST_ITEMS, GROUPS, SECTIONS, STATUSES, STATUS_LABEL as BOE_STATUS_LABEL, blankBoe, boeFindings, completeness, normalizeBoe, serializeBoe, type Boe, type BoeCtx, type BoeFacts, type BoeSection } from "../../shared/boe";
 import { SAMPLE_CAPEX, buildSampleBoe } from "../../shared/boe-sample";
 import { EVM_SAMPLE_COSTS } from "../../shared/evm-sample";
+import { packageBudgets } from "../../shared/evm-reference";
+import { SAMPLE_CASE_LEAVES } from "../../shared/case-distribplus";
 import { normalizeBaseline } from "../../shared/schedule-control";
 
 type GpiApi = typeof GpiCore.GPI;
@@ -92,6 +94,9 @@ interface ChangeOrder {
   id: string; desc: string; cause: string; cost: number; fund: string; status: string;
   kind?: string; approver?: string; sponsorAuth?: boolean; approvedOn?: string; baselined?: string | null;
   riskId?: string; riskCode?: string;   // vínculo con el Registro de Riesgos (kind = "riesgo")
+  // Paquete de la EDT que ejecuta el cambio (opcional: las órdenes anteriores no lo traen). Al aprobarse con contingencia, o al incorporarse
+  // a la línea base, su monto pasa al presupuesto de ese paquete en Valor Ganado (shared/evm-reference.ts, approvedTransfers).
+  wbsId?: string; wbsCode?: string;
   [key: string]: unknown; // compatible con CoOrder (shared/change-orders.ts)
 }
 
@@ -102,9 +107,9 @@ interface ChangeOrder {
    (contingencia), una ampliación del cliente (cambio de alcance, fondos adicionales)
    y trabajo imprevisto dentro del alcance (reserva de gestión, con sponsor). */
 const SAMPLE_CO: ChangeOrder[] = [
-  { id: "OC-001", desc: "Refuerzo de cimentación por hallazgo geotécnico", cause: "R-03 Suelo", cost: 180000, fund: "Contingencia", status: "Aprobada", kind: "riesgo", approver: "CCB", authLevel: "ccb", sponsorAuth: false, approvedOn: "2026-08-03", riskId: "rk3", riskCode: "R-03" },
-  { id: "OC-002", desc: "Ampliación de sala eléctrica solicitada por cliente", cause: "Cambio alcance", cost: 240000, fund: "Financiamiento adicional", status: "Pendiente", kind: "alcance", approver: "", sponsorAuth: false },
-  { id: "OC-003", desc: "Demolición de losa existente no identificada en el levantamiento", cause: "No identificado en el RBS", cost: 90000, fund: "Reserva de gestión", status: "Pendiente", kind: "imprevisto", approver: "", sponsorAuth: false }
+  { id: "OC-001", desc: "Refuerzo de cimentación por hallazgo geotécnico", cause: "R-03 Suelo", cost: 180000, fund: "Contingencia", status: "Aprobada", kind: "riesgo", approver: "CCB", authLevel: "ccb", sponsorAuth: false, approvedOn: "2026-09-02", riskId: "rk3", riskCode: "R-03", wbsId: "w-4.2", wbsCode: "4.2" },
+  { id: "OC-002", desc: "Ampliación de sala eléctrica solicitada por cliente", cause: "Cambio alcance", cost: 240000, fund: "Financiamiento adicional", status: "Pendiente", kind: "alcance", approver: "", sponsorAuth: false, wbsId: "w-4.5", wbsCode: "4.5" },
+  { id: "OC-003", desc: "Demolición de losa existente no identificada en el levantamiento", cause: "No identificado en el RBS", cost: 90000, fund: "Reserva de gestión", status: "Pendiente", kind: "imprevisto", approver: "", sponsorAuth: false, wbsId: "w-4.1", wbsCode: "4.1" }
 ];
 
 /* Partidas del análisis de rangos del caso de ejemplo: SOLO en modo independiente (igual que las
@@ -327,7 +332,7 @@ function getEng(): Engine | null {
   try {
     if (typeof GPI === "undefined" || !GPI || !GPI.util || !GPI.util.cpm || !GPI.util.scheduleNetwork) return null;
     if (gpiOn()) net = GPI.util.activeScheduleNetwork();
-    else { const m = sampleScheduleModules(); net = GPI.util.scheduleNetwork(m.wbs, m.activities, null, m.schedule, null, SAMPLE_START_DATE); }
+    else { const m = sampleScheduleModules(); net = GPI.util.scheduleNetwork(m.wbs, m.activities, null, m.schedule, sampleSchedulePlan(), SAMPLE_START_DATE); }
     eng = makeEngine(net, GPI.util.cpm);
   } catch (e) { net = null; eng = null; }
   return eng;
@@ -558,14 +563,16 @@ function pullRangesFromEstimate(): void {
   if (!gpiOn()) { showToast("Abre este módulo desde el Panel de Control para conectar el estimado."); return; }
   const G = GPI as GpiApi;
   const rows = G.util.costEstimateRows(G.getModule("costEstimate") as CostEstimateModule | null, G.getModule("activities") as ActivitiesModule | null, G.getModule("wbs") as WbsModule | null);
-  const by = new Map<string, { name: string; ml: number }>();
-  rows.forEach((r) => { if (r.subtotal && r.subtotal > 0) { const k = by.get(r.leafId) || { name: (r.code + " " + r.leafName).trim(), ml: 0 }; k.ml += r.subtotal; by.set(r.leafId, k); } });
-  if (!by.size) { showToast("Aún no hay actividades con Cantidad y Precio unitario cargados en Estimar los Costos."); return; }
-  mergePulled(Array.from(by, ([id, v]) => ({ id: "r-" + id, name: v.name, ml: Math.round(v.ml) })));
+  if (!rows.some((r) => r.subtotal != null && r.subtotal > 0)) { showToast("Aún no hay actividades con Cantidad y Precio unitario cargados en Estimar los Costos."); return; }
+  // Misma regla que WBS Builder y Valor Ganado: el estimado del paquete solo si está completo; si no, su costo de la EDT.
+  const wbs = G.getModule("wbs") as WbsModule | null, leaves = G.util.wbsLeaves(wbs), wbsCost: Record<string, number> = {};
+  leaves.forEach((l) => { wbsCost[l.id] = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) || 0 : 0; });
+  const pb = packageBudgets({ leaves, wbsCost, estimateRows: rows.map((r) => ({ leafId: r.leafId, subtotal: r.subtotal })) });
+  mergePulled(leaves.filter((l) => pb[l.id]).map((l) => ({ id: "r-" + l.id, name: (l.code + " " + l.name).trim(), ml: Math.round(pb[l.id].bac) })));
 }
 function pullRangesFromWbs(): void {
   if (!gpiOn()) { showToast("Abre este módulo desde el Panel de Control para conectar la EDT."); return; }
-  const G = GPI as GpiApi, wbs = G.getModule("wbs") as WbsModule | null;
+  const G = GPI as GpiApi, wbs = G.util.effectiveWbs();   // con los costos que muestra WBS Builder
   const items = G.util.wbsLeaves(wbs).map((lf) => ({ id: "r-" + lf.id, name: (lf.code + " " + lf.name).trim(), ml: Math.round(Number((wbs as WbsModule).nodes[lf.id].cost) || 0) })).filter((x) => x.ml > 0);
   if (!items.length) { showToast("La EDT del proyecto activo aún no tiene costos cargados en WBS Builder."); return; }
   mergePulled(items);
@@ -594,8 +601,10 @@ function escPackages(): EscCtx {
     const leaves = GPI.util.wbsLeaves(wbs);
     const costOf: Record<string, number> = {};
     if (connected) {
-      GPI.util.costEstimateRows(GPI.getModule("costEstimate"), act, wbs).forEach((r) => { if (r.subtotal && r.subtotal > 0) costOf[r.leafId] = (costOf[r.leafId] || 0) + r.subtotal; });
-      leaves.forEach((l) => { if (!costOf[l.id]) { const w = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) : 0; if (w > 0) costOf[l.id] = w; } });
+      // Mismo presupuesto por paquete que WBS Builder y Valor Ganado: el estimado solo si está completo; si no, el costo de la EDT.
+      const wbsCost: Record<string, number> = {}; leaves.forEach((l) => { wbsCost[l.id] = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) || 0 : 0; });
+      const pb = packageBudgets({ leaves, wbsCost, estimateRows: GPI.util.costEstimateRows(GPI.getModule("costEstimate"), act, wbs).map((r) => ({ leafId: r.leafId, subtotal: r.subtotal })) });
+      Object.keys(pb).forEach((id) => { costOf[id] = pb[id].bac; });
     } else leaves.forEach((l) => { if ((EVM_SAMPLE_COSTS as Record<string, number>)[l.code]) costOf[l.id] = (EVM_SAMPLE_COSTS as Record<string, number>)[l.code]; });
     const spans: Record<string, { start: string; end: string }> = {};
     if (net && eng && net.startDate) {
@@ -846,9 +855,23 @@ function authCell(r: ChangeOrder, i: number, pol: ReservePolicyT, locked: boolea
   return `<select class="mono" style="padding:3px 5px;max-width:150px;margin-top:5px;font-size:11px" data-i="${i}" data-f="authLevel" onchange="coEdit(this)" ${locked ? "disabled" : ""} aria-label="Nivel de autoridad con que se aprueba la orden ${escA(r.id)}">${opts}</select>
     <div class="${!locked && !ok ? "bad-txt" : "muted"}" style="font-size:11px;margin-top:3px" title="${escA(tiersText(pol, (n) => fmt2(n)))}">Política de reservas: requiere <b>${need ? esc(AUTH_LABEL[need]) : "—"}</b>${!locked && !ok ? " ⚠" : ""}</div>`;
 }
+// Paquetes de trabajo a los que se asigna una orden: los de la EDT del proyecto (conectado) o los del caso (independiente; mismos ids
+// «w-<código>» que la red de ejemplo).
+function coLeaves(): Array<{ id: string; code: string; name: string }> {
+  if (gpiOn()) { try { return (GPI as GpiApi).util.wbsLeaves((GPI as GpiApi).getModule("wbs")).map((l) => ({ id: l.id, code: l.code, name: l.name })); } catch (e) { return []; } }
+  return SAMPLE_CASE_LEAVES.map((l) => ({ id: "w-" + l.code, code: l.code, name: l.name }));
+}
+// El paquete de una orden: por id y, si ya no está (EDT editada o proyecto importado), por su código.
+function coLeafOf(r: ChangeOrder, leaves: Array<{ id: string; code: string; name: string }>): { id: string; code: string; name: string } | null {
+  return leaves.find((l) => l.id === r.wbsId) || (r.wbsCode ? leaves.find((l) => l.code === r.wbsCode) : undefined) || null;
+}
+function wbsOptions(leaves: Array<{ id: string; code: string; name: string }>, selected: string): string {
+  return `<option value="">— Paquete de la EDT —</option>` + leaves.map((l) => `<option value="${escA(l.id)}" ${l.id === selected ? "selected" : ""}>${esc(l.code + " " + l.name)}</option>`).join("");
+}
 function renderCO(): void {
   const tb = $("coBody"); tb.innerHTML = "";
-  const ctx = riskCtx(), refs = riskRefs(ctx);
+  const ctx = riskCtx(), refs = riskRefs(ctx), leaves = coLeaves();
+  const form = $("coWbs") as HTMLSelectElement, keep = form.value; form.innerHTML = wbsOptions(leaves, keep);
   state.co.forEach((r, i) => {
     const locked = r.status !== "Pendiente";               // aprobada/rechazada: los datos de aprobación no se editan
     const usesReserve = r.fund !== FUND_CONT;              // reserva de gestión o fondos adicionales: requiere sponsor
@@ -856,10 +879,15 @@ function renderCO(): void {
     const riskCell = r.kind !== "riesgo" ? "" : !locked
       ? `<select class="mono" style="padding:3px 5px;max-width:190px;margin-top:5px;font-size:11px" data-i="${i}" data-f="riskId" onchange="coEdit(this)" aria-label="Riesgo vinculado a la orden ${escA(r.id)}">${riskOptions(ctx, r.riskId, r.riskCode)}</select>`
       : `<div class="${r.riskId ? "muted" : "bad-txt"}" style="font-size:11px;margin-top:4px">${r.riskId ? "↳ " + esc(linked ? linked.code + " · " + linked.title : (r.riskCode || "?") + " (no está en el registro)") : "⚠ sin riesgo vinculado"}</div>`;
+    // Paquete que ejecuta el cambio: editable siempre (una orden ya aprobada sin paquete debe poder asignarse). Aprobada sin paquete = Valor
+    // Ganado no puede sumar su monto al presupuesto de ningún paquete.
+    const leaf = coLeafOf(r, leaves), toBudget = r.status === "Aprobada" && (r.fund === FUND_CONT || !!r.baselined);
+    const pkgCell = `<select class="mono" style="padding:3px 5px;max-width:230px;margin-top:5px;font-size:11px" data-i="${i}" data-f="wbsId" onchange="coEdit(this)" aria-label="Paquete de la EDT de la orden ${escA(r.id)}">${wbsOptions(leaves, leaf ? leaf.id : "")}</select>`
+      + (!leaf && toBudget ? `<div class="bad-txt" style="font-size:11px;margin-top:3px">⚠ Sin paquete: Valor Ganado no puede sumar este monto al presupuesto del trabajo</div>` : "");
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td class="mono">${esc(r.id)}</td>
-      <td>${esc(r.desc)}</td>
+      <td>${esc(r.desc)}${pkgCell}</td>
       <td><span class="pill ${r.kind ? "ok" : "bad"}" title="${escA(r.kind ? (CO_KIND_HINT as Record<string, string>)[r.kind] : "Clasifica la orden antes de aprobarla")}">${esc(kindLabel(r.kind))}</span>${riskCell}</td>
       <td class="muted">${esc(r.cause)}</td>
       <td class="num">${fmt2(+r.cost)}</td>
@@ -945,9 +973,16 @@ function coStatus(sel: HTMLSelectElement): void {
 }
 // Datos de aprobación (quién aprueba, autorización del sponsor): solo con la orden Pendiente.
 function coEdit(el: HTMLInputElement | HTMLSelectElement): void {
-  const r = state.co[+(el.dataset.i as string)]; if (!r || r.status !== "Pendiente") return;
-  userEdited = true;
+  const r = state.co[+(el.dataset.i as string)]; if (!r) return;
   const f = el.dataset.f;
+  if (f === "wbsId") {   // el paquete se puede asignar también a una orden ya aprobada (las anteriores a este campo no lo traen)
+    const l = coLeaves().find((x) => x.id === el.value);
+    userEdited = true;
+    if (l) { r.wbsId = l.id; r.wbsCode = l.code; } else { delete r.wbsId; delete r.wbsCode; }
+    renderCO(); save(); return;
+  }
+  if (r.status !== "Pendiente") return;
+  userEdited = true;
   if (f === "approver") r.approver = el.value.trim();
   else if (f === "sponsorAuth") r.sponsorAuth = (el as HTMLInputElement).checked;
   else if (f === "authLevel") { if (el.value) r.authLevel = el.value; else delete r.authLevel; renderCO(); }
@@ -985,6 +1020,8 @@ function addCO(): void {
     status: "Pendiente",
     kind: kindSel.value, approver: "", sponsorAuth: false
   };
+  const pk = coLeaves().find((l) => l.id === ($("coWbs") as HTMLSelectElement).value);
+  if (pk) { order.wbsId = pk.id; order.wbsCode = pk.code; }
   if (kindSel.value === "riesgo") {
     const rid = ($("coRisk") as HTMLSelectElement).value, ref = riskCtx().risks.find((x) => x.id === rid);
     if (rid) { order.riskId = rid; order.riskCode = ref ? ref.code : undefined; } else showToast("Orden registrada sin riesgo vinculado: no podrá aprobarse hasta vincularla con un riesgo del registro.");
@@ -1395,7 +1432,7 @@ function seedFromProject(): void {
   try {
     const meta = (GPI as GpiApi).meta() || ({} as Partial<ProjectMeta>);
     if (meta.currency && CUR[meta.currency]) ($("cur") as HTMLSelectElement).value = meta.currency;
-    const wbs = (GPI as GpiApi).getModule("wbs") as WbsModule | null;
+    const wbs = (GPI as GpiApi).util.effectiveWbs();   // la EDT tal como la muestra WBS Builder (con los costos de Estimar los Costos)
     const roll = ((GPI as GpiApi).util && wbs) ? (GPI as GpiApi).util.wbsRollup(wbs) : null;
     // Con proyecto activo la estimación base sale de la EDT real; si aún no
     // hay costos cargados, parte de 0 (no del valor de demostración del HTML).
@@ -1406,7 +1443,7 @@ function seedFromProject(): void {
 function pullFromWBS(): void {
   if (!gpiOn()) { showToast("Abre este módulo desde el Panel de Control para conectar la EDT."); return; }
   userEdited = true;
-  const wbs = (GPI as GpiApi).getModule("wbs") as WbsModule | null;
+  const wbs = (GPI as GpiApi).util.effectiveWbs();   // la EDT tal como la muestra WBS Builder (con los costos de Estimar los Costos)
   const roll = ((GPI as GpiApi).util && wbs) ? (GPI as GpiApi).util.wbsRollup(wbs) : null;
   if (!roll || !roll.cost) { showToast("La EDT del proyecto activo aún no tiene costos cargados en WBS Builder."); return; }
   const v = Math.round(roll.cost); ($("baseCost") as HTMLInputElement).value = String(v); ($("actCostP1") as HTMLInputElement).value = String(v);
@@ -1418,10 +1455,17 @@ function pullFromCostEstimate(): void {
   const wbs = (GPI as GpiApi).getModule("wbs") as WbsModule | null;
   const activities = (GPI as GpiApi).getModule("activities") as ActivitiesModule | null;
   const estimate = (GPI as GpiApi).getModule("costEstimate") as CostEstimateModule | null;
-  const total = ((GPI as GpiApi).util && wbs) ? (GPI as GpiApi).util.costEstimateTotal(estimate, activities, wbs) : 0;
-  if (!total) { showToast("Aún no hay actividades con Cantidad y Precio unitario cargados en Estimar los Costos."); return; }
+  const G = GPI as GpiApi, rows = G.util && wbs ? G.util.costEstimateRows(estimate, activities, wbs) : [];
+  if (!rows.some((r) => r.subtotal != null && r.subtotal > 0)) { showToast("Aún no hay actividades con Cantidad y Precio unitario cargados en Estimar los Costos."); return; }
+  // Paquete por paquete con la regla de WBS Builder: el estimado donde está completo; donde falta algún precio, el costo de la EDT
+  // (sumar solo lo que tiene precio daba un costo base menor que el real).
+  const leaves = G.util.wbsLeaves(wbs), wbsCost: Record<string, number> = {};
+  leaves.forEach((l) => { wbsCost[l.id] = wbs && wbs.nodes[l.id] ? Number(wbs.nodes[l.id].cost) || 0 : 0; });
+  const pb = packageBudgets({ leaves, wbsCost, estimateRows: rows.map((r) => ({ leafId: r.leafId, subtotal: r.subtotal })) });
+  const total = Object.keys(pb).reduce((s, id) => s + pb[id].bac, 0), fromWbs = Object.keys(pb).filter((id) => pb[id].source !== "Estimar los Costos").length;
   const v = Math.round(total); ($("baseCost") as HTMLInputElement).value = String(v); ($("actCostP1") as HTMLInputElement).value = String(v);
   save(); recalcCont(); flash();
+  if (fromWbs) showToast(fromWbs + " paquete(s) sin estimado completo se tomaron con su costo de la EDT.");
 }
 
 /* La rebanada "cost" del proyecto solo se crea tras una edición real del

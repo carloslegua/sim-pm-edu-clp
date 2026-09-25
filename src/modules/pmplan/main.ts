@@ -83,7 +83,7 @@ function buildCtx(): Ctx {
   const f = emptyFacts(todayISO());
   const m = G.active() as { meta?: unknown; modules?: unknown } | null, meta = rec(m && m.meta), mods = rec(m && m.modules);
   try {
-    const charter = G.getModule("charter"), wbs = G.getModule("wbs"), req = G.getModule("requirements"), scope = G.getModule("scopeStatement");
+    const charter = G.getModule("charter"), wbs = G.util.effectiveWbs(), req = G.getModule("requirements"), scope = G.getModule("scopeStatement");
     const sched = G.getModule("schedule"), sp = G.getModule("schedulePlan"), cost = G.getModule("cost"), rk = G.getModule("risks");
     // Acta
     const ca = G.util.charterAudit(charter), ends = arr(charter && charter.milestones).map((x) => str(x.date)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
@@ -246,7 +246,7 @@ const list = (items: string[]): string => (items.length ? "<ul>" + items.map((i)
 function buildSections(): Sect[] {
   const C = getCtx(), f = factsNow(), G = window.GPI as GpiApi, out: Sect[] = [];
   const meta = C.meta;
-  const charter = G.getModule("charter"), wbs = G.getModule("wbs"), req = G.getModule("requirements"), scope = G.getModule("scopeStatement");
+  const charter = G.getModule("charter"), wbs = G.util.effectiveWbs(), req = G.getModule("requirements"), scope = G.getModule("scopeStatement");
   const cost = G.getModule("cost"), sp = G.getModule("schedulePlan"), sched = G.getModule("schedule"), sym = ({ USD: "$", PEN: "S/", EUR: "€" } as Record<string, string>)[str(meta.currency)] || "";
   const m = (n: number): string => (sym ? sym + " " : "") + money(n);
 
