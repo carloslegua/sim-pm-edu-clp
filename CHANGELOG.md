@@ -9,6 +9,13 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Las tarjetas del Panel se veían desordenadas: la etiqueta de estado se superponía al nombre** — la
+  etiqueta («próximamente», «vacío», «con datos») estaba fuera del flujo (`position:absolute`, esquina
+  superior derecha) y tapaba los nombres largos, como «Liderar el Equipo y Monitorear los Recursos».
+  Ahora va en su propia fila, alineada a la derecha, y no puede solaparse con el texto.
+
 ### Changed
 
 - **El Panel se organiza por los 7 dominios de desempeño del PMBOK 8** — antes agrupaba en las 10
