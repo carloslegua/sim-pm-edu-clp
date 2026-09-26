@@ -2792,6 +2792,16 @@ Costs")
   siguieron los demás (`addEventListener`, `window.GPI`, `esc()` local,
   `gpi-shared.css` para el modal).
 
+## Componentes compartidos de interfaz, fecha local y versión del esquema
+
+- **Fecha de hoy:** siempre `todayLocalISO()` (`src/shared/local-date.ts`); `toISOString()` da el día siguiente de noche en Lima.
+- **Barra «Sincronizar»:** `installGpiBadge` (`src/shared/gpi-badge.ts`); cada módulo solo pasa nombre, `onSync` (false → «Sin sincronizar»,
+  cadena → ese texto, null → sin cambio) y sus colores de acento. `esc` sale de `src/shared/html.ts`. Todo se inlinea en el IIFE.
+- **Nombres accesibles:** `installA11yLabels` (núcleo) observa el DOM y pone `aria-label` a los controles sin nombre; no pisa nada existente y
+  no sale de la tarjeta/sección del control. Un módulo que dé un nombre mejor sigue mandando.
+- **Versión del esquema:** `DB_VERSION = 2`; `migrateDb`/`migrateProject` son normalizadores idempotentes y aditivos (regla #3). Fixtures
+  reales en `tests/fixtures/`; `schema-migration.test.ts` corre las auditorías del núcleo sobre ambos.
+
 ## JSZip vendorizado en el repo, no cargado desde un CDN
 
 Bug real reportado por el usuario: `Activity_Definition.html`,

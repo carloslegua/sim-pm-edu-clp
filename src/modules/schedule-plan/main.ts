@@ -23,6 +23,8 @@
    retorno estructuralmente compatible.
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
+import { esc } from "../../shared/html";
+import { installGpiBadge } from "../../shared/gpi-badge";
 import type { EditSession, ObsModule, ProjectMeta, RaciModule, SchedulePlanModule, WbsModule } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
 import { SAMPLE_CALENDAR } from "../../shared/schedule-sample";
@@ -193,7 +195,6 @@ function sampleState(): ScheduleState {
 let state: ScheduleState = defaultState();
 const DAY_OPTIONS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
-function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)); }
 function deepClone<T>(o: T): T { return JSON.parse(JSON.stringify(o)); }
 function setStatus(msg: string): void { (document.getElementById("statusLeft") as HTMLElement).textContent = msg; }
 
@@ -870,17 +871,7 @@ document.addEventListener("DOMContentLoaded", function gpiBridge() {
 });
 
 function gpiBadge(name: string | undefined, pushFn: () => boolean): void {
-  const css = document.createElement("style");
-  css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:42px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-dot{width:8px;height:8px;border-radius:50%;background:#00c2a8;box-shadow:0 0 0 3px rgba(0,194,168,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#0090c2;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#00b6ec;background:#fff}";
-  document.head.appendChild(css);
-  const bar = document.createElement("div");
-  bar.className = "gpi-badge";
-  bar.innerHTML = '<span class="gpi-dot"></span><span>Panel: <b>' + String(name || "—").replace(/</g, "&lt;") + '</b></span><button class="gpi-btn" id="gpiSyncBtn">☁ Sincronizar</button><a class="gpi-btn" href="Panel_Control.html">⌂ Panel</a>';
-  document.body.appendChild(bar);
-  (bar.querySelector("#gpiSyncBtn") as HTMLElement).addEventListener("click", () => {
-    const ok = pushFn(); const b = bar.querySelector("#gpiSyncBtn") as HTMLElement, t = b.textContent; b.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar";
-    setTimeout(() => { b.textContent = t; }, 1400);
-  });
+  installGpiBadge({ name, onSync: pushFn });
 }
 
 // ===== REPORTE IMPRIMIBLE (📄) =====

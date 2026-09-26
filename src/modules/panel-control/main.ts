@@ -30,6 +30,7 @@
    liga una constante de módulo no-nula una sola vez.
    ========================================================= */
 import type * as GpiCore from "../../core/gpi-core";
+import { esc } from "../../shared/html";
 import type { ProjectModules } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
@@ -245,7 +246,6 @@ const META_FIELDS: MetaFieldDef[] = [
   { k: "description", l: "Descripción", full: true, area: true }
 ];
 
-function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)); }
 function money(v: unknown, cur: string | undefined): string { const n = Number(v); if (!isFinite(n) || (!v && v !== 0)) return "—"; return (CUR[cur || ""] || "$") + " " + n.toLocaleString("es-PE"); }
 function setStatus(m: string): void { (document.getElementById("statusLeft") as HTMLElement).textContent = m; }
 function toast(m: string): void {

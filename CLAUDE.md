@@ -187,6 +187,11 @@ src/shared/stakeholder-engagement.ts → (se inlinea en stakeholder-studio.js) m
                                     de interesados: brecha, prioridad, hallazgos
 src/shared/write-session.ts      → (se inlinea en cada IIFE) guardado con sesión de
                                     edición + resultado común de escritura
+src/shared/local-date.ts         → (se inlinea donde se usa) `todayLocalISO()`: fecha de hoy LOCAL (no UTC)
+src/shared/gpi-badge.ts          → (se inlinea en cada IIFE) barra «Panel · Sincronizar · Panel» única
+src/shared/html.ts               → (se inlinea en cada IIFE) `esc` de HTML
+src/shared/a11y-labels.ts        → (se inlinea en gpi-core.js) nombres accesibles automáticos para campos sin etiqueta
+tests/fixtures/                  → .json de referencia: export v1 de alumno y caso DISTRIB+ completo v2 (migraciones, e2e de a11y)
 configs/<clave>.vite.config.ts   → config de build de ese módulo
 configs/lib.config.mjs           → factory compartida de vite.config
 scripts/sync-artifact.mjs        → copia .build-tmp/<clave>/* a la raíz

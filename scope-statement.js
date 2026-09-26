@@ -1,4 +1,47 @@
 (function() {
+	//#region src/shared/html.ts
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+			"&": "&amp;",
+			"<": "&lt;",
+			">": "&gt;",
+			"\"": "&quot;",
+			"'": "&#39;"
+		})[c]);
+	}
+	//#endregion
+	//#region src/shared/gpi-badge.ts
+	function installGpiBadge(o) {
+		if (typeof document === "undefined") return null;
+		if (o.id && document.getElementById(o.id)) return document.getElementById(o.id);
+		const accent = o.accent || "#0090c2", hover = o.hover || "#00b6ec", dot = o.dot || "#00c2a8", shadow = o.dotShadow || "rgba(0,194,168,.18)", dc = o.dotClass || "gpi-dot";
+		const css = document.createElement("style");
+		css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:" + (o.bottom === void 0 ? 42 : o.bottom) + "px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}." + dc + "{width:8px;height:8px;border-radius:50%;background:" + dot + ";box-shadow:0 0 0 3px " + shadow + "}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:" + accent + ";border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:" + hover + ";background:#fff}";
+		document.head.appendChild(css);
+		const bar = document.createElement("div");
+		bar.className = "gpi-badge";
+		if (o.id) bar.id = o.id;
+		bar.innerHTML = "<span class=\"" + dc + "\"></span><span>Panel: <b>" + esc(o.name || "—") + "</b></span><button class=\"gpi-btn\" id=\"gpiSyncBtn\">☁ Sincronizar</button><a class=\"gpi-btn\" href=\"Panel_Control.html\">⌂ Panel</a>";
+		document.body.appendChild(bar);
+		const btn = bar.querySelector("#gpiSyncBtn");
+		btn.addEventListener("click", () => {
+			const r = o.onSync();
+			if (r === null) return;
+			const t = btn.textContent;
+			btn.textContent = r === false ? "⚠ Sin sincronizar" : typeof r === "string" ? r : "✓ Sincronizado";
+			setTimeout(() => {
+				btn.textContent = t;
+			}, o.restoreMs || 1400);
+		});
+		return bar;
+	}
+	//#endregion
+	//#region src/shared/local-date.ts
+	function todayLocalISO(d = /* @__PURE__ */ new Date()) {
+		const p = (n) => (n < 10 ? "0" : "") + n;
+		return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+	}
+	//#endregion
 	//#region src/shared/write-session.ts
 	function writeOk(r) {
 		return r.status === "saved" || r.status === "unchanged";
@@ -356,15 +399,6 @@
 		const r = mod("requirements");
 		return r && r.items || [];
 	}
-	function esc(s) {
-		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
-			"&": "&amp;",
-			"<": "&lt;",
-			">": "&gt;",
-			"\"": "&quot;",
-			"'": "&#39;"
-		})[c]);
-	}
 	function escAttr(s) {
 		return esc(s);
 	}
@@ -713,7 +747,7 @@
 			if (drift.total) h += "<div class=\"card-sub\" style=\"margin-top:10px\"><b>Trabajo en edición distinto de lo aprobado (v" + esc(b.version) + "):</b><ul class=\"warn-list\" style=\"margin-top:6px\">" + (drift.enunciadoChanged ? "<li><span class=\"tag a\">revisar</span>El enunciado (entregables, supuestos, restricciones, exclusiones o alcances) cambió desde la aprobación.</li>" : "") + drift.wbsChanges.slice(0, 12).map((c) => "<li><span class=\"tag a\">EDT</span><b>" + esc(c.code || "—") + "</b> " + esc(c.name) + " — " + esc(c.kind) + ": " + esc(c.detail) + "</li>").join("") + (drift.wbsChanges.length > 12 ? "<li class=\"muted\">…y " + (drift.wbsChanges.length - 12) + " cambio(s) más en la EDT.</li>" : "") + "</ul><div class=\"muted\" style=\"font-size:12px\">Lo aprobado sigue siendo la instantánea; estos cambios son trabajo en edición hasta que se apruebe una nueva versión.</div></div>";
 			else if (drift.wbsInBaseline) h += "<div class=\"ok-note\" style=\"margin-top:8px\">✓ El enunciado, la EDT y su diccionario coinciden con lo aprobado en la v" + esc(b.version) + ".</div>";
 			const dv = (i, def) => escAttr(draft[i] !== void 0 ? draft[i] : def);
-			h += "<div style=\"margin-top:14px;border-top:1px solid var(--line);padding-top:12px\"><b>Nueva versión de la línea base</b> <span class=\"muted\" style=\"font-size:12px\">— archiva la v" + esc(b.version) + " completa (enunciado, EDT y diccionario) antes de establecer la siguiente.</span><div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:8px 0\"><div><label class=\"fl\">Versión</label><input class=\"txt\" id=\"nv_ver\" value=\"" + dv(0, suggestNextVersion(b)) + "\"></div><div><label class=\"fl\">Fecha</label><input class=\"txt\" id=\"nv_date\" type=\"date\" value=\"" + dv(1, (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)) + "\"></div><div><label class=\"fl\">Aprobador</label><input class=\"txt\" id=\"nv_appr\" value=\"" + dv(2, "") + "\" placeholder=\"Patrocinador / CCB\"></div></div><label class=\"fl\">Motivo del cambio</label><textarea class=\"txt\" id=\"nv_reason\" rows=\"2\" placeholder=\"Ej.: incorpora CR-002 (ampliación de la sala eléctrica) aprobada por el CCB\">" + esc(draft[3] !== void 0 ? draft[3] : "") + "</textarea><div class=\"empty-note\" id=\"nv_msg\" style=\"display:none;margin-top:6px\"></div><div style=\"margin-top:8px\"><button class=\"btn primary sm\" id=\"btnNewVer\">🔒 Fijar nueva versión</button></div></div>";
+			h += "<div style=\"margin-top:14px;border-top:1px solid var(--line);padding-top:12px\"><b>Nueva versión de la línea base</b> <span class=\"muted\" style=\"font-size:12px\">— archiva la v" + esc(b.version) + " completa (enunciado, EDT y diccionario) antes de establecer la siguiente.</span><div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:8px 0\"><div><label class=\"fl\">Versión</label><input class=\"txt\" id=\"nv_ver\" value=\"" + dv(0, suggestNextVersion(b)) + "\"></div><div><label class=\"fl\">Fecha</label><input class=\"txt\" id=\"nv_date\" type=\"date\" value=\"" + dv(1, todayLocalISO()) + "\"></div><div><label class=\"fl\">Aprobador</label><input class=\"txt\" id=\"nv_appr\" value=\"" + dv(2, "") + "\" placeholder=\"Patrocinador / CCB\"></div></div><label class=\"fl\">Motivo del cambio</label><textarea class=\"txt\" id=\"nv_reason\" rows=\"2\" placeholder=\"Ej.: incorpora CR-002 (ampliación de la sala eléctrica) aprobada por el CCB\">" + esc(draft[3] !== void 0 ? draft[3] : "") + "</textarea><div class=\"empty-note\" id=\"nv_msg\" style=\"display:none;margin-top:6px\"></div><div style=\"margin-top:8px\"><button class=\"btn primary sm\" id=\"btnNewVer\">🔒 Fijar nueva versión</button></div></div>";
 			if (b.history.length) h += "<div style=\"margin-top:14px;border-top:1px solid var(--line);padding-top:12px\"><b>Historial de versiones (" + b.history.length + ")</b>" + b.history.slice().reverse().map((v) => {
 				const nd = v.snapshot && Array.isArray(v.snapshot.deliverables) ? v.snapshot.deliverables.length : 0, wv = v.snapshot && v.snapshot.wbs ? v.snapshot.wbs : null, codes = wv ? wbsScopeCodes(wv) : {};
 				return "<details class=\"lb-hist\" style=\"border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-top:8px\"><summary style=\"cursor:pointer;font-size:12.5px\"><b>v" + esc(v.version) + "</b> · aprobada " + esc(v.date || "—") + " por " + esc(v.approver || "—") + " · " + nd + " entregable(s)" + (wv ? " · " + (Object.keys(wv.nodes).length - 1) + " elemento(s) de la EDT" : " · sin EDT (anterior a incluirla)") + " · sustituida el " + esc(v.supersededOn || "—") + "</summary><div class=\"muted\" style=\"font-size:12px;margin:6px 0\"><b>Motivo:</b> " + esc(v.reason || "—") + "</div>" + (wv ? "<table style=\"width:100%;font-size:12px\"><thead><tr><th>Cód.</th><th>Elemento de la EDT</th><th>Criterio de aceptación</th></tr></thead><tbody>" + Object.keys(codes).sort((x, y) => codes[x].localeCompare(codes[y], void 0, { numeric: true })).map((id) => "<tr><td>" + esc(codes[id]) + "</td><td>" + esc(wv.nodes[id].name) + "</td><td>" + esc(wv.nodes[id].acceptance || "—") + "</td></tr>").join("") + "</tbody></table>" : "") + "</details>";
@@ -732,7 +766,7 @@
 					return;
 				}
 				const prev = state.baseline.version;
-				state.baseline = advanceScopeBaseline(state.baseline, scopeSnapshotOf(state, mod("wbs")), input, (/* @__PURE__ */ new Date()).toISOString().slice(0, 10));
+				state.baseline = advanceScopeBaseline(state.baseline, scopeSnapshotOf(state, mod("wbs")), input, todayLocalISO());
 				persist();
 				renderCoherence();
 				toast("Línea base v" + input.version + " fijada; la v" + prev + " quedó archivada");
@@ -743,7 +777,7 @@
 			const f = document.getElementById("btnFreeze");
 			if (f) f.onclick = () => {
 				b.version = $("b_ver").value.trim() || "1.0";
-				b.date = $("b_date").value || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+				b.date = $("b_date").value || todayLocalISO();
 				b.approver = $("b_appr").value.trim();
 				b.snapshot = scopeSnapshotOf(state, mod("wbs"));
 				b.reason = b.reason || "Línea base inicial";
@@ -1134,22 +1168,14 @@
 		renderTrace();
 	}
 	function gpiBadge(name) {
-		const css = document.createElement("style");
-		css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:42px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-dot{width:8px;height:8px;border-radius:50%;background:#6c5ce7;box-shadow:0 0 0 3px rgba(108,92,231,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#5646c9;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#6c5ce7;background:#fff}";
-		document.head.appendChild(css);
-		const bar = document.createElement("div");
-		bar.className = "gpi-badge";
-		bar.innerHTML = "<span class=\"gpi-dot\"></span><span>Panel: <b>" + String(name || "—").replace(/</g, "&lt;") + "</b></span><button class=\"gpi-btn\" id=\"gpiSyncBtn\">☁ Sincronizar</button><a class=\"gpi-btn\" href=\"Panel_Control.html\">⌂ Panel</a>";
-		document.body.appendChild(bar);
-		const sb = bar.querySelector("#gpiSyncBtn");
-		if (sb) sb.onclick = () => {
-			const ok = persist();
-			const t = sb.textContent;
-			sb.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar";
-			setTimeout(() => {
-				sb.textContent = t;
-			}, 1400);
-		};
+		installGpiBadge({
+			name,
+			onSync: () => persist(),
+			accent: "#5646c9",
+			hover: "#6c5ce7",
+			dot: "#6c5ce7",
+			dotShadow: "rgba(108,92,231,.18)"
+		});
 	}
 	document.addEventListener("DOMContentLoaded", boot);
 	//#endregion

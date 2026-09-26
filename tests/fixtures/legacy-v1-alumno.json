@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "activeId": "palu1",
+  "projects": {
+    "palu1": {
+      "schema": "gpi.project/v1",
+      "meta": { "id": "palu1", "name": "Proyecto de un alumno (exportado con la versión 1)", "code": "ALU-01", "client": "Cliente", "location": "Lima", "sponsor": "Sponsor", "manager": "PM", "startDate": "2026-03-02", "endDate": "2026-09-30", "currency": "PEN", "capex": "500000", "description": "", "course": "Gestión de Proyectos de Ingeniería", "createdAt": 1772000000000, "updatedAt": 1772000000000 },
+      "modules": {
+        "charter": {
+          "identification": { "sponsor": "Sponsor", "manager": "PM", "client": "Cliente", "preparedDate": "2026-03-02", "approach": "Predictivo", "authority": "Hasta 2 % del CAPEX" },
+          "purpose": "Construir una nave de prueba.",
+          "objectives": [{ "dim": "Alcance", "objective": "Entregar la nave", "criteria": "Aceptada" }],
+          "requirements": ["Cumplir el reglamento de edificaciones", "Instalaciones eléctricas dimensionadas"],
+          "deliverables": ["Expediente técnico"],
+          "milestones": [{ "name": "Inicio", "date": "2026-03-02" }],
+          "budget": { "amount": "500000", "currency": "PEN" },
+          "approval": { "sponsorName": "Sponsor", "managerName": "PM" }
+        },
+        "schedulePlan": {
+          "methodology": { "approach": "predictivo", "tool": "Cronograma/CPM", "unit": "días hábiles" },
+          "calendar": { "workDays": ["Lun", "Mar", "Mié", "Jue", "Vie"], "hoursPerDay": 8, "holidays": ["2026-05-01", "2026-06-29"] },
+          "controlThresholds": [], "milestones": []
+        },
+        "wbs": {
+          "rootId": "n1", "idCounter": 4,
+          "nodes": {
+            "n1": { "id": "n1", "name": "Proyecto", "children": ["n2"], "parentId": null },
+            "n2": { "id": "n2", "name": "Fase 1", "children": ["n3"], "parentId": "n1" },
+            "n3": { "id": "n3", "name": "Paquete A", "children": [], "parentId": "n2", "cost": 100000, "start": "2026-03-02", "end": "2026-04-03" }
+          }
+        },
+        "activities": { "byLeaf": { "n3": [{ "id": "a1", "name": "Excavar", "unit": "m3", "qty": 100, "perf": 10, "teams": 1 }] }, "idCounter": 2 },
+        "requirements": { "items": [{ "id": "q1", "code": "REQ.001", "text": "Cumple el reglamento", "sourceRanIds": [], "wbsNodeIds": ["n3"] }], "changes": [], "idCounter": 2, "changeCounter": 1, "baseline": { "frozen": true, "version": "1.0", "date": "2026-03-10", "approver": "Sponsor", "snapshot": [{ "id": "q1", "text": "Cumple el reglamento" }] } },
+        "stakeholders": { "stakeholders": [{ "id": "s1", "name": "Municipalidad", "power": 80, "interest": 40 }], "idCounter": 2 },
+        "risks": { "risks": [{ "id": "rk1", "code": "R-01", "title": "Demora de la licencia", "prob": 3, "impCost": 2 }], "idCounter": 2 },
+        "cost": { "plan": { "currency": "PEN" }, "estimate": { "class": 3 }, "budget": { "baseCost": 100000, "contingency": { "method": "clase_tabla", "percentile": "P70" } }, "changeOrders": [{ "id": "OC-001", "desc": "Cambio", "cost": 5000, "fund": "Contingencia", "status": "Pendiente" }] }
+      }
+    }
+  }
+}

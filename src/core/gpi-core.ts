@@ -27,6 +27,7 @@ import type {
 } from "./types";
 import { analyzeChangeOrders } from "../shared/change-orders";
 import { deviationPct as baselineDeviationPct, normalizeBaseline } from "../shared/schedule-control";
+import { installA11yLabels } from "../shared/a11y-labels";
 import { normalizePlan as normalizeRiskPlan, normalizeRisk, portfolio as riskPortfolioOf, type Portfolio as RiskPortfolio } from "../shared/risk-analysis";
 export type { EditSession, WriteResult, WriteStatus } from "./types";
 
@@ -89,7 +90,37 @@ export function storageStatus(): { readable: boolean; writable: boolean } { retu
 // nada pendiente que deba seguir contando como "sin guardar".
 function memoryMode(): boolean { return !canWrite() && !readable(); }
 
-function fresh(): GpiDb { return { version: 1, activeId: null, projects: {} }; }
+// ----- versión del esquema y migraciones (auditoría, media) -----
+// `version` valía siempre 1 y cada módulo migraba lo suyo a su manera al leer. Ahora hay una versión REAL y una cadena de migraciones
+// que se aplican, en memoria, a lo que se lee de disco y a lo que se importa; se persisten con el siguiente guardado. Reglas:
+//   · una migración es idempotente y solo NORMALIZA (nunca borra datos ni cambia su significado): un .json antiguo sigue abriendo;
+//   · cuando cambie la FORMA de un dato guardado se sube DB_VERSION y se agrega el paso aquí (más su fixture en tests/fixtures);
+//   · los campos opcionales que solo se AGREGAN (regla #3 de CLAUDE.md) no necesitan migración: los módulos los leen como «sin dato».
+// v1 → v2: los feriados del Plan del Cronograma pasan a {date, name} (antes convivían cadenas y objetos) y los requisitos de alto
+// nivel del Acta guardados como cadenas pasan a objetos codificados RAN.0X (los módulos ya toleraban ambas formas).
+export const DB_VERSION = 2;
+function migrateProject(p: GpiProject): void {
+  if (!p || !isPlainObject(p.modules)) return;
+  const sp = p.modules.schedulePlan as { calendar?: { holidays?: unknown } } | null | undefined;
+  if (sp && isPlainObject(sp.calendar) && Array.isArray(sp.calendar.holidays)) {
+    sp.calendar.holidays = (sp.calendar.holidays as unknown[])
+      .map((h) => (typeof h === "string" ? { date: h.slice(0, 10), name: "" } : h))
+      .filter((h) => !!h && typeof h === "object");
+  }
+  const ch = p.modules.charter as { requirements?: unknown } | null | undefined;
+  if (ch && Array.isArray(ch.requirements) && ch.requirements.length && (ch.requirements as unknown[]).every((r) => typeof r === "string")) {
+    ch.requirements = (ch.requirements as string[]).map((text, i) => ({ id: "ran" + (i + 1), code: "RAN." + pad2(i + 1), text }));
+  }
+}
+export function migrateDb(d: GpiDb): GpiDb {
+  if (!d || typeof d !== "object") return d;
+  if ((Number(d.version) || 1) < DB_VERSION) {
+    if (isPlainObject(d.projects)) Object.keys(d.projects).forEach((id) => migrateProject(d.projects[id]));
+    d.version = DB_VERSION;
+  }
+  return d;
+}
+function fresh(): GpiDb { return { version: DB_VERSION, activeId: null, projects: {} }; }
 function db(): GpiDb {
   // Hay una versión más reciente que localStorage rechazó por cuota --
   // servirla a toda lectura/escritura hasta que un guardado futuro
@@ -102,7 +133,7 @@ function db(): GpiDb {
   if (pendingUnsaved) return pendingUnsaved;
   if (memoryMode()) return mem || (mem = fresh());
   try {
-    return (JSON.parse(localStorage.getItem(KEY) as string) as GpiDb) || fresh();
+    return migrateDb((JSON.parse(localStorage.getItem(KEY) as string) as GpiDb) || fresh());
   } catch (e) {
     return fresh();
   }
@@ -202,7 +233,7 @@ function reconcileWithDisk(d: GpiDb): Reconcile | null {
   try { diskRaw = localStorage.getItem(KEY); } catch (_) { /* noop */ }
   if (!diskRaw) return null;
   let disk: GpiDb;
-  try { disk = JSON.parse(diskRaw) as GpiDb; } catch (_) { return null; }
+  try { disk = migrateDb(JSON.parse(diskRaw) as GpiDb); } catch (_) { return null; }
   if (!disk || !isPlainObject(disk.projects)) return null;
   const base = pendingBase || fresh(), conflicts: string[] = [];
   const projects: Record<string, GpiProject> = {};
@@ -257,7 +288,7 @@ function save(d: GpiDb): boolean {
       // que "d" partió, para poder conciliar por módulo más adelante
       // (ver mergeWithDisk) -- en fallas consecutivas de la MISMA
       // racha, pendingBase ya está capturada y no se vuelve a tocar.
-      try { pendingBase = JSON.parse(localStorage.getItem(KEY) as string) as GpiDb; } catch (_) { pendingBase = null; }
+      try { pendingBase = migrateDb(JSON.parse(localStorage.getItem(KEY) as string) as GpiDb); } catch (_) { pendingBase = null; }
     }
     pendingUnsaved = d;
     showQuotaNotice();
@@ -763,6 +794,7 @@ function normalizeToProject(obj: any): GpiProject {
       if (!isPlainObject(obsMod.nodes)) obsMod.nodes = {};
       sanitizeTree(obsMod.rootId, obsMod.nodes);
     }
+    migrateProject(proj);   // un proyecto exportado con una versión anterior se lleva a la forma vigente (idempotente)
     return proj;
   }
   // envolver exportación de herramienta
@@ -2637,6 +2669,8 @@ export function installStorageNotice(): void {
   setInterval(run(false), 20000);                         // pasiva (sin escribir): pendientes por un guardado fallido, o recuperación con el aviso puesto
 }
 installStorageNotice();
+// Nombres accesibles para los controles que no lo traen (ver shared/a11y-labels.ts): una pasada al cargar más un observador del DOM.
+installA11yLabels();
 
 export const GPI = {
   KEY,

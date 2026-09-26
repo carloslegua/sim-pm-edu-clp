@@ -14,6 +14,9 @@
    DELIBERADAMENTE NO se usa GPI.ui.esc (modo suelto sin gpi-core.js).
    ============================================================ */
 import type * as GpiCore from "../../core/gpi-core";
+import { esc } from "../../shared/html";
+import { installGpiBadge } from "../../shared/gpi-badge";
+import { todayLocalISO } from "../../shared/local-date";
 import type { CharterModule, EditSession, RequirementItem, RequirementsModule, Stakeholder, WbsModule, WriteResult } from "../../core/types";
 import { advanceBaseline, newVersionProblems, normalizeRBaseline, onlyInVersion, suggestNextVersion, type RBaseline } from "../../shared/requirements-baseline";
 
@@ -77,7 +80,6 @@ function markProjectStale(): void {
 }
 
 function $(id: string): HTMLElement { return document.getElementById(id) as HTMLElement; }
-function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)); }
 // Bug real reportado por el usuario: un id de requisito/modificación
 // importado desde un .json se interpolaba SIN escapar dentro de un
 // manejador onclick/onchange inline (ver renderList()/renderChanges()
@@ -110,7 +112,7 @@ function escJsAttr(s: unknown): string {
 }
 function reqCode(n: number): string { return "REQ." + (n < 100 ? ("00" + n).slice(-3) : String(n)); }
 function modCode(n: number): string { return "MOD." + (n < 10 ? "0" + n : String(n)); }
-function todayISO(): string { return new Date().toISOString().slice(0, 10); }
+function todayISO(): string { return todayLocalISO(); }
 function repDate(s: string | undefined): string { if (!s) return "—"; const p = String(s).split("-"); return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : s; }
 
 /* ===================== Puente GPI ===================== */
@@ -920,16 +922,7 @@ function renderDiff(): void {
 
 /* ===================== Badge flotante ===================== */
 function gpiBadge(): void {
-  if ($("gpiBadge")) return;
-  const name = (gpiOn() && (GPI as GpiApi).meta() && (GPI as GpiApi).meta()!.name) || "—";
-  const css = document.createElement("style");
-  css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:18px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-bdot{width:8px;height:8px;border-radius:50%;background:#6c5ce7;box-shadow:0 0 0 3px rgba(108,92,231,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#6c5ce7;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#6c5ce7;background:#fff}";
-  document.head.appendChild(css);
-  const bar = document.createElement("div"); bar.className = "gpi-badge"; bar.id = "gpiBadge";
-  bar.innerHTML = '<span class="gpi-bdot"></span><span>Panel: <b>' + String(name).replace(/</g, "&lt;") + '</b></span>'
-    + '<button class="gpi-btn" id="gpiSyncBtn">☁ Sincronizar</button><a class="gpi-btn" href="Panel_Control.html">⌂ Panel</a>';
-  document.body.appendChild(bar);
-  (bar.querySelector("#gpiSyncBtn") as HTMLElement).addEventListener("click", function () { save(); const b = this as HTMLElement, t = b.textContent; b.textContent = "✓ Sincronizado"; setTimeout(() => { b.textContent = t; }, 1400); });
+  installGpiBadge({ name: (gpiOn() && (GPI as GpiApi).meta() && (GPI as GpiApi).meta()!.name) || "—", onSync: () => { save(); }, id: "gpiBadge", dotClass: "gpi-bdot", bottom: 18, accent: "#6c5ce7", hover: "#6c5ce7", dot: "#6c5ce7", dotShadow: "rgba(108,92,231,.18)" });
 }
 
 /* ===================== Init ===================== */

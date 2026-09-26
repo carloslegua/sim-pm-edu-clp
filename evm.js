@@ -1,4 +1,47 @@
 (function() {
+	//#region src/shared/html.ts
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+			"&": "&amp;",
+			"<": "&lt;",
+			">": "&gt;",
+			"\"": "&quot;",
+			"'": "&#39;"
+		})[c]);
+	}
+	//#endregion
+	//#region src/shared/gpi-badge.ts
+	function installGpiBadge(o) {
+		if (typeof document === "undefined") return null;
+		if (o.id && document.getElementById(o.id)) return document.getElementById(o.id);
+		const accent = o.accent || "#0090c2", hover = o.hover || "#00b6ec", dot = o.dot || "#00c2a8", shadow = o.dotShadow || "rgba(0,194,168,.18)", dc = o.dotClass || "gpi-dot";
+		const css = document.createElement("style");
+		css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:" + (o.bottom === void 0 ? 42 : o.bottom) + "px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}." + dc + "{width:8px;height:8px;border-radius:50%;background:" + dot + ";box-shadow:0 0 0 3px " + shadow + "}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:" + accent + ";border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:" + hover + ";background:#fff}";
+		document.head.appendChild(css);
+		const bar = document.createElement("div");
+		bar.className = "gpi-badge";
+		if (o.id) bar.id = o.id;
+		bar.innerHTML = "<span class=\"" + dc + "\"></span><span>Panel: <b>" + esc(o.name || "—") + "</b></span><button class=\"gpi-btn\" id=\"gpiSyncBtn\">☁ Sincronizar</button><a class=\"gpi-btn\" href=\"Panel_Control.html\">⌂ Panel</a>";
+		document.body.appendChild(bar);
+		const btn = bar.querySelector("#gpiSyncBtn");
+		btn.addEventListener("click", () => {
+			const r = o.onSync();
+			if (r === null) return;
+			const t = btn.textContent;
+			btn.textContent = r === false ? "⚠ Sin sincronizar" : typeof r === "string" ? r : "✓ Sincronizado";
+			setTimeout(() => {
+				btn.textContent = t;
+			}, o.restoreMs || 1400);
+		});
+		return bar;
+	}
+	//#endregion
+	//#region src/shared/local-date.ts
+	function todayLocalISO(d = /* @__PURE__ */ new Date()) {
+		const p = (n) => (n < 10 ? "0" : "") + n;
+		return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+	}
+	//#endregion
 	//#region src/shared/write-session.ts
 	function writeOk(r) {
 		return r.status === "saved" || r.status === "unchanged";
@@ -1335,16 +1378,7 @@
 	//#endregion
 	//#region src/modules/evm/main.ts
 	var $ = (id) => document.getElementById(id);
-	function esc(s) {
-		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
-			"&": "&amp;",
-			"<": "&lt;",
-			">": "&gt;",
-			"\"": "&quot;",
-			"'": "&#39;"
-		})[c]);
-	}
-	var todayISO = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+	var todayISO = () => todayLocalISO();
 	function setStatus(msg) {
 		$("statusLeft").textContent = msg;
 	}
@@ -2084,19 +2118,9 @@
 		gpiBadge(proj ? proj.meta && proj.meta.name : "", push);
 	})();
 	function gpiBadge(name, pushFn) {
-		const css = document.createElement("style");
-		css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:42px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-dot{width:8px;height:8px;border-radius:50%;background:#00c2a8;box-shadow:0 0 0 3px rgba(0,194,168,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#0090c2;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#00b6ec;background:#fff}";
-		document.head.appendChild(css);
-		const bar = document.createElement("div");
-		bar.className = "gpi-badge";
-		bar.innerHTML = "<span class=\"gpi-dot\"></span><span>Panel: <b>" + esc(name || "—") + "</b></span><button class=\"gpi-btn\" id=\"gpiSyncBtn\">☁ Sincronizar</button><a class=\"gpi-btn\" href=\"Panel_Control.html\">⌂ Panel</a>";
-		document.body.appendChild(bar);
-		bar.querySelector("#gpiSyncBtn").addEventListener("click", () => {
-			const ok = pushFn(), b = bar.querySelector("#gpiSyncBtn"), t = b.textContent;
-			b.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar";
-			setTimeout(() => {
-				b.textContent = t;
-			}, 1400);
+		installGpiBadge({
+			name,
+			onSync: pushFn
 		});
 	}
 	wireToolbar();

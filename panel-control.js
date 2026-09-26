@@ -1,4 +1,15 @@
 (function() {
+	//#region src/shared/html.ts
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+			"&": "&amp;",
+			"<": "&lt;",
+			">": "&gt;",
+			"\"": "&quot;",
+			"'": "&#39;"
+		})[c]);
+	}
+	//#endregion
 	//#region src/modules/panel-control/main.ts
 	var GPI = window.GPI;
 	var MODULOS_EXTRA = [];
@@ -386,15 +397,6 @@
 			area: true
 		}
 	];
-	function esc(s) {
-		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
-			"&": "&amp;",
-			"<": "&lt;",
-			">": "&gt;",
-			"\"": "&quot;",
-			"'": "&#39;"
-		})[c]);
-	}
 	function money(v, cur) {
 		const n = Number(v);
 		if (!isFinite(n) || !v && v !== 0) return "—";

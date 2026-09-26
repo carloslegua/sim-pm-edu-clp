@@ -26,6 +26,8 @@
    sin gpi-core.js.
    ============================================================ */
 import type * as GpiCore from "../../core/gpi-core";
+import { installGpiBadge } from "../../shared/gpi-badge";
+import { todayLocalISO } from "../../shared/local-date";
 import type { ActivitiesModule, CostEstimateModule, CostModule, EditSession, ProjectMeta, WbsModule, WriteResult } from "../../core/types";
 import { classifyVariance, validateThresholds, type CostThresholds, type VarianceLevel } from "../../shared/cost-variance";
 import {
@@ -826,7 +828,7 @@ function recalcCont(): void {
 function coBudget(): { bac: number; cont: number; mgmt: number } {
   const b = state._budget; return b ? { bac: b.bac, cont: b.cont, mgmt: b.mgmt } : { bac: 0, cont: 0, mgmt: 0 };
 }
-const todayISO = (): string => new Date().toISOString().slice(0, 10);
+const todayISO = (): string => todayLocalISO();
 // Como esc(), pero seguro dentro de un atributo entre comillas (value="...").
 const escA = (s: unknown): string => esc(s).replace(/"/g, "&quot;");
 const kindLabel = (k?: string): string => (k && (CO_KIND_LABEL as Record<string, string>)[k]) || "Sin clasificar";
@@ -1621,20 +1623,7 @@ function load(): void {
 }
 /* ---------- Barra de proyecto (badge flotante) ---------- */
 function gpiBadge(): void {
-  if (document.getElementById("gpiBadge")) return;
-  const name = (gpiOn() && (GPI as GpiApi).meta() && (GPI as GpiApi).meta()!.name) || "—";
-  const css = document.createElement("style");
-  css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:18px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-bdot{width:8px;height:8px;border-radius:50%;background:#00c2a8;box-shadow:0 0 0 3px rgba(0,194,168,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#0090c2;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#00b6ec;background:#fff}";
-  document.head.appendChild(css);
-  const bar = document.createElement("div");
-  bar.className = "gpi-badge"; bar.id = "gpiBadge";
-  bar.innerHTML = '<span class="gpi-bdot"></span><span>Panel: <b>' + String(name).replace(/</g, "&lt;") + "</b></span>"
-    + '<button class="gpi-btn" id="gpiSyncBtn">☁ Sincronizar</button><a class="gpi-btn" href="Panel_Control.html">⌂ Panel</a>';
-  document.body.appendChild(bar);
-  (bar.querySelector("#gpiSyncBtn") as HTMLElement).addEventListener("click", function () {
-    save(); const b = bar.querySelector("#gpiSyncBtn") as HTMLElement, t = b.textContent; b.textContent = "✓ Sincronizado";
-    setTimeout(function () { b.textContent = t; }, 1400);
-  });
+  installGpiBadge({ name: (gpiOn() && (GPI as GpiApi).meta() && (GPI as GpiApi).meta()!.name) || "—", onSync: () => { save(); }, id: "gpiBadge", dotClass: "gpi-bdot", bottom: 18 });
 }
 
 /* ---------- Init ---------- */

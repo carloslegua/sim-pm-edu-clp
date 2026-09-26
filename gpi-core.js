@@ -142,6 +142,100 @@ var GPI = (function(exports) {
 		return base.projectDuration > 0 ? (projectDuration - base.projectDuration) / base.projectDuration * 100 : null;
 	}
 	//#endregion
+	//#region src/shared/a11y-labels.ts
+	var SELECTOR = "input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=image]),select,textarea";
+	var LABELISH = "label,.fl,.lab,.label,legend,.eyebrow,.wl,.lbl";
+	var clean = (s, max = 60) => {
+		const t = String(s || "").replace(/\s+/g, " ").trim();
+		return t.length > max ? t.slice(0, max - 1) + "…" : t;
+	};
+	function hasAccessibleName(el) {
+		if (el.getAttribute("aria-label") || el.getAttribute("title")) return true;
+		const by = el.getAttribute("aria-labelledby");
+		if (by && by.split(/\s+/).some((id) => {
+			const n = document.getElementById(id);
+			return !!n && !!clean(n.textContent);
+		})) return true;
+		const id = el.id;
+		if (id) {
+			const l = document.querySelector("label[for=\"" + (window.CSS && CSS.escape ? CSS.escape(id) : id) + "\"]");
+			if (l && clean(l.textContent)) return true;
+		}
+		const wrap = el.closest("label");
+		return !!wrap && !!clean(wrap.textContent);
+	}
+	var humanize = (s) => s.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_.]+/g, " ").trim();
+	function fromTable(el) {
+		const cell = el.closest("td,th"), table = cell ? cell.closest("table") : null;
+		if (!cell || !table) return "";
+		const row = cell.parentElement, idx = cell.cellIndex;
+		let head = "";
+		const headRow = table.tHead && table.tHead.rows.length ? table.tHead.rows[table.tHead.rows.length - 1] : Array.from(table.rows).find((r) => r.querySelector("th"));
+		if (headRow && headRow !== row && headRow.cells[idx]) head = clean(headRow.cells[idx].textContent, 40);
+		const lead = row ? Array.from(row.cells).slice(0, idx).map((c) => c.querySelector(SELECTOR) ? "" : clean(c.textContent, 30)).find(Boolean) || "" : "";
+		return head ? head + (lead ? " — " + lead : "") : lead;
+	}
+	function fromContext(el) {
+		let branch = el;
+		for (let anc = el.parentElement, depth = 0; anc && depth < 4; anc = anc.parentElement, depth++) {
+			const kids = Array.from(anc.children);
+			const at = kids.indexOf(branch);
+			const hit = kids.slice(0, at).reverse().concat(kids.slice(at + 1)).find((c) => c.matches(LABELISH) && !c.contains(el) && !c.querySelector(SELECTOR) && !!clean(c.textContent) && !(c.getAttribute("for") && c.getAttribute("for") !== el.id));
+			if (hit) return clean(hit.textContent);
+			if (anc.matches("section,.card,fieldset,details")) break;
+			branch = anc;
+		}
+		return "";
+	}
+	function guessName(el) {
+		const h = el, ds = h.dataset || {};
+		let name = fromTable(el) || fromContext(el) || clean(el.getAttribute("placeholder")) || "";
+		if (!name) {
+			const sec = el.closest("section,.card,fieldset,details"), hd = sec ? sec.querySelector("h2,h3,h4,legend,summary") : null;
+			const k = ds.f || ds.k || ds.bind || ds.crit || ds.p || ds.e || ds.list || h.id || el.getAttribute("name") || "";
+			name = hd && clean(hd.textContent, 50) || humanize(k);
+		}
+		if (!name) return "";
+		if (ds.i !== void 0 && /^\d+$/.test(ds.i) && !/\d$/.test(name)) name += " " + (Number(ds.i) + 1);
+		return name;
+	}
+	function labelUnnamedControls(root = document) {
+		let n = 0;
+		root.querySelectorAll(SELECTOR).forEach((el) => {
+			if (hasAccessibleName(el)) return;
+			const g = guessName(el);
+			if (g) {
+				el.setAttribute("aria-label", g);
+				n++;
+			}
+		});
+		return n;
+	}
+	var installed = false;
+	function installA11yLabels() {
+		if (installed || typeof document === "undefined" || typeof window === "undefined") return;
+		installed = true;
+		let timer;
+		const run = () => {
+			timer = void 0;
+			try {
+				labelUnnamedControls(document);
+			} catch (e) {}
+		};
+		const schedule = () => {
+			if (timer === void 0) timer = setTimeout(run, 200);
+		};
+		const start = () => {
+			run();
+			if (typeof MutationObserver !== "undefined" && document.body) new MutationObserver(schedule).observe(document.body, {
+				childList: true,
+				subtree: true
+			});
+		};
+		if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
+		else start();
+	}
+	//#endregion
 	//#region src/shared/risk-analysis.ts
 	var RISK_STATUSES = [
 		"identificado",
@@ -473,9 +567,32 @@ var GPI = (function(exports) {
 	function memoryMode() {
 		return !canWrite() && !readable();
 	}
+	var DB_VERSION = 2;
+	function migrateProject(p) {
+		if (!p || !isPlainObject(p.modules)) return;
+		const sp = p.modules.schedulePlan;
+		if (sp && isPlainObject(sp.calendar) && Array.isArray(sp.calendar.holidays)) sp.calendar.holidays = sp.calendar.holidays.map((h) => typeof h === "string" ? {
+			date: h.slice(0, 10),
+			name: ""
+		} : h).filter((h) => !!h && typeof h === "object");
+		const ch = p.modules.charter;
+		if (ch && Array.isArray(ch.requirements) && ch.requirements.length && ch.requirements.every((r) => typeof r === "string")) ch.requirements = ch.requirements.map((text, i) => ({
+			id: "ran" + (i + 1),
+			code: "RAN." + pad2(i + 1),
+			text
+		}));
+	}
+	function migrateDb(d) {
+		if (!d || typeof d !== "object") return d;
+		if ((Number(d.version) || 1) < 2) {
+			if (isPlainObject(d.projects)) Object.keys(d.projects).forEach((id) => migrateProject(d.projects[id]));
+			d.version = 2;
+		}
+		return d;
+	}
 	function fresh() {
 		return {
-			version: 1,
+			version: 2,
 			activeId: null,
 			projects: {}
 		};
@@ -484,7 +601,7 @@ var GPI = (function(exports) {
 		if (pendingUnsaved) return pendingUnsaved;
 		if (memoryMode()) return mem || (mem = fresh());
 		try {
-			return JSON.parse(localStorage.getItem("gpi_db")) || fresh();
+			return migrateDb(JSON.parse(localStorage.getItem("gpi_db")) || fresh());
 		} catch (e) {
 			return fresh();
 		}
@@ -541,7 +658,7 @@ var GPI = (function(exports) {
 		if (!diskRaw) return null;
 		let disk;
 		try {
-			disk = JSON.parse(diskRaw);
+			disk = migrateDb(JSON.parse(diskRaw));
 		} catch (_) {
 			return null;
 		}
@@ -609,7 +726,7 @@ var GPI = (function(exports) {
 			return true;
 		} catch (e) {
 			if (pendingUnsaved == null) try {
-				pendingBase = JSON.parse(localStorage.getItem(KEY));
+				pendingBase = migrateDb(JSON.parse(localStorage.getItem(KEY)));
 			} catch (_) {
 				pendingBase = null;
 			}
@@ -1091,6 +1208,7 @@ var GPI = (function(exports) {
 				if (!isPlainObject(obsMod.nodes)) obsMod.nodes = {};
 				sanitizeTree(obsMod.rootId, obsMod.nodes);
 			}
+			migrateProject(proj);
 			return proj;
 		}
 		const projMeta = Object.assign(defaultMeta(), {
@@ -3284,8 +3402,8 @@ var GPI = (function(exports) {
 		setInterval(run(false), 2e4);
 	}
 	installStorageNotice();
-	//#endregion
-	exports.GPI = {
+	installA11yLabels();
+	var GPI = {
 		KEY,
 		schema,
 		checkStorageNotice,
@@ -3322,6 +3440,9 @@ var GPI = (function(exports) {
 		util,
 		ui
 	};
+	//#endregion
+	exports.DB_VERSION = DB_VERSION;
+	exports.GPI = GPI;
 	exports.KEY = KEY;
 	exports.active = active;
 	exports.activeId = activeId;
@@ -3359,6 +3480,7 @@ var GPI = (function(exports) {
 	exports.lastReconcile = lastReconcile;
 	exports.listProjects = listProjects;
 	exports.meta = meta;
+	exports.migrateDb = migrateDb;
 	exports.obsLabel = obsLabel;
 	exports.obsNodes = obsNodes;
 	exports.onChange = onChange;

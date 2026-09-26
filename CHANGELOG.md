@@ -11,6 +11,16 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Auditoría integral, hallazgos medios de software (S1, S3, S4, S5)**:
+  - **S1 — «Hoy» en UTC.** `new Date().toISOString().slice(0,10)` daba el día siguiente por la noche en Lima (UTC-5); ahora
+    `todayLocalISO()` (`src/shared/local-date.ts`) usa la fecha local en los 10 sitios afectados.
+  - **S5 — ~250 campos sin nombre accesible.** `src/shared/a11y-labels.ts` (instalado desde el núcleo) asigna `aria-label` a los controles
+    que no lo tienen (columna+fila, etiqueta de su bloque, placeholder, atributo de datos), sin pisar nombres existentes. Chrome real con el
+    caso completo: 260 → 0; `tests/e2e/a11y-unnamed-controls.spec.ts` lo vigila en las 21 páginas y sus pestañas.
+  - **S4 — Esquema sin versión.** `DB_VERSION = 2` y `migrateDb`/`migrateProject` (normalizadores idempotentes: feriados de texto → `{date,name}`,
+    requisitos del Acta de texto → objetos). Los `.json` v1 de alumnos abren igual; fixtures en `tests/fixtures/` y `schema-migration.test.ts`.
+  - **S3 — Código duplicado.** `gpiBadge` (17 copias) → `src/shared/gpi-badge.ts`; `esc` → `src/shared/html.ts`. Costos y Requisitos ya no
+    muestran «✓ Sincronizado» si el guardado falló.
 - **Los 4 hallazgos altos de la auditoría integral (2026-09-25)**:
   - **S2 — La EDT guardaba datos derivados que nadie actualizaba.** WBS Builder muestra las fechas del CPM
     y el costo de Estimar los Costos, pero no los guarda; el Panel, «Importar hitos desde la EDT» del Acta

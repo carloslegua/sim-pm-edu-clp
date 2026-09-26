@@ -13,6 +13,9 @@
    DELIBERADAMENTE NO se usa GPI.ui.esc (modo suelto sin gpi-core.js).
    ============================================================ */
 import type * as GpiCore from "../../core/gpi-core";
+import { esc } from "../../shared/html";
+import { installGpiBadge } from "../../shared/gpi-badge";
+import { todayLocalISO } from "../../shared/local-date";
 import type { EditSession, GpiProject, ProjectMeta, ProjectModules, RequirementItem, ScopeStatementModule } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
 import { advanceScopeBaseline, normalizeScopeBaseline, scopeDriftOf, scopeSnapshotOf, wbsScopeCodes, type ScopeBaselineData } from "../../shared/scope-baseline";
@@ -110,7 +113,6 @@ function rans(): GpiCore.CharterRan[] { try { return gpiOn() && window.GPI!.util
 function reqItems(): RequirementItem[] { const r = mod("requirements"); return (r && r.items) || []; }
 
 /* ---------- helpers ---------- */
-function esc(s: unknown): string { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)); }
 function escAttr(s: unknown): string { return esc(s); }
 function setStatus(m: string): void { const el = document.getElementById("statusLeft"); if (el) el.textContent = m; }
 function toast(m: string): void { const t = document.getElementById("toast") as HTMLElement & { _t?: ReturnType<typeof setTimeout> }; t.textContent = m; t.classList.add("show"); clearTimeout(t._t); t._t = setTimeout(() => { t.classList.remove("show"); }, 1900); }
@@ -373,7 +375,7 @@ function renderBaseline(a: GpiCore.ScopeAuditResult): void {
     h += '<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"><b>Nueva versión de la línea base</b> <span class="muted" style="font-size:12px">— archiva la v' + esc(b.version) + ' completa (enunciado, EDT y diccionario) antes de establecer la siguiente.</span>'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:8px 0">'
       + '<div><label class="fl">Versión</label><input class="txt" id="nv_ver" value="' + dv(0, suggestNextVersion(b)) + '"></div>'
-      + '<div><label class="fl">Fecha</label><input class="txt" id="nv_date" type="date" value="' + dv(1, new Date().toISOString().slice(0, 10)) + '"></div>'
+      + '<div><label class="fl">Fecha</label><input class="txt" id="nv_date" type="date" value="' + dv(1, todayLocalISO()) + '"></div>'
       + '<div><label class="fl">Aprobador</label><input class="txt" id="nv_appr" value="' + dv(2, "") + '" placeholder="Patrocinador / CCB"></div></div>'
       + '<label class="fl">Motivo del cambio</label><textarea class="txt" id="nv_reason" rows="2" placeholder="Ej.: incorpora CR-002 (ampliación de la sala eléctrica) aprobada por el CCB">' + esc(draft[3] !== undefined ? draft[3] : "") + '</textarea>'
       + '<div class="empty-note" id="nv_msg" style="display:none;margin-top:6px"></div>'
@@ -394,7 +396,7 @@ function renderBaseline(a: GpiCore.ScopeAuditResult): void {
       const g = (id: string): string => ($(id) as HTMLInputElement).value, input = { version: g("nv_ver").trim(), date: g("nv_date"), approver: g("nv_appr").trim(), reason: g("nv_reason").trim() }, problems = newVersionProblems(state.baseline, input), msg = $("nv_msg");
       if (problems.length) { msg.textContent = "No se puede fijar la nueva versión: " + problems.join("; ") + "."; msg.style.display = ""; return; }
       const prev = state.baseline.version;
-      state.baseline = advanceScopeBaseline(state.baseline, scopeSnapshotOf(state, mod("wbs")), input, new Date().toISOString().slice(0, 10));
+      state.baseline = advanceScopeBaseline(state.baseline, scopeSnapshotOf(state, mod("wbs")), input, todayLocalISO());
       persist(); renderCoherence(); toast("Línea base v" + input.version + " fijada; la v" + prev + " quedó archivada");
     };
   } else {
@@ -411,7 +413,7 @@ function renderBaseline(a: GpiCore.ScopeAuditResult): void {
     const f = document.getElementById("btnFreeze");
     if (f) (f as HTMLElement).onclick = () => {
       b.version = ($("b_ver") as HTMLInputElement).value.trim() || "1.0";
-      b.date = ($("b_date") as HTMLInputElement).value || new Date().toISOString().slice(0, 10);
+      b.date = ($("b_date") as HTMLInputElement).value || todayLocalISO();
       b.approver = ($("b_appr") as HTMLInputElement).value.trim();
       b.snapshot = scopeSnapshotOf(state, mod("wbs"));       // enunciado + EDT + diccionario, versionados juntos
       b.reason = b.reason || "Línea base inicial";
@@ -704,14 +706,7 @@ function refreshFromGpi(): void {
 }
 
 function gpiBadge(name: string | undefined): void {
-  const css = document.createElement("style");
-  css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:42px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-dot{width:8px;height:8px;border-radius:50%;background:#6c5ce7;box-shadow:0 0 0 3px rgba(108,92,231,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#5646c9;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#6c5ce7;background:#fff}";
-  document.head.appendChild(css);
-  const bar = document.createElement("div"); bar.className = "gpi-badge";
-  bar.innerHTML = '<span class="gpi-dot"></span><span>Panel: <b>' + String(name || "—").replace(/</g, "&lt;") + '</b></span><button class="gpi-btn" id="gpiSyncBtn">☁ Sincronizar</button><a class="gpi-btn" href="Panel_Control.html">⌂ Panel</a>';
-  document.body.appendChild(bar);
-  const sb = bar.querySelector("#gpiSyncBtn");
-  if (sb) (sb as HTMLElement).onclick = () => { const ok = persist(); const t = sb.textContent; sb.textContent = ok ? "✓ Sincronizado" : "⚠ Sin sincronizar"; setTimeout(() => { sb.textContent = t; }, 1400); };
+  installGpiBadge({ name, onSync: () => persist(), accent: "#5646c9", hover: "#6c5ce7", dot: "#6c5ce7", dotShadow: "rgba(108,92,231,.18)" });
 }
 
 document.addEventListener("DOMContentLoaded", boot);

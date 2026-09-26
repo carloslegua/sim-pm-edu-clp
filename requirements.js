@@ -1,4 +1,47 @@
 (function() {
+	//#region src/shared/html.ts
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+			"&": "&amp;",
+			"<": "&lt;",
+			">": "&gt;",
+			"\"": "&quot;",
+			"'": "&#39;"
+		})[c]);
+	}
+	//#endregion
+	//#region src/shared/gpi-badge.ts
+	function installGpiBadge(o) {
+		if (typeof document === "undefined") return null;
+		if (o.id && document.getElementById(o.id)) return document.getElementById(o.id);
+		const accent = o.accent || "#0090c2", hover = o.hover || "#00b6ec", dot = o.dot || "#00c2a8", shadow = o.dotShadow || "rgba(0,194,168,.18)", dc = o.dotClass || "gpi-dot";
+		const css = document.createElement("style");
+		css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:" + (o.bottom === void 0 ? 42 : o.bottom) + "px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}." + dc + "{width:8px;height:8px;border-radius:50%;background:" + dot + ";box-shadow:0 0 0 3px " + shadow + "}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:" + accent + ";border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:" + hover + ";background:#fff}";
+		document.head.appendChild(css);
+		const bar = document.createElement("div");
+		bar.className = "gpi-badge";
+		if (o.id) bar.id = o.id;
+		bar.innerHTML = "<span class=\"" + dc + "\"></span><span>Panel: <b>" + esc(o.name || "—") + "</b></span><button class=\"gpi-btn\" id=\"gpiSyncBtn\">☁ Sincronizar</button><a class=\"gpi-btn\" href=\"Panel_Control.html\">⌂ Panel</a>";
+		document.body.appendChild(bar);
+		const btn = bar.querySelector("#gpiSyncBtn");
+		btn.addEventListener("click", () => {
+			const r = o.onSync();
+			if (r === null) return;
+			const t = btn.textContent;
+			btn.textContent = r === false ? "⚠ Sin sincronizar" : typeof r === "string" ? r : "✓ Sincronizado";
+			setTimeout(() => {
+				btn.textContent = t;
+			}, o.restoreMs || 1400);
+		});
+		return bar;
+	}
+	//#endregion
+	//#region src/shared/local-date.ts
+	function todayLocalISO(d = /* @__PURE__ */ new Date()) {
+		const p = (n) => (n < 10 ? "0" : "") + n;
+		return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+	}
+	//#endregion
 	//#region src/shared/requirements-baseline.ts
 	var str = (v) => v === null || v === void 0 ? "" : String(v);
 	var clone = (v) => JSON.parse(JSON.stringify(v));
@@ -132,15 +175,6 @@
 	function $(id) {
 		return document.getElementById(id);
 	}
-	function esc(s) {
-		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
-			"&": "&amp;",
-			"<": "&lt;",
-			">": "&gt;",
-			"\"": "&quot;",
-			"'": "&#39;"
-		})[c]);
-	}
 	function isSafeId(v) {
 		return typeof v === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(v);
 	}
@@ -154,7 +188,7 @@
 		return "MOD." + (n < 10 ? "0" + n : String(n));
 	}
 	function todayISO() {
-		return (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+		return todayLocalISO();
 	}
 	function repDate(s) {
 		if (!s) return "—";
@@ -1405,23 +1439,18 @@
 		host.innerHTML = h;
 	}
 	function gpiBadge() {
-		if ($("gpiBadge")) return;
-		const name = gpiOn() && GPI.meta() && GPI.meta().name || "—";
-		const css = document.createElement("style");
-		css.textContent = ".gpi-badge{position:fixed;right:16px;bottom:18px;z-index:900;background:#fff;border:1px solid #e0e8f0;border-radius:30px;box-shadow:0 6px 20px rgba(20,30,60,.15);padding:7px 8px 7px 14px;display:flex;align-items:center;gap:9px;font-family:'Manrope',sans-serif;font-size:12px;color:#4d5768}.gpi-badge b{color:#1a2027}.gpi-bdot{width:8px;height:8px;border-radius:50%;background:#6c5ce7;box-shadow:0 0 0 3px rgba(108,92,231,.18)}.gpi-badge .gpi-btn{font-family:'Manrope',sans-serif;font-size:11.5px;font-weight:600;border:1px solid #e0e8f0;background:#f3f8fc;color:#6c5ce7;border-radius:20px;padding:5px 11px;cursor:pointer;text-decoration:none}.gpi-badge .gpi-btn:hover{border-color:#6c5ce7;background:#fff}";
-		document.head.appendChild(css);
-		const bar = document.createElement("div");
-		bar.className = "gpi-badge";
-		bar.id = "gpiBadge";
-		bar.innerHTML = "<span class=\"gpi-bdot\"></span><span>Panel: <b>" + String(name).replace(/</g, "&lt;") + "</b></span><button class=\"gpi-btn\" id=\"gpiSyncBtn\">☁ Sincronizar</button><a class=\"gpi-btn\" href=\"Panel_Control.html\">⌂ Panel</a>";
-		document.body.appendChild(bar);
-		bar.querySelector("#gpiSyncBtn").addEventListener("click", function() {
-			save();
-			const b = this, t = b.textContent;
-			b.textContent = "✓ Sincronizado";
-			setTimeout(() => {
-				b.textContent = t;
-			}, 1400);
+		installGpiBadge({
+			name: gpiOn() && GPI.meta() && GPI.meta().name || "—",
+			onSync: () => {
+				save();
+			},
+			id: "gpiBadge",
+			dotClass: "gpi-bdot",
+			bottom: 18,
+			accent: "#6c5ce7",
+			hover: "#6c5ce7",
+			dot: "#6c5ce7",
+			dotShadow: "rgba(108,92,231,.18)"
 		});
 	}
 	function init() {
