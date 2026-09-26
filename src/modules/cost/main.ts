@@ -321,7 +321,7 @@ function riskCtx(): RiskCtx {
 }
 const riskRefs = (ctx: RiskCtx) => ctx.risks.map((r) => ({ ...toRiskRef(r), plannedMax: r.costImpact.high !== null ? r.costImpact.high : r.costImpact.likely }));
 function includeRisksOn(): boolean { const c = document.getElementById("rngRisks") as HTMLInputElement | null; return !c || c.checked; }
-// ---- cronograma: la red de actividades y el CPM (AACE 40R-08 / 65R-11: el riesgo de plazo cuesta) ----
+// ---- cronograma: la red de actividades y el CPM (AACE 40R-08 / 57R-09: el riesgo de plazo cuesta) ----
 // Costos LEE la red, no la escribe: conectado, la del proyecto; independiente, la red DISTRIB+ completa. Se arma
 // perezosamente y se invalida cuando otro módulo cambia el proyecto o al volver a esta pestaña.
 let net: Network | null = null, eng: Engine | null = null, netDirty = true;
@@ -1229,7 +1229,7 @@ function rangeDocHtml(): string {
   const evTxt = ec && ec.events.length
     ? `Incluye <b>${ec.events.length} evento(s) de riesgo</b> del ${ec.source === "registro" ? "Registro de Riesgos del proyecto" : "caso de ejemplo"} (${esc(ec.events.slice(0, 6).map((e) => e.code).join(", "))}${ec.events.length > 6 ? "…" : ""}), con su riesgo <b>residual</b> cuando está cuantificado; valor esperado neto ${fmt(ec.ev)}.`
     : "No incluye eventos de riesgo discretos (ninguno cuantificado en el registro, o se excluyeron).";
-  // Plazo integrado (AACE 65R-11): efecto de los eventos sobre el fin del proyecto y su costo.
+  // Plazo integrado (AACE 57R-09): efecto de los eventos sobre el fin del proyecto y su costo.
   const sc = res && res.schedule, cpd = timeCostPerDay(), basisT = (($("rngTimeBasis") as HTMLInputElement | null) || { value: "" }).value.trim();
   const schedTxt = sc && sc.events
     ? ` <b>Plazo:</b> ${sc.events} evento(s) retrasan actividades del cronograma (CPM real, duración base ${fmtDays(sc.base)}); con P${p} el plazo es ${fmtDays(sc.p[p])} (reserva de plazo ${fmtDays(Math.max(0, sc.p[p] - sc.base))}${finishOf(sc.p[p]) ? ", fin " + esc(finishOf(sc.p[p])) : ""}).${cpd > 0 ? " La extensión del plazo se costea a " + fmt(cpd) + " por día" + (basisT ? " (" + esc(basisT) + ")" : "") + ": costo medio " + fmt(sc.timeCostMean) + ", incluido en la contingencia." : " No se definió un costo por día de extensión: el retraso no se traduce a costo."}`

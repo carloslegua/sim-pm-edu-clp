@@ -410,6 +410,22 @@
           <div class="field"><label>Fecha de aceptación (Director)</label><input type="date" data-bind="approval.managerDate"></div>
         </div>
       </div>
+      <div class="list-title"><span class="dot" style="background:var(--ch-c)"></span>Versión aprobada del acta</div>
+      <div class="hint">Aprobar fija una versión del acta (quién, cuándo y por qué). Lo que edites después es trabajo en edición: no se copia al presupuesto, patrocinador ni director del proyecto hasta que apruebes una nueva versión.</div>
+      <div class="info-panel" id="blStatus" style="margin:0 0 10px 36px;"></div>
+      <div class="two-col">
+        <div class="field-grid" style="grid-template-columns:1fr 1fr;">
+          <div class="field"><label for="blVersion">Versión</label><input id="blVersion"></div>
+          <div class="field"><label for="blDate">Fecha de aprobación</label><input id="blDate" type="date"></div>
+        </div>
+        <div class="field-grid" style="grid-template-columns:1fr;">
+          <div class="field"><label for="blApprover">Aprobada por</label><input id="blApprover" placeholder="Nombre y cargo de quien aprueba"></div>
+        </div>
+      </div>
+      <div class="field"><label for="blReason">Motivo (qué cambió y por qué)</label><input id="blReason"></div>
+      <button class="btn sm add-row-btn" id="btnApproveCharter">✓ Aprobar esta versión del acta</button>
+      <div id="blHistory" class="hint" style="margin-left:0;"></div>
+
       <div class="list-title"><span class="dot" style="background:var(--ch-c)"></span>Patrocinadores que autorizan el proyecto</div>
       <div class="hint">Además de la firma del patrocinador principal, registra aquí a todas las autoridades que respaldan formalmente el proyecto (patrocinio ejecutivo, direcciones involucradas, comité).</div>
       <div class="rt-wrap">

@@ -6,7 +6,8 @@ const base = (version: string, date: string, approver = "CCB") => ({ has: true, 
 // Un proyecto completo y coherente (todo en orden).
 function completo(): PlanFacts {
   const f = emptyFacts("2026-09-01");
-  f.charter = { has: true, pct: 100, end: "2027-07-21" };
+  f.charter = { has: true, pct: 100, end: "2027-07-21", approach: "Predictivo" };
+  f.approach = { lifecycle: "Predictivo por fases", tailoring: "Sin adaptación de las áreas", configuration: "Líneas base versionadas", changeProcess: "CCB según montos" };
   f.scope = { has: true, state: "verde", base: base("1.0", "2026-07-10"), notDecomposed: 0 };
   f.requirements = { has: true, state: "verde", base: base("1.0", "2026-07-10"), total: 6 };
   f.wbs = { leaves: 18, state: "verde", dictPct: 100, riesgo: 0, aviso: 0 };
@@ -53,7 +54,7 @@ describe("areaRows / estado del plan", () => {
 describe("integrationFindings — el cruce entre líneas base", () => {
   it("un proyecto coherente y con el plan sin aprobar: solo la sugerencia de aprobarlo (P13)", () => { expect(codes(completo())).toEqual(["P13"]); });
   it("P1: hay planes y líneas base pero no Acta; P10: sin Registro de Riesgos", () => {
-    const f = completo(); f.charter = { has: false, pct: 0, end: "" }; f.risks = { total: 0, open: 0, high: 0 };
+    const f = completo(); f.charter = { has: false, pct: 0, end: "", approach: "Predictivo" }; f.risks = { total: 0, open: 0, high: 0 };
     expect(codes(f)).toEqual(expect.arrayContaining(["P1", "P10"]));
     expect(codes(emptyFacts())).toEqual([]);                                                       // nada que integrar: nada que avisar
   });
@@ -96,6 +97,24 @@ describe("integrationFindings — el cruce entre líneas base", () => {
     const p = integrationFindings(f).find((x) => x.code === "P21")!; expect(p.severity).toBe("aviso"); expect(p.text).toMatch(/difiere de la línea base del alcance v1\.0: 3 cambio\(s\) en la EDT y su diccionario y cambios en el enunciado/);
     f.scope.drift = { wbsInBaseline: false, wbsChanges: 0, enunciadoChanged: false }; expect(integrationFindings(f).find((x) => x.code === "P22")!.text).toMatch(/se congeló sin la EDT y su diccionario/);
     f.scope.base = { has: false, version: "", date: "", approver: "" }; expect(codes(f)).not.toContain("P22");                     // sin línea base del alcance no aplica
+  });
+  it("P23: el Acta declara un enfoque no predictivo y la suite modela uno predictivo (sin declarar, o predictivo/cascada, no avisa)", () => {
+    const f = completo(); f.charter.approach = "Ágil";
+    const p = integrationFindings(f).find((x) => x.code === "P23")!; expect(p.severity).toBe("aviso"); expect(p.text).toMatch(/«Ágil».*PREDICTIVO/);
+    f.charter.approach = "Híbrido"; expect(codes(f)).toContain("P23");
+    ["Predictivo", "predictivo (cascada)", "Cascada", ""].forEach((a) => { f.charter.approach = a; expect(codes(f), a).not.toContain("P23"); });
+    expect(codes(emptyFacts())).toEqual([]);
+  });
+  it("P24: el plan no declara ciclo de vida, adaptación, configuración ni proceso de cambios: los nombra uno a uno", () => {
+    const f = completo(); f.approach = { lifecycle: "", tailoring: "  ", configuration: "x", changeProcess: "" };
+    expect(integrationFindings(f).find((x) => x.code === "P24")!.text).toMatch(/no declara: ciclo de vida y enfoque de desarrollo; adaptación \(tailoring\); proceso de gestión de cambios\./);
+    f.approach = { lifecycle: "a", tailoring: "b", configuration: "c", changeProcess: "d" }; expect(codes(f)).not.toContain("P24");
+  });
+  it("el enfoque declarado es un componente del plan: si cambia tras la aprobación, el plan queda con cambios sin aprobar", () => {
+    expect(PLAN_COMPONENTS.map((c) => c.key)).toContain("planApproach");
+    const f = completo(); f.digests = { planApproach: "h1" };
+    const snap = snapshotOf(f), f2 = { ...f, digests: { planApproach: "h2" } };
+    expect(snapshotDiff(snap, snapshotOf(f2))).toEqual([{ label: "Enfoque, ciclo de vida y adaptación", from: "aprobado", to: "modificado" }]);
   });
   it("P11: el pronóstico se desvía más del 10 % de la línea base", () => {
     const f = completo(); f.schedule.deviationPct = 12.34; expect(integrationFindings(f).find((x) => x.code === "P11")!.text).toMatch(/12\.3 %/);

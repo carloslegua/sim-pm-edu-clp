@@ -28,8 +28,15 @@ export const PLAN_COMPONENTS: Array<{ key: string; label: string }> = [
   { key: "meta", label: "Ficha del proyecto" }, { key: "charter", label: "Acta de Constitución" }, { key: "requirements", label: "Requisitos" }, { key: "scopeStatement", label: "Enunciado del Alcance" },
   { key: "wbs", label: "EDT y diccionario" }, { key: "activities", label: "Actividades" }, { key: "pert", label: "Estimación PERT" }, { key: "costEstimate", label: "Estimación de costos" },
   { key: "schedulePlan", label: "Plan del Cronograma" }, { key: "schedule", label: "Cronograma y línea base" }, { key: "cost", label: "Plan de Costos y BOE" }, { key: "riskPlan", label: "Plan de Riesgos" },
-  { key: "obs", label: "Organización (OBS)" }, { key: "raci", label: "Matriz RACI" }, { key: "quality", label: "Plan de Calidad" }, { key: "comms", label: "Plan de Comunicaciones" }, { key: "procurement", label: "Plan de Adquisiciones" }
+  { key: "obs", label: "Organización (OBS)" }, { key: "raci", label: "Matriz RACI" }, { key: "quality", label: "Plan de Calidad" }, { key: "comms", label: "Plan de Comunicaciones" }, { key: "procurement", label: "Plan de Adquisiciones" },
+  { key: "planApproach", label: "Enfoque, ciclo de vida y adaptación" }
 ];
+// Lo que el plan para la dirección declara por sí mismo (auditoría, media): PMBOK pide que el plan describa el enfoque de desarrollo y el ciclo de vida, cómo se
+// adaptó (tailoring) y cómo se gestionan la configuración y los cambios. Ninguna otra herramienta lo captura; se guardan aquí, con el registro de aprobación.
+export interface PlanApproach { lifecycle: string; tailoring: string; configuration: string; changeProcess: string; }
+export const emptyApproach = (): PlanApproach => ({ lifecycle: "", tailoring: "", configuration: "", changeProcess: "" });
+// El simulador modela un ciclo de vida PREDICTIVO (líneas base de alcance, cronograma y costo; CPM; valor ganado): el enfoque del Acta se contrasta con eso.
+export const isPredictive = (approach: string): boolean => !approach.trim() || /predictiv|cascada|waterfall|tradicional/i.test(approach);
 // JSON estable (claves ordenadas): el mismo contenido da siempre la misma cadena, sin importar el orden en que se guardó.
 export function stableStringify(v: unknown): string {
   if (v === null || v === undefined) return "null";
@@ -46,7 +53,8 @@ export function digestOf(v: unknown): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 export interface PlanFacts {
-  charter: { has: boolean; pct: number; end: string };
+  charter: { has: boolean; pct: number; end: string; approach: string };
+  approach: PlanApproach;   // lo que el propio plan declara (ver PlanApproach)
   scope: { has: boolean; state: AreaState; base: BaselineFact; notDecomposed: number; drift?: { wbsInBaseline: boolean; wbsChanges: number; enunciadoChanged: boolean } };
   requirements: { has: boolean; state: AreaState; base: BaselineFact; total: number };
   wbs: { leaves: number; state: AreaState; dictPct: number; riesgo: number; aviso: number };
@@ -70,7 +78,7 @@ export interface AreaRow { key: string; label: string; file: string | null; stat
 export const emptyBase = (): BaselineFact => ({ has: false, version: "", date: "", approver: "" });
 export function emptyFacts(today = ""): PlanFacts {
   return {
-    charter: { has: false, pct: 0, end: "" }, scope: { has: false, state: "vacio", base: emptyBase(), notDecomposed: 0 }, requirements: { has: false, state: "vacio", base: emptyBase(), total: 0 },
+    charter: { has: false, pct: 0, end: "", approach: "" }, approach: emptyApproach(), scope: { has: false, state: "vacio", base: emptyBase(), notDecomposed: 0 }, requirements: { has: false, state: "vacio", base: emptyBase(), total: 0 },
     wbs: { leaves: 0, state: "vacio", dictPct: 0, riesgo: 0, aviso: 0 },
     schedule: { has: false, ok: true, activities: 0, duration: null, start: "", finish: "", critical: 0, base: emptyBase(), deviationPct: null },
     cost: { has: false, bac: 0, bacCurrent: 0, total: 0, pendingBaseline: 0, capex: null, boeStatus: "", boeApprovedOn: "", baselineVersion: "", baselineDate: "" },
@@ -166,6 +174,11 @@ export function integrationFindings(f: PlanFacts): PFinding[] {
   const bac = f.cost.bacCurrent || f.cost.bac;
   if (f.procurement.has && bac > 0 && f.procurement.total > bac) F("P19", "aviso", "Adquisiciones", "El valor estimado de las adquisiciones (" + money(f.procurement.total) + ") supera el BAC vigente (" + money(bac) + "): concilia los contratos con el presupuesto.");
   if (anyData) ([["quality", "Calidad"], ["comms", "Comunicaciones"], ["procurement", "Adquisiciones"]] as const).forEach(([k, n]) => { if (!f[k].has) F("P17", "info", n, "El Plan de " + n + " aún no está elaborado: el plan para la dirección se aprueba con sus planes subsidiarios."); });
+  if (anyData && !isPredictive(f.charter.approach)) F("P23", "aviso", "Acta", "El Acta declara un enfoque «" + f.charter.approach.trim() + "», pero esta suite modela un ciclo de vida PREDICTIVO (líneas base de alcance, cronograma y costo, CPM, valor ganado): no representa iteraciones, backlog ni velocidad. Documenta en «Enfoque y adaptación» cómo se aplica el plan aquí, o corrige el enfoque del Acta.");
+  if (anyData) {
+    const miss = ([["ciclo de vida y enfoque de desarrollo", f.approach.lifecycle], ["adaptación (tailoring)", f.approach.tailoring], ["gestión de la configuración", f.approach.configuration], ["proceso de gestión de cambios", f.approach.changeProcess]] as const).filter(([, t]) => !t.trim()).map(([n]) => n);
+    if (miss.length) F("P24", "aviso", "Plan", "El plan para la dirección no declara: " + miss.join("; ") + ". PMBOK pide que el plan describa el enfoque de desarrollo y el ciclo de vida, cómo se adaptó el proceso y cómo se controlan la configuración y los cambios (sección «Enfoque y adaptación»).");
+  }
   if (s.base.has && s.deviationPct !== null && s.deviationPct > 10) F("P11", "aviso", "Cronograma", "El pronóstico del cronograma se desvía " + Math.round(s.deviationPct * 10) / 10 + " % de su línea base: evalúa un cambio (o una nueva línea base) antes de aprobar el plan.");
   if (f.plan.status === "aprobado") {
     if (!f.plan.approvedBy.trim() || !f.plan.approvedOn) F("P14", "riesgo", "Plan", "El plan figura «aprobado» sin registrar quién lo aprueba y en qué fecha.");

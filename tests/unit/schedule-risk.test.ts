@@ -1,4 +1,4 @@
-// Riesgo de plazo (AACE 40R-08 / 65R-11 + PMBOK): el efecto de un riesgo sobre el FIN del proyecto sale de volver a
+// Riesgo de plazo (AACE 40R-08 / 57R-09 + PMBOK): el efecto de un riesgo sobre el FIN del proyecto sale de volver a
 // correr el CPM con la duración afectada -- no es «los días del riesgo» ni «días − holgura total». Estas pruebas fijan
 // la lógica con redes chicas de resultado conocido y la simulación integrada de costo y plazo contra valores analíticos.
 import { describe, expect, it } from "vitest";

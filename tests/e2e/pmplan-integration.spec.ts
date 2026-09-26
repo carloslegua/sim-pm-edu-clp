@@ -41,8 +41,8 @@ test("Plan para la Dirección sobre el proyecto real: cronograma 273 d, document
   await page.locator('#tabs .tab[data-view="doc"]').click();
   const doc = page.locator("#docView");
   await expect(doc).toContainText("Plan para la dirección del proyecto");
-  await expect(doc).toContainText("3. Plan de gestión del cronograma");
-  await expect(doc).toContainText("5. Plan de gestión de la calidad"); await expect(doc).toContainText("9. Plan de gestión de las adquisiciones");
+  await expect(doc).toContainText("4. Plan de gestión del cronograma");
+  await expect(doc).toContainText("6. Plan de gestión de la calidad"); await expect(doc).toContainText("10. Plan de gestión de las adquisiciones");
   await expect(doc).toContainText("QC-11");                                                                 // el control de cimentaciones del ejemplo de calidad
   await expect(doc.locator("h3#s2-edt ~ table").first().locator("tbody tr")).not.toHaveCount(0);
   await expect(doc).toContainText(/Duración \(días laborables\)\s*273/);

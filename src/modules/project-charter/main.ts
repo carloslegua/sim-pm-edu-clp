@@ -24,6 +24,8 @@
 import type * as GpiCore from "../../core/gpi-core";
 import { esc } from "../../shared/html";
 import { installGpiBadge } from "../../shared/gpi-badge";
+import { todayLocalISO } from "../../shared/local-date";
+import { approvalProblems, approveCharter, charterDrift, normalizeCharterBaseline, suggestCharterVersion, type CharterBaseline } from "../../shared/charter-baseline";
 import type { CharterModule, EditSession, ProjectMeta, WbsModule, WriteResult } from "../../core/types";
 
 type GpiApi = typeof GpiCore.GPI;
@@ -65,6 +67,7 @@ interface CharterState {
   exitCriteria: string[];
   sponsors: SponsorRow[];
   approval: Approval;
+  baseline?: CharterBaseline | null;   // versión aprobada del acta (opcional: las actas guardadas antes no la traen)
 }
 
 function defaultState(): CharterState {
@@ -97,7 +100,7 @@ function defaultState(): CharterState {
 }
 
 function sampleState(): CharterState {
-  return {
+  const s: CharterState = {
     identification: {
       preparedDate: "2026-07-06",
       sponsor: "Gerencia General DISTRIB+",
@@ -106,7 +109,7 @@ function sampleState(): CharterState {
       client: "DISTRIB+ S.A. (uso interno — operación logística)",
       approach: "Predictivo",
       language: "Español",
-      authority: "El Director de Proyecto puede aprobar cambios de hasta el 2% del CAPEX sin escalar al Sponsor, contratar servicios menores dentro del presupuesto aprobado y aceptar entregables intermedios. Los cambios de alcance, plazo total o presupuesto por encima de ese umbral requieren aprobación del Comité de Control de Cambios y del Sponsor."
+      authority: "El Director de Proyecto puede autorizar por sí solo el uso de reserva o los cambios de hasta USD 50.000, contratar servicios menores dentro del presupuesto aprobado y aceptar entregables intermedios. Entre USD 50.000 y USD 250.000 los autoriza el Comité de Control de Cambios (CCB); por encima de USD 250.000, o si cambian el alcance aprobado o el plazo total, los aprueba el Sponsor. Son los mismos niveles del Plan de Riesgos."
     },
     purpose: "DISTRIB+ S.A. necesita ampliar su capacidad de almacenamiento y despacho en Lima Sur para sostener el crecimiento de su cartera de distribución. El propósito del proyecto es construir y poner en marcha un almacén logístico en Lurín que permita consolidar operaciones hoy tercerizadas, reducir el costo logístico unitario y mejorar los tiempos de atención a los clientes de la zona sur.",
     businessCase: {
@@ -114,7 +117,7 @@ function sampleState(): CharterState {
       investment: "USD 8.5 millones (CAPEX)",
       annualBenefit: "USD 1.2 millones / año (ahorro operativo)",
       payback: "≈ 7.1 años (solo por ahorro operativo)",
-      indicators: "VAN positivo a 10 años con tasa de descuento del 12%; TIR estimada 14.5%",
+      indicators: "A 10 años y con tasa de descuento del 12%, contando solo el ahorro operativo el VAN es negativo (≈ −USD 1.7 millones; TIR ≈ 6.8%). Con un valor residual del activo de USD 6.0 millones al año 10 (supuesto declarado: la nave y su terreno conservan valor), el VAN es ≈ +USD 0.2 millones y la TIR ≈ 12.5%: el caso de negocio depende de ese supuesto.",
       intangibles: "Control directo sobre los niveles de servicio y los tiempos de despacho; capacidad de crecer sin renegociar con terceros; activo inmobiliario propio que revaloriza; menor exposición a la variación de tarifas del mercado logístico."
     },
     description: "El proyecto comprende la ingeniería, procura, construcción y puesta en marcha de un almacén logístico de estructura metálica prefabricada sobre un terreno propio en Lurín, incluyendo movimiento de tierras, cimentaciones, estructura y cobertura, acabados, instalaciones MEP, patio de maniobras y las pruebas de instalaciones previas a la entrega. La gestión sigue las buenas prácticas del PMBOK y los estándares de AACE International usados en el curso.",
@@ -214,6 +217,9 @@ function sampleState(): CharterState {
       managerDate: "2026-07-08"
     }
   };
+  // El acta del caso ya está aprobada (v1.0, 2026-07-08): lo que el alumno edite después es trabajo en edición hasta una nueva versión.
+  s.baseline = approveCharter(s, null, { version: "1.0", date: "2026-07-08", approver: s.approval.sponsorName, reason: "Aprobación inicial del acta" }, "2026-07-08");
+  return s;
 }
 
 // Migración de versiones anteriores del módulo (por si el esquema evoluciona).
@@ -233,6 +239,7 @@ function normalizeState(obj: any): CharterState {
     if (Array.isArray(obj[k])) out[k] = obj[k];
   });
   out.requirements = migrateRequirements(out.requirements);
+  out.baseline = normalizeCharterBaseline(obj.baseline);   // las actas guardadas antes no la traen: quedan sin aprobar
   return out as CharterState;
 }
 
@@ -595,6 +602,33 @@ function updateSidebar(): void {
   }).join("");
 }
 
+// ---------- versión aprobada del acta ----------
+function renderBaseline(prefill = false): void {
+  const b = state.baseline || null, d = charterDrift(state, b), st = document.getElementById("blStatus") as HTMLElement;
+  if (!b) st.innerHTML = "<b>Acta sin aprobar.</b> Mientras no se apruebe, lo que escribes aquí (patrocinador, director, cliente y presupuesto) se copia al proyecto y a los demás módulos tal cual.";
+  else if (d.drifted) st.innerHTML = "<b>Versión aprobada: v" + esc(b.version) + "</b> (" + esc(repDate(b.date)) + ", " + esc(b.approver) + "). <b>El acta en edición difiere de lo aprobado</b> — " + esc(d.sections.join(", ")) + ". Estos cambios <b>no se copian</b> al patrocinador, director, cliente ni presupuesto del proyecto hasta que apruebes una nueva versión.";
+  else st.innerHTML = "<b>Versión aprobada: v" + esc(b.version) + "</b> (" + esc(repDate(b.date)) + ", " + esc(b.approver) + "). El acta en edición coincide con lo aprobado.";
+  const hist = (b ? b.history : []).slice().reverse().map((h) => "v" + esc(h.version) + " — " + esc(repDate(h.date)) + ", " + esc(h.approver) + " — " + esc(h.reason) + " (reemplazada el " + esc(repDate(h.supersededOn)) + ")");
+  (document.getElementById("blHistory") as HTMLElement).innerHTML = hist.length ? "<b>Versiones anteriores:</b><br>" + hist.join("<br>") : "";
+  if (prefill) {
+    (document.getElementById("blVersion") as HTMLInputElement).value = suggestCharterVersion(b);
+    (document.getElementById("blDate") as HTMLInputElement).value = todayLocalISO();
+    (document.getElementById("blApprover") as HTMLInputElement).value = state.approval.sponsorName || state.identification.sponsor || "";
+    (document.getElementById("blReason") as HTMLInputElement).value = b ? "" : "Aprobación inicial del acta";
+  }
+}
+async function approveCurrentCharter(): Promise<void> {
+  const inp = (id: string): string => (document.getElementById(id) as HTMLInputElement).value;
+  const i = { version: inp("blVersion"), date: inp("blDate"), approver: inp("blApprover"), reason: inp("blReason") };
+  const problems = approvalProblems(state.baseline || null, i);
+  if (problems.length) { await showAlert("Para aprobar el acta: " + problems.join("; ") + ".", "Falta información"); return; }
+  state.baseline = approveCharter(state, state.baseline || null, i, todayLocalISO());
+  state.approval.sponsorName = i.approver; state.approval.sponsorDate = i.date;   // la firma del Patrocinador es la de esta aprobación
+  hydrateStatics(); renderBaseline(true); updateSidebar();
+  clearTimeout(dirtyTimer); gpiPush();   // aprobado: ahora sí se propaga a los metadatos del proyecto
+  setStatus("Acta aprobada — versión " + state.baseline.version + ".");
+}
+
 function renderAll(): void {
   hydrateStatics();
   renderObjectives();
@@ -603,11 +637,13 @@ function renderAll(): void {
   renderApprovalReq();
   renderSponsors();
   renderAllLists();
+  renderBaseline(true);
   updateSidebar();
 }
 
 let dirtyTimer: ReturnType<typeof setTimeout> | undefined;
 function onDirty(): void {
+  renderBaseline();
   updateSidebar();
   clearTimeout(dirtyTimer);
   dirtyTimer = setTimeout(gpiPush, 800); // persistencia inmediata (con debounce corto)
@@ -796,6 +832,8 @@ function buildReport(): void {
     : '<p class="rep-note">— No registrado —</p>';
 
   body += '<p class="rep-note" style="margin-top:14px">Índice de completitud del acta al momento de emisión: <b>' + a.pct + '%</b> (' + a.okCount + '/' + a.total + ' elementos del checklist).</p>';
+  const bl = state.baseline || null, dr = charterDrift(state, bl);
+  body += '<p class="rep-note">' + (bl ? 'Versión aprobada: <b>v' + esc(bl.version) + '</b> (' + esc(repDate(bl.date)) + ', ' + esc(bl.approver) + ')' + (dr.drifted ? '. <b>Este reporte incluye cambios posteriores sin aprobar:</b> ' + esc(dr.sections.join(', ')) + '.' : '.') : 'Acta sin aprobar formalmente (sin versión aprobada).') + '</p>';
 
   body += '<div class="rep-sign">'
     + '<div class="box"><b>' + esc(ap.sponsorName || "Patrocinador (Sponsor)") + '</b><div class="r">Patrocinador — Fecha: ' + esc(repDate(ap.sponsorDate)) + '</div></div>'
@@ -809,6 +847,7 @@ function buildReport(): void {
 function wireToolbar(): void {
   document.getElementById("btnImportMilestones")!.addEventListener("click", importMilestonesFromWbs);
   document.getElementById("btnImportStakeholders")!.addEventListener("click", importKeyStakeholders);
+  document.getElementById("btnApproveCharter")!.addEventListener("click", approveCurrentCharter);
   document.getElementById("btnReport")!.addEventListener("click", buildReport);
   document.getElementById("btnPrint")!.addEventListener("click", () => { window.print(); });
   document.getElementById("btnSample")!.addEventListener("click", async () => {
@@ -902,10 +941,14 @@ function gpiPush(): boolean {
     name: (document.getElementById("projectTitle") as HTMLInputElement).value,
     course: (document.getElementById("courseTitle") as HTMLInputElement).value
   };
-  if ((state.identification.sponsor || "").trim()) patch.sponsor = state.identification.sponsor;
-  if ((state.identification.manager || "").trim()) patch.manager = state.identification.manager;
-  if ((state.identification.client || "").trim()) patch.client = state.identification.client;
-  if (Number(state.budget.amount) > 0) { patch.capex = state.budget.amount; patch.currency = state.budget.currency; }
+  // Con el acta aprobada y modificada después, esos cambios son trabajo en edición: no se propagan al proyecto (auditoría, media) hasta aprobar
+  // una nueva versión. Sin aprobar (o coincidiendo con lo aprobado) el comportamiento es el de siempre.
+  if (!charterDrift(state, state.baseline || null).drifted) {
+    if ((state.identification.sponsor || "").trim()) patch.sponsor = state.identification.sponsor;
+    if ((state.identification.manager || "").trim()) patch.manager = state.identification.manager;
+    if ((state.identification.client || "").trim()) patch.client = state.identification.client;
+    if (Number(state.budget.amount) > 0) { patch.capex = state.budget.amount; patch.currency = state.budget.currency; }
+  }
   // UNA sola operación atómica (Acta + metadatos): un conflicto en cualquiera
   // de los dos no escribe nada -- antes el Acta conservaba un patrocinador y los
   // metadatos del proyecto quedaban con otro (ver commitState() en el núcleo).

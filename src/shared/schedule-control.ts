@@ -11,7 +11,7 @@
 //    actividades, adelantos (leads) 0, desfases (lags) ≤ 5 % de los enlaces, relaciones FS ≥ 90 %, holgura alta (> 44 días
 //    laborables) ≤ 5 %, holgura negativa 0, duración alta (> 44 d) ≤ 5 %. Son valores de REFERENCIA de la industria, no
 //    una norma: orientan, no bloquean. (Las restricciones duras, los recursos y el avance real no los modela la suite.)
-//  · Línea base (PMBOK: Schedule Baseline; AACE 29R-03 análisis de cronograma): una versión aprobada del cronograma que solo
+//  · Línea base (PMBOK: Schedule Baseline): una versión aprobada del cronograma que solo
 //    cambia por control integrado de cambios. Cada versión (LB-n) conserva fecha, motivo y quién la aprobó; si el cambio
 //    en la duración supera el umbral de rebaselinado del plan, la autoriza el sponsor.
 //  · Variación: contra la línea base se mide el desplazamiento del fin, cuánto se consumió de la reserva de cronograma y el

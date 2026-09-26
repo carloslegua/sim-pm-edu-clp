@@ -62,16 +62,17 @@ describe("WBS_Builder.html — calidad de la EDT", () => {
     expect(doc.querySelectorAll(".q-group").length).toBe(0);
   });
 
-  it("ejemplo DISTRIB+: diccionario completo (18/18) y un único aviso real, S2: Estructuras metálicas concentra el 25,6 % del costo", async () => {
+  it("ejemplo DISTRIB+: diccionario completo (18/18) y dos avisos reales: S1 (Acabados y cerramientos dura 106 d, con las fechas del CPM) y S2 (Estructuras metálicas concentra el 25,6 % del costo)", async () => {
     const dom = await abrir(), doc = dom.window.document;
     await cargarEjemplo(doc);
     const q = quality(doc);
-    expect(q).toMatch(/Con avisos/); expect(q).toMatch(/1 aviso\b/);
+    expect(q).toMatch(/Con avisos/); expect(q).toMatch(/2 avisos/);
     expect(q).toMatch(/Diccionario completo\s*18\/18 paquetes · 100 %/);
-    expect(doc.querySelectorAll(".q-group").length).toBe(1);
+    expect(doc.querySelectorAll(".q-group").length).toBe(2);
+    expect(grupo(doc, "S1")!.textContent).toMatch(/Acabados y cerramientos/); expect(grupo(doc, "S1")!.textContent).toMatch(/106 d/);
     const s2 = grupo(doc, "S2")!;
     expect(s2.textContent).toMatch(/Estructuras metálicas prefabricadas/); expect(s2.textContent).toMatch(/25\.6 %/);
-    expect(doc.querySelectorAll("#canvas .node .q-flag").length).toBe(1);                              // marca solo en ese nodo
+    expect(doc.querySelectorAll("#canvas .node .q-flag").length).toBe(2);                              // marca solo en esos dos nodos
     expect(nodo(doc, "Estructuras metálicas prefabricadas").querySelector(".q-flag")!.textContent).toBe("1");
     expect(doc.getElementById("statGrid")!.textContent).toMatch(/S\/ 7,100,000/);                    // el resto del módulo no cambió
   });
@@ -79,7 +80,7 @@ describe("WBS_Builder.html — calidad de la EDT", () => {
   it("clic en un hallazgo: selecciona el elemento, muestra sus hallazgos y su diccionario", async () => {
     const dom = await abrir(), doc = dom.window.document;
     await cargarEjemplo(doc);
-    clic(dom, doc.querySelector(".q-item")!); await esperar(50);
+    clic(dom, grupo(doc, "S2")!.querySelector(".q-item")!); await esperar(50);
     expect((doc.getElementById("f_name") as HTMLInputElement).value).toBe("Estructuras metálicas prefabricadas");
     expect(doc.getElementById("nodeQuality")!.textContent).toMatch(/S2/);
     expect((doc.getElementById("f_accept") as HTMLTextAreaElement).value).toMatch(/certificados de calidad/);
@@ -96,7 +97,7 @@ describe("WBS_Builder.html — calidad de la EDT", () => {
     expect(fila("Cimentaciones").textContent).toMatch(/Cimentación conforme a planos/);
     expect(t.querySelectorAll(".loe-tag").length).toBe(1);
     expect(fila("Informes de seguimiento y control").querySelector(".loe-tag")).toBeTruthy();
-    expect(t.querySelectorAll(".q-flag").length).toBe(1);
+    expect(t.querySelectorAll(".q-flag").length).toBe(2);
   });
 
   it("EDT nueva: nombres de plantilla y repetidos se marcan (E1, E2 en riesgo) y se corrigen al renombrar", async () => {

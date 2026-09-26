@@ -30,8 +30,8 @@ import { commState, coverage as commCoverage, normalizeComms, type CommData } fr
 import { COQ_CATS, COQ_LABEL, coqSummary, coverage as qualityCoverage, normalizeQuality, qualityState, type QualityData } from "../../shared/quality-plan";
 import { launchBy, normalizeProcurement, procurementState, summary as procSummary, type ProcData } from "../../shared/procurement-plan";
 import {
-  PLAN_COMPONENTS, STATE_LABEL, approvalBlockers, areaRows, digestOf, emptyBase, emptyFacts, integrationFindings, snapshotDiff, snapshotOf,
-  type AreaState, type BaselineFact, type PlanFacts, type PlanSnapshot
+  PLAN_COMPONENTS, STATE_LABEL, approvalBlockers, areaRows, digestOf, emptyApproach, emptyBase, emptyFacts, integrationFindings, isPredictive, snapshotDiff, snapshotOf,
+  type AreaState, type BaselineFact, type PlanApproach, type PlanFacts, type PlanSnapshot
 } from "../../shared/pm-plan";
 
 type GpiApi = typeof GpiCore.GPI;
@@ -53,8 +53,8 @@ const nl = (s: unknown): string => esc(s).replace(/\n/g, "<br>");
 // componente del plan en ese momento. El documento vigente se reconstruye con datos actuales, pero NUNCA reemplaza al aprobado: si algo cambia
 // después, el aprobado sigue intacto y lo vigente es un borrador que necesita una nueva versión aprobada. Cada versión anterior conserva el suyo.
 interface HistoryEntry { version: string; approvedBy: string; approvedOn: string; snapshot: PlanSnapshot | null; doc: string; }
-interface PlanRecord { version: string; status: "borrador" | "aprobado"; preparedBy: string; approvedBy: string; approvedOn: string; notes: string; snapshot: PlanSnapshot | null; approvedDoc: string; history: HistoryEntry[]; }
-const blankPlan = (): PlanRecord => ({ version: "1.0", status: "borrador", preparedBy: "", approvedBy: "", approvedOn: "", notes: "", snapshot: null, approvedDoc: "", history: [] });
+interface PlanRecord { version: string; status: "borrador" | "aprobado"; preparedBy: string; approvedBy: string; approvedOn: string; notes: string; snapshot: PlanSnapshot | null; approvedDoc: string; history: HistoryEntry[]; approach: PlanApproach; }
+const blankPlan = (): PlanRecord => ({ version: "1.0", status: "borrador", preparedBy: "", approvedBy: "", approvedOn: "", notes: "", snapshot: null, approvedDoc: "", history: [], approach: emptyApproach() });
 function normSnapshot(o: unknown): PlanSnapshot | null {
   if (!o || typeof o !== "object") return null;
   const x = rec(o), s: PlanSnapshot = { scopeVersion: str(x.scopeVersion), scopeDate: str(x.scopeDate), requirementsVersion: str(x.requirementsVersion), scheduleVersion: str(x.scheduleVersion), scheduleDate: str(x.scheduleDate), scheduleFinish: str(x.scheduleFinish), bacCurrent: num(x.bacCurrent), costBaseline: str(x.costBaseline), boeStatus: str(x.boeStatus) };
@@ -65,6 +65,7 @@ function normPlan(o: unknown): PlanRecord {
   const x = rec(o), p = blankPlan();
   p.version = str(x.version) || "1.0"; p.status = x.status === "aprobado" ? "aprobado" : "borrador"; p.preparedBy = str(x.preparedBy); p.approvedBy = str(x.approvedBy); p.approvedOn = str(x.approvedOn); p.notes = str(x.notes);
   p.snapshot = normSnapshot(x.snapshot); p.approvedDoc = str(x.approvedDoc);
+  const ap = rec(x.approach); p.approach = { lifecycle: str(ap.lifecycle), tailoring: str(ap.tailoring), configuration: str(ap.configuration), changeProcess: str(ap.changeProcess) };   // los planes guardados antes no lo traen: en blanco
   p.history = arr(x.history).map((h) => ({ version: str(h.version), approvedBy: str(h.approvedBy), approvedOn: str(h.approvedOn), snapshot: normSnapshot(h.snapshot), doc: str(h.doc) }));
   return p;
 }
@@ -89,7 +90,7 @@ function buildCtx(): Ctx {
     const sched = G.getModule("schedule"), sp = G.getModule("schedulePlan"), cost = G.getModule("cost"), rk = G.getModule("risks");
     // Acta
     const ca = G.util.charterAudit(charter), ends = arr(charter && charter.milestones).map((x) => str(x.date)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
-    f.charter = { has: !!charter && ca.okCount > 0, pct: ca.pct, end: ends.length ? ends[ends.length - 1] : "" };
+    f.charter = { has: !!charter && ca.okCount > 0, pct: ca.pct, end: ends.length ? ends[ends.length - 1] : "", approach: str(rec(rec(charter).identification).approach) };
     // Requisitos y alcance
     const ra = G.util.requirementsAudit(req, charter, wbs), sa = G.util.scopeAudit(scope, req, charter, wbs);
     f.requirements = { has: ra.total > 0, state: ra.state as AreaState, base: baseOf(req && req.baseline as Record<string, unknown>), total: ra.total };
@@ -155,7 +156,7 @@ function buildCtx(): Ctx {
   } catch (e) { /* noop: cada tarjeta del plan queda "sin datos" */ }
   return { connected, name: str(meta.name), meta, mods, facts: f };
 }
-const factsNow = (): PlanFacts => { const c = getCtx(); c.facts.plan = { status: plan.status, version: plan.version, approvedBy: plan.approvedBy, approvedOn: plan.approvedOn, snapshot: plan.snapshot, docPreserved: !!plan.approvedDoc }; return c.facts; };
+const factsNow = (): PlanFacts => { const c = getCtx(); c.facts.plan = { status: plan.status, version: plan.version, approvedBy: plan.approvedBy, approvedOn: plan.approvedOn, snapshot: plan.snapshot, docPreserved: !!plan.approvedDoc }; c.facts.approach = { ...plan.approach }; c.facts.digests.planApproach = digestOf(plan.approach); return c.facts; };
 // ¿El proyecto cambió desde la aprobación? (versiones/importes de las líneas base y contenido de cada componente del plan)
 const changesSinceApproval = (): Array<{ label: string; from: string; to: string }> => (plan.status === "aprobado" && plan.snapshot ? snapshotDiff(plan.snapshot, snapshotOf(factsNow())) : []);
 
@@ -197,6 +198,13 @@ function renderState(): void {
         ${plan.history.length ? `<p class="small muted" style="margin-top:8px">Versiones anteriores: ${plan.history.map((h, i) => "v" + esc(h.version) + " (" + esc(h.approvedOn || "—") + ")" + (h.doc ? ` <button class="btn sm" data-histdoc="${i}">Ver documento</button>` : " <span title=\"aprobada antes de conservar su contenido\">sin contenido conservado</span>")).join(" · ")}</p>` : ""}
       </div>
     </div>
+    <div class="card"><h3>Enfoque, ciclo de vida y adaptación</h3>
+      <p class="small muted">Enfoque de desarrollo declarado en el Acta: <b>${esc(f.charter.approach || "sin declarar")}</b>${isPredictive(f.charter.approach) ? "" : " — esta suite modela un ciclo de vida predictivo (ver hallazgo P23)"}. Lo que escribas aquí forma parte del plan aprobado: si lo cambias después de aprobarlo, el plan queda con cambios sin aprobar.</p>
+      <div class="fd"><label for="pfLifecycle">Ciclo de vida y enfoque de desarrollo (fases, cómo se organiza el trabajo)</label><textarea id="pfLifecycle" rows="2">${esc(plan.approach.lifecycle)}</textarea></div>
+      <div class="fd"><label for="pfTailoring">Adaptación (tailoring): qué se adaptó del proceso y por qué</label><textarea id="pfTailoring" rows="2">${esc(plan.approach.tailoring)}</textarea></div>
+      <div class="fd"><label for="pfConfig">Gestión de la configuración (qué elementos se controlan, versionado, quién autoriza cambiar una versión aprobada)</label><textarea id="pfConfig" rows="2">${esc(plan.approach.configuration)}</textarea></div>
+      <div class="fd"><label for="pfChangeProc">Proceso de gestión de cambios (quién evalúa y quién decide, según el monto y el impacto)</label><textarea id="pfChangeProc" rows="2">${esc(plan.approach.changeProcess)}</textarea></div>
+    </div>
     <div class="card"><h3>Áreas del plan</h3>
       <table class="an"><thead><tr><th>Área</th><th>Estado</th><th>Resumen</th><th>Módulo</th></tr></thead><tbody>
       ${rows.map((r) => `<tr><td>${esc(r.label)}</td><td>${pill(r.state)}</td><td>${esc(r.metric)}${r.note ? ` <span class="muted small">${esc(r.note)}</span>` : ""}</td><td>${r.file ? `<a href="${esc(r.file)}">Abrir</a>` : '<span class="muted">—</span>'}</td></tr>`).join("")}
@@ -209,6 +217,8 @@ function renderState(): void {
 function wireState(): void {
   const bind = (id: string, key: "version" | "preparedBy" | "approvedBy" | "approvedOn" | "notes"): void => { const el = document.getElementById(id) as HTMLInputElement | null; if (el) el.addEventListener("input", () => { plan[key] = el.value; save(); }); };
   bind("pfVersion", "version"); bind("pfPrepared", "preparedBy"); bind("pfApprover", "approvedBy"); bind("pfDate", "approvedOn"); bind("pfNotes", "notes");
+  const bindA = (id: string, key: keyof PlanApproach): void => { const el = document.getElementById(id) as HTMLTextAreaElement | null; if (el) el.addEventListener("input", () => { plan.approach[key] = el.value; save(); }); };
+  bindA("pfLifecycle", "lifecycle"); bindA("pfTailoring", "tailoring"); bindA("pfConfig", "configuration"); bindA("pfChangeProc", "changeProcess");
   const ap = document.getElementById("btnApprove"); if (ap) ap.addEventListener("click", approve);
   const nv = document.getElementById("btnNewVersion"); if (nv) nv.addEventListener("click", newVersion);
   document.querySelectorAll<HTMLElement>("[data-histdoc]").forEach((b) => b.addEventListener("click", () => { docMode = Number(b.dataset.histdoc); setView("doc"); }));
@@ -261,6 +271,19 @@ function buildSections(): Sect[] {
     h += `<h3 class="d2" id="s1-mil">Hitos principales</h3>` + (mil.length ? tbl(["Hito", "Fecha"], mil.map((x) => [esc(x.name), esc(x.date)])) : nodata("Sin hitos en el Acta."));
     if (Object.keys(ident).length === 0 && !charter) h = nodata("El Acta de Constitución aún no tiene datos.") + h;
     out.push({ id: "s1", title: "1. Descripción del proyecto", subs: [{ id: "s1-prop", title: "Propósito y descripción" }, { id: "s1-obj", title: "Objetivos" }, { id: "s1-mil", title: "Hitos principales" }], html: h });
+  }
+
+  // Enfoque de desarrollo, ciclo de vida, adaptación, configuración y cambios (lo declara el propio plan; el enfoque viene del Acta)
+  {
+    const ap = plan.approach, ident = rec(rec(charter).identification), phases = G.util.wbsPhases(wbs || ({} as never));
+    let h = kv([["Enfoque de desarrollo (Acta)", esc(ident.approach)], ["Ciclo de vida y enfoque de desarrollo", nl(ap.lifecycle)]]);
+    if (!ap.lifecycle.trim()) h += nodata("El plan no describe el ciclo de vida ni cómo se organiza el trabajo.");
+    if (phases.length) h += `<h4 class="d3">Fases (de la EDT)</h4>` + tbl(["Fase", "Inicio", "Fin"], phases.map((p) => [esc(p.name), esc(p.start), esc(p.end)]));
+    if (!isPredictive(f.charter.approach)) h += `<p class="note"><b>Nota:</b> el Acta declara un enfoque «${esc(f.charter.approach)}»; esta suite modela un ciclo de vida predictivo (líneas base de alcance, cronograma y costo). Ver la adaptación.</p>`;
+    h += `<h3 class="d2" id="sd-ad">Adaptación (tailoring)</h3>` + (ap.tailoring.trim() ? `<p>${nl(ap.tailoring)}</p>` : nodata("No se declaró cómo se adaptó el proceso."));
+    h += `<h3 class="d2" id="sd-cf">Gestión de la configuración</h3>` + (ap.configuration.trim() ? `<p>${nl(ap.configuration)}</p>` : nodata("No se declaró la gestión de la configuración."));
+    h += `<h3 class="d2" id="sd-ch">Proceso de gestión de cambios</h3>` + (ap.changeProcess.trim() ? `<p>${nl(ap.changeProcess)}</p>` : nodata("No se declaró el proceso de gestión de cambios."));
+    out.push({ id: "sd", title: "Enfoque, ciclo de vida y adaptación", subs: [{ id: "sd-ad", title: "Adaptación" }, { id: "sd-cf", title: "Configuración" }, { id: "sd-ch", title: "Gestión de cambios" }], html: h });
   }
 
   // 2. Plan de gestión del alcance
@@ -403,7 +426,7 @@ function buildSections(): Sect[] {
 }
 // Orden del documento (áreas de conocimiento): alcance, cronograma, costos, calidad, recursos, comunicaciones, riesgos, adquisiciones, interesados;
 // luego cambios, valor ganado y líneas base. La numeración se asigna aquí, en ese orden.
-const SECTION_ORDER = ["s1", "s2", "s3", "s4", "sq", "s7", "sc", "s5", "sp", "s6", "s8", "s9", "s10"];
+const SECTION_ORDER = ["s1", "sd", "s2", "s3", "s4", "sq", "s7", "sc", "s5", "sp", "s6", "s8", "s9", "s10"];
 // Estado que declara la portada: «Aprobado» solo si NADA cambió desde la aprobación; con cambios, «Borrador» (no se hace pasar por el aprobado).
 function coverStatus(): string { return plan.status !== "aprobado" ? "Borrador" : changesSinceApproval().length ? "Borrador con cambios sin aprobar (sobre la v" + plan.version + " aprobada)" : "Aprobado"; }
 // Documento reconstruido con los datos VIGENTES (nunca sustituye al aprobado: ver `shownDoc`).
@@ -492,7 +515,7 @@ function save(): void { saveFn(); }
     const b = document.getElementById("banner");
     if (b) { b.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar la aprobación del plan aquí: recárgala, o vuelve a activar el proyecto original desde el Panel de Control."; b.classList.add("show"); }
   }
-  const payload = () => ({ version: plan.version, status: plan.status, preparedBy: plan.preparedBy, approvedBy: plan.approvedBy, approvedOn: plan.approvedOn, notes: plan.notes, snapshot: plan.snapshot, approvedDoc: plan.approvedDoc, history: plan.history });
+  const payload = () => ({ version: plan.version, status: plan.status, preparedBy: plan.preparedBy, approvedBy: plan.approvedBy, approvedOn: plan.approvedOn, notes: plan.notes, snapshot: plan.snapshot, approvedDoc: plan.approvedDoc, history: plan.history, approach: plan.approach });
   function pull(): void {
     const p = window.GPI!.active(); if (!p) return;
     loadedProjectId = window.GPI!.activeId(); session = window.GPI!.openSession("pmplan"); ctxDirty = true;

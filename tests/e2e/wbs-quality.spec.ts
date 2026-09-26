@@ -2,8 +2,9 @@
 // Lo que ningún smoke jsdom prueba de punta a punta:
 //  1. El diccionario (descripción, criterio de aceptación, LOE) sobrevive a una recarga REAL y a las sincronizaciones con el Cronograma CPM y
 //     Estimar los Costos (que reescriben la EDT del proyecto sin perder los campos nuevos).
-//  2. Con las fechas reales del CPM el ejemplo suma un segundo aviso legítimo: «Acabados y cerramientos» (4.4) dura 106 días porque sus tres
-//     actividades van en serie (S1); el seguimiento (1.3, LOE) sigue exento. Con las fechas manuales del ejemplo independiente solo hay S2.
+//  2. El ejemplo tiene dos avisos legítimos: «Acabados y cerramientos» (4.4) dura 106 días porque sus tres actividades van en serie (S1) y
+//     Estructuras metálicas concentra el costo (S2). Las fechas manuales del ejemplo independiente ya son las del CPM (auditoría M3), así que
+//     los dos aparecen también sin cronograma.
 //  3. Editar el diccionario y marcar LOE en el navegador se guarda en el proyecto y se lee de vuelta tras recargar.
 import { test, expect, type Page } from "@playwright/test";
 
@@ -25,14 +26,15 @@ test("calidad de la EDT sobre el proyecto real: el diccionario sobrevive a las s
   await page.goto("/Panel_Control.html");
   await expect(page.locator("#projSelect option")).toContainText("DISTRIB+ S.A.");
 
-  // 1) EDT del ejemplo: diccionario completo y un único aviso real (S2); sobrevive a una recarga real
+  // 1) EDT del ejemplo: diccionario completo y los dos avisos reales (S1 y S2); sobrevive a una recarga real
   await cargar(page, "/WBS_Builder.html", "#btnSample", "#modalConfirmBtn");
   await page.reload();
   await expect(page.locator("#qualityBox")).toContainText("Con avisos");
   await expect(page.locator("#qualityBox")).toContainText("18/18 paquetes");
-  await expect(page.locator(".q-group")).toHaveCount(1);
+  await expect(page.locator(".q-group")).toHaveCount(2);
   await expect(page.locator('.q-group[data-code="S2"]')).toContainText("Estructuras metálicas prefabricadas");
-  await expect(page.locator("#canvas .node .q-flag")).toHaveCount(1);
+  await expect(page.locator('.q-group[data-code="S1"]')).toContainText("«Acabados y cerramientos» dura 106 d");
+  await expect(page.locator("#canvas .node .q-flag")).toHaveCount(2);
   const sano = await edtGuardada(page);
   expect(sano.informes.loe).toBe(true);
   expect(sano.cimentaciones.acceptance).toMatch(/Cimentación conforme a planos/);

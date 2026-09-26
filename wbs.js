@@ -562,127 +562,127 @@
 		const root = rootId;
 		const dirProy = newNode(root, "Dirección de Proyecto", { resource: "PM" });
 		newNode(dirProy, "Acta de constitución", {
-			duration: 3,
+			duration: 4,
 			cost: 12e3,
 			percent: 100,
 			resource: "PM",
 			start: "2026-07-06",
-			end: "2026-07-08"
+			end: "2026-07-09"
 		});
 		newNode(dirProy, "Plan de gestión del proyecto", {
-			duration: 8,
+			duration: 17,
 			cost: 38e3,
 			percent: 60,
 			resource: "PM",
-			start: "2026-07-09",
-			end: "2026-07-20"
+			start: "2026-07-10",
+			end: "2026-08-05"
 		});
 		newNode(dirProy, "Informes de seguimiento y control", {
-			duration: 60,
+			duration: 16,
 			cost: 145e3,
 			percent: 20,
 			resource: "PM",
-			start: "2026-07-21",
-			end: "2026-10-23"
+			start: "2026-08-06",
+			end: "2026-08-27"
 		});
 		const ing = newNode(root, "Ingeniería y Diseño", { resource: "Ing. Civil" });
 		newNode(ing, "Estudio de suelos", {
-			duration: 10,
+			duration: 18,
 			cost: 28e3,
 			percent: 100,
 			resource: "Geotecnia",
-			start: "2026-07-06",
-			end: "2026-07-17"
+			start: "2026-08-06",
+			end: "2026-08-31"
 		});
 		newNode(ing, "Diseño estructural", {
-			duration: 20,
+			duration: 22,
 			cost: 165e3,
 			percent: 80,
 			resource: "Ing. Estructural",
-			start: "2026-07-20",
-			end: "2026-08-14"
+			start: "2026-09-01",
+			end: "2026-09-30"
 		});
 		newNode(ing, "Diseño eléctrico y sanitario", {
-			duration: 15,
+			duration: 16,
 			cost: 98e3,
 			percent: 50,
 			resource: "Ing. MEP",
-			start: "2026-07-27",
-			end: "2026-08-14"
+			start: "2026-09-08",
+			end: "2026-09-29"
 		});
 		newNode(ing, "Permisos y licencias municipales", {
-			duration: 25,
+			duration: 30,
 			cost: 64e3,
 			percent: 30,
 			resource: "Legal",
-			start: "2026-07-20",
-			end: "2026-08-21"
+			start: "2026-10-01",
+			end: "2026-11-11"
 		});
 		const proc = newNode(root, "Procura", { resource: "Logística" });
 		newNode(proc, "Estructuras metálicas prefabricadas", {
-			duration: 18,
+			duration: 13,
 			cost: 182e4,
 			percent: 10,
 			resource: "Proveedor A",
-			start: "2026-07-27",
-			end: "2026-08-19"
+			start: "2026-10-01",
+			end: "2026-10-19"
 		});
 		newNode(proc, "Materiales de construcción", {
-			duration: 12,
+			duration: 15,
 			cost: 715e3,
 			percent: 25,
 			resource: "Proveedor B",
-			start: "2026-08-03",
-			end: "2026-08-17"
+			start: "2026-10-15",
+			end: "2026-11-04"
 		});
 		newNode(proc, "Equipos eléctricos e instalaciones", {
-			duration: 14,
+			duration: 10,
 			cost: 415e3,
 			percent: 0,
 			resource: "Proveedor C",
-			start: "2026-08-10",
-			end: "2026-08-26"
+			start: "2026-09-30",
+			end: "2026-10-13"
 		});
 		const constr = newNode(root, "Construcción", { resource: "Residente de Obra" });
 		newNode(constr, "Movimiento de tierras", {
-			duration: 10,
+			duration: 32,
 			cost: 38e4,
 			percent: 0,
 			resource: "Cuadrilla A",
-			start: "2026-08-03",
-			end: "2026-08-14"
+			start: "2026-11-12",
+			end: "2026-12-25"
 		});
 		newNode(constr, "Cimentaciones", {
-			duration: 15,
+			duration: 29,
 			cost: 735e3,
 			percent: 0,
 			resource: "Cuadrilla B",
-			start: "2026-08-17",
-			end: "2026-09-04"
+			start: "2026-12-28",
+			end: "2027-02-04"
 		});
 		newNode(constr, "Estructura y cobertura", {
-			duration: 25,
+			duration: 28,
 			cost: 1165e3,
 			percent: 0,
 			resource: "Cuadrilla C",
-			start: "2026-09-07",
-			end: "2026-10-09"
+			start: "2027-02-05",
+			end: "2027-03-16"
 		});
 		newNode(constr, "Acabados y cerramientos", {
-			duration: 18,
+			duration: 76,
 			cost: 55e4,
 			percent: 0,
 			resource: "Cuadrilla D",
-			start: "2026-09-21",
-			end: "2026-10-16"
+			start: "2027-03-17",
+			end: "2027-06-30"
 		});
 		newNode(constr, "Instalaciones MEP", {
-			duration: 20,
+			duration: 35,
 			cost: 485e3,
 			percent: 0,
 			resource: "Subcontrata MEP",
-			start: "2026-09-28",
-			end: "2026-10-23"
+			start: "2027-03-01",
+			end: "2027-04-16"
 		});
 		nodes[constr].orientation = "stack";
 		const com = newNode(root, "Pruebas y Puesta en Marcha", { resource: "QA/QC" });
@@ -691,24 +691,24 @@
 			cost: 145e3,
 			percent: 0,
 			resource: "QA/QC",
-			start: "2026-10-26",
-			end: "2026-10-31"
+			start: "2027-06-14",
+			end: "2027-06-21"
 		});
 		newNode(com, "Capacitación al cliente", {
-			duration: 3,
+			duration: 12,
 			cost: 48e3,
 			percent: 0,
 			resource: "PM",
-			start: "2026-11-02",
-			end: "2026-11-04"
+			start: "2027-06-22",
+			end: "2027-07-07"
 		});
 		newNode(com, "Acta de entrega y cierre", {
-			duration: 2,
+			duration: 12,
 			cost: 92e3,
 			percent: 0,
 			resource: "PM",
-			start: "2026-11-05",
-			end: "2026-11-06"
+			start: "2027-07-08",
+			end: "2027-07-23"
 		});
 		const codes = computeCodes();
 		Object.keys(nodes).forEach((id) => {

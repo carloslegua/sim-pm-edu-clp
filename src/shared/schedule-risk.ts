@@ -4,8 +4,8 @@
 //
 // Base metodológica:
 //  · AACE RP 40R-08: la contingencia reúne incertidumbre y riesgos, y debe incluir el efecto del riesgo de CRONOGRAMA
-//    sobre el costo (un retraso cuesta: costos indirectos, dirección, alquileres). RP 65R-11 / 118R-21: análisis
-//    integrado de costo y cronograma -- el mismo evento de riesgo produce su impacto en costo Y en plazo dentro de la
+//    sobre el costo (un retraso cuesta: costos indirectos, dirección, alquileres). RP 57R-09 (simulación Monte Carlo sobre un
+//    cronograma CPM) y 118R-21: análisis integrado de costo y cronograma -- el mismo evento de riesgo produce su impacto en costo Y en plazo dentro de la
 //    misma iteración de la simulación.
 //  · PMI / PMBOK (Gestión del cronograma y de los riesgos): un retraso en una actividad solo mueve la fecha de fin si
 //    consume más que su HOLGURA; una actividad de la ruta crítica traslada el retraso íntegro. Por eso el efecto de un

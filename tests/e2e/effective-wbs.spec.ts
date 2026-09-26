@@ -21,12 +21,12 @@ test("la EDT efectiva: WBS Builder, el Panel y el Acta ven el fin del CPM (2027-
   await cargar(page, "/Schedule_Management_Plan.html", "#btnSample", "#modalConfirmBtn");
   await cargar(page, "/Estimar_Costos.html", "#btnLoadSampleLive", "#modalOk");
 
-  // el núcleo: lo guardado sigue siendo lo manual; lo efectivo, lo del CPM y del estimado
+  // el núcleo: el ejemplo manual de la EDT ya coincide con los tramos del CPM (misma fecha de fin); lo efectivo sale del CPM y del estimado
   const r = await page.evaluate(() => {
     const G = (window as any).GPI, ef = G.util.wbsRollup(G.util.effectiveWbs()), st = G.util.wbsRollup(G.getModule("wbs"));
     return { efEnd: ef.maxEnd, efCost: ef.cost, storedEnd: st.maxEnd, calendario: G.util.projectCalendar().holidays };
   });
-  expect(r).toEqual({ efEnd: "2027-07-23", efCost: 7100000, storedEnd: "2026-11-06", calendario: ["2026-07-28", "2026-07-29", "2026-08-30"] });
+  expect(r).toEqual({ efEnd: "2027-07-23", efCost: 7100000, storedEnd: "2027-07-23", calendario: ["2026-07-28", "2026-07-29", "2026-08-30"] });
 
   // WBS Builder: el paquete de cierre termina con el proyecto y su costo no cambió al cargar el estimado
   await page.goto("/WBS_Builder.html");
@@ -44,5 +44,4 @@ test("la EDT efectiva: WBS Builder, el Panel y el Acta ven el fin del CPM (2027-
   await page.locator("#modalOk").click();
   const hitos = await page.locator("#tblMilestones tbody input[type=date]").evaluateAll((els) => (els as HTMLInputElement[]).map((e) => e.value));
   expect(hitos).toContain("2027-07-23");
-  expect(hitos).not.toContain("2026-11-06");
 });

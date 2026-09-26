@@ -11,6 +11,21 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Auditoría integral, hallazgos medios de caso y metodología (M3, M4, M5, M9, M12, M19, M24)**:
+  - **M3 — Fechas manuales de la EDT.** Las fechas y duraciones del ejemplo de WBS Builder eran de otro calendario (terminaban en nov. 2026) y no
+    coincidían con el CPM del caso; ahora son los tramos reales (fin 2027-07-23). Consecuencia visible: el ejemplo independiente muestra los
+    mismos dos avisos de calidad de la EDT que el caso completo (S1 Acabados y S2 Estructuras) en vez de solo S2.
+  - **M4 — Autoridad del Director.** El Acta decía «2 % del CAPEX»; el Plan de Riesgos usa 50.000 / 250.000. El ejemplo del Acta usa los mismos niveles.
+  - **M5 — Caso de negocio.** El Acta afirmaba «VAN positivo, TIR 14,5 %», falso con USD 1,2 M/año sobre 8,5 M. Ahora declara VAN ≈ −1,7 M
+    (TIR 6,8 %) sin valor residual, y VAN ≈ +0,2 M (TIR 12,5 %) con un residual declarado de 6,0 M al año 10.
+  - **M19 — Citas AACE.** Monte Carlo sobre el CPM es RP 57R-09 (no 65R-11); se quitó la cita 29R-03 no verificada.
+  - **M24 — Aprobación y versiones del Acta.** `src/shared/charter-baseline.ts`: el Acta se aprueba (versión, fecha, quién, motivo) y guarda una
+    instantánea; lo editado después difiere de lo aprobado y NO se copia al CAPEX, patrocinador, director ni cliente del proyecto hasta aprobar una nueva
+    versión (que archiva la anterior). Campo `baseline` opcional en el Acta (las guardadas antes quedan «sin aprobar»).
+  - **M9 + M12 — Plan para la Dirección.** Nueva sección «Enfoque, ciclo de vida y adaptación» (ciclo de vida, tailoring, gestión de la configuración y
+    proceso de cambios; se declaran en el propio plan y cuentan como componente: cambiarlos tras aprobar deja el plan con cambios sin aprobar).
+    Hallazgos P23 (el Acta declara un enfoque no predictivo y la suite modela uno predictivo) y P24 (falta declarar alguno de los cuatro puntos).
+    La numeración del documento se corre en uno desde la sección 2.
 - **Auditoría integral, hallazgos medios de software (S1, S3, S4, S5)**:
   - **S1 — «Hoy» en UTC.** `new Date().toISOString().slice(0,10)` daba el día siguiente por la noche en Lima (UTC-5); ahora
     `todayLocalISO()` (`src/shared/local-date.ts`) usa la fecha local en los 10 sitios afectados.

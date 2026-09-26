@@ -16,7 +16,7 @@
 //    triangular). La contingencia se determina sobre la exposición que QUEDA tras la respuesta.
 // (Números de RP verificados contra AACE en sept. 2026: 10S-90 terminología, 40R-08 contingencia, 44R-08 valor
 // esperado; la 41R-08 se retituló en 2021 «Understanding Estimate Ranging».)
-//  · Riesgo de PLAZO (AACE 40R-08 / 65R-11): el impacto en plazo de un riesgo se traduce al fin del proyecto con el CPM
+//  · Riesgo de PLAZO (AACE 40R-08 / 57R-09): el impacto en plazo de un riesgo se traduce al fin del proyecto con el CPM
 //    (ver schedule-risk.ts); aquí solo viven los hallazgos que contrastan el nivel declarado con ese efecto.
 
 import type { RiskEventInput } from "./range-estimating";
@@ -307,7 +307,7 @@ export interface ExcludedRisk { code: string; title: string; reason: string; }
 // cuando está cuantificado (o la aceptación activa, cuyo residual es el inherente); si la respuesta no tiene residual
 // cuantificado se usa el inherente (más conservador) y se rotula. Los materializados ya son un costo real (no
 // incertidumbre) y los cerrados no ocurrieron: no entran. Los que no se pueden cuantificar se listan con su motivo.
-// Plazo (AACE 65R-11): si trae impacto en días y `opts.targets` ubica al riesgo en el cronograma (ids de las actividades
+// Plazo (AACE 57R-09): si trae impacto en días y `opts.targets` ubica al riesgo en el cronograma (ids de las actividades
 // que retrasa), el evento lleva `days` y `targets` y la simulación calcula su efecto en el fin del proyecto y su costo.
 // `unmapped` lista los que tienen días pero no se pudieron ubicar: su costo directo entra, su retraso no.
 export function riskEventsOf(risks: Risk[], p: RiskPlan, opts?: { targets?: (r: Risk) => string[] }): { events: RiskEvent[]; excluded: ExcludedRisk[]; unmapped: string[]; ev: number } {

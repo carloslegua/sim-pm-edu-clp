@@ -83,7 +83,7 @@ describe("Plan_Direccion.html (Plan para la Dirección del Proyecto)", () => {
     const t = documento(doc);
     expect(t).toMatch(/Plan para la dirección del proyecto\s*Proyecto Live/); expect(t).toMatch(/Contenido/);
     // en el orden de las áreas de conocimiento: alcance, cronograma, costos, calidad, recursos, comunicaciones, riesgos, adquisiciones, interesados…
-    const titulos = ["1. Descripción del proyecto", "2. Plan de gestión del alcance", "3. Plan de gestión del cronograma", "4. Plan de gestión de costos", "5. Plan de gestión de la calidad", "6. Plan de gestión de recursos", "7. Plan de gestión de las comunicaciones", "8. Plan de gestión de riesgos", "9. Plan de gestión de las adquisiciones", "10. Plan de involucramiento", "11. Control integrado de cambios", "12. Medición del desempeño", "13. Líneas base y aprobación"];
+    const titulos = ["1. Descripción del proyecto", "2. Enfoque, ciclo de vida y adaptación", "3. Plan de gestión del alcance", "4. Plan de gestión del cronograma", "5. Plan de gestión de costos", "6. Plan de gestión de la calidad", "7. Plan de gestión de recursos", "8. Plan de gestión de las comunicaciones", "9. Plan de gestión de riesgos", "10. Plan de gestión de las adquisiciones", "11. Plan de involucramiento", "12. Control integrado de cambios", "13. Medición del desempeño", "14. Líneas base y aprobación"];
     titulos.forEach((s) => expect(t, s).toContain(s));
     const pos = (s: string) => doc.querySelector("#docView .paper")!.textContent!.lastIndexOf(s);
     titulos.slice(1).forEach((s, i) => expect(pos(s), s).toBeGreaterThan(pos(titulos[i])));
@@ -104,8 +104,8 @@ describe("Plan_Direccion.html (Plan para la Dirección del Proyecto)", () => {
     expect(t).not.toMatch(/P17 /);                                                                        // los tres planes existen
     pestana(doc, "doc");
     const d = documento(doc);
-    expect(d).toMatch(/5\. Plan de gestión de la calidad/); expect(d).toMatch(/Ensayo de probetas/); expect(d).toMatch(/7\. Plan de gestión de las comunicaciones/); expect(d).toMatch(/CM-01.*Avance.*Alinear.*Sponsor/);
-    expect(d).toMatch(/9\. Plan de gestión de las adquisiciones/); expect(d).toMatch(/PR-01.*Estructuras.*Precio unitario.*Precio 100 %.*2026-10-15.*2026-09-05/);   // convocar antes del 2026-10-15 − 40 d
+    expect(d).toMatch(/6\. Plan de gestión de la calidad/); expect(d).toMatch(/Ensayo de probetas/); expect(d).toMatch(/8\. Plan de gestión de las comunicaciones/); expect(d).toMatch(/CM-01.*Avance.*Alinear.*Sponsor/);
+    expect(d).toMatch(/10\. Plan de gestión de las adquisiciones/); expect(d).toMatch(/PR-01.*Estructuras.*Precio unitario.*Precio 100 %.*2026-10-15.*2026-09-05/);   // convocar antes del 2026-10-15 − 40 d
   });
 
   it("con las tres líneas base se puede aprobar: guarda versión, quién, cuándo y la instantánea; sin nombre no aprueba", async () => {

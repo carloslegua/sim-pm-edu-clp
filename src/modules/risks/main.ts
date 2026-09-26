@@ -78,7 +78,7 @@ function refreshContext(): void {
   netDirty = true;
 }
 
-// ---------- cronograma: la red de actividades y el CPM (AACE 40R-08 / 65R-11) ----------
+// ---------- cronograma: la red de actividades y el CPM (AACE 40R-08 / 57R-09) ----------
 // Se arma perezosamente y se invalida cuando cambia el contexto o el proyecto (otro módulo editó actividades o enlaces).
 // Conectado: la red del proyecto; independiente: la red DISTRIB+ completa (43 actividades, 3 hitos, 51 enlaces).
 let net: Network | null = null, eng: Engine | null = null, netDirty = true;
@@ -396,7 +396,7 @@ function finishOf(days: number): string {
 function scheduleAnalysisHtml(): string {
   const head = `<h3 class="mxh">Riesgo de plazo — efecto en el fin del proyecto (CPM)</h3>`;
   const e = getEng();
-  if (!e) return `<div class="card" style="margin-top:14px">${head}<div class="muted small">El proyecto aún no tiene actividades enlazadas en el cronograma. Cuando las tenga, aquí verás cuánto retrasa cada riesgo el fin del proyecto y la reserva de plazo que requiere la cartera (AACE 40R-08 / 65R-11).</div></div>`;
+  if (!e) return `<div class="card" style="margin-top:14px">${head}<div class="muted small">El proyecto aún no tiene actividades enlazadas en el cronograma. Cuando las tenga, aquí verás cuánto retrasa cada riesgo el fin del proyecto y la reserva de plazo que requiere la cartera (AACE 40R-08 / 57R-09).</div></div>`;
   const rows = risks.filter((r) => isOpen(r) && impactMean(r.timeImpact) !== null && (r.timeImpact.likely || 0) > 0).map((r) => ({ r, a: impactFor(r, "inherent") as ScheduleImpact, b: impactFor(r, "residual") }));
   rows.sort((x, y) => Math.abs(y.a.evDays || 0) - Math.abs(x.a.evDays || 0) || x.r.code.localeCompare(y.r.code));
   const dd = (v: number | null): string => (v === null ? "—" : fmtDays(v));

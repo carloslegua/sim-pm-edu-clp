@@ -163,37 +163,38 @@ function loadSample(): void {
   const root = rootId;
 
   const dirProy = newNode(root, "Dirección de Proyecto", { resource: "PM" });
-  newNode(dirProy, "Acta de constitución", { duration: 3, cost: 12000, percent: 100, resource: "PM", start: "2026-07-06", end: "2026-07-08" });
-  newNode(dirProy, "Plan de gestión del proyecto", { duration: 8, cost: 38000, percent: 60, resource: "PM", start: "2026-07-09", end: "2026-07-20" });
-  newNode(dirProy, "Informes de seguimiento y control", { duration: 60, cost: 145000, percent: 20, resource: "PM", start: "2026-07-21", end: "2026-10-23" });
+  newNode(dirProy, "Acta de constitución", { duration: 4, cost: 12000, percent: 100, resource: "PM", start: "2026-07-06", end: "2026-07-09" });
+  newNode(dirProy, "Plan de gestión del proyecto", { duration: 17, cost: 38000, percent: 60, resource: "PM", start: "2026-07-10", end: "2026-08-05" });
+  newNode(dirProy, "Informes de seguimiento y control", { duration: 16, cost: 145000, percent: 20, resource: "PM", start: "2026-08-06", end: "2026-08-27" });
 
   const ing = newNode(root, "Ingeniería y Diseño", { resource: "Ing. Civil" });
-  newNode(ing, "Estudio de suelos", { duration: 10, cost: 28000, percent: 100, resource: "Geotecnia", start: "2026-07-06", end: "2026-07-17" });
-  newNode(ing, "Diseño estructural", { duration: 20, cost: 165000, percent: 80, resource: "Ing. Estructural", start: "2026-07-20", end: "2026-08-14" });
-  newNode(ing, "Diseño eléctrico y sanitario", { duration: 15, cost: 98000, percent: 50, resource: "Ing. MEP", start: "2026-07-27", end: "2026-08-14" });
-  newNode(ing, "Permisos y licencias municipales", { duration: 25, cost: 64000, percent: 30, resource: "Legal", start: "2026-07-20", end: "2026-08-21" });
+  newNode(ing, "Estudio de suelos", { duration: 18, cost: 28000, percent: 100, resource: "Geotecnia", start: "2026-08-06", end: "2026-08-31" });
+  newNode(ing, "Diseño estructural", { duration: 22, cost: 165000, percent: 80, resource: "Ing. Estructural", start: "2026-09-01", end: "2026-09-30" });
+  newNode(ing, "Diseño eléctrico y sanitario", { duration: 16, cost: 98000, percent: 50, resource: "Ing. MEP", start: "2026-09-08", end: "2026-09-29" });
+  newNode(ing, "Permisos y licencias municipales", { duration: 30, cost: 64000, percent: 30, resource: "Legal", start: "2026-10-01", end: "2026-11-11" });
 
   const proc = newNode(root, "Procura", { resource: "Logística" });
-  newNode(proc, "Estructuras metálicas prefabricadas", { duration: 18, cost: 1820000, percent: 10, resource: "Proveedor A", start: "2026-07-27", end: "2026-08-19" });
-  newNode(proc, "Materiales de construcción", { duration: 12, cost: 715000, percent: 25, resource: "Proveedor B", start: "2026-08-03", end: "2026-08-17" });
-  newNode(proc, "Equipos eléctricos e instalaciones", { duration: 14, cost: 415000, percent: 0, resource: "Proveedor C", start: "2026-08-10", end: "2026-08-26" });
+  newNode(proc, "Estructuras metálicas prefabricadas", { duration: 13, cost: 1820000, percent: 10, resource: "Proveedor A", start: "2026-10-01", end: "2026-10-19" });
+  newNode(proc, "Materiales de construcción", { duration: 15, cost: 715000, percent: 25, resource: "Proveedor B", start: "2026-10-15", end: "2026-11-04" });
+  newNode(proc, "Equipos eléctricos e instalaciones", { duration: 10, cost: 415000, percent: 0, resource: "Proveedor C", start: "2026-09-30", end: "2026-10-13" });
 
-  // Construcción: varios paquetes se ejecutan EN PARALELO (Estructura, Acabados e
-  // Instalaciones MEP se solapan). La duración de la fase NO es la suma de los 5
-  // paquetes (116 días); es el tramo desde el inicio más temprano (Movimiento de
-  // tierras) hasta el fin más tardío (Instalaciones MEP): ~82 días.
+  // Fechas y duraciones de los paquetes = los tramos REALES que da el CPM del caso (calendario lunes a viernes con los feriados del caso):
+  // así la EDT manual y la efectiva coinciden y el proyecto termina el 2027-07-23 (273 días laborables).
+  // Construcción: varios paquetes se ejecutan EN PARALELO (Instalaciones MEP se solapa con Estructura y Acabados). La duración de la
+  // fase NO es la suma de los 5 paquetes; es el tramo desde el inicio más temprano (Movimiento de tierras) hasta el fin más tardío
+  // (Acabados y cerramientos): 165 días laborables.
   const constr = newNode(root, "Construcción", { resource: "Residente de Obra" });
-  newNode(constr, "Movimiento de tierras", { duration: 10, cost: 380000, percent: 0, resource: "Cuadrilla A", start: "2026-08-03", end: "2026-08-14" });
-  newNode(constr, "Cimentaciones", { duration: 15, cost: 735000, percent: 0, resource: "Cuadrilla B", start: "2026-08-17", end: "2026-09-04" });
-  newNode(constr, "Estructura y cobertura", { duration: 25, cost: 1165000, percent: 0, resource: "Cuadrilla C", start: "2026-09-07", end: "2026-10-09" });
-  newNode(constr, "Acabados y cerramientos", { duration: 18, cost: 550000, percent: 0, resource: "Cuadrilla D", start: "2026-09-21", end: "2026-10-16" });
-  newNode(constr, "Instalaciones MEP", { duration: 20, cost: 485000, percent: 0, resource: "Subcontrata MEP", start: "2026-09-28", end: "2026-10-23" });
+  newNode(constr, "Movimiento de tierras", { duration: 32, cost: 380000, percent: 0, resource: "Cuadrilla A", start: "2026-11-12", end: "2026-12-25" });
+  newNode(constr, "Cimentaciones", { duration: 29, cost: 735000, percent: 0, resource: "Cuadrilla B", start: "2026-12-28", end: "2027-02-04" });
+  newNode(constr, "Estructura y cobertura", { duration: 28, cost: 1165000, percent: 0, resource: "Cuadrilla C", start: "2027-02-05", end: "2027-03-16" });
+  newNode(constr, "Acabados y cerramientos", { duration: 76, cost: 550000, percent: 0, resource: "Cuadrilla D", start: "2027-03-17", end: "2027-06-30" });
+  newNode(constr, "Instalaciones MEP", { duration: 35, cost: 485000, percent: 0, resource: "Subcontrata MEP", start: "2027-03-01", end: "2027-04-16" });
   nodes[constr].orientation = "stack"; // demo: esta rama se despliega en vertical por tener muchos paquetes
 
   const com = newNode(root, "Pruebas y Puesta en Marcha", { resource: "QA/QC" });
-  newNode(com, "Pruebas de instalaciones", { duration: 6, cost: 145000, percent: 0, resource: "QA/QC", start: "2026-10-26", end: "2026-10-31" });
-  newNode(com, "Capacitación al cliente", { duration: 3, cost: 48000, percent: 0, resource: "PM", start: "2026-11-02", end: "2026-11-04" });
-  newNode(com, "Acta de entrega y cierre", { duration: 2, cost: 92000, percent: 0, resource: "PM", start: "2026-11-05", end: "2026-11-06" });
+  newNode(com, "Pruebas de instalaciones", { duration: 6, cost: 145000, percent: 0, resource: "QA/QC", start: "2027-06-14", end: "2027-06-21" });
+  newNode(com, "Capacitación al cliente", { duration: 12, cost: 48000, percent: 0, resource: "PM", start: "2027-06-22", end: "2027-07-07" });
+  newNode(com, "Acta de entrega y cierre", { duration: 12, cost: 92000, percent: 0, resource: "PM", start: "2027-07-08", end: "2027-07-23" });
 
   // Diccionario de la EDT del caso (descripción, criterio de aceptación y esfuerzo continuo): una sola fuente, shared/wbs-sample.ts.
   const codes = computeCodes();

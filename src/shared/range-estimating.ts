@@ -26,7 +26,7 @@ export interface RangeLine { id: string; name: string; ml: number; lowPct: numbe
 // −1 oportunidad (lo reduce). Se simula como Bernoulli × triangular, independiente de las partidas y entre sí.
 // La estimación base NO incluye estos eventos: por eso no hay «costo más probable» que restar (AACE 40R-08).
 //
-// Análisis INTEGRADO de costo y cronograma (AACE 40R-08 / 65R-11): un evento puede traer además su impacto en PLAZO
+// Análisis INTEGRADO de costo y cronograma (AACE 40R-08 / 57R-09): un evento puede traer además su impacto en PLAZO
 // (`days`, triangular, en días laborables) y las actividades del cronograma que retrasa (`targets`). Cuando el evento
 // ocurre, el MISMO sorteo produce su costo directo y su retraso; el efecto sobre el fin del proyecto lo da el CPM real
 // (`schedule.duration`), y cada día de extensión cuesta `schedule.costPerDay` (gastos generales, dirección, alquileres).

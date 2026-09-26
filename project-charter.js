@@ -36,6 +36,153 @@
 		return bar;
 	}
 	//#endregion
+	//#region src/shared/local-date.ts
+	function todayLocalISO(d = /* @__PURE__ */ new Date()) {
+		const p = (n) => (n < 10 ? "0" : "") + n;
+		return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+	}
+	//#endregion
+	//#region src/shared/requirements-baseline.ts
+	var str = (v) => v === null || v === void 0 ? "" : String(v);
+	var clone = (v) => JSON.parse(JSON.stringify(v));
+	var iso = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	var arr = (v) => Array.isArray(v) ? v : [];
+	function normalizeRBaseline(o) {
+		const x = o && typeof o === "object" ? o : {};
+		return {
+			frozen: !!x.frozen,
+			version: str(x.version) || "1.0",
+			date: str(x.date),
+			approver: str(x.approver),
+			reason: str(x.reason),
+			snapshot: arr(x.snapshot),
+			history: arr(x.history).filter((h) => h && typeof h === "object").map((h) => ({
+				version: str(h.version),
+				date: str(h.date),
+				approver: str(h.approver),
+				reason: str(h.reason),
+				supersededOn: str(h.supersededOn),
+				snapshot: arr(h.snapshot)
+			}))
+		};
+	}
+	var usedVersions = (b) => [b.version].concat(b.history.map((h) => h.version));
+	function suggestNextVersion(b) {
+		const m = /^(\d+)(?:\.(\d+))?/.exec(b.version || "1.0"), used = new Set(usedVersions(b));
+		let maj = (m ? Number(m[1]) : 1) + 1;
+		while (used.has(maj + ".0")) maj++;
+		return maj + ".0";
+	}
+	function newVersionProblems(b, i) {
+		const p = [];
+		if (!i.version.trim()) p.push("indica la versión");
+		else if (usedVersions(b).indexOf(i.version.trim()) >= 0) p.push("la versión " + i.version.trim() + " ya existe (vigente o archivada)");
+		if (!iso(i.date)) p.push("indica la fecha de aprobación");
+		if (!i.approver.trim()) p.push("registra quién aprueba la nueva línea base");
+		if (!i.reason.trim()) p.push("documenta el motivo del cambio (p. ej. las modificaciones de alcance aprobadas que incorpora)");
+		return p;
+	}
+	function advanceBaseline(b, items, i, today) {
+		const archived = {
+			version: b.version,
+			date: b.date,
+			approver: b.approver,
+			reason: b.reason,
+			supersededOn: today,
+			snapshot: clone(b.snapshot)
+		};
+		return {
+			frozen: true,
+			version: i.version.trim(),
+			date: i.date,
+			approver: i.approver.trim(),
+			reason: i.reason.trim(),
+			snapshot: clone(items),
+			history: clone(b.history).concat([archived])
+		};
+	}
+	//#endregion
+	//#region src/shared/pm-plan.ts
+	function stableStringify(v) {
+		if (v === null || v === void 0) return "null";
+		if (typeof v !== "object") return JSON.stringify(v);
+		if (Array.isArray(v)) return "[" + v.map(stableStringify).join(",") + "]";
+		const o = v;
+		return "{" + Object.keys(o).sort().filter((k) => o[k] !== void 0).map((k) => JSON.stringify(k) + ":" + stableStringify(o[k])).join(",") + "}";
+	}
+	//#endregion
+	//#region src/shared/charter-baseline.ts
+	var EXCLUDED = ["approval", "baseline"];
+	var SECTION_LABELS = {
+		identification: "Identificación y autoridad",
+		purpose: "Propósito",
+		businessCase: "Caso de negocio",
+		description: "Descripción",
+		boundaries: "Límites",
+		objectives: "Objetivos",
+		requirements: "Requisitos de alto nivel",
+		deliverables: "Entregables",
+		milestones: "Hitos",
+		budget: "Presupuesto",
+		preAssignedResources: "Recursos preasignados",
+		risks: "Riesgos",
+		assumptions: "Supuestos",
+		constraints: "Restricciones",
+		exclusions: "Exclusiones",
+		stakeholders: "Interesados",
+		approvalRequirements: "Requisitos de aprobación",
+		exitCriteria: "Criterios de salida",
+		sponsors: "Patrocinadores"
+	};
+	function charterContent(state) {
+		const s = state && typeof state === "object" ? state : {}, out = {};
+		Object.keys(s).filter((k) => EXCLUDED.indexOf(k) < 0).forEach((k) => {
+			out[k] = JSON.parse(JSON.stringify(s[k] === void 0 ? null : s[k]));
+		});
+		return out;
+	}
+	function normalizeCharterBaseline(o) {
+		if (!o || typeof o !== "object") return null;
+		const b = normalizeRBaseline(o);
+		return b.frozen && b.snapshot.length ? b : null;
+	}
+	function charterDrift(state, baseline) {
+		if (!baseline || !baseline.frozen || !baseline.snapshot.length) return {
+			approved: false,
+			drifted: false,
+			sections: []
+		};
+		const now = charterContent(state), then = baseline.snapshot[0];
+		const sections = Array.from(new Set(Object.keys(now).concat(Object.keys(then)))).filter((k) => stableStringify(now[k] === void 0 ? null : now[k]) !== stableStringify(then[k] === void 0 ? null : then[k])).map((k) => SECTION_LABELS[k] || k);
+		return {
+			approved: true,
+			drifted: sections.length > 0,
+			sections
+		};
+	}
+	function approvalProblems(baseline, i) {
+		return newVersionProblems(baseline || {
+			version: "",
+			history: []
+		}, i);
+	}
+	function suggestCharterVersion(baseline) {
+		return baseline ? suggestNextVersion(baseline) : "1.0";
+	}
+	function approveCharter(state, baseline, i, today) {
+		const content = charterContent(state);
+		if (!baseline) return {
+			frozen: true,
+			version: i.version.trim(),
+			date: i.date,
+			approver: i.approver.trim(),
+			reason: i.reason.trim(),
+			snapshot: [content],
+			history: []
+		};
+		return advanceBaseline(baseline, [content], i, today);
+	}
+	//#endregion
 	//#region src/modules/project-charter/main.ts
 	var OBJ_DIMS = [
 		"Alcance",
@@ -115,7 +262,7 @@
 		};
 	}
 	function sampleState() {
-		return {
+		const s = {
 			identification: {
 				preparedDate: "2026-07-06",
 				sponsor: "Gerencia General DISTRIB+",
@@ -124,7 +271,7 @@
 				client: "DISTRIB+ S.A. (uso interno — operación logística)",
 				approach: "Predictivo",
 				language: "Español",
-				authority: "El Director de Proyecto puede aprobar cambios de hasta el 2% del CAPEX sin escalar al Sponsor, contratar servicios menores dentro del presupuesto aprobado y aceptar entregables intermedios. Los cambios de alcance, plazo total o presupuesto por encima de ese umbral requieren aprobación del Comité de Control de Cambios y del Sponsor."
+				authority: "El Director de Proyecto puede autorizar por sí solo el uso de reserva o los cambios de hasta USD 50.000, contratar servicios menores dentro del presupuesto aprobado y aceptar entregables intermedios. Entre USD 50.000 y USD 250.000 los autoriza el Comité de Control de Cambios (CCB); por encima de USD 250.000, o si cambian el alcance aprobado o el plazo total, los aprueba el Sponsor. Son los mismos niveles del Plan de Riesgos."
 			},
 			purpose: "DISTRIB+ S.A. necesita ampliar su capacidad de almacenamiento y despacho en Lima Sur para sostener el crecimiento de su cartera de distribución. El propósito del proyecto es construir y poner en marcha un almacén logístico en Lurín que permita consolidar operaciones hoy tercerizadas, reducir el costo logístico unitario y mejorar los tiempos de atención a los clientes de la zona sur.",
 			businessCase: {
@@ -132,7 +279,7 @@
 				investment: "USD 8.5 millones (CAPEX)",
 				annualBenefit: "USD 1.2 millones / año (ahorro operativo)",
 				payback: "≈ 7.1 años (solo por ahorro operativo)",
-				indicators: "VAN positivo a 10 años con tasa de descuento del 12%; TIR estimada 14.5%",
+				indicators: "A 10 años y con tasa de descuento del 12%, contando solo el ahorro operativo el VAN es negativo (≈ −USD 1.7 millones; TIR ≈ 6.8%). Con un valor residual del activo de USD 6.0 millones al año 10 (supuesto declarado: la nave y su terreno conservan valor), el VAN es ≈ +USD 0.2 millones y la TIR ≈ 12.5%: el caso de negocio depende de ese supuesto.",
 				intangibles: "Control directo sobre los niveles de servicio y los tiempos de despacho; capacidad de crecer sin renegociar con terceros; activo inmobiliario propio que revaloriza; menor exposición a la variación de tarifas del mercado logístico."
 			},
 			description: "El proyecto comprende la ingeniería, procura, construcción y puesta en marcha de un almacén logístico de estructura metálica prefabricada sobre un terreno propio en Lurín, incluyendo movimiento de tierras, cimentaciones, estructura y cobertura, acabados, instalaciones MEP, patio de maniobras y las pruebas de instalaciones previas a la entrega. La gestión sigue las buenas prácticas del PMBOK y los estándares de AACE International usados en el curso.",
@@ -327,6 +474,13 @@
 				managerDate: "2026-07-08"
 			}
 		};
+		s.baseline = approveCharter(s, null, {
+			version: "1.0",
+			date: "2026-07-08",
+			approver: s.approval.sponsorName,
+			reason: "Aprobación inicial del acta"
+		}, "2026-07-08");
+		return s;
 	}
 	function normalizeState(obj) {
 		const base = defaultState();
@@ -361,6 +515,7 @@
 			if (Array.isArray(obj[k])) out[k] = obj[k];
 		});
 		out.requirements = migrateRequirements(out.requirements);
+		out.baseline = normalizeCharterBaseline(obj.baseline);
 		return out;
 	}
 	function ranPad(n) {
@@ -869,6 +1024,43 @@
 			return "<div class=\"chk-cat\"><div class=\"chk-cat-h\">" + esc(cat) + "<span>" + ok + "/" + items.length + "</span></div>" + items.map((i) => "<div class=\"chk-item " + (i.ok ? "ok" : "") + "\"><span class=\"chk-dot\">" + (i.ok ? "✓" : "○") + "</span>" + esc(i.label) + "</div>").join("") + "</div>";
 		}).join("");
 	}
+	function renderBaseline(prefill = false) {
+		const b = state.baseline || null, d = charterDrift(state, b), st = document.getElementById("blStatus");
+		if (!b) st.innerHTML = "<b>Acta sin aprobar.</b> Mientras no se apruebe, lo que escribes aquí (patrocinador, director, cliente y presupuesto) se copia al proyecto y a los demás módulos tal cual.";
+		else if (d.drifted) st.innerHTML = "<b>Versión aprobada: v" + esc(b.version) + "</b> (" + esc(repDate(b.date)) + ", " + esc(b.approver) + "). <b>El acta en edición difiere de lo aprobado</b> — " + esc(d.sections.join(", ")) + ". Estos cambios <b>no se copian</b> al patrocinador, director, cliente ni presupuesto del proyecto hasta que apruebes una nueva versión.";
+		else st.innerHTML = "<b>Versión aprobada: v" + esc(b.version) + "</b> (" + esc(repDate(b.date)) + ", " + esc(b.approver) + "). El acta en edición coincide con lo aprobado.";
+		const hist = (b ? b.history : []).slice().reverse().map((h) => "v" + esc(h.version) + " — " + esc(repDate(h.date)) + ", " + esc(h.approver) + " — " + esc(h.reason) + " (reemplazada el " + esc(repDate(h.supersededOn)) + ")");
+		document.getElementById("blHistory").innerHTML = hist.length ? "<b>Versiones anteriores:</b><br>" + hist.join("<br>") : "";
+		if (prefill) {
+			document.getElementById("blVersion").value = suggestCharterVersion(b);
+			document.getElementById("blDate").value = todayLocalISO();
+			document.getElementById("blApprover").value = state.approval.sponsorName || state.identification.sponsor || "";
+			document.getElementById("blReason").value = b ? "" : "Aprobación inicial del acta";
+		}
+	}
+	async function approveCurrentCharter() {
+		const inp = (id) => document.getElementById(id).value;
+		const i = {
+			version: inp("blVersion"),
+			date: inp("blDate"),
+			approver: inp("blApprover"),
+			reason: inp("blReason")
+		};
+		const problems = approvalProblems(state.baseline || null, i);
+		if (problems.length) {
+			await showAlert("Para aprobar el acta: " + problems.join("; ") + ".", "Falta información");
+			return;
+		}
+		state.baseline = approveCharter(state, state.baseline || null, i, todayLocalISO());
+		state.approval.sponsorName = i.approver;
+		state.approval.sponsorDate = i.date;
+		hydrateStatics();
+		renderBaseline(true);
+		updateSidebar();
+		clearTimeout(dirtyTimer);
+		gpiPush();
+		setStatus("Acta aprobada — versión " + state.baseline.version + ".");
+	}
 	function renderAll() {
 		hydrateStatics();
 		renderObjectives();
@@ -877,10 +1069,12 @@
 		renderApprovalReq();
 		renderSponsors();
 		renderAllLists();
+		renderBaseline(true);
 		updateSidebar();
 	}
 	var dirtyTimer;
 	function onDirty() {
+		renderBaseline();
 		updateSidebar();
 		clearTimeout(dirtyTimer);
 		dirtyTimer = setTimeout(gpiPush, 800);
@@ -1016,12 +1210,15 @@
 		body += "<h2>20. Patrocinadores que autorizan el proyecto</h2>";
 		body += spon.length ? "<table><tr><th style=\"width:45%\">Nombre</th><th>Cargo / rol en la autorización</th></tr>" + spon.map((s) => "<tr><td>" + esc(s.name) + "</td><td>" + esc(s.role) + "</td></tr>").join("") + "</table>" : "<p class=\"rep-note\">— No registrado —</p>";
 		body += "<p class=\"rep-note\" style=\"margin-top:14px\">Índice de completitud del acta al momento de emisión: <b>" + a.pct + "%</b> (" + a.okCount + "/" + a.total + " elementos del checklist).</p>";
+		const bl = state.baseline || null, dr = charterDrift(state, bl);
+		body += "<p class=\"rep-note\">" + (bl ? "Versión aprobada: <b>v" + esc(bl.version) + "</b> (" + esc(repDate(bl.date)) + ", " + esc(bl.approver) + ")" + (dr.drifted ? ". <b>Este reporte incluye cambios posteriores sin aprobar:</b> " + esc(dr.sections.join(", ")) + "." : ".") : "Acta sin aprobar formalmente (sin versión aprobada).") + "</p>";
 		body += "<div class=\"rep-sign\"><div class=\"box\"><b>" + esc(ap.sponsorName || "Patrocinador (Sponsor)") + "</b><div class=\"r\">Patrocinador — Fecha: " + esc(repDate(ap.sponsorDate)) + "</div></div><div class=\"box\"><b>" + esc(ap.managerName || "Director de Proyecto") + "</b><div class=\"r\">Director de Proyecto — Fecha: " + esc(repDate(ap.managerDate)) + "</div></div></div>";
 		reportShell("Acta de Constitución del Proyecto", "Project Charter · PMBOK", body);
 	}
 	function wireToolbar() {
 		document.getElementById("btnImportMilestones").addEventListener("click", importMilestonesFromWbs);
 		document.getElementById("btnImportStakeholders").addEventListener("click", importKeyStakeholders);
+		document.getElementById("btnApproveCharter").addEventListener("click", approveCurrentCharter);
 		document.getElementById("btnReport").addEventListener("click", buildReport);
 		document.getElementById("btnPrint").addEventListener("click", () => {
 			window.print();
@@ -1141,12 +1338,14 @@
 			name: document.getElementById("projectTitle").value,
 			course: document.getElementById("courseTitle").value
 		};
-		if ((state.identification.sponsor || "").trim()) patch.sponsor = state.identification.sponsor;
-		if ((state.identification.manager || "").trim()) patch.manager = state.identification.manager;
-		if ((state.identification.client || "").trim()) patch.client = state.identification.client;
-		if (Number(state.budget.amount) > 0) {
-			patch.capex = state.budget.amount;
-			patch.currency = state.budget.currency;
+		if (!charterDrift(state, state.baseline || null).drifted) {
+			if ((state.identification.sponsor || "").trim()) patch.sponsor = state.identification.sponsor;
+			if ((state.identification.manager || "").trim()) patch.manager = state.identification.manager;
+			if ((state.identification.client || "").trim()) patch.client = state.identification.client;
+			if (Number(state.budget.amount) > 0) {
+				patch.capex = state.budget.amount;
+				patch.currency = state.budget.currency;
+			}
 		}
 		const r = window.GPI.saveState("charter", state, patch, session);
 		if (!session && r.status === "saved") session = window.GPI.openSession("charter");

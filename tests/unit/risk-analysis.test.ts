@@ -193,7 +193,7 @@ describe("eventos para la contingencia (riskEventsOf) y vínculo con Costos", ()
     expect(events.map((e) => e.code)).toEqual(["R-06"]);
     expect(excluded.map((x) => [x.code, x.reason])).toEqual([["R-03", "sin impacto en costo ni en plazo cuantificado"], ["R-04", "sin probabilidad"], ["R-05", "rango de costo incoherente"]]);
   });
-  // ---- plazo (AACE 65R-11): el evento lleva su impacto en días y las actividades que retrasa ----
+  // ---- plazo (AACE 57R-09): el evento lleva su impacto en días y las actividades que retrasa ----
   const T = { low: 10, likely: 20, high: 35 };
   const ubica = (ids: string[]) => ({ targets: () => ids });
   it("plazo: un evento con días y actividades ubicadas los lleva (`days`, `targets`); sin ubicar entra por su costo y se lista en `unmapped`", () => {

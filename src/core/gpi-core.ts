@@ -2552,7 +2552,7 @@ export const ui = { esc, kpi };
 // ---------------------------------------------------------------
 // Red de precedencias del proyecto (nodos + enlaces + calendario) para quien necesita
 // CORRER el CPM sobre ella sin ser el módulo de Cronograma -- el Registro de riesgos y
-// Costos (análisis de riesgo de plazo, AACE 40R-08 / 65R-11). Replica el criterio de
+// Costos (análisis de riesgo de plazo, AACE 40R-08 / 57R-09). Replica el criterio de
 // Cronograma/CPM (fullRowsSnapshot + scheduleNodes): actividades en el orden de la EDT,
 // hitos (duración 0) atados a un paquete o sueltos en su posición, duración determinística
 // Dur = Met/(#Eq×R) y solo los enlaces cuyos dos extremos existen. Las actividades sin

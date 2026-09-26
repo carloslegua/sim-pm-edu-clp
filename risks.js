@@ -2787,7 +2787,7 @@
 	function scheduleAnalysisHtml() {
 		const head = `<h3 class="mxh">Riesgo de plazo — efecto en el fin del proyecto (CPM)</h3>`;
 		const e = getEng();
-		if (!e) return `<div class="card" style="margin-top:14px">${head}<div class="muted small">El proyecto aún no tiene actividades enlazadas en el cronograma. Cuando las tenga, aquí verás cuánto retrasa cada riesgo el fin del proyecto y la reserva de plazo que requiere la cartera (AACE 40R-08 / 65R-11).</div></div>`;
+		if (!e) return `<div class="card" style="margin-top:14px">${head}<div class="muted small">El proyecto aún no tiene actividades enlazadas en el cronograma. Cuando las tenga, aquí verás cuánto retrasa cada riesgo el fin del proyecto y la reserva de plazo que requiere la cartera (AACE 40R-08 / 57R-09).</div></div>`;
 		const rows = risks.filter((r) => isOpen(r) && impactMean(r.timeImpact) !== null && (r.timeImpact.likely || 0) > 0).map((r) => ({
 			r,
 			a: impactFor(r, "inherent"),

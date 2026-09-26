@@ -2802,6 +2802,15 @@ Costs")
 - **Versión del esquema:** `DB_VERSION = 2`; `migrateDb`/`migrateProject` son normalizadores idempotentes y aditivos (regla #3). Fixtures
   reales en `tests/fixtures/`; `schema-migration.test.ts` corre las auditorías del núcleo sobre ambos.
 
+## Acta aprobada y enfoque del plan (auditoría, medias M24 / M9 / M12)
+
+- **Acta:** `charter.baseline` (opcional) = versión aprobada {versión, fecha, aprobador, motivo, instantánea del contenido, historial}. El contenido excluye
+  las firmas (`approval`) y la propia línea base. Mientras el acta en edición difiera de lo aprobado, `gpiPush` guarda el Acta pero NO propaga
+  sponsor/manager/client/CAPEX/moneda a `meta`; aprobar una nueva versión (con motivo) archiva la anterior y vuelve a propagar.
+- **Plan para la Dirección:** `pmplan.approach` {lifecycle, tailoring, configuration, changeProcess} es lo único que declara el plan por sí mismo
+  (además de su aprobación). Entra en las huellas (`digests.planApproach`, componente «Enfoque, ciclo de vida y adaptación»). Los planes aprobados antes no
+  tienen esa huella y no se marcan como modificados. P23/P24 son avisos, no bloquean la aprobación.
+
 ## JSZip vendorizado en el repo, no cargado desde un CDN
 
 Bug real reportado por el usuario: `Activity_Definition.html`,

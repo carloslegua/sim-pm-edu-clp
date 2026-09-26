@@ -1599,8 +1599,19 @@
 		{
 			key: "procurement",
 			label: "Plan de Adquisiciones"
+		},
+		{
+			key: "planApproach",
+			label: "Enfoque, ciclo de vida y adaptación"
 		}
 	];
+	var emptyApproach = () => ({
+		lifecycle: "",
+		tailoring: "",
+		configuration: "",
+		changeProcess: ""
+	});
+	var isPredictive = (approach) => !approach.trim() || /predictiv|cascada|waterfall|tradicional/i.test(approach);
 	function stableStringify(v) {
 		if (v === null || v === void 0) return "null";
 		if (typeof v !== "object") return JSON.stringify(v);
@@ -1631,8 +1642,10 @@
 			charter: {
 				has: false,
 				pct: 0,
-				end: ""
+				end: "",
+				approach: ""
 			},
+			approach: emptyApproach(),
 			scope: {
 				has: false,
 				state: "vacio",
@@ -1953,6 +1966,16 @@
 		].forEach(([k, n]) => {
 			if (!f[k].has) F("P17", "info", n, "El Plan de " + n + " aún no está elaborado: el plan para la dirección se aprueba con sus planes subsidiarios.");
 		});
+		if (anyData && !isPredictive(f.charter.approach)) F("P23", "aviso", "Acta", "El Acta declara un enfoque «" + f.charter.approach.trim() + "», pero esta suite modela un ciclo de vida PREDICTIVO (líneas base de alcance, cronograma y costo, CPM, valor ganado): no representa iteraciones, backlog ni velocidad. Documenta en «Enfoque y adaptación» cómo se aplica el plan aquí, o corrige el enfoque del Acta.");
+		if (anyData) {
+			const miss = [
+				["ciclo de vida y enfoque de desarrollo", f.approach.lifecycle],
+				["adaptación (tailoring)", f.approach.tailoring],
+				["gestión de la configuración", f.approach.configuration],
+				["proceso de gestión de cambios", f.approach.changeProcess]
+			].filter(([, t]) => !t.trim()).map(([n]) => n);
+			if (miss.length) F("P24", "aviso", "Plan", "El plan para la dirección no declara: " + miss.join("; ") + ". PMBOK pide que el plan describa el enfoque de desarrollo y el ciclo de vida, cómo se adaptó el proceso y cómo se controlan la configuración y los cambios (sección «Enfoque y adaptación»).");
+		}
 		if (s.base.has && s.deviationPct !== null && s.deviationPct > 10) F("P11", "aviso", "Cronograma", "El pronóstico del cronograma se desvía " + Math.round(s.deviationPct * 10) / 10 + " % de su línea base: evalúa un cambio (o una nueva línea base) antes de aprobar el plan.");
 		if (f.plan.status === "aprobado") {
 			if (!f.plan.approvedBy.trim() || !f.plan.approvedOn) F("P14", "riesgo", "Plan", "El plan figura «aprobado» sin registrar quién lo aprueba y en qué fecha.");
@@ -2536,7 +2559,8 @@
 		notes: "",
 		snapshot: null,
 		approvedDoc: "",
-		history: []
+		history: [],
+		approach: emptyApproach()
 	});
 	function normSnapshot(o) {
 		if (!o || typeof o !== "object") return null;
@@ -2570,6 +2594,13 @@
 		p.notes = str(x.notes);
 		p.snapshot = normSnapshot(x.snapshot);
 		p.approvedDoc = str(x.approvedDoc);
+		const ap = rec(x.approach);
+		p.approach = {
+			lifecycle: str(ap.lifecycle),
+			tailoring: str(ap.tailoring),
+			configuration: str(ap.configuration),
+			changeProcess: str(ap.changeProcess)
+		};
 		p.history = arr(x.history).map((h) => ({
 			version: str(h.version),
 			approvedBy: str(h.approvedBy),
@@ -2617,7 +2648,8 @@
 			f.charter = {
 				has: !!charter && ca.okCount > 0,
 				pct: ca.pct,
-				end: ends.length ? ends[ends.length - 1] : ""
+				end: ends.length ? ends[ends.length - 1] : "",
+				approach: str(rec(rec(charter).identification).approach)
 			};
 			const ra = G.util.requirementsAudit(req, charter, wbs), sa = G.util.scopeAudit(scope, req, charter, wbs);
 			f.requirements = {
@@ -2814,6 +2846,8 @@
 			snapshot: plan.snapshot,
 			docPreserved: !!plan.approvedDoc
 		};
+		c.facts.approach = { ...plan.approach };
+		c.facts.digests.planApproach = digestOf(plan.approach);
 		return c.facts;
 	};
 	var changesSinceApproval = () => plan.status === "aprobado" && plan.snapshot ? snapshotDiff(plan.snapshot, snapshotOf(factsNow())) : [];
@@ -2878,6 +2912,13 @@
         ${plan.history.length ? `<p class="small muted" style="margin-top:8px">Versiones anteriores: ${plan.history.map((h, i) => "v" + esc(h.version) + " (" + esc(h.approvedOn || "—") + ")" + (h.doc ? ` <button class="btn sm" data-histdoc="${i}">Ver documento</button>` : " <span title=\"aprobada antes de conservar su contenido\">sin contenido conservado</span>")).join(" · ")}</p>` : ""}
       </div>
     </div>
+    <div class="card"><h3>Enfoque, ciclo de vida y adaptación</h3>
+      <p class="small muted">Enfoque de desarrollo declarado en el Acta: <b>${esc(f.charter.approach || "sin declarar")}</b>${isPredictive(f.charter.approach) ? "" : " — esta suite modela un ciclo de vida predictivo (ver hallazgo P23)"}. Lo que escribas aquí forma parte del plan aprobado: si lo cambias después de aprobarlo, el plan queda con cambios sin aprobar.</p>
+      <div class="fd"><label for="pfLifecycle">Ciclo de vida y enfoque de desarrollo (fases, cómo se organiza el trabajo)</label><textarea id="pfLifecycle" rows="2">${esc(plan.approach.lifecycle)}</textarea></div>
+      <div class="fd"><label for="pfTailoring">Adaptación (tailoring): qué se adaptó del proceso y por qué</label><textarea id="pfTailoring" rows="2">${esc(plan.approach.tailoring)}</textarea></div>
+      <div class="fd"><label for="pfConfig">Gestión de la configuración (qué elementos se controlan, versionado, quién autoriza cambiar una versión aprobada)</label><textarea id="pfConfig" rows="2">${esc(plan.approach.configuration)}</textarea></div>
+      <div class="fd"><label for="pfChangeProc">Proceso de gestión de cambios (quién evalúa y quién decide, según el monto y el impacto)</label><textarea id="pfChangeProc" rows="2">${esc(plan.approach.changeProcess)}</textarea></div>
+    </div>
     <div class="card"><h3>Áreas del plan</h3>
       <table class="an"><thead><tr><th>Área</th><th>Estado</th><th>Resumen</th><th>Módulo</th></tr></thead><tbody>
       ${rows.map((r) => `<tr><td>${esc(r.label)}</td><td>${pill(r.state)}</td><td>${esc(r.metric)}${r.note ? ` <span class="muted small">${esc(r.note)}</span>` : ""}</td><td>${r.file ? `<a href="${esc(r.file)}">Abrir</a>` : "<span class=\"muted\">—</span>"}</td></tr>`).join("")}
@@ -2900,6 +2941,17 @@
 		bind("pfApprover", "approvedBy");
 		bind("pfDate", "approvedOn");
 		bind("pfNotes", "notes");
+		const bindA = (id, key) => {
+			const el = document.getElementById(id);
+			if (el) el.addEventListener("input", () => {
+				plan.approach[key] = el.value;
+				save();
+			});
+		};
+		bindA("pfLifecycle", "lifecycle");
+		bindA("pfTailoring", "tailoring");
+		bindA("pfConfig", "configuration");
+		bindA("pfChangeProc", "changeProcess");
 		const ap = document.getElementById("btnApprove");
 		if (ap) ap.addEventListener("click", approve);
 		const nv = document.getElementById("btnNewVersion");
@@ -3015,6 +3067,43 @@
 					{
 						id: "s1-mil",
 						title: "Hitos principales"
+					}
+				],
+				html: h
+			});
+		}
+		{
+			const ap = plan.approach, ident = rec(rec(charter).identification), phases = G.util.wbsPhases(wbs || {});
+			let h = kv([["Enfoque de desarrollo (Acta)", esc(ident.approach)], ["Ciclo de vida y enfoque de desarrollo", nl(ap.lifecycle)]]);
+			if (!ap.lifecycle.trim()) h += nodata("El plan no describe el ciclo de vida ni cómo se organiza el trabajo.");
+			if (phases.length) h += `<h4 class="d3">Fases (de la EDT)</h4>` + tbl([
+				"Fase",
+				"Inicio",
+				"Fin"
+			], phases.map((p) => [
+				esc(p.name),
+				esc(p.start),
+				esc(p.end)
+			]));
+			if (!isPredictive(f.charter.approach)) h += `<p class="note"><b>Nota:</b> el Acta declara un enfoque «${esc(f.charter.approach)}»; esta suite modela un ciclo de vida predictivo (líneas base de alcance, cronograma y costo). Ver la adaptación.</p>`;
+			h += `<h3 class="d2" id="sd-ad">Adaptación (tailoring)</h3>` + (ap.tailoring.trim() ? `<p>${nl(ap.tailoring)}</p>` : nodata("No se declaró cómo se adaptó el proceso."));
+			h += `<h3 class="d2" id="sd-cf">Gestión de la configuración</h3>` + (ap.configuration.trim() ? `<p>${nl(ap.configuration)}</p>` : nodata("No se declaró la gestión de la configuración."));
+			h += `<h3 class="d2" id="sd-ch">Proceso de gestión de cambios</h3>` + (ap.changeProcess.trim() ? `<p>${nl(ap.changeProcess)}</p>` : nodata("No se declaró el proceso de gestión de cambios."));
+			out.push({
+				id: "sd",
+				title: "Enfoque, ciclo de vida y adaptación",
+				subs: [
+					{
+						id: "sd-ad",
+						title: "Adaptación"
+					},
+					{
+						id: "sd-cf",
+						title: "Configuración"
+					},
+					{
+						id: "sd-ch",
+						title: "Gestión de cambios"
 					}
 				],
 				html: h
@@ -3612,6 +3701,7 @@
 	}
 	var SECTION_ORDER = [
 		"s1",
+		"sd",
 		"s2",
 		"s3",
 		"s4",
@@ -3775,7 +3865,8 @@
 			notes: plan.notes,
 			snapshot: plan.snapshot,
 			approvedDoc: plan.approvedDoc,
-			history: plan.history
+			history: plan.history,
+			approach: plan.approach
 		});
 		function pull() {
 			const p = window.GPI.active();

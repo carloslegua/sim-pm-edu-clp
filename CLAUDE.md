@@ -187,6 +187,8 @@ src/shared/stakeholder-engagement.ts → (se inlinea en stakeholder-studio.js) m
                                     de interesados: brecha, prioridad, hallazgos
 src/shared/write-session.ts      → (se inlinea en cada IIFE) guardado con sesión de
                                     edición + resultado común de escritura
+src/shared/charter-baseline.ts   → (se inlinea en project-charter.js) aprobación y versiones del Acta: instantánea, deriva y nueva versión
+                                    (reutiliza el motor de requirements-baseline.ts)
 src/shared/local-date.ts         → (se inlinea donde se usa) `todayLocalISO()`: fecha de hoy LOCAL (no UTC)
 src/shared/gpi-badge.ts          → (se inlinea en cada IIFE) barra «Panel · Sincronizar · Panel» única
 src/shared/html.ts               → (se inlinea en cada IIFE) `esc` de HTML
