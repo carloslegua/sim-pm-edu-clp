@@ -2826,6 +2826,23 @@ Costs")
   iteración, con su propio flujo aleatorio (los eventos ocurren igual con o sin la opción). `EventOutcomes.integrated` distingue los resultados guardados en caché.
   Guardado como `cost.rangeAnalysis.includePert` (opcional; ausente = apagado).
 
+## Los tres módulos del cierre del ciclo (Validar el Alcance, Gestión del Conocimiento, Cierre)
+
+Mismo patrón que Calidad y Comunicaciones (lógica pura en `src/shared/`, interfaz en `src/modules/<clave>/main.ts`, IIFE, arranca EN BLANCO con un proyecto conectado y muestra el ejemplo en modo independiente).
+Cada uno guarda SOLO lo suyo y LEE el resto (`plan-facts.ts`):
+
+| Módulo | Clave / rebanada | Guarda | Lee del proyecto |
+|---|---|---|---|
+| Validar el Alcance | `scopeValidation` | `records[]` (entregable, paquetes, criterio, evidencia, decisión), `asOf` | Enunciado del Alcance (entregables y criterios), EDT (paquetes, `delId`), Plan de Calidad (no conformidades abiertas por paquete), OBS |
+| Gestión del Conocimiento | `knowledge` | `lessons[]` (tipo, categoría, paquete, riesgo, situación, lección, recomendación, estado), `asOf` | Registro de Riesgos (materializados y códigos), EDT, OBS |
+| Cierre del Proyecto o Fase | `closeout` | `kind`, `phase`, `items[]` (lista de verificación), `closure` (aprobación, costo final, informe), `asOf` | Validar el Alcance, Calidad, Adquisiciones (entregadas / reclamos abiertos), Conocimiento, Control de Cambios, Costos (BAC vigente) |
+
+Decisiones: (1) **el cierre no captura de nuevo** lo que ya vive en otro módulo: las siete comprobaciones son derivadas y nunca se guardan; solo se guarda la lista de verificación propia y la aprobación. (2) Se puede
+**declarar** el cierre con pendientes, pero queda como riesgo C1 (un cierre con deuda); sin declararlo, lo pendiente es información (C7). (3) Umbrales didácticos declarados: validación sin decisión 15 días, lección sin validar
+30 días. (4) Todos llevan `asOf` (fecha de corte; vacía = hoy) para que el ejemplo, fechado al corte 2026-11-03, no envejezca con el reloj. (5) El ejemplo del cierre es de un proyecto EN CURSO: la lista trae fechas
+posteriores al fin del cronograma (2027-07-23) y las cifras del corte (1 de 6 entregables aceptados, 1 no conformidad abierta, 8 lecciones sin transferir, 3 solicitudes de cambio abiertas, BAC 8.081.108) son las de los demás
+ejemplos. (6) Ninguno entra todavía en el Plan para la Dirección (no es parte de lo que se aprueba al planificar).
+
 ## JSZip vendorizado en el repo, no cargado desde un CDN
 
 Bug real reportado por el usuario: `Activity_Definition.html`,

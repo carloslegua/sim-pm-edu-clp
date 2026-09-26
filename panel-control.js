@@ -96,10 +96,10 @@
 			key: "knowledge",
 			group: "gov",
 			name: "Gestión del Conocimiento",
-			file: null,
+			file: "Gestion_Conocimiento.html",
 			icon: "🧠",
 			color: "#00967f",
-			desc: "Registro de lecciones aprendidas y del conocimiento del proyecto: captura durante la ejecución y transferencia al cierre."
+			desc: "Registro de lecciones aprendidas: qué pasó, qué se aprendió y qué hacer distinto; se captura durante la ejecución, se valida y se transfiere. Avisa el riesgo materializado que no dejó lección."
 		},
 		{
 			key: "changes",
@@ -114,10 +114,10 @@
 			key: "closeout",
 			group: "gov",
 			name: "Cierre del Proyecto o Fase",
-			file: null,
+			file: "Cierre_Proyecto.html",
 			icon: "🏁",
 			color: "#00967f",
-			desc: "Aceptación de entregables, liberación de recursos, lecciones aprendidas y cierre administrativo y contractual."
+			desc: "La puerta de salida: comprueba (leyendo las demás herramientas) que los entregables están aceptados, sin defectos abiertos, con contratos entregados, lecciones transferidas y cambios cerrados; lista de verificación de cierre y aprobación."
 		},
 		{
 			key: "requirements",
@@ -150,10 +150,10 @@
 			key: "scopeValidation",
 			group: "scope",
 			name: "Validar el Alcance",
-			file: null,
+			file: "Validar_Alcance.html",
 			icon: "☑",
 			color: "#6c5ce7",
-			desc: "Aceptación formal de los entregables terminados por el cliente o patrocinador, contra los criterios de aceptación del Enunciado y el diccionario de la EDT."
+			desc: "Aceptación formal de cada entregable por quien lo recibe, contra el criterio del Enunciado del Alcance: evidencia, quién firma y cuándo; avisa lo aceptado con no conformidades abiertas."
 		},
 		{
 			key: "schedulePlan",
@@ -297,16 +297,7 @@
 			file: "Risk_Register.html",
 			icon: "⚠",
 			color: "#ff9f1c",
-			desc: "Registro de riesgos (PMBOK + AACE): enunciado causa–evento–efecto, RBS, matriz probabilidad–impacto con umbrales del plan, estrategias para amenazas y oportunidades, riesgo residual y valor esperado."
-		},
-		{
-			key: "montecarlo",
-			group: "risk",
-			name: "Simulación Monte Carlo",
-			file: null,
-			icon: "🎲",
-			color: "#ff6b8b",
-			desc: "Riesgo cuantitativo de costo y plazo: histograma, curva S y tornado."
+			desc: "Registro de riesgos (PMBOK + AACE): enunciado causa–evento–efecto, RBS, matriz probabilidad–impacto con umbrales del plan, estrategias para amenazas y oportunidades, riesgo residual, valor esperado y análisis cuantitativo de costo y plazo con Monte Carlo (histograma, curva S, tornado). El mismo motor alimenta la contingencia de Costos y el análisis PERT."
 		}
 	];
 	MODULES = MODULES.concat((Array.isArray(MODULOS_EXTRA) ? MODULOS_EXTRA : []).filter((m) => {

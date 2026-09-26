@@ -123,12 +123,12 @@ let MODULES: ModuleDef[] = [
     desc: "Estrategia de contratación, hacer o comprar, tipos de contrato, criterios de selección y fecha límite de convocatoria contra el cronograma; enlaza la EDT, los riesgos y el OBS." },
   { key: "quality", group: "gov", name: "Gestión de la Calidad", file: "Plan_Calidad.html", icon: "✔", color: "#00c2a8",
     desc: "Métricas de calidad, aseguramiento y control por paquete (verifica el criterio de aceptación del diccionario de la EDT) y costo de la calidad (conformidad vs. no conformidad)." },
-  { key: "knowledge", group: "gov", name: "Gestión del Conocimiento", file: null, icon: "🧠", color: "#00967f",
-    desc: "Registro de lecciones aprendidas y del conocimiento del proyecto: captura durante la ejecución y transferencia al cierre." },
+  { key: "knowledge", group: "gov", name: "Gestión del Conocimiento", file: "Gestion_Conocimiento.html", icon: "🧠", color: "#00967f",
+    desc: "Registro de lecciones aprendidas: qué pasó, qué se aprendió y qué hacer distinto; se captura durante la ejecución, se valida y se transfiere. Avisa el riesgo materializado que no dejó lección." },
   { key: "changes", group: "gov", name: "Control Integrado de Cambios", file: "Control_Cambios.html", icon: "🔁", color: "#00967f",
     desc: "Solicitudes de cambio que evalúan a la vez alcance, cronograma, costo, riesgo, calidad y recursos; decisión del CCB con la autoridad que exige (línea base, reservas); y trazabilidad hasta las órdenes de cambio de Costos, las modificaciones de alcance y la línea base del cronograma." },
-  { key: "closeout", group: "gov", name: "Cierre del Proyecto o Fase", file: null, icon: "🏁", color: "#00967f",
-    desc: "Aceptación de entregables, liberación de recursos, lecciones aprendidas y cierre administrativo y contractual." },
+  { key: "closeout", group: "gov", name: "Cierre del Proyecto o Fase", file: "Cierre_Proyecto.html", icon: "🏁", color: "#00967f",
+    desc: "La puerta de salida: comprueba (leyendo las demás herramientas) que los entregables están aceptados, sin defectos abiertos, con contratos entregados, lecciones transferidas y cambios cerrados; lista de verificación de cierre y aprobación." },
 
   // — Alcance — (orden PMBOK: Recopilar Requisitos → Enunciado del Alcance → Crear la EDT → Validar)
   { key: "requirements", group: "scope", name: "Recopilar Requisitos", file: "Recopilar_Requisitos.html", icon: "📝", color: "#6c5ce7",
@@ -137,8 +137,8 @@ let MODULES: ModuleDef[] = [
     desc: "Definir el Alcance (PMBOK): descripción del alcance, entregables (DEL.0X) con criterios de aceptación, y supuestos/restricciones/exclusiones. Es el puente que agrupa los REQ en entregables; la EDT descompone esos entregables, no los requisitos." },
   { key: "wbs", group: "scope", name: "WBS Builder", file: "WBS_Builder.html", icon: "▦", color: "#6c5ce7",
     desc: "Estructura de desglose del trabajo con costo, duración, avance y diccionario WBS. Siembra sus ramas desde los entregables del Enunciado del Alcance." },
-  { key: "scopeValidation", group: "scope", name: "Validar el Alcance", file: null, icon: "☑", color: "#6c5ce7",
-    desc: "Aceptación formal de los entregables terminados por el cliente o patrocinador, contra los criterios de aceptación del Enunciado y el diccionario de la EDT." },
+  { key: "scopeValidation", group: "scope", name: "Validar el Alcance", file: "Validar_Alcance.html", icon: "☑", color: "#6c5ce7",
+    desc: "Aceptación formal de cada entregable por quien lo recibe, contra el criterio del Enunciado del Alcance: evidencia, quién firma y cuándo; avisa lo aceptado con no conformidades abiertas." },
 
   // — Cronograma — (orden: Plan de Gestión → Definir Actividades → PERT → CPM)
   { key: "schedulePlan", group: "sched", name: "Plan de Gestión del Cronograma", file: "Schedule_Management_Plan.html", icon: "📋", color: "#3a86ff",
@@ -180,9 +180,7 @@ let MODULES: ModuleDef[] = [
 
   // — Riesgo —
   { key: "risks", group: "risk", name: "Gestión de Riesgos", file: "Risk_Register.html", icon: "⚠", color: "#ff9f1c",
-    desc: "Registro de riesgos (PMBOK + AACE): enunciado causa–evento–efecto, RBS, matriz probabilidad–impacto con umbrales del plan, estrategias para amenazas y oportunidades, riesgo residual y valor esperado." },
-  { key: "montecarlo", group: "risk", name: "Simulación Monte Carlo", file: null, icon: "🎲", color: "#ff6b8b",
-    desc: "Riesgo cuantitativo de costo y plazo: histograma, curva S y tornado." }
+    desc: "Registro de riesgos (PMBOK + AACE): enunciado causa–evento–efecto, RBS, matriz probabilidad–impacto con umbrales del plan, estrategias para amenazas y oportunidades, riesgo residual, valor esperado y análisis cuantitativo de costo y plazo con Monte Carlo (histograma, curva S, tornado). El mismo motor alimenta la contingencia de Costos y el análisis PERT." }
 ];
 
 // ─── Aplicación de la configuración de entrega ────────────────────────

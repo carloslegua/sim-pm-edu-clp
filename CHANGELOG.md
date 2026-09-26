@@ -9,6 +9,20 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ## [Unreleased]
 
+### Added
+
+- **Auditoría integral, hallazgo medio M7 — tres módulos que faltaban en el ciclo del proyecto.** El Panel ya tiene 23 herramientas activas y 4 módulos faltantes declarados (Estimar los Recursos, Adquirir
+  Recursos, Liderar el Equipo y Gestionar el Compromiso). Cada módulo nuevo lleva su lógica pura (`src/shared/`), su ejemplo DISTRIB+ al corte del caso (2026-11-03), su fecha de corte del seguimiento y sus
+  pruebas (unitarias, humo y e2e):
+  - **Validar el Alcance** (`Validar_Alcance.html`, `scopeValidation`): la aceptación formal de cada entregable del Enunciado del Alcance (criterio, evidencia, quién firma, decisión). Hallazgos V1 (aceptar con no
+    conformidades ABIERTAS de Calidad en sus paquetes; crítica = riesgo), V2–V8 (sin evidencia, sin observaciones, criterio distinto del Enunciado, sin decisión en 15 días…).
+  - **Gestión del Conocimiento** (`Gestion_Conocimiento.html`, `knowledge`): el registro de lecciones aprendidas (qué pasó, qué se aprendió, qué hacer distinto; capturada → validada → transferida). Hallazgos K1–K7,
+    en particular K3: un riesgo MATERIALIZADO del Registro de Riesgos que ninguna lección cita.
+  - **Cierre del Proyecto o Fase** (`Cierre_Proyecto.html`, `closeout`): lista de verificación de cierre + aprobación, y siete comprobaciones que LEEN las demás herramientas (entregables aceptados, no conformidades
+    abiertas, contratos entregados y reclamos, lecciones transferidas, solicitudes de cambio abiertas, costo final contra el presupuesto). Declarar el cierre con pendientes es un riesgo (C1). El ejemplo está PREPARADO,
+    no declarado: el proyecto termina el 2027-07-23.
+  Se quitó del Panel la tarjeta «Simulación Monte Carlo»: ya existe dentro de Gestión de Riesgos, Planificar la Gestión Financiera y Análisis PERT (su descripción quedó en Gestión de Riesgos).
+
 ### Fixed
 
 - **Auditoría integral, hallazgo medio M8 — registros de ejecución en Calidad, Comunicaciones y Adquisiciones.** Los tres módulos solo planificaban; ahora también registran la ejecución

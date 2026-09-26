@@ -1459,15 +1459,468 @@
 		return P && I ? "cerca" : P ? "satisfecho" : I ? "informado" : "monitorear";
 	}
 	//#endregion
+	//#region src/shared/procurement-plan.ts
+	var STATUSES = [
+		"Planificada",
+		"Convocada",
+		"Adjudicada",
+		"Contratada",
+		"Entregada"
+	];
+	var STATUS_RANK = {
+		Planificada: 0,
+		Convocada: 1,
+		Adjudicada: 2,
+		Contratada: 3,
+		Entregada: 4
+	};
+	var FIXED_PRICE = ["Precio fijo (FFP)", "Precio fijo con ajuste económico (FPEPA)"];
+	var PAY_STATUSES = [
+		"programado",
+		"pagado",
+		"retenido"
+	];
+	var CLAIM_STATUSES = [
+		"abierto",
+		"resuelto",
+		"rechazado"
+	];
+	var str$5 = (v) => v === null || v === void 0 ? "" : String(v);
+	var strs$2 = (v) => Array.isArray(v) ? v.map(str$5).filter(Boolean) : [];
+	var numOrNull$1 = (v) => {
+		if (v === null || v === void 0 || v === "") return null;
+		const n = Number(v);
+		return isFinite(n) ? n : null;
+	};
+	var rec$4 = (o) => o && typeof o === "object" ? o : {};
+	var iso$2 = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	function normalizeItem$1(o, fb) {
+		const x = rec$4(o), id = str$5(x.id) || fb;
+		return {
+			id,
+			code: str$5(x.code) || id,
+			name: str$5(x.name),
+			wbsIds: strs$2(x.wbsIds),
+			full: x.full === false ? false : true,
+			decision: str$5(x.decision),
+			contractType: str$5(x.contractType),
+			selection: str$5(x.selection),
+			criteria: (Array.isArray(x.criteria) ? x.criteria : []).map((c) => {
+				const q = rec$4(c);
+				return {
+					name: str$5(q.name),
+					weight: numOrNull$1(q.weight)
+				};
+			}),
+			value: numOrNull$1(x.value),
+			needDate: str$5(x.needDate),
+			leadDays: numOrNull$1(x.leadDays),
+			selectionDays: numOrNull$1(x.selectionDays),
+			supplier: str$5(x.supplier),
+			status: STATUS_RANK[str$5(x.status)] !== void 0 ? str$5(x.status) : "Planificada",
+			owner: str$5(x.owner),
+			awardDate: str$5(x.awardDate),
+			riskIds: strs$2(x.riskIds),
+			notes: str$5(x.notes)
+		};
+	}
+	function normalizePayment(o, fb) {
+		const x = rec$4(o), id = str$5(x.id) || fb;
+		return {
+			id,
+			code: str$5(x.code) || id,
+			itemId: str$5(x.itemId),
+			date: str$5(x.date),
+			concept: str$5(x.concept),
+			amount: numOrNull$1(x.amount),
+			status: PAY_STATUSES.indexOf(x.status) >= 0 ? x.status : "programado"
+		};
+	}
+	function normalizeClaim(o, fb) {
+		const x = rec$4(o), id = str$5(x.id) || fb;
+		return {
+			id,
+			code: str$5(x.code) || id,
+			itemId: str$5(x.itemId),
+			date: str$5(x.date),
+			description: str$5(x.description),
+			amount: numOrNull$1(x.amount),
+			status: CLAIM_STATUSES.indexOf(x.status) >= 0 ? x.status : "abierto",
+			resolvedOn: str$5(x.resolvedOn)
+		};
+	}
+	function normalizeProcurement(raw, today = "") {
+		const x = rec$4(raw), items = (Array.isArray(x.items) ? x.items : []).map((o, i) => normalizeItem$1(o, "pr" + (i + 1))), ad = rec$4(x.admin);
+		const payments = (Array.isArray(ad.payments) ? ad.payments : []).map((o, i) => normalizePayment(o, "pg" + (i + 1))), claims = (Array.isArray(ad.claims) ? ad.claims : []).map((o, i) => normalizeClaim(o, "rc" + (i + 1)));
+		return {
+			strategy: str$5(x.strategy),
+			performance: str$5(x.performance),
+			approvals: str$5(x.approvals),
+			asOf: iso$2(str$5(x.asOf)) ? str$5(x.asOf) : today,
+			items,
+			idCounter: Number(x.idCounter) || items.length + payments.length + claims.length + 1,
+			admin: {
+				payments,
+				claims
+			}
+		};
+	}
+	var day = (s) => Date.parse(s + "T12:00:00Z");
+	var addDays = (s, n) => new Date(day(s) + n * 864e5).toISOString().slice(0, 10);
+	var daysBetween = (a, b) => iso$2(a) && iso$2(b) ? Math.round((day(b) - day(a)) / 864e5) : null;
+	function launchBy(it) {
+		if (!iso$2(it.needDate) || it.leadDays === null || it.selectionDays === null) return null;
+		return addDays(it.needDate, -(it.leadDays + it.selectionDays));
+	}
+	var isBuy = (it) => it.decision !== "Hacer (recursos propios)";
+	var criteriaSum = (it) => it.criteria.reduce((s, c) => s + (c.weight || 0), 0);
+	function summary(d, f) {
+		const byStatus = {};
+		STATUSES.forEach((s) => {
+			byStatus[s] = 0;
+		});
+		let total = 0, late = 0, soon = 0;
+		d.items.forEach((it) => {
+			byStatus[it.status]++;
+			total += it.value || 0;
+			const lb = launchBy(it), left = lb ? daysBetween(d.asOf, lb) : null;
+			if (it.status === "Planificada" && left !== null) {
+				if (left < 0) late++;
+				else if (left <= 30) soon++;
+			}
+		});
+		return {
+			total,
+			count: d.items.length,
+			byStatus,
+			pctOfBase: f.baseCost && f.baseCost > 0 ? total / f.baseCost * 100 : null,
+			late,
+			soon
+		};
+	}
+	function procurementFindings(d, f) {
+		const out = [], F = (code, severity, itemId, text) => {
+			out.push({
+				code,
+				severity,
+				itemId,
+				text
+			});
+		};
+		const roles = new Set(f.roles.map((r) => r.toLowerCase())), leafBy = new Map(f.leaves.map((l) => [l.id, l])), sup = new Set(f.suppliers.map((s) => s.toLowerCase()));
+		d.items.forEach((it) => {
+			const w = it.code + (it.name.trim() ? " «" + it.name.trim() + "»" : ""), buy = isBuy(it), rank = STATUS_RANK[it.status];
+			if (!it.name.trim() || !it.decision) F("P2", "aviso", it.id, w + ": falta el nombre o la decisión hacer o comprar.");
+			if (it.wbsIds.some((i) => !leafBy.has(i)) && f.leaves.length) F("P2", "aviso", it.id, w + ": apunta a un paquete de la EDT que ya no existe.");
+			if (!it.wbsIds.length) F("P2", "info", it.id, w + ": no dice qué paquetes de la EDT cubre.");
+			if (!it.owner.trim()) F("P10", "aviso", it.id, w + ": no tiene responsable de la adquisición.");
+			else if (roles.size && !roles.has(it.owner.trim().toLowerCase())) F("P10", "info", it.id, w + ": el responsable «" + it.owner + "» no figura entre los puestos del OBS.");
+			if (!buy) return;
+			const lb = launchBy(it);
+			if (lb === null) F("P3", "aviso", it.id, w + ": sin fecha requerida o sin plazos (del proveedor y de selección) no se puede calcular cuándo convocar.");
+			else if (it.status === "Planificada") {
+				const left = daysBetween(d.asOf, lb);
+				if (left < 0) F("P1", "riesgo", it.id, w + ": la convocatoria debió lanzarse el " + lb + " (hace " + -left + " días respecto de la fecha de corte " + d.asOf + ") para tener el suministro el " + it.needDate + " y sigue «Planificada»: la fecha de necesidad ya no se sostiene.");
+				else if (left <= 30) F("P1", "info", it.id, w + ": la convocatoria debe lanzarse antes del " + lb + " (" + left + " días desde la fecha de corte).");
+			}
+			if (!it.contractType) F("P4", "aviso", it.id, w + ": falta el tipo de contrato.");
+			else if (FIXED_PRICE.indexOf(it.contractType) >= 0 && f.estimateClass !== null && f.estimateClass >= 4) F("P4", "aviso", it.id, w + ": un contrato de precio fijo traslada el riesgo de costo al proveedor y exige un alcance bien definido; el estimado del proyecto es de clase " + f.estimateClass + " (definición insuficiente): el proveedor lo cotizará con un sobreprecio o reclamará después.");
+			if (!it.selection) F("P5", "aviso", it.id, w + ": falta el método de selección del proveedor.");
+			else if (it.selection === "Adjudicación directa") F("P5", "info", it.id, w + ": adjudicación directa: deja escrita la justificación (proveedor único, urgencia, monto menor) en las notas.");
+			else {
+				const sum = criteriaSum(it);
+				if (!it.criteria.length) F("P5", "aviso", it.id, w + ": no define los criterios de selección con su peso.");
+				else if (Math.abs(sum - 100) > .001 || it.criteria.some((c) => !c.name.trim() || c.weight === null)) F("P5", "aviso", it.id, w + ": los criterios de selección deben tener nombre y peso, y sumar 100 (suman " + Math.round(sum * 100) / 100 + ").");
+				else if (it.criteria.length < 3) F("P5", "info", it.id, w + ": solo " + it.criteria.length + " criterio(s): la selección se apoya en algo más que el precio (capacidad técnica, plazo, experiencia).");
+			}
+			const edt = it.wbsIds.map((i) => leafBy.get(i)).filter((l) => !!l).reduce((s, l) => s + l.cost, 0);
+			if (it.value === null) F("P6", "aviso", it.id, w + ": falta el valor estimado.");
+			else if (it.full && edt > 0 && Math.abs(it.value - edt) / edt * 100 > 10) F("P6", "aviso", it.id, w + ": el valor estimado (" + Math.round(it.value).toLocaleString("es-PE") + ") difiere más de 10 % del costo de los paquetes que cubre en la EDT (" + Math.round(edt).toLocaleString("es-PE") + "): concilia el presupuesto con el contrato.");
+			if (rank >= STATUS_RANK.Adjudicada && (!it.supplier.trim() || !iso$2(it.awardDate))) F("P7", "aviso", it.id, w + ": está «" + it.status + "» pero no registra el proveedor o la fecha de adjudicación.");
+			else if (it.supplier.trim() && sup.size && !sup.has(it.supplier.trim().toLowerCase())) F("P12", "info", it.id, w + ": el proveedor «" + it.supplier + "» no figura en el OBS ni entre los interesados: regístralo para gestionar su compromiso.");
+			const cited = new Set(it.riskIds);
+			f.risks.filter((r) => r.high && r.threat && r.wbsIds.some((i) => it.wbsIds.indexOf(i) >= 0) && !cited.has(r.id)).forEach((r) => F("P8", "info", it.id, w + ": el riesgo alto " + r.code + " «" + r.title + "» afecta sus paquetes y no lo cita: define si el contrato lo transfiere, lo mitiga o lo acepta."));
+			if (it.riskIds.some((i) => !f.risks.some((r) => r.id === i)) && f.risks.length) F("P8", "info", it.id, w + ": cita un riesgo que ya no está abierto en el Registro de Riesgos.");
+		});
+		const itemBy = new Map(d.items.map((i) => [i.id, i]));
+		d.items.forEach((it) => {
+			const mine = d.admin.payments.filter((p) => p.itemId === it.id), paid = mine.filter((p) => p.status === "pagado").reduce((s, p) => s + (p.amount || 0), 0), sched = mine.filter((p) => p.status !== "retenido").reduce((s, p) => s + (p.amount || 0), 0), w = it.code + (it.name.trim() ? " «" + it.name.trim() + "»" : "");
+			if (it.value !== null && it.value > 0 && paid > it.value + .5) F("P14", "riesgo", it.id, w + ": lo PAGADO (" + Math.round(paid).toLocaleString("es-PE") + ") supera el valor del contrato (" + Math.round(it.value).toLocaleString("es-PE") + "): un pago sin respaldo contractual o una orden de cambio sin registrar.");
+			else if (it.value !== null && it.value > 0 && sched > it.value + .5) F("P14", "aviso", it.id, w + ": lo pagado y programado (" + Math.round(sched).toLocaleString("es-PE") + ") supera el valor del contrato (" + Math.round(it.value).toLocaleString("es-PE") + ").");
+			if (mine.some((p) => p.status === "pagado") && STATUS_RANK[it.status] < STATUS_RANK.Contratada) F("P15", "aviso", it.id, w + ": tiene pagos realizados pero está «" + it.status + "»: no se paga lo que aún no se contrató.");
+		});
+		d.admin.payments.forEach((p) => {
+			const w = p.code + (itemBy.has(p.itemId) ? " (" + itemBy.get(p.itemId).code + ")" : "");
+			if (!itemBy.has(p.itemId)) F("P15", "aviso", null, w + ": no corresponde a ninguna adquisición del plan" + (p.itemId ? " (ya no existe)" : "") + ": un pago sin contrato no tiene a qué imputarse.");
+			if (p.status === "pagado" && (!iso$2(p.date) || p.amount === null)) F("P17", "info", p.itemId || null, w + ": pagado sin fecha o sin monto registrado.");
+		});
+		d.admin.claims.forEach((c) => {
+			const w = c.code + (itemBy.has(c.itemId) ? " (" + itemBy.get(c.itemId).code + ")" : "");
+			if (!itemBy.has(c.itemId)) F("P15", "aviso", null, w + ": no corresponde a ninguna adquisición del plan.");
+			const age = c.status === "abierto" ? daysBetween(c.date, d.asOf) : null;
+			if (age !== null && age > 30) F("P16", "aviso", c.itemId || null, w + ": reclamo ABIERTO hace " + age + " días (más de 30 a la fecha de corte " + d.asOf + "): sin resolverse puede volverse una controversia o un cambio de precio.");
+			if (c.status === "resuelto" && !iso$2(c.resolvedOn)) F("P17", "info", c.itemId || null, w + ": resuelto sin fecha de resolución.");
+		});
+		if (d.items.length && !d.strategy.trim()) F("P13", "info", null, "El plan no declara la estrategia de adquisiciones (qué se compra, qué se hace, cómo se contrata en general).");
+		if (d.items.length && !d.performance.trim()) F("P13", "info", null, "El plan no dice cómo se mide y se gestiona el desempeño de los proveedores (entregas, calidad, plazos).");
+		if (d.items.length && !d.approvals.trim()) F("P13", "info", null, "El plan no dice quién autoriza contratar y hasta qué monto.");
+		return out;
+	}
+	function adminSummary(d) {
+		const over = d.items.filter((it) => it.value !== null && it.value > 0 && d.admin.payments.filter((p) => p.itemId === it.id && p.status === "pagado").reduce((s, p) => s + (p.amount || 0), 0) > it.value + .5).length;
+		const open = d.admin.claims.filter((c) => c.status === "abierto");
+		return {
+			payments: d.admin.payments.length,
+			paid: d.admin.payments.filter((p) => p.status === "pagado").reduce((s, p) => s + (p.amount || 0), 0),
+			overpaid: over,
+			claimsOpen: open.length,
+			claimsStale: open.filter((c) => {
+				const a = daysBetween(c.date, d.asOf);
+				return a !== null && a > 30;
+			}).length
+		};
+	}
+	function procurementState(d, f) {
+		if (!d.items.length) return "vacio";
+		const fs = procurementFindings(d, f);
+		return fs.some((x) => x.severity === "riesgo") ? "rojo" : fs.some((x) => x.severity === "aviso") ? "ambar" : "verde";
+	}
+	//#endregion
+	//#region src/shared/quality-plan.ts
+	var COQ_CATS = [
+		"prevencion",
+		"evaluacion",
+		"falla_interna",
+		"falla_externa"
+	];
+	var COQ_LABEL = {
+		prevencion: "Prevención",
+		evaluacion: "Evaluación",
+		falla_interna: "Fallas internas",
+		falla_externa: "Fallas externas"
+	};
+	var INSPECTION_RESULTS = [
+		"conforme",
+		"observada",
+		"no_conforme"
+	];
+	var NCR_SEVERITIES = [
+		"menor",
+		"mayor",
+		"critica"
+	];
+	var NCR_STATUSES = [
+		"abierta",
+		"en_correccion",
+		"cerrada"
+	];
+	var NCR_STATUS_LABEL = {
+		abierta: "Abierta",
+		en_correccion: "En corrección",
+		cerrada: "Cerrada"
+	};
+	var str$4 = (v) => v === null || v === void 0 ? "" : String(v);
+	var strs$1 = (v) => Array.isArray(v) ? v.map(str$4).filter(Boolean) : [];
+	var numOrNull = (v) => {
+		if (v === null || v === void 0 || v === "") return null;
+		const n = Number(v);
+		return isFinite(n) ? n : null;
+	};
+	var rec$3 = (o) => o && typeof o === "object" ? o : {};
+	function normalizeMetric(o, fb) {
+		const x = rec$3(o), id = str$4(x.id) || fb;
+		return {
+			id,
+			code: str$4(x.code) || id,
+			name: str$4(x.name),
+			wbsIds: strs$1(x.wbsIds),
+			definition: str$4(x.definition),
+			target: str$4(x.target),
+			tolerance: str$4(x.tolerance),
+			method: str$4(x.method),
+			frequency: str$4(x.frequency),
+			owner: str$4(x.owner)
+		};
+	}
+	function normalizeCheck(o, fb) {
+		const x = rec$3(o), id = str$4(x.id) || fb;
+		return {
+			id,
+			code: str$4(x.code) || id,
+			wbsId: str$4(x.wbsId),
+			what: str$4(x.what),
+			criterion: str$4(x.criterion),
+			kind: str$4(x.kind),
+			method: str$4(x.method),
+			frequency: str$4(x.frequency),
+			owner: str$4(x.owner),
+			record: str$4(x.record),
+			metricId: str$4(x.metricId)
+		};
+	}
+	function normalizeCoq(o, fb) {
+		const x = rec$3(o);
+		return {
+			id: str$4(x.id) || fb,
+			cat: COQ_CATS.indexOf(x.cat) >= 0 ? x.cat : "prevencion",
+			description: str$4(x.description),
+			amount: numOrNull(x.amount)
+		};
+	}
+	function normalizeInspection(o, fb) {
+		const x = rec$3(o), id = str$4(x.id) || fb;
+		return {
+			id,
+			code: str$4(x.code) || id,
+			checkId: str$4(x.checkId),
+			date: str$4(x.date),
+			result: INSPECTION_RESULTS.indexOf(x.result) >= 0 ? x.result : "conforme",
+			inspector: str$4(x.inspector),
+			notes: str$4(x.notes),
+			ncrId: str$4(x.ncrId)
+		};
+	}
+	function normalizeNcr(o, fb) {
+		const x = rec$3(o), id = str$4(x.id) || fb;
+		return {
+			id,
+			code: str$4(x.code) || id,
+			wbsId: str$4(x.wbsId),
+			description: str$4(x.description),
+			severity: NCR_SEVERITIES.indexOf(x.severity) >= 0 ? x.severity : "menor",
+			detectedOn: str$4(x.detectedOn),
+			status: NCR_STATUSES.indexOf(x.status) >= 0 ? x.status : "abierta",
+			action: str$4(x.action),
+			owner: str$4(x.owner),
+			dueDate: str$4(x.dueDate),
+			closedOn: str$4(x.closedOn)
+		};
+	}
+	function normalizeQuality(raw) {
+		const x = rec$3(raw), metrics = (Array.isArray(x.metrics) ? x.metrics : []).map((o, i) => normalizeMetric(o, "qm" + (i + 1))), checks = (Array.isArray(x.checks) ? x.checks : []).map((o, i) => normalizeCheck(o, "qc" + (i + 1)));
+		const coq = (Array.isArray(x.coq) ? x.coq : []).map((o, i) => normalizeCoq(o, "cq" + (i + 1)));
+		const inspections = (Array.isArray(x.inspections) ? x.inspections : []).map((o, i) => normalizeInspection(o, "in" + (i + 1))), ncrs = (Array.isArray(x.ncrs) ? x.ncrs : []).map((o, i) => normalizeNcr(o, "nc" + (i + 1)));
+		return {
+			policy: str$4(x.policy),
+			standards: str$4(x.standards),
+			metrics,
+			checks,
+			coq,
+			idCounter: Number(x.idCounter) || metrics.length + checks.length + coq.length + inspections.length + ncrs.length + 1,
+			inspections,
+			ncrs,
+			asOf: /^\d{4}-\d{2}-\d{2}$/.test(str$4(x.asOf)) ? str$4(x.asOf) : ""
+		};
+	}
+	function coqSummary(coq, baseCost) {
+		const byCat = {
+			prevencion: 0,
+			evaluacion: 0,
+			falla_interna: 0,
+			falla_externa: 0
+		};
+		coq.forEach((c) => {
+			byCat[c.cat] += c.amount || 0;
+		});
+		const conformity = byCat.prevencion + byCat.evaluacion, nonConformity = byCat.falla_interna + byCat.falla_externa, total = conformity + nonConformity;
+		return {
+			byCat,
+			conformity,
+			nonConformity,
+			total,
+			pctOfBase: baseCost && baseCost > 0 ? total / baseCost * 100 : null,
+			failureShare: total > 0 ? nonConformity / total * 100 : null
+		};
+	}
+	function coverage$1(d, f) {
+		const hr = new Set(f.highRiskLeafIds);
+		return f.leaves.map((l) => ({
+			leaf: l,
+			checks: d.checks.filter((c) => c.wbsId === l.id),
+			needs: !l.loe && !!l.acceptance.trim(),
+			highRisk: hr.has(l.id)
+		}));
+	}
+	var isoOk$1 = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	var asOfOf$1 = (d, today) => isoOk$1(d.asOf) ? d.asOf : today;
+	function executionSummary(d, today0) {
+		const today = asOfOf$1(d, today0), open = d.ncrs.filter((n) => n.status !== "cerrada");
+		return {
+			inspections: d.inspections.length,
+			nonConforming: d.inspections.filter((i) => i.result === "no_conforme").length,
+			ncrs: d.ncrs.length,
+			ncrOpen: open.length,
+			ncrOverdue: isoOk$1(today) ? open.filter((n) => isoOk$1(n.dueDate) && n.dueDate < today).length : 0,
+			ncrCritical: open.filter((n) => n.severity === "critica").length
+		};
+	}
+	function qualityFindings(d, f, today0 = "") {
+		const today = asOfOf$1(d, today0), out = [], F = (code, severity, text) => {
+			out.push({
+				code,
+				severity,
+				text
+			});
+		};
+		const leafBy = new Map(f.leaves.map((l) => [l.id, l])), roles = new Set(f.roles.map((r) => r.toLowerCase()));
+		if (!(d.checks.length || d.metrics.length || d.coq.length || d.inspections.length || d.ncrs.length)) return out;
+		coverage$1(d, f).filter((r) => r.needs).filter((r) => !r.checks.length).forEach((r) => {
+			if (r.highRisk) F("Q2", "riesgo", "El paquete " + r.leaf.code + " «" + r.leaf.name + "» tiene un riesgo alto abierto y ninguna actividad de control o aseguramiento: nada verifica su criterio de aceptación.");
+			else F("Q1", "aviso", "El paquete " + r.leaf.code + " «" + r.leaf.name + "» tiene criterio de aceptación («" + r.leaf.acceptance.trim().slice(0, 70) + (r.leaf.acceptance.trim().length > 70 ? "…" : "") + "») pero ninguna actividad que lo verifique.");
+		});
+		d.checks.forEach((c) => {
+			const w = c.code + (c.what.trim() ? " «" + c.what.trim() + "»" : "");
+			if (!c.wbsId || !leafBy.has(c.wbsId)) F("Q8", "aviso", w + ": no apunta a un paquete de trabajo de la EDT" + (c.wbsId ? " (el paquete ya no existe)" : "") + ".");
+			if (!c.what.trim() || !c.criterion.trim() || !c.method || !c.frequency.trim() || !c.owner.trim()) F("Q4", "aviso", w + ": incompleta (falta qué se verifica, el criterio, el método, la frecuencia o el responsable).");
+			else if (roles.size && !roles.has(c.owner.trim().toLowerCase())) F("Q6", "info", w + ": el responsable «" + c.owner + "» no figura entre los puestos del OBS.");
+			if (!c.record.trim()) F("Q5", "info", w + ": no dice qué registro deja (informe de ensayo, protocolo, acta): sin registro no hay evidencia de conformidad.");
+			if (c.metricId && !d.metrics.some((m) => m.id === c.metricId)) F("Q8", "aviso", w + ": apunta a una métrica que ya no existe.");
+		});
+		d.metrics.forEach((m) => {
+			const w = m.code + (m.name.trim() ? " «" + m.name.trim() + "»" : "");
+			if (!m.name.trim() || !m.target.trim() || !m.method) F("Q7", "aviso", w + ": una métrica necesita nombre, objetivo medible y método de medición.");
+			if (!d.checks.some((c) => c.metricId === m.id)) F("Q7", "info", w + ": ninguna actividad de control la usa: no se está midiendo.");
+		});
+		if (d.checks.length && !d.checks.some((c) => c.kind === "Aseguramiento")) F("Q9", "info", "Todo el plan es control (detectar defectos): falta aseguramiento de la calidad (prevenir: revisiones de diseño, auditorías del proceso).");
+		if (d.checks.length && !d.policy.trim()) F("Q11", "info", "El plan no declara la política de calidad del proyecto.");
+		if (d.checks.length && !d.standards.trim()) F("Q11", "info", "El plan no lista las normas y especificaciones que definen la conformidad.");
+		const s = coqSummary(d.coq, f.baseCost);
+		if (d.checks.length && !d.coq.length) F("Q10", "aviso", "El plan de control y aseguramiento no tiene costo de la calidad: no se sabe cuánto cuesta prevenir y evaluar ni cuánto se reserva por fallas.");
+		if (d.coq.length && s.byCat.prevencion <= 0) F("Q10", "aviso", "El costo de la calidad no invierte nada en prevención: es lo que más barato evita fallas (evaluar solo detecta el defecto ya hecho).");
+		if (d.coq.length && s.failureShare !== null && s.failureShare > 50) F("Q10", "aviso", "Más de la mitad del costo de la calidad (" + Math.round(s.failureShare) + " %) es por fallas: el plan gasta más en corregir que en prevenir y evaluar.");
+		if (d.coq.some((c) => c.amount === null)) F("Q10", "info", "Hay partidas del costo de la calidad sin monto.");
+		const checkBy = new Map(d.checks.map((c) => [c.id, c])), ncrBy = new Map(d.ncrs.map((n) => [n.id, n]));
+		d.inspections.forEach((i) => {
+			const w = i.code + (checkBy.has(i.checkId) ? " (" + checkBy.get(i.checkId).code + ")" : "");
+			if (!checkBy.has(i.checkId)) F("Q15", "aviso", w + ": no corresponde a ningún control del plan" + (i.checkId ? " (el control ya no existe)" : "") + ": una inspección sin control planificado no tiene criterio de aceptación contra el cual juzgarla.");
+			if (i.result === "no_conforme" && !(i.ncrId && ncrBy.has(i.ncrId))) F("Q13", "aviso", w + ": resultado NO CONFORME sin una no conformidad registrada: el defecto se detectó pero nadie está obligado a corregirlo.");
+			if (!isoOk$1(i.date)) F("Q15", "info", w + ": sin fecha de inspección.");
+		});
+		d.ncrs.forEach((n) => {
+			const w = n.code + (n.description.trim() ? " «" + n.description.trim().slice(0, 60) + (n.description.trim().length > 60 ? "…" : "") + "»" : ""), open = n.status !== "cerrada";
+			if (open && n.severity === "critica") F("Q12", "riesgo", w + ": no conformidad CRÍTICA sin cerrar: puede comprometer la aceptación del entregable (y la seguridad o el cumplimiento normativo).");
+			if (open && isoOk$1(today) && isoOk$1(n.dueDate) && n.dueDate < today) F("Q12", n.severity === "menor" ? "info" : "aviso", w + ": la corrección vencía el " + n.dueDate + " y sigue " + NCR_STATUS_LABEL[n.status].toLowerCase() + ".");
+			if (open && (!n.action.trim() || !n.owner.trim() || !isoOk$1(n.dueDate))) F("Q14", "aviso", w + ": abierta sin acción correctiva, responsable o fecha límite: nadie sabe qué hacer ni para cuándo.");
+			if (!open && (!n.action.trim() || !isoOk$1(n.closedOn))) F("Q14", "info", w + ": cerrada sin registrar la acción correctiva o la fecha de cierre (no queda evidencia de cómo se resolvió).");
+			if (!n.wbsId || !leafBy.has(n.wbsId)) F("Q15", "info", w + ": no apunta a un paquete de trabajo de la EDT.");
+		});
+		return out;
+	}
+	function qualityState(d, f, today = "") {
+		if (!(d.checks.length || d.metrics.length || d.coq.length || d.inspections.length || d.ncrs.length)) return "vacio";
+		const fs = qualityFindings(d, f, today);
+		return fs.some((x) => x.severity === "riesgo") ? "rojo" : fs.some((x) => x.severity === "aviso") ? "ambar" : "verde";
+	}
+	//#endregion
 	//#region src/shared/plan-facts.ts
-	var rec$4 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+	var rec$2 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
 	var num$1 = (v) => {
 		const n = Number(v);
 		return isFinite(n) ? n : 0;
 	};
 	function gatherCommFacts(G) {
 		return {
-			stakeholders: (Array.isArray(rec$4(G.getModule("stakeholders")).stakeholders) ? rec$4(G.getModule("stakeholders")).stakeholders.map(rec$4) : []).map((s) => ({
+			stakeholders: (Array.isArray(rec$2(G.getModule("stakeholders")).stakeholders) ? rec$2(G.getModule("stakeholders")).stakeholders.map(rec$2) : []).map((s) => ({
 				id: String(s.id),
 				name: String(s.name || s.id),
 				quadrant: quadrantOf(num$1(s.power), num$1(s.interest)),
@@ -1494,10 +1947,10 @@
 	}
 	var rolesOf = (G) => Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)));
 	function gatherQualityFacts(G) {
-		const wbs = G.util.effectiveWbs(), nodes = rec$4(wbs && wbs.nodes);
+		const wbs = G.util.effectiveWbs(), nodes = rec$2(wbs && wbs.nodes);
 		return {
 			leaves: G.util.wbsLeaves(wbs).map((l) => {
-				const n = rec$4(nodes[l.id]);
+				const n = rec$2(nodes[l.id]);
 				return {
 					id: l.id,
 					code: l.code,
@@ -1513,26 +1966,26 @@
 		};
 	}
 	function gatherProcurementFacts(G) {
-		const wbs = G.util.effectiveWbs(), nodes = rec$4(wbs && wbs.nodes), obs = G.util.obsNodes(G.getModule("obs")), sk = rec$4(G.getModule("stakeholders")).stakeholders;
+		const wbs = G.util.effectiveWbs(), nodes = rec$2(wbs && wbs.nodes), obs = G.util.obsNodes(G.getModule("obs")), sk = rec$2(G.getModule("stakeholders")).stakeholders;
 		const cost = G.getModule("cost"), cl = Number(String(cost && cost.estimate && cost.estimate.class).replace(/\D/g, ""));
 		return {
 			leaves: G.util.wbsLeaves(wbs).map((l) => ({
 				id: l.id,
 				code: l.code,
 				name: l.name,
-				cost: Number(rec$4(nodes[l.id]).cost) || 0
+				cost: Number(rec$2(nodes[l.id]).cost) || 0
 			})),
 			roles: rolesOf(G),
 			risks: openRisks(G),
-			suppliers: Array.from(new Set(obs.map((n) => (n.person || "").trim()).concat((Array.isArray(sk) ? sk : []).map((s) => String(rec$4(s).org || "").trim())).filter(Boolean))),
+			suppliers: Array.from(new Set(obs.map((n) => (n.person || "").trim()).concat((Array.isArray(sk) ? sk : []).map((s) => String(rec$2(s).org || "").trim())).filter(Boolean))),
 			estimateClass: cl >= 1 && cl <= 5 ? cl : null,
 			baseCost: baseCostOf(G)
 		};
 	}
 	//#endregion
 	//#region src/shared/milestone-check.ts
-	var str$5 = (v) => v === null || v === void 0 ? "" : String(v);
-	var iso$2 = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	var str$3 = (v) => v === null || v === void 0 ? "" : String(v);
+	var iso$1 = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 	var dayDiff = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
 	var DATED_CONSTRAINTS = [
 		"FNLT",
@@ -1548,8 +2001,8 @@
 			const n = wbs.nodes[id];
 			if (!n || seen.has(id)) return "";
 			seen.add(id);
-			const kids = Array.isArray(n.children) ? n.children.map(str$5).filter((c) => !!wbs.nodes[c]) : [];
-			let end = kids.length ? "" : iso$2(str$5(n.end)) ? str$5(n.end) : "";
+			const kids = Array.isArray(n.children) ? n.children.map(str$3).filter((c) => !!wbs.nodes[c]) : [];
+			let end = kids.length ? "" : iso$1(str$3(n.end)) ? str$3(n.end) : "";
 			kids.forEach((c, i) => {
 				const e = walk(c, (code ? code + "." : "") + (i + 1));
 				if (e && (!end || e > end)) end = e;
@@ -1560,11 +2013,11 @@
 		walk(wbs.rootId, "");
 		return out;
 	}
-	var splitCodes = (s) => str$5(s).split(/[,;\s]+/).map((c) => c.trim()).filter(Boolean);
+	var splitCodes = (s) => str$3(s).split(/[,;\s]+/).map((c) => c.trim()).filter(Boolean);
 	function checkMilestones(milestones, wbs) {
 		const ends = endsByCode(wbs);
 		return (Array.isArray(milestones) ? milestones : []).map((raw) => {
-			const m = raw && typeof raw === "object" ? raw : {}, name = str$5(m.name).trim(), date = str$5(m.date), constraint = str$5(m.constraint).toUpperCase(), codes = splitCodes(str$5(m.wbsCode));
+			const m = raw && typeof raw === "object" ? raw : {}, name = str$3(m.name).trim(), date = str$3(m.date), constraint = str$3(m.constraint).toUpperCase(), codes = splitCodes(str$3(m.wbsCode));
 			const base = {
 				name,
 				date,
@@ -1578,7 +2031,7 @@
 				status: "no-aplica",
 				text: "La restricción " + (constraint || "—") + " no fija una fecha que comparar con el CPM."
 			};
-			if (!iso$2(date)) return {
+			if (!iso$1(date)) return {
 				...base,
 				status: "no-aplica",
 				text: "El hito no tiene fecha."
@@ -1877,9 +2330,9 @@
 		rojo: "Con riesgos"
 	};
 	var pctState = (has, pct) => !has ? "vacio" : pct >= 100 ? "verde" : pct >= 50 ? "ambar" : "rojo";
-	var iso$1 = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	var iso = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 	var days = (a, b) => {
-		if (!iso$1(a) || !iso$1(b)) return null;
+		if (!iso(a) || !iso(b)) return null;
 		return Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
 	};
 	var money$1 = (n) => Math.round(n).toLocaleString("es-PE");
@@ -2119,20 +2572,20 @@
 	}
 	//#endregion
 	//#region src/shared/scope-baseline.ts
-	var str$4 = (v) => v === null || v === void 0 ? "" : String(v);
-	var rec$3 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+	var str$2 = (v) => v === null || v === void 0 ? "" : String(v);
+	var rec$1 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
 	function wbsScopeOf(wbs) {
-		const w = rec$3(wbs), nodes = rec$3(w.nodes), rootId = str$4(w.rootId);
+		const w = rec$1(wbs), nodes = rec$1(w.nodes), rootId = str$2(w.rootId);
 		if (!rootId || !nodes[rootId]) return null;
 		const out = {};
 		Object.keys(nodes).forEach((id) => {
-			const n = rec$3(nodes[id]);
+			const n = rec$1(nodes[id]);
 			out[id] = {
-				name: str$4(n.name),
-				children: (Array.isArray(n.children) ? n.children : []).map(str$4),
-				delId: str$4(n.delId),
-				notes: str$4(n.notes),
-				acceptance: str$4(n.acceptance),
+				name: str$2(n.name),
+				children: (Array.isArray(n.children) ? n.children : []).map(str$2),
+				delId: str$2(n.delId),
+				notes: str$2(n.notes),
+				acceptance: str$2(n.acceptance),
 				loe: !!n.loe
 			};
 		});
@@ -2228,22 +2681,22 @@
 		return s;
 	}
 	function normalizeScopeBaseline(o) {
-		const x = rec$3(o);
+		const x = rec$1(o);
 		return {
 			frozen: !!x.frozen,
-			version: str$4(x.version) || "1.0",
-			date: str$4(x.date),
-			approver: str$4(x.approver),
-			reason: str$4(x.reason),
+			version: str$2(x.version) || "1.0",
+			date: str$2(x.date),
+			approver: str$2(x.approver),
+			reason: str$2(x.reason),
 			snapshot: snapOf(x.snapshot),
 			history: (Array.isArray(x.history) ? x.history : []).filter((h) => h && typeof h === "object").map((h) => {
-				const q = rec$3(h);
+				const q = rec$1(h);
 				return {
-					version: str$4(q.version),
-					date: str$4(q.date),
-					approver: str$4(q.approver),
-					reason: str$4(q.reason),
-					supersededOn: str$4(q.supersededOn),
+					version: str$2(q.version),
+					date: str$2(q.date),
+					approver: str$2(q.approver),
+					reason: str$2(q.reason),
+					supersededOn: str$2(q.supersededOn),
 					snapshot: snapOf(q.snapshot)
 				};
 			})
@@ -2291,56 +2744,56 @@
 		reprogramada: "Reprogramada",
 		omitida: "Omitida"
 	};
-	var str$3 = (v) => v === null || v === void 0 ? "" : String(v);
-	var strs$2 = (v) => Array.isArray(v) ? v.map(str$3).filter(Boolean) : [];
-	function normalizeItem$1(o, fallbackId) {
-		const x = o && typeof o === "object" ? o : {}, id = str$3(x.id) || fallbackId;
+	var str$1 = (v) => v === null || v === void 0 ? "" : String(v);
+	var strs = (v) => Array.isArray(v) ? v.map(str$1).filter(Boolean) : [];
+	function normalizeItem(o, fallbackId) {
+		const x = o && typeof o === "object" ? o : {}, id = str$1(x.id) || fallbackId;
 		return {
 			id,
-			code: str$3(x.code) || id,
-			info: str$3(x.info),
-			purpose: str$3(x.purpose),
-			stkIds: strs$2(x.stkIds),
-			audience: str$3(x.audience),
-			sender: str$3(x.sender),
-			frequency: str$3(x.frequency),
-			method: str$3(x.method),
-			channel: str$3(x.channel),
-			storage: str$3(x.storage),
-			notes: str$3(x.notes)
+			code: str$1(x.code) || id,
+			info: str$1(x.info),
+			purpose: str$1(x.purpose),
+			stkIds: strs(x.stkIds),
+			audience: str$1(x.audience),
+			sender: str$1(x.sender),
+			frequency: str$1(x.frequency),
+			method: str$1(x.method),
+			channel: str$1(x.channel),
+			storage: str$1(x.storage),
+			notes: str$1(x.notes)
 		};
 	}
 	function normalizeLog(o, fallbackId) {
-		const x = o && typeof o === "object" ? o : {}, id = str$3(x.id) || fallbackId;
+		const x = o && typeof o === "object" ? o : {}, id = str$1(x.id) || fallbackId;
 		return {
 			id,
-			code: str$3(x.code) || id,
-			itemId: str$3(x.itemId),
-			date: str$3(x.date),
+			code: str$1(x.code) || id,
+			itemId: str$1(x.itemId),
+			date: str$1(x.date),
 			status: LOG_STATUSES.indexOf(x.status) >= 0 ? x.status : "emitida",
-			by: str$3(x.by),
-			summary: str$3(x.summary),
-			evidence: str$3(x.evidence)
+			by: str$1(x.by),
+			summary: str$1(x.summary),
+			evidence: str$1(x.evidence)
 		};
 	}
 	function normalizeComms(raw) {
 		const x = raw && typeof raw === "object" ? raw : {}, p = x.plan && typeof x.plan === "object" ? x.plan : {};
-		const items = (Array.isArray(x.items) ? x.items : []).map((o, i) => normalizeItem$1(o, "cm" + (i + 1)));
+		const items = (Array.isArray(x.items) ? x.items : []).map((o, i) => normalizeItem(o, "cm" + (i + 1)));
 		const log = (Array.isArray(x.log) ? x.log : []).map((o, i) => normalizeLog(o, "lg" + (i + 1)));
 		return {
 			items,
 			plan: {
-				escalation: str$3(p.escalation),
-				restrictions: str$3(p.restrictions),
-				review: str$3(p.review)
+				escalation: str$1(p.escalation),
+				restrictions: str$1(p.restrictions),
+				review: str$1(p.review)
 			},
 			idCounter: Number(x.idCounter) || items.length + log.length + 1,
 			log,
-			asOf: /^\d{4}-\d{2}-\d{2}$/.test(str$3(x.asOf)) ? str$3(x.asOf) : ""
+			asOf: /^\d{4}-\d{2}-\d{2}$/.test(str$1(x.asOf)) ? str$1(x.asOf) : ""
 		};
 	}
-	var isoOk$1 = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
-	var asOfOf$1 = (d, today) => isoOk$1(d.asOf) ? d.asOf : today;
+	var isoOk = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	var asOfOf = (d, today) => isoOk(d.asOf) ? d.asOf : today;
 	var dayGap = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
 	var PERIOD_DAYS = {
 		Diaria: 1,
@@ -2348,7 +2801,7 @@
 		Quincenal: 15,
 		Mensual: 30
 	};
-	function coverage$1(items, f) {
+	function coverage(items, f) {
 		return f.stakeholders.map((s) => ({
 			stk: s,
 			items: items.filter((c) => c.stkIds.indexOf(s.id) >= 0),
@@ -2356,7 +2809,7 @@
 		}));
 	}
 	function commFindings(d, f, today0 = "") {
-		const today = asOfOf$1(d, today0), out = [], F = (code, severity, itemId, text) => {
+		const today = asOfOf(d, today0), out = [], F = (code, severity, itemId, text) => {
 			out.push({
 				code,
 				severity,
@@ -2375,7 +2828,7 @@
 			if (!c.frequency || !c.method) F("M8", "aviso", c.id, w + ": falta la frecuencia o el medio.");
 			if (!c.storage.trim()) F("M9", "info", c.id, w + ": no dice dónde queda el registro (acta, informe archivado): sin registro no hay evidencia de que se comunicó.");
 		});
-		coverage$1(d.items, f).forEach((r) => {
+		coverage(d.items, f).forEach((r) => {
 			const s = r.stk;
 			if (!r.items.length) {
 				if (s.quadrant === "cerca") F("M1", "riesgo", null, "«" + s.name + "» es un interesado a gestionar de cerca y no recibe ninguna comunicación planificada.");
@@ -2386,19 +2839,19 @@
 		});
 		if (d.items.length && !d.plan.escalation.trim()) F("M11", "aviso", null, "El plan no define la ruta de escalamiento de los asuntos de comunicación (a quién y en cuánto tiempo).");
 		if (d.items.length && !d.plan.review.trim()) F("M12", "info", null, "El plan no dice cómo ni cuándo se revisa y actualiza la matriz (p. ej. tras cada cambio de interesados).");
-		const itemBy = new Map(d.items.map((c) => [c.id, c])), emitted = d.log.filter((l) => l.status === "emitida" && isoOk$1(l.date));
+		const itemBy = new Map(d.items.map((c) => [c.id, c])), emitted = d.log.filter((l) => l.status === "emitida" && isoOk(l.date));
 		d.log.forEach((l) => {
 			const w = l.code + (itemBy.has(l.itemId) ? " (" + itemBy.get(l.itemId).code + ")" : "");
 			if (!itemBy.has(l.itemId)) F("M13", "aviso", null, w + ": no corresponde a ninguna comunicación de la matriz" + (l.itemId ? " (ya no existe)" : "") + ": lo que se comunica sin estar planificado no tiene destinatarios ni propósito acordados.");
 			if (l.status !== "emitida" && !l.summary.trim()) F("M14", "aviso", null, w + ": está " + LOG_STATUS_LABEL[l.status].toLowerCase() + " y no dice por qué: una comunicación que no se hizo necesita su motivo y, si se reprograma, su nueva fecha.");
-			if (l.status === "emitida" && (!isoOk$1(l.date) || !l.evidence.trim())) F("M14", "info", null, w + ": emitida sin " + (!isoOk$1(l.date) ? "fecha" : "evidencia") + " registrada: sin evidencia no se puede demostrar que se comunicó.");
+			if (l.status === "emitida" && (!isoOk(l.date) || !l.evidence.trim())) F("M14", "info", null, w + ": emitida sin " + (!isoOk(l.date) ? "fecha" : "evidencia") + " registrada: sin evidencia no se puede demostrar que se comunicó.");
 		});
-		if (isoOk$1(today) && d.log.length) {
+		if (isoOk(today) && d.log.length) {
 			d.items.filter((c) => PERIOD_DAYS[c.frequency] !== void 0).forEach((c) => {
 				const mine = emitted.filter((l) => l.itemId === c.id).map((l) => l.date).sort(), last = mine.length ? mine[mine.length - 1] : "", limit = PERIOD_DAYS[c.frequency] * 2;
 				if (!last || dayGap(last, today) > limit) F("M16", "aviso", c.id, c.code + " «" + c.info.trim().slice(0, 50) + "»: es " + c.frequency.toLowerCase() + " y " + (last ? "la última emitida fue el " + last + " (hace " + dayGap(last, today) + " días)" : "no hay ninguna emitida") + " a la fecha de corte " + today + ": el plan promete un ritmo que la ejecución no cumple.");
 			});
-			coverage$1(d.items, f).forEach((r) => {
+			coverage(d.items, f).forEach((r) => {
 				if (r.stk.quadrant !== "cerca") return;
 				const ids = new Set(r.items.map((c) => c.id)), mine = emitted.filter((l) => ids.has(l.itemId)).map((l) => l.date).sort(), last = mine.length ? mine[mine.length - 1] : "";
 				if (!last || dayGap(last, today) > 45) F("M15", "aviso", null, "«" + r.stk.name + "» es un interesado a gestionar de cerca y " + (last ? "su última comunicación emitida fue el " + last + " (hace " + dayGap(last, today) + " días)" : "no se le ha emitido ninguna comunicación") + ": supera los 45 días de silencio.");
@@ -2409,459 +2862,6 @@
 	function commState(d, f, today = "") {
 		if (!d.items.length) return "vacio";
 		const fs = commFindings(d, f, today);
-		return fs.some((x) => x.severity === "riesgo") ? "rojo" : fs.some((x) => x.severity === "aviso") ? "ambar" : "verde";
-	}
-	//#endregion
-	//#region src/shared/quality-plan.ts
-	var COQ_CATS = [
-		"prevencion",
-		"evaluacion",
-		"falla_interna",
-		"falla_externa"
-	];
-	var COQ_LABEL = {
-		prevencion: "Prevención",
-		evaluacion: "Evaluación",
-		falla_interna: "Fallas internas",
-		falla_externa: "Fallas externas"
-	};
-	var INSPECTION_RESULTS = [
-		"conforme",
-		"observada",
-		"no_conforme"
-	];
-	var NCR_SEVERITIES = [
-		"menor",
-		"mayor",
-		"critica"
-	];
-	var NCR_STATUSES = [
-		"abierta",
-		"en_correccion",
-		"cerrada"
-	];
-	var NCR_STATUS_LABEL = {
-		abierta: "Abierta",
-		en_correccion: "En corrección",
-		cerrada: "Cerrada"
-	};
-	var str$2 = (v) => v === null || v === void 0 ? "" : String(v);
-	var strs$1 = (v) => Array.isArray(v) ? v.map(str$2).filter(Boolean) : [];
-	var numOrNull$1 = (v) => {
-		if (v === null || v === void 0 || v === "") return null;
-		const n = Number(v);
-		return isFinite(n) ? n : null;
-	};
-	var rec$2 = (o) => o && typeof o === "object" ? o : {};
-	function normalizeMetric(o, fb) {
-		const x = rec$2(o), id = str$2(x.id) || fb;
-		return {
-			id,
-			code: str$2(x.code) || id,
-			name: str$2(x.name),
-			wbsIds: strs$1(x.wbsIds),
-			definition: str$2(x.definition),
-			target: str$2(x.target),
-			tolerance: str$2(x.tolerance),
-			method: str$2(x.method),
-			frequency: str$2(x.frequency),
-			owner: str$2(x.owner)
-		};
-	}
-	function normalizeCheck(o, fb) {
-		const x = rec$2(o), id = str$2(x.id) || fb;
-		return {
-			id,
-			code: str$2(x.code) || id,
-			wbsId: str$2(x.wbsId),
-			what: str$2(x.what),
-			criterion: str$2(x.criterion),
-			kind: str$2(x.kind),
-			method: str$2(x.method),
-			frequency: str$2(x.frequency),
-			owner: str$2(x.owner),
-			record: str$2(x.record),
-			metricId: str$2(x.metricId)
-		};
-	}
-	function normalizeCoq(o, fb) {
-		const x = rec$2(o);
-		return {
-			id: str$2(x.id) || fb,
-			cat: COQ_CATS.indexOf(x.cat) >= 0 ? x.cat : "prevencion",
-			description: str$2(x.description),
-			amount: numOrNull$1(x.amount)
-		};
-	}
-	function normalizeInspection(o, fb) {
-		const x = rec$2(o), id = str$2(x.id) || fb;
-		return {
-			id,
-			code: str$2(x.code) || id,
-			checkId: str$2(x.checkId),
-			date: str$2(x.date),
-			result: INSPECTION_RESULTS.indexOf(x.result) >= 0 ? x.result : "conforme",
-			inspector: str$2(x.inspector),
-			notes: str$2(x.notes),
-			ncrId: str$2(x.ncrId)
-		};
-	}
-	function normalizeNcr(o, fb) {
-		const x = rec$2(o), id = str$2(x.id) || fb;
-		return {
-			id,
-			code: str$2(x.code) || id,
-			wbsId: str$2(x.wbsId),
-			description: str$2(x.description),
-			severity: NCR_SEVERITIES.indexOf(x.severity) >= 0 ? x.severity : "menor",
-			detectedOn: str$2(x.detectedOn),
-			status: NCR_STATUSES.indexOf(x.status) >= 0 ? x.status : "abierta",
-			action: str$2(x.action),
-			owner: str$2(x.owner),
-			dueDate: str$2(x.dueDate),
-			closedOn: str$2(x.closedOn)
-		};
-	}
-	function normalizeQuality(raw) {
-		const x = rec$2(raw), metrics = (Array.isArray(x.metrics) ? x.metrics : []).map((o, i) => normalizeMetric(o, "qm" + (i + 1))), checks = (Array.isArray(x.checks) ? x.checks : []).map((o, i) => normalizeCheck(o, "qc" + (i + 1)));
-		const coq = (Array.isArray(x.coq) ? x.coq : []).map((o, i) => normalizeCoq(o, "cq" + (i + 1)));
-		const inspections = (Array.isArray(x.inspections) ? x.inspections : []).map((o, i) => normalizeInspection(o, "in" + (i + 1))), ncrs = (Array.isArray(x.ncrs) ? x.ncrs : []).map((o, i) => normalizeNcr(o, "nc" + (i + 1)));
-		return {
-			policy: str$2(x.policy),
-			standards: str$2(x.standards),
-			metrics,
-			checks,
-			coq,
-			idCounter: Number(x.idCounter) || metrics.length + checks.length + coq.length + inspections.length + ncrs.length + 1,
-			inspections,
-			ncrs,
-			asOf: /^\d{4}-\d{2}-\d{2}$/.test(str$2(x.asOf)) ? str$2(x.asOf) : ""
-		};
-	}
-	function coqSummary(coq, baseCost) {
-		const byCat = {
-			prevencion: 0,
-			evaluacion: 0,
-			falla_interna: 0,
-			falla_externa: 0
-		};
-		coq.forEach((c) => {
-			byCat[c.cat] += c.amount || 0;
-		});
-		const conformity = byCat.prevencion + byCat.evaluacion, nonConformity = byCat.falla_interna + byCat.falla_externa, total = conformity + nonConformity;
-		return {
-			byCat,
-			conformity,
-			nonConformity,
-			total,
-			pctOfBase: baseCost && baseCost > 0 ? total / baseCost * 100 : null,
-			failureShare: total > 0 ? nonConformity / total * 100 : null
-		};
-	}
-	function coverage(d, f) {
-		const hr = new Set(f.highRiskLeafIds);
-		return f.leaves.map((l) => ({
-			leaf: l,
-			checks: d.checks.filter((c) => c.wbsId === l.id),
-			needs: !l.loe && !!l.acceptance.trim(),
-			highRisk: hr.has(l.id)
-		}));
-	}
-	var isoOk = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
-	var asOfOf = (d, today) => isoOk(d.asOf) ? d.asOf : today;
-	function executionSummary(d, today0) {
-		const today = asOfOf(d, today0), open = d.ncrs.filter((n) => n.status !== "cerrada");
-		return {
-			inspections: d.inspections.length,
-			nonConforming: d.inspections.filter((i) => i.result === "no_conforme").length,
-			ncrs: d.ncrs.length,
-			ncrOpen: open.length,
-			ncrOverdue: isoOk(today) ? open.filter((n) => isoOk(n.dueDate) && n.dueDate < today).length : 0,
-			ncrCritical: open.filter((n) => n.severity === "critica").length
-		};
-	}
-	function qualityFindings(d, f, today0 = "") {
-		const today = asOfOf(d, today0), out = [], F = (code, severity, text) => {
-			out.push({
-				code,
-				severity,
-				text
-			});
-		};
-		const leafBy = new Map(f.leaves.map((l) => [l.id, l])), roles = new Set(f.roles.map((r) => r.toLowerCase()));
-		if (!(d.checks.length || d.metrics.length || d.coq.length || d.inspections.length || d.ncrs.length)) return out;
-		coverage(d, f).filter((r) => r.needs).filter((r) => !r.checks.length).forEach((r) => {
-			if (r.highRisk) F("Q2", "riesgo", "El paquete " + r.leaf.code + " «" + r.leaf.name + "» tiene un riesgo alto abierto y ninguna actividad de control o aseguramiento: nada verifica su criterio de aceptación.");
-			else F("Q1", "aviso", "El paquete " + r.leaf.code + " «" + r.leaf.name + "» tiene criterio de aceptación («" + r.leaf.acceptance.trim().slice(0, 70) + (r.leaf.acceptance.trim().length > 70 ? "…" : "") + "») pero ninguna actividad que lo verifique.");
-		});
-		d.checks.forEach((c) => {
-			const w = c.code + (c.what.trim() ? " «" + c.what.trim() + "»" : "");
-			if (!c.wbsId || !leafBy.has(c.wbsId)) F("Q8", "aviso", w + ": no apunta a un paquete de trabajo de la EDT" + (c.wbsId ? " (el paquete ya no existe)" : "") + ".");
-			if (!c.what.trim() || !c.criterion.trim() || !c.method || !c.frequency.trim() || !c.owner.trim()) F("Q4", "aviso", w + ": incompleta (falta qué se verifica, el criterio, el método, la frecuencia o el responsable).");
-			else if (roles.size && !roles.has(c.owner.trim().toLowerCase())) F("Q6", "info", w + ": el responsable «" + c.owner + "» no figura entre los puestos del OBS.");
-			if (!c.record.trim()) F("Q5", "info", w + ": no dice qué registro deja (informe de ensayo, protocolo, acta): sin registro no hay evidencia de conformidad.");
-			if (c.metricId && !d.metrics.some((m) => m.id === c.metricId)) F("Q8", "aviso", w + ": apunta a una métrica que ya no existe.");
-		});
-		d.metrics.forEach((m) => {
-			const w = m.code + (m.name.trim() ? " «" + m.name.trim() + "»" : "");
-			if (!m.name.trim() || !m.target.trim() || !m.method) F("Q7", "aviso", w + ": una métrica necesita nombre, objetivo medible y método de medición.");
-			if (!d.checks.some((c) => c.metricId === m.id)) F("Q7", "info", w + ": ninguna actividad de control la usa: no se está midiendo.");
-		});
-		if (d.checks.length && !d.checks.some((c) => c.kind === "Aseguramiento")) F("Q9", "info", "Todo el plan es control (detectar defectos): falta aseguramiento de la calidad (prevenir: revisiones de diseño, auditorías del proceso).");
-		if (d.checks.length && !d.policy.trim()) F("Q11", "info", "El plan no declara la política de calidad del proyecto.");
-		if (d.checks.length && !d.standards.trim()) F("Q11", "info", "El plan no lista las normas y especificaciones que definen la conformidad.");
-		const s = coqSummary(d.coq, f.baseCost);
-		if (d.checks.length && !d.coq.length) F("Q10", "aviso", "El plan de control y aseguramiento no tiene costo de la calidad: no se sabe cuánto cuesta prevenir y evaluar ni cuánto se reserva por fallas.");
-		if (d.coq.length && s.byCat.prevencion <= 0) F("Q10", "aviso", "El costo de la calidad no invierte nada en prevención: es lo que más barato evita fallas (evaluar solo detecta el defecto ya hecho).");
-		if (d.coq.length && s.failureShare !== null && s.failureShare > 50) F("Q10", "aviso", "Más de la mitad del costo de la calidad (" + Math.round(s.failureShare) + " %) es por fallas: el plan gasta más en corregir que en prevenir y evaluar.");
-		if (d.coq.some((c) => c.amount === null)) F("Q10", "info", "Hay partidas del costo de la calidad sin monto.");
-		const checkBy = new Map(d.checks.map((c) => [c.id, c])), ncrBy = new Map(d.ncrs.map((n) => [n.id, n]));
-		d.inspections.forEach((i) => {
-			const w = i.code + (checkBy.has(i.checkId) ? " (" + checkBy.get(i.checkId).code + ")" : "");
-			if (!checkBy.has(i.checkId)) F("Q15", "aviso", w + ": no corresponde a ningún control del plan" + (i.checkId ? " (el control ya no existe)" : "") + ": una inspección sin control planificado no tiene criterio de aceptación contra el cual juzgarla.");
-			if (i.result === "no_conforme" && !(i.ncrId && ncrBy.has(i.ncrId))) F("Q13", "aviso", w + ": resultado NO CONFORME sin una no conformidad registrada: el defecto se detectó pero nadie está obligado a corregirlo.");
-			if (!isoOk(i.date)) F("Q15", "info", w + ": sin fecha de inspección.");
-		});
-		d.ncrs.forEach((n) => {
-			const w = n.code + (n.description.trim() ? " «" + n.description.trim().slice(0, 60) + (n.description.trim().length > 60 ? "…" : "") + "»" : ""), open = n.status !== "cerrada";
-			if (open && n.severity === "critica") F("Q12", "riesgo", w + ": no conformidad CRÍTICA sin cerrar: puede comprometer la aceptación del entregable (y la seguridad o el cumplimiento normativo).");
-			if (open && isoOk(today) && isoOk(n.dueDate) && n.dueDate < today) F("Q12", n.severity === "menor" ? "info" : "aviso", w + ": la corrección vencía el " + n.dueDate + " y sigue " + NCR_STATUS_LABEL[n.status].toLowerCase() + ".");
-			if (open && (!n.action.trim() || !n.owner.trim() || !isoOk(n.dueDate))) F("Q14", "aviso", w + ": abierta sin acción correctiva, responsable o fecha límite: nadie sabe qué hacer ni para cuándo.");
-			if (!open && (!n.action.trim() || !isoOk(n.closedOn))) F("Q14", "info", w + ": cerrada sin registrar la acción correctiva o la fecha de cierre (no queda evidencia de cómo se resolvió).");
-			if (!n.wbsId || !leafBy.has(n.wbsId)) F("Q15", "info", w + ": no apunta a un paquete de trabajo de la EDT.");
-		});
-		return out;
-	}
-	function qualityState(d, f, today = "") {
-		if (!(d.checks.length || d.metrics.length || d.coq.length || d.inspections.length || d.ncrs.length)) return "vacio";
-		const fs = qualityFindings(d, f, today);
-		return fs.some((x) => x.severity === "riesgo") ? "rojo" : fs.some((x) => x.severity === "aviso") ? "ambar" : "verde";
-	}
-	//#endregion
-	//#region src/shared/procurement-plan.ts
-	var STATUSES = [
-		"Planificada",
-		"Convocada",
-		"Adjudicada",
-		"Contratada",
-		"Entregada"
-	];
-	var STATUS_RANK = {
-		Planificada: 0,
-		Convocada: 1,
-		Adjudicada: 2,
-		Contratada: 3,
-		Entregada: 4
-	};
-	var FIXED_PRICE = ["Precio fijo (FFP)", "Precio fijo con ajuste económico (FPEPA)"];
-	var PAY_STATUSES = [
-		"programado",
-		"pagado",
-		"retenido"
-	];
-	var CLAIM_STATUSES = [
-		"abierto",
-		"resuelto",
-		"rechazado"
-	];
-	var str$1 = (v) => v === null || v === void 0 ? "" : String(v);
-	var strs = (v) => Array.isArray(v) ? v.map(str$1).filter(Boolean) : [];
-	var numOrNull = (v) => {
-		if (v === null || v === void 0 || v === "") return null;
-		const n = Number(v);
-		return isFinite(n) ? n : null;
-	};
-	var rec$1 = (o) => o && typeof o === "object" ? o : {};
-	var iso = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
-	function normalizeItem(o, fb) {
-		const x = rec$1(o), id = str$1(x.id) || fb;
-		return {
-			id,
-			code: str$1(x.code) || id,
-			name: str$1(x.name),
-			wbsIds: strs(x.wbsIds),
-			full: x.full === false ? false : true,
-			decision: str$1(x.decision),
-			contractType: str$1(x.contractType),
-			selection: str$1(x.selection),
-			criteria: (Array.isArray(x.criteria) ? x.criteria : []).map((c) => {
-				const q = rec$1(c);
-				return {
-					name: str$1(q.name),
-					weight: numOrNull(q.weight)
-				};
-			}),
-			value: numOrNull(x.value),
-			needDate: str$1(x.needDate),
-			leadDays: numOrNull(x.leadDays),
-			selectionDays: numOrNull(x.selectionDays),
-			supplier: str$1(x.supplier),
-			status: STATUS_RANK[str$1(x.status)] !== void 0 ? str$1(x.status) : "Planificada",
-			owner: str$1(x.owner),
-			awardDate: str$1(x.awardDate),
-			riskIds: strs(x.riskIds),
-			notes: str$1(x.notes)
-		};
-	}
-	function normalizePayment(o, fb) {
-		const x = rec$1(o), id = str$1(x.id) || fb;
-		return {
-			id,
-			code: str$1(x.code) || id,
-			itemId: str$1(x.itemId),
-			date: str$1(x.date),
-			concept: str$1(x.concept),
-			amount: numOrNull(x.amount),
-			status: PAY_STATUSES.indexOf(x.status) >= 0 ? x.status : "programado"
-		};
-	}
-	function normalizeClaim(o, fb) {
-		const x = rec$1(o), id = str$1(x.id) || fb;
-		return {
-			id,
-			code: str$1(x.code) || id,
-			itemId: str$1(x.itemId),
-			date: str$1(x.date),
-			description: str$1(x.description),
-			amount: numOrNull(x.amount),
-			status: CLAIM_STATUSES.indexOf(x.status) >= 0 ? x.status : "abierto",
-			resolvedOn: str$1(x.resolvedOn)
-		};
-	}
-	function normalizeProcurement(raw, today = "") {
-		const x = rec$1(raw), items = (Array.isArray(x.items) ? x.items : []).map((o, i) => normalizeItem(o, "pr" + (i + 1))), ad = rec$1(x.admin);
-		const payments = (Array.isArray(ad.payments) ? ad.payments : []).map((o, i) => normalizePayment(o, "pg" + (i + 1))), claims = (Array.isArray(ad.claims) ? ad.claims : []).map((o, i) => normalizeClaim(o, "rc" + (i + 1)));
-		return {
-			strategy: str$1(x.strategy),
-			performance: str$1(x.performance),
-			approvals: str$1(x.approvals),
-			asOf: iso(str$1(x.asOf)) ? str$1(x.asOf) : today,
-			items,
-			idCounter: Number(x.idCounter) || items.length + payments.length + claims.length + 1,
-			admin: {
-				payments,
-				claims
-			}
-		};
-	}
-	var day = (s) => Date.parse(s + "T12:00:00Z");
-	var addDays = (s, n) => new Date(day(s) + n * 864e5).toISOString().slice(0, 10);
-	var daysBetween = (a, b) => iso(a) && iso(b) ? Math.round((day(b) - day(a)) / 864e5) : null;
-	function launchBy(it) {
-		if (!iso(it.needDate) || it.leadDays === null || it.selectionDays === null) return null;
-		return addDays(it.needDate, -(it.leadDays + it.selectionDays));
-	}
-	var isBuy = (it) => it.decision !== "Hacer (recursos propios)";
-	var criteriaSum = (it) => it.criteria.reduce((s, c) => s + (c.weight || 0), 0);
-	function summary(d, f) {
-		const byStatus = {};
-		STATUSES.forEach((s) => {
-			byStatus[s] = 0;
-		});
-		let total = 0, late = 0, soon = 0;
-		d.items.forEach((it) => {
-			byStatus[it.status]++;
-			total += it.value || 0;
-			const lb = launchBy(it), left = lb ? daysBetween(d.asOf, lb) : null;
-			if (it.status === "Planificada" && left !== null) {
-				if (left < 0) late++;
-				else if (left <= 30) soon++;
-			}
-		});
-		return {
-			total,
-			count: d.items.length,
-			byStatus,
-			pctOfBase: f.baseCost && f.baseCost > 0 ? total / f.baseCost * 100 : null,
-			late,
-			soon
-		};
-	}
-	function procurementFindings(d, f) {
-		const out = [], F = (code, severity, itemId, text) => {
-			out.push({
-				code,
-				severity,
-				itemId,
-				text
-			});
-		};
-		const roles = new Set(f.roles.map((r) => r.toLowerCase())), leafBy = new Map(f.leaves.map((l) => [l.id, l])), sup = new Set(f.suppliers.map((s) => s.toLowerCase()));
-		d.items.forEach((it) => {
-			const w = it.code + (it.name.trim() ? " «" + it.name.trim() + "»" : ""), buy = isBuy(it), rank = STATUS_RANK[it.status];
-			if (!it.name.trim() || !it.decision) F("P2", "aviso", it.id, w + ": falta el nombre o la decisión hacer o comprar.");
-			if (it.wbsIds.some((i) => !leafBy.has(i)) && f.leaves.length) F("P2", "aviso", it.id, w + ": apunta a un paquete de la EDT que ya no existe.");
-			if (!it.wbsIds.length) F("P2", "info", it.id, w + ": no dice qué paquetes de la EDT cubre.");
-			if (!it.owner.trim()) F("P10", "aviso", it.id, w + ": no tiene responsable de la adquisición.");
-			else if (roles.size && !roles.has(it.owner.trim().toLowerCase())) F("P10", "info", it.id, w + ": el responsable «" + it.owner + "» no figura entre los puestos del OBS.");
-			if (!buy) return;
-			const lb = launchBy(it);
-			if (lb === null) F("P3", "aviso", it.id, w + ": sin fecha requerida o sin plazos (del proveedor y de selección) no se puede calcular cuándo convocar.");
-			else if (it.status === "Planificada") {
-				const left = daysBetween(d.asOf, lb);
-				if (left < 0) F("P1", "riesgo", it.id, w + ": la convocatoria debió lanzarse el " + lb + " (hace " + -left + " días respecto de la fecha de corte " + d.asOf + ") para tener el suministro el " + it.needDate + " y sigue «Planificada»: la fecha de necesidad ya no se sostiene.");
-				else if (left <= 30) F("P1", "info", it.id, w + ": la convocatoria debe lanzarse antes del " + lb + " (" + left + " días desde la fecha de corte).");
-			}
-			if (!it.contractType) F("P4", "aviso", it.id, w + ": falta el tipo de contrato.");
-			else if (FIXED_PRICE.indexOf(it.contractType) >= 0 && f.estimateClass !== null && f.estimateClass >= 4) F("P4", "aviso", it.id, w + ": un contrato de precio fijo traslada el riesgo de costo al proveedor y exige un alcance bien definido; el estimado del proyecto es de clase " + f.estimateClass + " (definición insuficiente): el proveedor lo cotizará con un sobreprecio o reclamará después.");
-			if (!it.selection) F("P5", "aviso", it.id, w + ": falta el método de selección del proveedor.");
-			else if (it.selection === "Adjudicación directa") F("P5", "info", it.id, w + ": adjudicación directa: deja escrita la justificación (proveedor único, urgencia, monto menor) en las notas.");
-			else {
-				const sum = criteriaSum(it);
-				if (!it.criteria.length) F("P5", "aviso", it.id, w + ": no define los criterios de selección con su peso.");
-				else if (Math.abs(sum - 100) > .001 || it.criteria.some((c) => !c.name.trim() || c.weight === null)) F("P5", "aviso", it.id, w + ": los criterios de selección deben tener nombre y peso, y sumar 100 (suman " + Math.round(sum * 100) / 100 + ").");
-				else if (it.criteria.length < 3) F("P5", "info", it.id, w + ": solo " + it.criteria.length + " criterio(s): la selección se apoya en algo más que el precio (capacidad técnica, plazo, experiencia).");
-			}
-			const edt = it.wbsIds.map((i) => leafBy.get(i)).filter((l) => !!l).reduce((s, l) => s + l.cost, 0);
-			if (it.value === null) F("P6", "aviso", it.id, w + ": falta el valor estimado.");
-			else if (it.full && edt > 0 && Math.abs(it.value - edt) / edt * 100 > 10) F("P6", "aviso", it.id, w + ": el valor estimado (" + Math.round(it.value).toLocaleString("es-PE") + ") difiere más de 10 % del costo de los paquetes que cubre en la EDT (" + Math.round(edt).toLocaleString("es-PE") + "): concilia el presupuesto con el contrato.");
-			if (rank >= STATUS_RANK.Adjudicada && (!it.supplier.trim() || !iso(it.awardDate))) F("P7", "aviso", it.id, w + ": está «" + it.status + "» pero no registra el proveedor o la fecha de adjudicación.");
-			else if (it.supplier.trim() && sup.size && !sup.has(it.supplier.trim().toLowerCase())) F("P12", "info", it.id, w + ": el proveedor «" + it.supplier + "» no figura en el OBS ni entre los interesados: regístralo para gestionar su compromiso.");
-			const cited = new Set(it.riskIds);
-			f.risks.filter((r) => r.high && r.threat && r.wbsIds.some((i) => it.wbsIds.indexOf(i) >= 0) && !cited.has(r.id)).forEach((r) => F("P8", "info", it.id, w + ": el riesgo alto " + r.code + " «" + r.title + "» afecta sus paquetes y no lo cita: define si el contrato lo transfiere, lo mitiga o lo acepta."));
-			if (it.riskIds.some((i) => !f.risks.some((r) => r.id === i)) && f.risks.length) F("P8", "info", it.id, w + ": cita un riesgo que ya no está abierto en el Registro de Riesgos.");
-		});
-		const itemBy = new Map(d.items.map((i) => [i.id, i]));
-		d.items.forEach((it) => {
-			const mine = d.admin.payments.filter((p) => p.itemId === it.id), paid = mine.filter((p) => p.status === "pagado").reduce((s, p) => s + (p.amount || 0), 0), sched = mine.filter((p) => p.status !== "retenido").reduce((s, p) => s + (p.amount || 0), 0), w = it.code + (it.name.trim() ? " «" + it.name.trim() + "»" : "");
-			if (it.value !== null && it.value > 0 && paid > it.value + .5) F("P14", "riesgo", it.id, w + ": lo PAGADO (" + Math.round(paid).toLocaleString("es-PE") + ") supera el valor del contrato (" + Math.round(it.value).toLocaleString("es-PE") + "): un pago sin respaldo contractual o una orden de cambio sin registrar.");
-			else if (it.value !== null && it.value > 0 && sched > it.value + .5) F("P14", "aviso", it.id, w + ": lo pagado y programado (" + Math.round(sched).toLocaleString("es-PE") + ") supera el valor del contrato (" + Math.round(it.value).toLocaleString("es-PE") + ").");
-			if (mine.some((p) => p.status === "pagado") && STATUS_RANK[it.status] < STATUS_RANK.Contratada) F("P15", "aviso", it.id, w + ": tiene pagos realizados pero está «" + it.status + "»: no se paga lo que aún no se contrató.");
-		});
-		d.admin.payments.forEach((p) => {
-			const w = p.code + (itemBy.has(p.itemId) ? " (" + itemBy.get(p.itemId).code + ")" : "");
-			if (!itemBy.has(p.itemId)) F("P15", "aviso", null, w + ": no corresponde a ninguna adquisición del plan" + (p.itemId ? " (ya no existe)" : "") + ": un pago sin contrato no tiene a qué imputarse.");
-			if (p.status === "pagado" && (!iso(p.date) || p.amount === null)) F("P17", "info", p.itemId || null, w + ": pagado sin fecha o sin monto registrado.");
-		});
-		d.admin.claims.forEach((c) => {
-			const w = c.code + (itemBy.has(c.itemId) ? " (" + itemBy.get(c.itemId).code + ")" : "");
-			if (!itemBy.has(c.itemId)) F("P15", "aviso", null, w + ": no corresponde a ninguna adquisición del plan.");
-			const age = c.status === "abierto" ? daysBetween(c.date, d.asOf) : null;
-			if (age !== null && age > 30) F("P16", "aviso", c.itemId || null, w + ": reclamo ABIERTO hace " + age + " días (más de 30 a la fecha de corte " + d.asOf + "): sin resolverse puede volverse una controversia o un cambio de precio.");
-			if (c.status === "resuelto" && !iso(c.resolvedOn)) F("P17", "info", c.itemId || null, w + ": resuelto sin fecha de resolución.");
-		});
-		if (d.items.length && !d.strategy.trim()) F("P13", "info", null, "El plan no declara la estrategia de adquisiciones (qué se compra, qué se hace, cómo se contrata en general).");
-		if (d.items.length && !d.performance.trim()) F("P13", "info", null, "El plan no dice cómo se mide y se gestiona el desempeño de los proveedores (entregas, calidad, plazos).");
-		if (d.items.length && !d.approvals.trim()) F("P13", "info", null, "El plan no dice quién autoriza contratar y hasta qué monto.");
-		return out;
-	}
-	function adminSummary(d) {
-		const over = d.items.filter((it) => it.value !== null && it.value > 0 && d.admin.payments.filter((p) => p.itemId === it.id && p.status === "pagado").reduce((s, p) => s + (p.amount || 0), 0) > it.value + .5).length;
-		const open = d.admin.claims.filter((c) => c.status === "abierto");
-		return {
-			payments: d.admin.payments.length,
-			paid: d.admin.payments.filter((p) => p.status === "pagado").reduce((s, p) => s + (p.amount || 0), 0),
-			overpaid: over,
-			claimsOpen: open.length,
-			claimsStale: open.filter((c) => {
-				const a = daysBetween(c.date, d.asOf);
-				return a !== null && a > 30;
-			}).length
-		};
-	}
-	function procurementState(d, f) {
-		if (!d.items.length) return "vacio";
-		const fs = procurementFindings(d, f);
 		return fs.some((x) => x.severity === "riesgo") ? "rojo" : fs.some((x) => x.severity === "aviso") ? "ambar" : "verde";
 	}
 	//#endregion
@@ -3103,7 +3103,7 @@
 				approvedOpen: cp.pendingBaseline,
 				oldestPending: cp.oldestPendingDays
 			};
-			const qd = normalizeQuality(G.getModule("quality")), qf = gatherQualityFacts(G), qcov = coverage(qd, qf).filter((r) => r.needs);
+			const qd = normalizeQuality(G.getModule("quality")), qf = gatherQualityFacts(G), qcov = coverage$1(qd, qf).filter((r) => r.needs);
 			const qx = executionSummary(qd, todayISO());
 			f.quality = {
 				has: qd.checks.length + qd.metrics.length + qd.coq.length > 0,
@@ -3119,7 +3119,7 @@
 					ncrCritical: qx.ncrCritical
 				}
 			};
-			const cd = normalizeComms(G.getModule("comms")), cf2 = gatherCommFacts(G), ccov = coverage$1(cd.items, cf2);
+			const cd = normalizeComms(G.getModule("comms")), cf2 = gatherCommFacts(G), ccov = coverage(cd.items, cf2);
 			const cfs = commFindings(cd, cf2, todayISO());
 			f.comms = {
 				has: cd.items.length > 0,
@@ -3865,7 +3865,7 @@
 			});
 		}
 		{
-			const qd = normalizeQuality(G.getModule("quality")), qf = gatherQualityFacts(G), s = coqSummary(qd.coq, qf.baseCost), cov = coverage(qd, qf).filter((r) => r.needs), leaf = new Map(qf.leaves.map((l) => [l.id, l.code + " " + l.name]));
+			const qd = normalizeQuality(G.getModule("quality")), qf = gatherQualityFacts(G), s = coqSummary(qd.coq, qf.baseCost), cov = coverage$1(qd, qf).filter((r) => r.needs), leaf = new Map(qf.leaves.map((l) => [l.id, l.code + " " + l.name]));
 			let h = qd.checks.length + qd.metrics.length + qd.coq.length > 0 ? kv([
 				["Política de calidad", nl(qd.policy)],
 				["Normas y especificaciones", nl(qd.standards)],
@@ -3963,7 +3963,7 @@
 				esc(x.method),
 				esc(x.storage)
 			])) : nodata("La matriz de comunicaciones aún no tiene datos.");
-			if (cd.items.length) h += `<p class="note">${coverage$1(cd.items, cf).filter((r) => r.items.length).length} de ${cf.stakeholders.length} interesados reciben al menos una comunicación planificada.</p>` + kv([
+			if (cd.items.length) h += `<p class="note">${coverage(cd.items, cf).filter((r) => r.items.length).length} de ${cf.stakeholders.length} interesados reciben al menos una comunicación planificada.</p>` + kv([
 				["Escalamiento", nl(cd.plan.escalation)],
 				["Restricciones y confidencialidad", nl(cd.plan.restrictions)],
 				["Actualización del plan", nl(cd.plan.review)]

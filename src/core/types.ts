@@ -379,7 +379,17 @@ export interface ProcurementModule {
   strategy?: string; performance?: string; approvals?: string; asOf?: string; items?: unknown[]; idCounter?: number;
 }
 
+// Validar el Alcance (Validar_Alcance.html): la aceptación formal de cada entregable del Enunciado del Alcance. Esquema y normalización en shared/scope-validation.ts.
+export interface ScopeValidationModule { records?: unknown[]; asOf?: string; idCounter?: number; }
+// Gestión del Conocimiento (Gestion_Conocimiento.html): el registro de lecciones aprendidas. Esquema y normalización en shared/knowledge.ts.
+export interface KnowledgeModule { lessons?: unknown[]; asOf?: string; idCounter?: number; }
+// Cierre del Proyecto o Fase (Cierre_Proyecto.html): lista de verificación de cierre y registro de su aprobación; el estado de los demás frentes se LEE de sus módulos. Esquema en shared/closeout.ts.
+export interface CloseoutModule { kind?: string; phase?: string; items?: unknown[]; closure?: Record<string, unknown> | null; asOf?: string; idCounter?: number; }
+
 export interface ProjectModules {
+  scopeValidation?: ScopeValidationModule | null;
+  knowledge?: KnowledgeModule | null;
+  closeout?: CloseoutModule | null;
   procurement?: ProcurementModule | null;
   quality?: QualityModule | null;
   comms?: CommsModule | null;

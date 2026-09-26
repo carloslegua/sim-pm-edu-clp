@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { test, expect } from "@playwright/test";
 
 const DB = readFileSync("tests/fixtures/distribplus-completo-v2.json", "utf8");
-const PAGES = ["Panel_Control", "Project_Charter", "Stakeholder_Studio", "Recopilar_Requisitos", "Enunciado_del_Alcance", "WBS_Builder", "OBS_Builder", "RACI_Matrix", "Activity_Definition", "Estimar_Costos", "Pert_Analysis", "Schedule_Management_Plan", "Cronograma_CPM", "Cost-management", "Risk_Register", "Valor_Ganado", "Control_Cambios", "Plan_Calidad", "Plan_Comunicaciones", "Plan_Adquisiciones", "Plan_Direccion"];
+const PAGES = ["Panel_Control", "Project_Charter", "Stakeholder_Studio", "Recopilar_Requisitos", "Enunciado_del_Alcance", "WBS_Builder", "OBS_Builder", "RACI_Matrix", "Activity_Definition", "Estimar_Costos", "Pert_Analysis", "Schedule_Management_Plan", "Cronograma_CPM", "Cost-management", "Risk_Register", "Valor_Ganado", "Control_Cambios", "Plan_Calidad", "Plan_Comunicaciones", "Plan_Adquisiciones", "Plan_Direccion", "Validar_Alcance", "Gestion_Conocimiento", "Cierre_Proyecto"];
 
 for (const m of PAGES) {
   test(`${m} — todos los campos visibles tienen nombre accesible (en cada pestaña)`, async ({ page }) => {

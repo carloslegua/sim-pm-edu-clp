@@ -243,50 +243,6 @@
 	}
 	var isOpen = (r) => r.status !== "materializado" && r.status !== "cerrado";
 	//#endregion
-	//#region src/shared/plan-facts.ts
-	var rec$1 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
-	function openRisks(G) {
-		const rk = G.getModule("risks"), plan = normalizePlan(rk && rk.plan);
-		return (rk && Array.isArray(rk.risks) ? rk.risks : []).map((r, i) => normalizeRisk(r, "rk" + (i + 1))).filter(isOpen).map((r) => ({
-			id: r.id,
-			code: r.code,
-			title: r.title,
-			wbsIds: r.wbsIds,
-			high: levelOf(inherentScore(r), plan) === "alto",
-			threat: r.type === "amenaza"
-		}));
-	}
-	function baseCostOf(G) {
-		const cost = G.getModule("cost"), b = cost && cost.budget, base = Number(b && (b.baseCost || b.computed && b.computed.base)) || 0;
-		return base > 0 ? base : null;
-	}
-	var rolesOf = (G) => Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)));
-	function gatherQualityFacts(G) {
-		const wbs = G.util.effectiveWbs(), nodes = rec$1(wbs && wbs.nodes);
-		return {
-			leaves: G.util.wbsLeaves(wbs).map((l) => {
-				const n = rec$1(nodes[l.id]);
-				return {
-					id: l.id,
-					code: l.code,
-					name: l.name,
-					acceptance: String(n.acceptance || ""),
-					loe: !!n.loe,
-					cost: Number(n.cost) || 0
-				};
-			}),
-			roles: rolesOf(G),
-			highRiskLeafIds: Array.from(new Set(openRisks(G).filter((r) => r.high).flatMap((r) => r.wbsIds))),
-			baseCost: baseCostOf(G)
-		};
-	}
-	//#endregion
-	//#region src/shared/local-date.ts
-	function todayLocalISO(d = /* @__PURE__ */ new Date()) {
-		const p = (n) => (n < 10 ? "0" : "") + n;
-		return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
-	}
-	//#endregion
 	//#region src/shared/quality-plan.ts
 	var CHECK_KINDS = ["Aseguramiento", "Control"];
 	var QUALITY_METHODS = [
@@ -352,9 +308,9 @@
 		const n = Number(v);
 		return isFinite(n) ? n : null;
 	};
-	var rec = (o) => o && typeof o === "object" ? o : {};
+	var rec$1 = (o) => o && typeof o === "object" ? o : {};
 	function normalizeMetric(o, fb) {
-		const x = rec(o), id = str(x.id) || fb;
+		const x = rec$1(o), id = str(x.id) || fb;
 		return {
 			id,
 			code: str(x.code) || id,
@@ -369,7 +325,7 @@
 		};
 	}
 	function normalizeCheck(o, fb) {
-		const x = rec(o), id = str(x.id) || fb;
+		const x = rec$1(o), id = str(x.id) || fb;
 		return {
 			id,
 			code: str(x.code) || id,
@@ -385,7 +341,7 @@
 		};
 	}
 	function normalizeCoq(o, fb) {
-		const x = rec(o);
+		const x = rec$1(o);
 		return {
 			id: str(x.id) || fb,
 			cat: COQ_CATS.indexOf(x.cat) >= 0 ? x.cat : "prevencion",
@@ -394,7 +350,7 @@
 		};
 	}
 	function normalizeInspection(o, fb) {
-		const x = rec(o), id = str(x.id) || fb;
+		const x = rec$1(o), id = str(x.id) || fb;
 		return {
 			id,
 			code: str(x.code) || id,
@@ -407,7 +363,7 @@
 		};
 	}
 	function normalizeNcr(o, fb) {
-		const x = rec(o), id = str(x.id) || fb;
+		const x = rec$1(o), id = str(x.id) || fb;
 		return {
 			id,
 			code: str(x.code) || id,
@@ -423,7 +379,7 @@
 		};
 	}
 	function normalizeQuality(raw) {
-		const x = rec(raw), metrics = (Array.isArray(x.metrics) ? x.metrics : []).map((o, i) => normalizeMetric(o, "qm" + (i + 1))), checks = (Array.isArray(x.checks) ? x.checks : []).map((o, i) => normalizeCheck(o, "qc" + (i + 1)));
+		const x = rec$1(raw), metrics = (Array.isArray(x.metrics) ? x.metrics : []).map((o, i) => normalizeMetric(o, "qm" + (i + 1))), checks = (Array.isArray(x.checks) ? x.checks : []).map((o, i) => normalizeCheck(o, "qc" + (i + 1)));
 		const coq = (Array.isArray(x.coq) ? x.coq : []).map((o, i) => normalizeCoq(o, "cq" + (i + 1)));
 		const inspections = (Array.isArray(x.inspections) ? x.inspections : []).map((o, i) => normalizeInspection(o, "in" + (i + 1))), ncrs = (Array.isArray(x.ncrs) ? x.ncrs : []).map((o, i) => normalizeNcr(o, "nc" + (i + 1)));
 		return {
@@ -549,6 +505,50 @@
 		if (!(d.checks.length || d.metrics.length || d.coq.length || d.inspections.length || d.ncrs.length)) return "vacio";
 		const fs = qualityFindings(d, f, today);
 		return fs.some((x) => x.severity === "riesgo") ? "rojo" : fs.some((x) => x.severity === "aviso") ? "ambar" : "verde";
+	}
+	//#endregion
+	//#region src/shared/plan-facts.ts
+	var rec = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+	function openRisks(G) {
+		const rk = G.getModule("risks"), plan = normalizePlan(rk && rk.plan);
+		return (rk && Array.isArray(rk.risks) ? rk.risks : []).map((r, i) => normalizeRisk(r, "rk" + (i + 1))).filter(isOpen).map((r) => ({
+			id: r.id,
+			code: r.code,
+			title: r.title,
+			wbsIds: r.wbsIds,
+			high: levelOf(inherentScore(r), plan) === "alto",
+			threat: r.type === "amenaza"
+		}));
+	}
+	function baseCostOf(G) {
+		const cost = G.getModule("cost"), b = cost && cost.budget, base = Number(b && (b.baseCost || b.computed && b.computed.base)) || 0;
+		return base > 0 ? base : null;
+	}
+	var rolesOf = (G) => Array.from(new Set(G.util.obsNodes(G.getModule("obs")).map((n) => (n.role || "").trim()).filter(Boolean)));
+	function gatherQualityFacts(G) {
+		const wbs = G.util.effectiveWbs(), nodes = rec(wbs && wbs.nodes);
+		return {
+			leaves: G.util.wbsLeaves(wbs).map((l) => {
+				const n = rec(nodes[l.id]);
+				return {
+					id: l.id,
+					code: l.code,
+					name: l.name,
+					acceptance: String(n.acceptance || ""),
+					loe: !!n.loe,
+					cost: Number(n.cost) || 0
+				};
+			}),
+			roles: rolesOf(G),
+			highRiskLeafIds: Array.from(new Set(openRisks(G).filter((r) => r.high).flatMap((r) => r.wbsIds))),
+			baseCost: baseCostOf(G)
+		};
+	}
+	//#endregion
+	//#region src/shared/local-date.ts
+	function todayLocalISO(d = /* @__PURE__ */ new Date()) {
+		const p = (n) => (n < 10 ? "0" : "") + n;
+		return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
 	}
 	//#endregion
 	//#region src/shared/case-distribplus.ts

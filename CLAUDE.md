@@ -8,7 +8,7 @@ fecha y evidencia puntual de cada paso, vive en [MIGRATION.md](MIGRATION.md).
 
 ## Qué es esto
 
-Suite educativa PMBOK de 21 módulos HTML (20 herramientas + el Panel) + un núcleo de datos
+Suite educativa PMBOK de 24 módulos HTML (23 herramientas + el Panel) + un núcleo de datos
 compartido (`gpi-core.js`) sobre `localStorage`. Sitio 100% estático: sin
 backend, sin servidor de build en producción. Se despliega copiando
 archivos a GitHub Pages o abriendo cualquier módulo con doble clic
@@ -189,6 +189,13 @@ src/shared/write-session.ts      → (se inlinea en cada IIFE) guardado con sesi
                                     edición + resultado común de escritura
 src/shared/charter-baseline.ts   → (se inlinea en project-charter.js) aprobación y versiones del Acta: instantánea, deriva y nueva versión
                                     (reutiliza el motor de requirements-baseline.ts)
+src/shared/scope-validation.ts   → (se inlinea en scope-validation.js) Validar el Alcance: aceptación formal de cada entregable, cobertura, hallazgos V1–V8
+src/shared/scope-validation-sample.ts → (se inlinea en scope-validation.js) ejemplo DISTRIB+ (6 entregables del Enunciado; 1 aceptado con observaciones al corte 2026-11-03)
+src/shared/knowledge.ts          → (se inlinea en knowledge.js) lecciones aprendidas: registro, estados, hallazgos K1–K7 (riesgo materializado sin lección)
+src/shared/knowledge-sample.ts   → (se inlinea en knowledge.js) ejemplo DISTRIB+ (8 lecciones nacidas de R-03/OC-001, NC-01, licencia, mesa vecinal, acero, LOE, Acabados)
+src/shared/closeout.ts           → (se inlinea en closeout.js) cierre: lista de verificación, comprobaciones automáticas sobre las demás herramientas y aprobación; C1–C8
+src/shared/closeout-sample.ts    → (se inlinea en closeout.js) ejemplo DISTRIB+ (cierre PREPARADO, no declarado; hechos del caso al corte)
+src/shared/plan-facts.ts         → (también) gatherValidationFacts / gatherKnowledgeFacts / gatherCloseFacts: lo que esos módulos leen del proyecto
 src/shared/pert-sample.ts        → (se inlinea en pert.js) ternas O/P del ejemplo DISTRIB+ de Análisis PERT (43 actividades por código + nombre)
 src/shared/raci-sample.ts        → (se inlinea en raci.js) matriz RACI BIEN armada del caso para el proyecto (paquetes por código, puestos por nombre)
 src/shared/milestone-check.ts    → (se inlinea en schedule-plan.js y plan-direccion.js) restricciones de los hitos (FNLT/FNET/MSO/MFO) contra el fin del CPM

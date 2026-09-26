@@ -5,8 +5,12 @@ import type * as GpiCore from "../core/gpi-core";
 import { inherentScore, isOpen, levelOf, normalizePlan as normalizeRiskPlan, normalizeRisk } from "./risk-analysis";
 import { quadrantOf } from "./stakeholder-engagement";
 import type { CommFacts } from "./comms-plan";
-import type { ProcFacts } from "./procurement-plan";
-import type { QualityFacts } from "./quality-plan";
+import { isBuy, normalizeProcurement, type ProcFacts } from "./procurement-plan";
+import { normalizeQuality, type QualityFacts } from "./quality-plan";
+import { coverage as validationCoverage, normalizeValidation, type SvFacts } from "./scope-validation";
+import { normalizeKnowledge, type KFacts } from "./knowledge";
+import { normalizeCr } from "./change-control";
+import type { CloseFacts } from "./closeout";
 
 type GpiApi = typeof GpiCore.GPI;
 const rec = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
@@ -40,6 +44,39 @@ export function gatherQualityFacts(G: GpiApi): QualityFacts {
   return {
     leaves: G.util.wbsLeaves(wbs).map((l) => { const n = rec(nodes[l.id]); return { id: l.id, code: l.code, name: l.name, acceptance: String(n.acceptance || ""), loe: !!n.loe, cost: Number(n.cost) || 0 }; }),
     roles: rolesOf(G), highRiskLeafIds: Array.from(new Set(openRisks(G).filter((r) => r.high).flatMap((r) => r.wbsIds))), baseCost: baseCostOf(G)
+  };
+}
+
+// No conformidades ABIERTAS del Plan de Calidad, por id de paquete (las usan Validar el Alcance y el Cierre).
+function openNcrByLeaf(G: GpiApi): Record<string, { count: number; critical: number }> {
+  const out: Record<string, { count: number; critical: number }> = {};
+  normalizeQuality(G.getModule("quality")).ncrs.filter((n) => n.status !== "cerrada" && n.wbsId).forEach((n) => { const o = out[n.wbsId] || (out[n.wbsId] = { count: 0, critical: 0 }); o.count++; if (n.severity === "critica") o.critical++; });
+  return out;
+}
+const deliverablesOf = (G: GpiApi): Array<{ id: string; code: string; name: string; criteria: string }> =>
+  (Array.isArray(rec(G.getModule("scopeStatement")).deliverables) ? (rec(G.getModule("scopeStatement")).deliverables as unknown[]).map(rec) : []).map((d) => ({ id: String(d.id), code: String(d.code || ""), name: String(d.name || d.id), criteria: String(d.acceptanceCriteria || "") }));
+
+export function gatherValidationFacts(G: GpiApi): SvFacts {
+  const wbs = G.util.effectiveWbs(), nodes = rec(wbs && wbs.nodes), leavesOf: Record<string, string[]> = {};
+  // paquetes (hojas) que cuelgan de cada elemento de la EDT vinculado a un entregable (delId)
+  const leaves = (id: string): string[] => { const k = rec(nodes[id]).children; return Array.isArray(k) && k.length ? (k as string[]).flatMap(leaves) : [id]; };
+  Object.keys(nodes).forEach((id) => { const d = String(rec(nodes[id]).delId || ""); if (d) leavesOf[d] = Array.from(new Set((leavesOf[d] || []).concat(leaves(id)))); });
+  return { deliverables: deliverablesOf(G), leaves: G.util.wbsLeaves(wbs).map((l) => ({ id: l.id, code: l.code, name: l.name, acceptance: String(rec(nodes[l.id]).acceptance || "") })), roles: rolesOf(G), openNcr: openNcrByLeaf(G), leavesOf };
+}
+export function gatherKnowledgeFacts(G: GpiApi): KFacts {
+  const rk = G.getModule("risks"), risks = (rk && Array.isArray(rk.risks) ? rk.risks : []).map((r, i) => normalizeRisk(r, "rk" + (i + 1)));
+  return { materialized: risks.filter((r) => r.status === "materializado").map((r) => ({ code: r.code, title: r.title })), riskCodes: risks.map((r) => r.code), leaves: G.util.wbsLeaves(G.util.effectiveWbs()).map((l) => ({ id: l.id, code: l.code, name: l.name })), roles: rolesOf(G) };
+}
+export function gatherCloseFacts(G: GpiApi): CloseFacts {
+  const dels = deliverablesOf(G), val = normalizeValidation(G.getModule("scopeValidation")), cov = validationCoverage(val, { deliverables: dels, leaves: [], roles: [], openNcr: {} });
+  const ncr = normalizeQuality(G.getModule("quality")).ncrs.filter((n) => n.status !== "cerrada"), proc = normalizeProcurement(G.getModule("procurement")), buys = proc.items.filter(isBuy);
+  const lessons = normalizeKnowledge(G.getModule("knowledge")).lessons, crs = (Array.isArray(rec(G.getModule("changes")).requests) ? (rec(G.getModule("changes")).requests as unknown[]) : []).map((o, i) => normalizeCr(o, "cr" + (i + 1)));
+  const cs = G.util.costSummary(G.getModule("cost"));
+  return {
+    deliverables: { total: dels.length, accepted: cov.filter((r) => r.state === "aceptado").length }, ncr: { open: ncr.length, critical: ncr.filter((n) => n.severity === "critica").length },
+    contracts: { total: buys.length, notDelivered: buys.filter((i) => i.status !== "Entregada").length, claimsOpen: proc.admin.claims.filter((c) => c.status === "abierto").length },
+    lessons: { total: lessons.length, transferred: lessons.filter((l) => l.status === "transferida").length }, changes: { open: crs.filter((c) => c.status === "Pendiente" || c.status === "Aprobada").length },
+    bac: cs.hasData ? (cs.bacCurrent || cs.bac || null) : null, roles: rolesOf(G)
   };
 }
 
