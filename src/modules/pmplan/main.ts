@@ -27,9 +27,9 @@ import { QUADRANT_LABEL, levelName, quadrantOf } from "../../shared/stakeholder-
 import { gatherCommFacts, gatherProcurementFacts, gatherQualityFacts } from "../../shared/plan-facts";
 import { checkMilestones, milestoneSummary } from "../../shared/milestone-check";
 import { normalizeScopeBaseline, scopeDriftOf } from "../../shared/scope-baseline";
-import { commState, coverage as commCoverage, normalizeComms, type CommData } from "../../shared/comms-plan";
-import { COQ_CATS, COQ_LABEL, coqSummary, coverage as qualityCoverage, normalizeQuality, qualityState, type QualityData } from "../../shared/quality-plan";
-import { launchBy, normalizeProcurement, procurementState, summary as procSummary, type ProcData } from "../../shared/procurement-plan";
+import { commFindings, commState, coverage as commCoverage, normalizeComms, type CommData } from "../../shared/comms-plan";
+import { COQ_CATS, COQ_LABEL, coqSummary, coverage as qualityCoverage, executionSummary, normalizeQuality, qualityState, type QualityData } from "../../shared/quality-plan";
+import { adminSummary, launchBy, normalizeProcurement, procurementState, summary as procSummary, type ProcData } from "../../shared/procurement-plan";
 import {
   PLAN_COMPONENTS, STATE_LABEL, approvalBlockers, areaRows, digestOf, emptyApproach, emptyBase, emptyFacts, integrationFindings, isPredictive, snapshotDiff, snapshotOf,
   type AreaState, type BaselineFact, type PlanApproach, type PlanFacts, type PlanSnapshot
@@ -139,11 +139,16 @@ function buildCtx(): Ctx {
     f.changes = { total: cp.total, pending: cp.byStatus.Pendiente, approvedOpen: cp.pendingBaseline, oldestPending: cp.oldestPendingDays };
     // Planes de calidad, comunicaciones y adquisiciones (la misma lectura que usa cada módulo)
     const qd = normalizeQuality(G.getModule("quality")), qf = gatherQualityFacts(G), qcov = qualityCoverage(qd, qf).filter((r) => r.needs);
-    f.quality = { has: qd.checks.length + qd.metrics.length + qd.coq.length > 0, state: qualityState(qd, qf) as AreaState, needing: qcov.length, verified: qcov.filter((r) => r.checks.length).length, checks: qd.checks.length, coqTotal: coqSummary(qd.coq, qf.baseCost).total };
+    const qx = executionSummary(qd, todayISO());
+    f.quality = { has: qd.checks.length + qd.metrics.length + qd.coq.length > 0, state: qualityState(qd, qf, todayISO()) as AreaState, needing: qcov.length, verified: qcov.filter((r) => r.checks.length).length, checks: qd.checks.length, coqTotal: coqSummary(qd.coq, qf.baseCost).total,
+      exec: { inspections: qx.inspections, ncrOpen: qx.ncrOpen, ncrOverdue: qx.ncrOverdue, ncrCritical: qx.ncrCritical } };
     const cd = normalizeComms(G.getModule("comms")), cf2 = gatherCommFacts(G), ccov = commCoverage(cd.items, cf2);
-    f.comms = { has: cd.items.length > 0, state: commState(cd, cf2) as AreaState, items: cd.items.length, covered: ccov.filter((r) => r.items.length).length, stakeholders: cf2.stakeholders.length, closeUncovered: ccov.filter((r) => r.stk.quadrant === "cerca" && !r.items.length).length };
+    const cfs = commFindings(cd, cf2, todayISO());
+    f.comms = { has: cd.items.length > 0, state: commState(cd, cf2, todayISO()) as AreaState, items: cd.items.length, covered: ccov.filter((r) => r.items.length).length, stakeholders: cf2.stakeholders.length, closeUncovered: ccov.filter((r) => r.stk.quadrant === "cerca" && !r.items.length).length,
+      exec: { logged: cd.log.length, periodicSilent: cfs.filter((x) => x.code === "M16").length, closeSilent: cfs.filter((x) => x.code === "M15").length } };
     const pd = normalizeProcurement(G.getModule("procurement"), todayISO()), pf = gatherProcurementFacts(G), ps = procSummary(pd, pf);
-    f.procurement = { has: pd.items.length > 0, state: procurementState(pd, pf) as AreaState, items: pd.items.length, total: ps.total, late: ps.late, soon: ps.soon, asOf: pd.asOf };
+    const pax = adminSummary(pd);
+    f.procurement = { has: pd.items.length > 0, state: procurementState(pd, pf) as AreaState, items: pd.items.length, total: ps.total, late: ps.late, soon: ps.soon, asOf: pd.asOf, exec: { payments: pax.payments, overpaid: pax.overpaid, claimsOpen: pax.claimsOpen, claimsStale: pax.claimsStale } };
     // Valor ganado
     const reps = arr(rec(G.getModule("evm")).reports);
     f.evm = { reports: reps.length, lastCut: reps.length ? str(reps[reps.length - 1].date) : "" };
@@ -155,7 +160,11 @@ function buildCtx(): Ctx {
     // y el resto de los módulos que componen el plan. Ver PLAN_COMPONENTS en shared/pm-plan.ts.
     const METAKEYS = ["name", "code", "client", "location", "sponsor", "manager", "startDate", "endDate", "currency", "capex", "description"], mm: Record<string, unknown> = {};
     METAKEYS.forEach((k) => { mm[k] = meta[k]; });
-    PLAN_COMPONENTS.forEach((c) => { f.digests[c.key] = digestOf(c.key === "meta" ? mm : c.key === "riskPlan" ? rec(G.getModule("risks")).plan : G.getModule(c.key as never)); });
+    // Los REGISTROS DE EJECUCIÓN (inspecciones y no conformidades de Calidad, bitácora de Comunicaciones, administración de contratos) cambian todos los días y no son parte del plan
+    // aprobado: se dejan fuera de la huella, igual que el Registro de Riesgos y las solicitudes de cambio.
+    const EXEC_KEYS: Record<string, string[]> = { quality: ["inspections", "ncrs", "asOf"], comms: ["log", "asOf"], procurement: ["admin"] };
+    const planPart = (key: string, mod: unknown): unknown => { const skip = EXEC_KEYS[key]; if (!skip || !mod || typeof mod !== "object") return mod; const o = { ...(mod as Record<string, unknown>) }; skip.forEach((k) => { delete o[k]; }); return o; };
+    PLAN_COMPONENTS.forEach((c) => { f.digests[c.key] = digestOf(c.key === "meta" ? mm : c.key === "riskPlan" ? rec(G.getModule("risks")).plan : planPart(c.key, G.getModule(c.key as never))); });
     f.plan = { status: plan.status, version: plan.version, approvedBy: plan.approvedBy, approvedOn: plan.approvedOn, snapshot: plan.snapshot, docPreserved: !!plan.approvedDoc };
   } catch (e) { /* noop: cada tarjeta del plan queda "sin datos" */ }
   return { connected, name: str(meta.name), meta, mods, facts: f };

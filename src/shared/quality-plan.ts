@@ -18,7 +18,21 @@ export const COQ_GROUP: Record<CoqCat, "conformidad" | "no_conformidad"> = { pre
 export interface QMetric { id: string; code: string; name: string; wbsIds: string[]; definition: string; target: string; tolerance: string; method: string; frequency: string; owner: string; }
 export interface QCheck { id: string; code: string; wbsId: string; what: string; criterion: string; kind: string; method: string; frequency: string; owner: string; record: string; metricId: string; }
 export interface CoqItem { id: string; cat: CoqCat; description: string; amount: number | null; }
-export interface QualityData { policy: string; standards: string; metrics: QMetric[]; checks: QCheck[]; coq: CoqItem[]; idCounter: number; }
+// EJECUCIÓN (auditoría, media): el plan solo cubría la planificación; en la ejecución se REGISTRAN las inspecciones y ensayos hechos (IN-nn: qué control del plan, cuándo, con qué resultado) y las
+// no conformidades (NC-nn: qué paquete, qué gravedad, qué acción correctiva, quién y para cuándo). Campos opcionales: los planes guardados antes no los traen y quedan en blanco.
+export const INSPECTION_RESULTS = ["conforme", "observada", "no_conforme"] as const;
+export type InspectionResult = typeof INSPECTION_RESULTS[number];
+export const RESULT_LABEL: Record<InspectionResult, string> = { conforme: "Conforme", observada: "Con observaciones", no_conforme: "No conforme" };
+export const NCR_SEVERITIES = ["menor", "mayor", "critica"] as const;
+export type NcrSeverity = typeof NCR_SEVERITIES[number];
+export const SEVERITY_LABEL: Record<NcrSeverity, string> = { menor: "Menor", mayor: "Mayor", critica: "Crítica" };
+export const NCR_STATUSES = ["abierta", "en_correccion", "cerrada"] as const;
+export type NcrStatus = typeof NCR_STATUSES[number];
+export const NCR_STATUS_LABEL: Record<NcrStatus, string> = { abierta: "Abierta", en_correccion: "En corrección", cerrada: "Cerrada" };
+export interface QInspection { id: string; code: string; checkId: string; date: string; result: InspectionResult; inspector: string; notes: string; ncrId: string; }
+export interface QNcr { id: string; code: string; wbsId: string; description: string; severity: NcrSeverity; detectedOn: string; status: NcrStatus; action: string; owner: string; dueDate: string; closedOn: string; }
+// `asOf` = fecha de corte del seguimiento (vacía = hoy): contra ella se juzga qué corrección está vencida, así el ejemplo del caso no cambia con el reloj.
+export interface QualityData { policy: string; standards: string; metrics: QMetric[]; checks: QCheck[]; coq: CoqItem[]; idCounter: number; inspections: QInspection[]; ncrs: QNcr[]; asOf: string; }
 
 const str = (v: unknown): string => (v === null || v === undefined ? "" : String(v));
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.map(str).filter(Boolean) : []);
@@ -27,15 +41,20 @@ const rec = (o: unknown): Record<string, unknown> => (o && typeof o === "object"
 export function normalizeMetric(o: unknown, fb: string): QMetric { const x = rec(o), id = str(x.id) || fb; return { id, code: str(x.code) || id, name: str(x.name), wbsIds: strs(x.wbsIds), definition: str(x.definition), target: str(x.target), tolerance: str(x.tolerance), method: str(x.method), frequency: str(x.frequency), owner: str(x.owner) }; }
 export function normalizeCheck(o: unknown, fb: string): QCheck { const x = rec(o), id = str(x.id) || fb; return { id, code: str(x.code) || id, wbsId: str(x.wbsId), what: str(x.what), criterion: str(x.criterion), kind: str(x.kind), method: str(x.method), frequency: str(x.frequency), owner: str(x.owner), record: str(x.record), metricId: str(x.metricId) }; }
 export function normalizeCoq(o: unknown, fb: string): CoqItem { const x = rec(o); return { id: str(x.id) || fb, cat: (COQ_CATS.indexOf(x.cat as CoqCat) >= 0 ? x.cat : "prevencion") as CoqCat, description: str(x.description), amount: numOrNull(x.amount) }; }
+export function normalizeInspection(o: unknown, fb: string): QInspection { const x = rec(o), id = str(x.id) || fb; return { id, code: str(x.code) || id, checkId: str(x.checkId), date: str(x.date), result: (INSPECTION_RESULTS.indexOf(x.result as InspectionResult) >= 0 ? x.result : "conforme") as InspectionResult, inspector: str(x.inspector), notes: str(x.notes), ncrId: str(x.ncrId) }; }
+export function normalizeNcr(o: unknown, fb: string): QNcr { const x = rec(o), id = str(x.id) || fb; return { id, code: str(x.code) || id, wbsId: str(x.wbsId), description: str(x.description), severity: (NCR_SEVERITIES.indexOf(x.severity as NcrSeverity) >= 0 ? x.severity : "menor") as NcrSeverity, detectedOn: str(x.detectedOn), status: (NCR_STATUSES.indexOf(x.status as NcrStatus) >= 0 ? x.status : "abierta") as NcrStatus, action: str(x.action), owner: str(x.owner), dueDate: str(x.dueDate), closedOn: str(x.closedOn) }; }
 export function normalizeQuality(raw: unknown): QualityData {
   const x = rec(raw), metrics = (Array.isArray(x.metrics) ? x.metrics : []).map((o, i) => normalizeMetric(o, "qm" + (i + 1))), checks = (Array.isArray(x.checks) ? x.checks : []).map((o, i) => normalizeCheck(o, "qc" + (i + 1)));
   const coq = (Array.isArray(x.coq) ? x.coq : []).map((o, i) => normalizeCoq(o, "cq" + (i + 1)));
-  return { policy: str(x.policy), standards: str(x.standards), metrics, checks, coq, idCounter: Number(x.idCounter) || metrics.length + checks.length + coq.length + 1 };
+  const inspections = (Array.isArray(x.inspections) ? x.inspections : []).map((o, i) => normalizeInspection(o, "in" + (i + 1))), ncrs = (Array.isArray(x.ncrs) ? x.ncrs : []).map((o, i) => normalizeNcr(o, "nc" + (i + 1)));
+  return { policy: str(x.policy), standards: str(x.standards), metrics, checks, coq, idCounter: Number(x.idCounter) || metrics.length + checks.length + coq.length + inspections.length + ncrs.length + 1, inspections, ncrs, asOf: /^\d{4}-\d{2}-\d{2}$/.test(str(x.asOf)) ? str(x.asOf) : "" };
 }
 export const blankQuality = (): QualityData => normalizeQuality(null);
 function nextOf(items: Array<{ code: string }>, prefix: string): string { let max = 0; items.forEach((c) => { const m = /(\d+)\s*$/.exec(c.code); if (m) max = Math.max(max, Number(m[1])); }); return prefix + String(max + 1).padStart(2, "0"); }
 export const nextMetricCode = (m: QMetric[]): string => nextOf(m, "QM-");
 export const nextCheckCode = (c: QCheck[]): string => nextOf(c, "QC-");
+export const nextInspectionCode = (c: QInspection[]): string => nextOf(c, "IN-");
+export const nextNcrCode = (c: QNcr[]): string => nextOf(c, "NC-");
 
 // ---- lo que se lee de la EDT, del OBS, de Riesgos y de Costos (solo lectura) ----
 export interface QLeaf { id: string; code: string; name: string; acceptance: string; loe: boolean; cost: number; }
@@ -58,9 +77,18 @@ export function coverage(d: QualityData, f: QualityFacts): CoverageRow[] {
 }
 
 export interface QFinding { code: string; severity: "riesgo" | "aviso" | "info"; text: string; }
-export function qualityFindings(d: QualityData, f: QualityFacts): QFinding[] {
-  const out: QFinding[] = [], F = (code: string, severity: QFinding["severity"], text: string): void => { out.push({ code, severity, text }); };
-  const leafBy = new Map(f.leaves.map((l) => [l.id, l] as const)), roles = new Set(f.roles.map((r) => r.toLowerCase())), anything = d.checks.length || d.metrics.length || d.coq.length;
+// Resumen de la ejecución: lo abierto, lo vencido a la fecha `today` y lo crítico. Sirve al plan para la dirección.
+export interface ExecutionSummary { inspections: number; nonConforming: number; ncrs: number; ncrOpen: number; ncrOverdue: number; ncrCritical: number; }
+const isoOk = (s: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(s);
+export const asOfOf = (d: QualityData, today: string): string => (isoOk(d.asOf) ? d.asOf : today);
+export function executionSummary(d: QualityData, today0: string): ExecutionSummary {
+  const today = asOfOf(d, today0), open = d.ncrs.filter((n) => n.status !== "cerrada");
+  return { inspections: d.inspections.length, nonConforming: d.inspections.filter((i) => i.result === "no_conforme").length, ncrs: d.ncrs.length, ncrOpen: open.length,
+    ncrOverdue: isoOk(today) ? open.filter((n) => isoOk(n.dueDate) && n.dueDate < today).length : 0, ncrCritical: open.filter((n) => n.severity === "critica").length };
+}
+export function qualityFindings(d: QualityData, f: QualityFacts, today0 = ""): QFinding[] {
+  const today = asOfOf(d, today0), out: QFinding[] = [], F = (code: string, severity: QFinding["severity"], text: string): void => { out.push({ code, severity, text }); };
+  const leafBy = new Map(f.leaves.map((l) => [l.id, l] as const)), roles = new Set(f.roles.map((r) => r.toLowerCase())), anything = d.checks.length || d.metrics.length || d.coq.length || d.inspections.length || d.ncrs.length;
   if (!anything) return out;
   const cov = coverage(d, f), needing = cov.filter((r) => r.needs);
   needing.filter((r) => !r.checks.length).forEach((r) => {
@@ -88,11 +116,26 @@ export function qualityFindings(d: QualityData, f: QualityFacts): QFinding[] {
   if (d.coq.length && s.byCat.prevencion <= 0) F("Q10", "aviso", "El costo de la calidad no invierte nada en prevención: es lo que más barato evita fallas (evaluar solo detecta el defecto ya hecho).");
   if (d.coq.length && s.failureShare !== null && s.failureShare > 50) F("Q10", "aviso", "Más de la mitad del costo de la calidad (" + Math.round(s.failureShare) + " %) es por fallas: el plan gasta más en corregir que en prevenir y evaluar.");
   if (d.coq.some((c) => c.amount === null)) F("Q10", "info", "Hay partidas del costo de la calidad sin monto.");
+  // ---- ejecución: inspecciones y no conformidades ----
+  const checkBy = new Map(d.checks.map((c) => [c.id, c] as const)), ncrBy = new Map(d.ncrs.map((n) => [n.id, n] as const));
+  d.inspections.forEach((i) => {
+    const w = i.code + (checkBy.has(i.checkId) ? " (" + (checkBy.get(i.checkId) as QCheck).code + ")" : "");
+    if (!checkBy.has(i.checkId)) F("Q15", "aviso", w + ": no corresponde a ningún control del plan" + (i.checkId ? " (el control ya no existe)" : "") + ": una inspección sin control planificado no tiene criterio de aceptación contra el cual juzgarla.");
+    if (i.result === "no_conforme" && !(i.ncrId && ncrBy.has(i.ncrId))) F("Q13", "aviso", w + ": resultado NO CONFORME sin una no conformidad registrada: el defecto se detectó pero nadie está obligado a corregirlo.");
+    if (!isoOk(i.date)) F("Q15", "info", w + ": sin fecha de inspección.");
+  });
+  d.ncrs.forEach((n) => {
+    const w = n.code + (n.description.trim() ? " «" + n.description.trim().slice(0, 60) + (n.description.trim().length > 60 ? "…" : "") + "»" : ""), open = n.status !== "cerrada";
+    if (open && n.severity === "critica") F("Q12", "riesgo", w + ": no conformidad CRÍTICA sin cerrar: puede comprometer la aceptación del entregable (y la seguridad o el cumplimiento normativo).");
+    if (open && isoOk(today) && isoOk(n.dueDate) && n.dueDate < today) F("Q12", n.severity === "menor" ? "info" : "aviso", w + ": la corrección vencía el " + n.dueDate + " y sigue " + NCR_STATUS_LABEL[n.status].toLowerCase() + ".");
+    if (open && (!n.action.trim() || !n.owner.trim() || !isoOk(n.dueDate))) F("Q14", "aviso", w + ": abierta sin acción correctiva, responsable o fecha límite: nadie sabe qué hacer ni para cuándo.");
+    if (!open && (!n.action.trim() || !isoOk(n.closedOn))) F("Q14", "info", w + ": cerrada sin registrar la acción correctiva o la fecha de cierre (no queda evidencia de cómo se resolvió).");
+    if (!n.wbsId || !leafBy.has(n.wbsId)) F("Q15", "info", w + ": no apunta a un paquete de trabajo de la EDT.");
+  });
   return out;
-}
-export type QualityState = "vacio" | "verde" | "ambar" | "rojo";
-export function qualityState(d: QualityData, f: QualityFacts): QualityState {
-  if (!(d.checks.length || d.metrics.length || d.coq.length)) return "vacio";
-  const fs = qualityFindings(d, f);
+}export type QualityState = "vacio" | "verde" | "ambar" | "rojo";
+export function qualityState(d: QualityData, f: QualityFacts, today = ""): QualityState {
+  if (!(d.checks.length || d.metrics.length || d.coq.length || d.inspections.length || d.ncrs.length)) return "vacio";
+  const fs = qualityFindings(d, f, today);
   return fs.some((x) => x.severity === "riesgo") ? "rojo" : fs.some((x) => x.severity === "aviso") ? "ambar" : "verde";
 }

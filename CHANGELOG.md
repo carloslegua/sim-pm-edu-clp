@@ -11,6 +11,16 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Auditoría integral, hallazgo medio M8 — registros de ejecución en Calidad, Comunicaciones y Adquisiciones.** Los tres módulos solo planificaban; ahora también registran la ejecución
+  (campos opcionales: lo guardado antes se lee en blanco). **Calidad:** inspecciones (IN-nn: control del plan, fecha, resultado) y no conformidades (NC-nn: paquete, gravedad, acción
+  correctiva, responsable, fecha límite, cierre); hallazgos Q12 (crítica sin cerrar = riesgo; vencida), Q13 (inspección no conforme sin no conformidad), Q14 (sin acción/responsable/fecha,
+  o cerrada sin evidencia), Q15 (sin control del plan). **Comunicaciones:** bitácora de comunicaciones emitidas / reprogramadas / omitidas (LG-nn) con hallazgos M13–M16 (comunicación
+  periódica sin emitir en más de dos períodos, interesado a gestionar de cerca sin comunicación en 45 días, omitida sin motivo, sin evidencia). **Adquisiciones:** pagos (PG-nn) y reclamos
+  (RC-nn) de los contratos con P14 (pagado por encima del contrato = riesgo), P15 (pago sin contrato), P16 (reclamo abierto más de 30 días), P17. Calidad y Comunicaciones llevan una
+  **fecha de corte del seguimiento** (`asOf`, vacía = hoy) para que el ejemplo (corte 2026-11-03, el de Valor Ganado) no envejezca con el reloj; Adquisiciones ya tenía la suya y su ejemplo
+  sigue en la aprobación del plan (2026-08-05, sin contratos firmados), así que su administración de contratos empieza en blanco. El Plan para la Dirección suma P27 (no conformidades
+  críticas o vencidas), P28 (comunicaciones sin emitir) y P29 (pagado sobre el contrato / reclamos viejos), y **deja los registros de ejecución fuera de la huella** del plan aprobado
+  (como el Registro de Riesgos): registrar una inspección no deja el plan «con cambios sin aprobar».
 - **Auditoría integral, hallazgo medio M6 — «Cargar ejemplo» sobre el proyecto de Análisis PERT, Matriz RACI y Costos.** Los tres solo tenían ejemplo en modo independiente
   (PERT: un caso didáctico de 12 actividades; RACI: con errores deliberados; Costos: solo sin proyecto conectado) y con el proyecto DISTRIB+ armado no había cómo cargar su
   parte del caso. Ahora cada uno tiene su botón «⇩ Cargar ejemplo en el proyecto» (acción explícita, con confirmación): PERT trae las 43 ternas O/P

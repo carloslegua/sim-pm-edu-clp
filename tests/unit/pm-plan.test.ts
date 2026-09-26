@@ -115,6 +115,16 @@ describe("integrationFindings — el cruce entre líneas base", () => {
     f.schedule.forecast = { statusDate: "2026-11-03", planFinish: "2027-07-21", forecastFinish: "2027-08-02", delayDays: 8, vsBaselineDays: 8 };
     const p = integrationFindings(f).find((x) => x.code === "P26")!; expect(p.severity).toBe("aviso"); expect(p.text).toMatch(/2026-11-03.*2027-08-02.*8 día\(s\) laborable\(s\) después del planificado.*8 día\(s\).*línea base/);
   });
+  it("P27–P29: los registros de ejecución de Calidad, Comunicaciones y Adquisiciones llegan al plan para la dirección", () => {
+    const f = completo(); f.quality.exec = { inspections: 8, ncrOpen: 1, ncrOverdue: 0, ncrCritical: 0 }; f.comms.exec = { logged: 12, periodicSilent: 0, closeSilent: 0 }; f.procurement.exec = { payments: 2, overpaid: 0, claimsOpen: 1, claimsStale: 0 };
+    expect(codes(f)).toEqual(["P13"]);                                                              // todo al día: nada que avisar
+    f.quality.exec = { inspections: 8, ncrOpen: 2, ncrOverdue: 1, ncrCritical: 1 }; f.comms.exec = { logged: 12, periodicSilent: 2, closeSilent: 1 }; f.procurement.exec = { payments: 2, overpaid: 1, claimsOpen: 3, claimsStale: 2 };
+    const by = (c: string) => integrationFindings(f).find((x) => x.code === c)!;
+    expect(by("P27").severity).toBe("riesgo"); expect(by("P27").text).toMatch(/1 no conformidad\(es\) CRÍTICA\(S\) sin cerrar y 1 con la corrección vencida \(de 2 abierta/);
+    expect(by("P28").severity).toBe("aviso"); expect(by("P28").text).toMatch(/2 comunicación\(es\) periódica.*1 interesado\(s\) a gestionar de cerca/);
+    expect(by("P29").severity).toBe("riesgo"); expect(by("P29").text).toMatch(/1 contrato\(s\) con lo pagado por encima.*2 reclamo\(s\) abierto\(s\) hace más de 30 días/);
+    f.quality.exec = { inspections: 8, ncrOpen: 1, ncrOverdue: 1, ncrCritical: 0 }; expect(by("P27").severity).toBe("aviso");
+  });
   it("P24: el plan no declara ciclo de vida, adaptación, configuración ni proceso de cambios: los nombra uno a uno", () => {
     const f = completo(); f.approach = { lifecycle: "", tailoring: "  ", configuration: "x", changeProcess: "" };
     expect(integrationFindings(f).find((x) => x.code === "P24")!.text).toMatch(/no declara: ciclo de vida y enfoque de desarrollo; adaptación \(tailoring\); proceso de gestión de cambios\./);

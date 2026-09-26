@@ -36,6 +36,7 @@ export function buildSampleProcurement(resolveWbs: (code: string) => string = (c
     strategy: "Se compra todo lo que no es la dirección, la ingeniería ni el control de calidad del proyecto: procura de estructuras, materiales y equipos por paquete, y la instalación MEP a un subcontratista. Cada compra usa el contrato que reparte el riesgo según qué tan definido está su alcance: precio fijo donde hay planos y especificación (equipos, MEP), ajuste económico donde el insumo es volátil (acero) y precio unitario donde la cantidad final varía (materiales, ensayos).",
     performance: "El Jefe de Logística mide a cada proveedor por entregas a tiempo y conformes (registro de recepción de Calidad) y por avance de fabricación; dos entregas no conformes seguidas activan una reunión de acción correctiva con el proveedor y su registro como interesado a gestionar de cerca.",
     approvals: "Adjudicaciones y contratos hasta USD 100.000: Director de Proyecto. Mayores a ese monto: Comité Directivo / Sponsor, con el informe de evaluación de ofertas y la revisión de Asesoría Legal.",
-    asOf: SAMPLE_AS_OF, items, idCounter: items.length + 1
+    // La fecha de corte del ejemplo es la aprobación del plan (2026-08-05): todavía no hay ningún contrato firmado, así que la administración de contratos (pagos y reclamos) empieza en blanco.
+    asOf: SAMPLE_AS_OF, items, idCounter: items.length + 1, admin: { payments: [], claims: [] }
   };
 }

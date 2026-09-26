@@ -20,8 +20,9 @@ import type { EditSession } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
 import { gatherProcurementFacts } from "../../shared/plan-facts";
 import {
-  CONTRACT_TYPES, DECISIONS, SELECTION_METHODS, STATUSES, WARN_DAYS, blankProcurement, criteriaSum, daysBetween, isBuy, launchBy, nextCode, normalizeItem, normalizeProcurement, procurementFindings, procurementState, summary,
-  type ProcData, type ProcFacts, type ProcItem, type ProcState
+  CLAIM_LABEL, CLAIM_STATUSES, CONTRACT_TYPES, DECISIONS, PAY_LABEL, PAY_STATUSES, SELECTION_METHODS, STATUSES, WARN_DAYS, adminSummary, blankProcurement, criteriaSum, daysBetween, isBuy, launchBy, nextClaimCode, nextCode, nextPaymentCode,
+  normalizeClaim, normalizeItem, normalizePayment, normalizeProcurement, procurementFindings, procurementState, summary,
+  type ProcClaim, type ProcData, type ProcFacts, type ProcItem, type ProcPayment, type ProcState
 } from "../../shared/procurement-plan";
 import { buildSampleProcurement, sampleProcurementFacts } from "../../shared/procurement-sample";
 
@@ -93,6 +94,20 @@ function itemHtml(it: ProcItem, f: ProcFacts, flagged: Set<string>): string {
     </div>
     <div style="margin-top:10px"><button class="btn sm danger" data-del="${esc(it.id)}">Eliminar esta adquisición</button></div></div></details>`;
 }
+const itemSel = (attr: string, cur: string): string => `<select ${attr} aria-label="Adquisición"><option value=""></option>${data.items.map((i) => `<option value="${esc(i.id)}"${i.id === cur ? " selected" : ""}>${esc(i.code)} ${esc(i.name.slice(0, 40))}</option>`).join("")}${cur && !data.items.some((i) => i.id === cur) ? `<option value="${esc(cur)}" selected>(ya no existe)</option>` : ""}</select>`;
+const enumSel = (attr: string, list: readonly string[], labels: Record<string, string>, cur: string): string => `<select ${attr}>${list.map((o) => `<option value="${o}"${o === cur ? " selected" : ""}>${esc(labels[o])}</option>`).join("")}</select>`;
+function payRow(p: ProcPayment): string {
+  return `<tr data-ak="pay" data-id="${esc(p.id)}"><td style="width:70px"><input data-af="code" value="${esc(p.code)}" aria-label="Código"></td><td style="min-width:160px">${itemSel('data-af="itemId"', p.itemId)}</td>
+    <td style="width:130px"><input data-af="date" type="date" value="${esc(p.date)}" aria-label="Fecha"></td><td style="min-width:180px"><input data-af="concept" value="${esc(p.concept)}" aria-label="Concepto"></td>
+    <td style="width:130px"><input data-af="amount" type="number" min="0" step="any" value="${p.amount === null ? "" : p.amount}" aria-label="Monto"></td><td style="width:130px">${enumSel('data-af="status" aria-label="Estado"', PAY_STATUSES, PAY_LABEL, p.status)}</td>
+    <td><button class="btn sm danger" data-delpay="${esc(p.id)}" aria-label="Eliminar">✕</button></td></tr>`;
+}
+function claimRow(c: ProcClaim): string {
+  return `<tr data-ak="claim" data-id="${esc(c.id)}"><td style="width:70px"><input data-af="code" value="${esc(c.code)}" aria-label="Código"></td><td style="min-width:160px">${itemSel('data-af="itemId"', c.itemId)}</td>
+    <td style="width:130px"><input data-af="date" type="date" value="${esc(c.date)}" aria-label="Fecha"></td><td style="min-width:200px"><textarea data-af="description" aria-label="Descripción">${esc(c.description)}</textarea></td>
+    <td style="width:130px"><input data-af="amount" type="number" min="0" step="any" value="${c.amount === null ? "" : c.amount}" aria-label="Monto"></td><td style="width:130px">${enumSel('data-af="status" aria-label="Estado"', CLAIM_STATUSES, CLAIM_LABEL, c.status)}</td>
+    <td style="width:130px"><input data-af="resolvedOn" type="date" value="${esc(c.resolvedOn)}" aria-label="Resuelto el"></td><td><button class="btn sm danger" data-delclaim="${esc(c.id)}" aria-label="Eliminar">✕</button></td></tr>`;
+}
 function render(): void {
   const C = getCtx(), f = C.facts, root = $("mainArea"), fs = procurementFindings(data, f), flagged = new Set(fs.map((x) => x.itemId).filter((x): x is string => !!x));
   ($("asOf") as HTMLInputElement).value = data.asOf;
@@ -106,17 +121,22 @@ function render(): void {
       <div class="card fd"><h3>Autorizaciones</h3><label for="approvals">Quién autoriza contratar y hasta qué monto</label><textarea id="approvals" data-p="approvals">${esc(data.approvals)}</textarea></div>
     </div>
     <div id="items">${data.items.length ? data.items.map((it) => itemHtml(it, f, flagged)).join("") : `<div class="empty-hint">Aún no hay adquisiciones. Agrega la primera con <b>＋ Nueva adquisición</b>, o usa <b>Cargar ejemplo</b> para explorar el caso DISTRIB+.</div>`}</div>
+    <div class="card"><h3>Administración de contratos: pagos (${data.admin.payments.length})</h3><p class="hint">Cada pago de un contrato: programado, pagado o retenido. Lo pagado no puede superar el valor del contrato ni imputarse a una adquisición que aún no se contrató.</p>
+      ${data.admin.payments.length ? `<table class="an" id="tblPay"><thead><tr><th>Cód.</th><th>Adquisición</th><th>Fecha</th><th>Concepto</th><th>Monto</th><th>Estado</th><th></th></tr></thead><tbody>${data.admin.payments.map(payRow).join("")}</tbody></table>` : `<div class="empty-hint">Sin pagos registrados. Cuando se firme un contrato, registra el primero con <b>＋ Pago</b>.</div>`}</div>
+    <div class="card"><h3>Administración de contratos: reclamos (${data.admin.claims.length})</h3><p class="hint">Reclamos del proveedor o del proyecto (plazo, precio, calidad). Un reclamo abierto más de 30 días a la fecha de corte se avisa.</p>
+      ${data.admin.claims.length ? `<table class="an" id="tblClaim"><thead><tr><th>Cód.</th><th>Adquisición</th><th>Fecha</th><th>Descripción</th><th>Monto</th><th>Estado</th><th>Resuelto el</th><th></th></tr></thead><tbody>${data.admin.claims.map(claimRow).join("")}</tbody></table>` : `<div class="empty-hint">Sin reclamos registrados.</div>`}</div>
     <datalist id="rolesList">${f.roles.map((r) => `<option value="${esc(r)}">`).join("")}</datalist><datalist id="suppliersList">${f.suppliers.map((r) => `<option value="${esc(r)}">`).join("")}</datalist>
     <div class="card"><h3>Hallazgos del plan</h3><div id="finds"></div></div>`;
   refreshMeta(); wireMain();
 }
 // KPIs, resúmenes de las fichas y hallazgos: se actualizan al editar sin volver a dibujar las fichas (no se pierde el foco).
 function refreshMeta(): void {
-  const C = getCtx(), f = C.facts, s = summary(data, f), fs = procurementFindings(data, f), st = procurementState(data, f);
+  const C = getCtx(), f = C.facts, s = summary(data, f), fs = procurementFindings(data, f), st = procurementState(data, f), ad = adminSummary(data);
   $("kpis").innerHTML = `<div class="kpi"><b>${s.count}</b><span>Adquisiciones planificadas</span></div>
     <div class="kpi"><b>${money(s.total)}</b><span>Valor estimado${s.pctOfBase !== null ? " · " + s.pctOfBase.toFixed(0) + " % del costo base" : ""}</span></div>
     <div class="kpi"><b>${s.late} / ${s.soon}</b><span>Convocatorias vencidas / próximas (≤ ${WARN_DAYS} d)</span></div>
     <div class="kpi"><b>${s.byStatus.Contratada + s.byStatus.Entregada}/${s.count}</b><span>Contratadas o entregadas</span></div>
+    <div class="kpi"><b>${money(ad.paid)}</b><span>Pagado a contratos · ${ad.claimsOpen} reclamo(s) abierto(s)${ad.claimsStale ? " (" + ad.claimsStale + " de más de 30 d)" : ""}</span></div>
     <div class="kpi"><span class="pill st-${st}">${STATE_LABEL[st]}</span><span style="display:block;margin-top:6px">Estado del plan</span></div>`;
   data.items.forEach((it) => {
     const d = document.querySelector(`details.pr[data-id="${it.id}"]`); if (!d) return;
@@ -148,6 +168,15 @@ function wireMain(): void {
   items.querySelectorAll<HTMLElement>("[data-addcrit]").forEach((b) => b.addEventListener("click", () => { const it = byId((b.closest("details.pr") as HTMLElement).dataset.id || null); if (!it) return; it.criteria.push({ name: "", weight: null }); render(); save(); }));
   items.querySelectorAll<HTMLElement>("[data-delcrit]").forEach((b) => b.addEventListener("click", () => { const it = byId((b.closest("details.pr") as HTMLElement).dataset.id || null); if (!it) return; it.criteria.splice(Number(b.dataset.delcrit), 1); render(); save(); }));
   document.querySelectorAll<HTMLTextAreaElement>("[data-p]").forEach((t) => t.addEventListener("input", () => { (data as unknown as Record<string, string>)[t.dataset.p as string] = t.value; refreshMeta(); save(); }));
+  const updAdmin = (el: Element): void => {
+    const tr = el.closest("tr"), f = el.getAttribute("data-af"); if (!tr || !f) return;
+    const list = (tr.getAttribute("data-ak") === "pay" ? data.admin.payments : data.admin.claims) as unknown as Array<Record<string, unknown>>, o = list.find((x) => x.id === tr.getAttribute("data-id")); if (!o) return;
+    const v = (el as HTMLInputElement).value; o[f] = f === "amount" ? (v === "" || !isFinite(Number(v)) ? null : Number(v)) : v; refreshMeta(); save();
+  };
+  ["tblPay", "tblClaim"].forEach((tid) => { const t = document.getElementById(tid); if (!t) return;
+    t.addEventListener("input", (e) => { const x = e.target as Element; if (x.tagName !== "SELECT") updAdmin(x); }); t.addEventListener("change", (e) => updAdmin(e.target as Element));
+    t.querySelectorAll<HTMLElement>("[data-delpay]").forEach((b) => b.addEventListener("click", () => { data.admin.payments = data.admin.payments.filter((p) => p.id !== b.dataset.delpay); render(); save(); setStatus("Pago eliminado."); }));
+    t.querySelectorAll<HTMLElement>("[data-delclaim]").forEach((b) => b.addEventListener("click", () => { data.admin.claims = data.admin.claims.filter((c) => c.id !== b.dataset.delclaim); render(); save(); setStatus("Reclamo eliminado."); })); });
 }
 
 // ---------- acciones ----------
@@ -155,6 +184,8 @@ function addItem(): void {
   const id = newId(), it = normalizeItem({ id, code: nextCode(data.items), decision: "Comprar", status: "Planificada" }, id); data.items.push(it); openSet.add(id); render(); save(); setStatus(it.code + " creada: completa qué cubre, el contrato y las fechas.");
   const el = document.querySelector(`details.pr[data-id="${id}"] [data-f="name"]`) as HTMLElement | null; if (el) el.focus();
 }
+function addPay(): void { const id = "pg" + data.idCounter++, p = normalizePayment({ id, code: nextPaymentCode(data.admin.payments), date: todayISO() }, id); data.admin.payments.push(p); render(); save(); setStatus(p.code + " creado: elige la adquisición y el monto."); }
+function addClaim(): void { const id = "rc" + data.idCounter++, c = normalizeClaim({ id, code: nextClaimCode(data.admin.claims), date: todayISO() }, id); data.admin.claims.push(c); render(); save(); setStatus(c.code + " creado: elige la adquisición y describe el reclamo."); }
 function exportCsv(): void {
   const f = getCtx().facts, leaf = (id: string): string => { const l = f.leaves.find((x) => x.id === id); return l ? l.code : ""; }, q = (v: string): string => '"' + v.replace(/"/g, '""') + '"';
   const lines = [["Código", "Adquisición", "Paquetes EDT", "Decisión", "Contrato", "Selección", "Valor", "Fecha requerida", "Plazo proveedor (d)", "Selección (d)", "Convocar antes del", "Proveedor", "Estado", "Responsable"].map(q).join(",")];
@@ -179,7 +210,7 @@ function sampleForProject(): ProcData {
   return buildSampleProcurement((c) => leaf.get(c) || "", (c) => risk.get(c) || "");
 }
 function wireToolbar(): void {
-  $("btnAdd").addEventListener("click", addItem); $("btnCsv").addEventListener("click", exportCsv);
+  $("btnAdd").addEventListener("click", addItem); $("btnAddPay").addEventListener("click", addPay); $("btnAddClaim").addEventListener("click", addClaim); $("btnCsv").addEventListener("click", exportCsv);
   ($("asOf") as HTMLInputElement).addEventListener("change", (e) => { const v = (e.target as HTMLInputElement).value; if (/^\d{4}-\d{2}-\d{2}$/.test(v)) { data.asOf = v; refreshMeta(); save(); } });
   $("btnSample").addEventListener("click", () => {
     showConfirm("Esto reemplazará el plan actual con el caso de ejemplo DISTRIB+ S.A. ¿Continuar?", "Cargar ejemplo").then((ok) => {
@@ -207,7 +238,7 @@ function save(): void { saveFn(); }
     const b = document.getElementById("banner");
     if (b) { b.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar el plan de adquisiciones aquí: recárgala, o vuelve a activar el proyecto original desde el Panel de Control."; b.classList.add("show"); }
   }
-  const payload = () => ({ strategy: data.strategy, performance: data.performance, approvals: data.approvals, asOf: data.asOf, items: data.items, idCounter: data.idCounter });
+  const payload = () => ({ strategy: data.strategy, performance: data.performance, approvals: data.approvals, asOf: data.asOf, items: data.items, idCounter: data.idCounter, admin: data.admin });
   function pull(): void {
     const p = window.GPI!.active(); if (!p) return;
     loadedProjectId = window.GPI!.activeId(); session = window.GPI!.openSession("procurement"); ctxDirty = true;

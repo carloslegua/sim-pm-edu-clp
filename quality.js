@@ -281,6 +281,12 @@
 		};
 	}
 	//#endregion
+	//#region src/shared/local-date.ts
+	function todayLocalISO(d = /* @__PURE__ */ new Date()) {
+		const p = (n) => (n < 10 ? "0" : "") + n;
+		return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+	}
+	//#endregion
 	//#region src/shared/quality-plan.ts
 	var CHECK_KINDS = ["Aseguramiento", "Control"];
 	var QUALITY_METHODS = [
@@ -308,6 +314,36 @@
 		evaluacion: "conformidad",
 		falla_interna: "no_conformidad",
 		falla_externa: "no_conformidad"
+	};
+	var INSPECTION_RESULTS = [
+		"conforme",
+		"observada",
+		"no_conforme"
+	];
+	var RESULT_LABEL = {
+		conforme: "Conforme",
+		observada: "Con observaciones",
+		no_conforme: "No conforme"
+	};
+	var NCR_SEVERITIES = [
+		"menor",
+		"mayor",
+		"critica"
+	];
+	var SEVERITY_LABEL = {
+		menor: "Menor",
+		mayor: "Mayor",
+		critica: "Crítica"
+	};
+	var NCR_STATUSES = [
+		"abierta",
+		"en_correccion",
+		"cerrada"
+	];
+	var NCR_STATUS_LABEL = {
+		abierta: "Abierta",
+		en_correccion: "En corrección",
+		cerrada: "Cerrada"
 	};
 	var str = (v) => v === null || v === void 0 ? "" : String(v);
 	var strs = (v) => Array.isArray(v) ? v.map(str).filter(Boolean) : [];
@@ -357,16 +393,49 @@
 			amount: numOrNull(x.amount)
 		};
 	}
+	function normalizeInspection(o, fb) {
+		const x = rec(o), id = str(x.id) || fb;
+		return {
+			id,
+			code: str(x.code) || id,
+			checkId: str(x.checkId),
+			date: str(x.date),
+			result: INSPECTION_RESULTS.indexOf(x.result) >= 0 ? x.result : "conforme",
+			inspector: str(x.inspector),
+			notes: str(x.notes),
+			ncrId: str(x.ncrId)
+		};
+	}
+	function normalizeNcr(o, fb) {
+		const x = rec(o), id = str(x.id) || fb;
+		return {
+			id,
+			code: str(x.code) || id,
+			wbsId: str(x.wbsId),
+			description: str(x.description),
+			severity: NCR_SEVERITIES.indexOf(x.severity) >= 0 ? x.severity : "menor",
+			detectedOn: str(x.detectedOn),
+			status: NCR_STATUSES.indexOf(x.status) >= 0 ? x.status : "abierta",
+			action: str(x.action),
+			owner: str(x.owner),
+			dueDate: str(x.dueDate),
+			closedOn: str(x.closedOn)
+		};
+	}
 	function normalizeQuality(raw) {
 		const x = rec(raw), metrics = (Array.isArray(x.metrics) ? x.metrics : []).map((o, i) => normalizeMetric(o, "qm" + (i + 1))), checks = (Array.isArray(x.checks) ? x.checks : []).map((o, i) => normalizeCheck(o, "qc" + (i + 1)));
 		const coq = (Array.isArray(x.coq) ? x.coq : []).map((o, i) => normalizeCoq(o, "cq" + (i + 1)));
+		const inspections = (Array.isArray(x.inspections) ? x.inspections : []).map((o, i) => normalizeInspection(o, "in" + (i + 1))), ncrs = (Array.isArray(x.ncrs) ? x.ncrs : []).map((o, i) => normalizeNcr(o, "nc" + (i + 1)));
 		return {
 			policy: str(x.policy),
 			standards: str(x.standards),
 			metrics,
 			checks,
 			coq,
-			idCounter: Number(x.idCounter) || metrics.length + checks.length + coq.length + 1
+			idCounter: Number(x.idCounter) || metrics.length + checks.length + coq.length + inspections.length + ncrs.length + 1,
+			inspections,
+			ncrs,
+			asOf: /^\d{4}-\d{2}-\d{2}$/.test(str(x.asOf)) ? str(x.asOf) : ""
 		};
 	}
 	var blankQuality = () => normalizeQuality(null);
@@ -380,6 +449,8 @@
 	}
 	var nextMetricCode = (m) => nextOf(m, "QM-");
 	var nextCheckCode = (c) => nextOf(c, "QC-");
+	var nextInspectionCode = (c) => nextOf(c, "IN-");
+	var nextNcrCode = (c) => nextOf(c, "NC-");
 	function coqSummary(coq, baseCost) {
 		const byCat = {
 			prevencion: 0,
@@ -409,8 +480,21 @@
 			highRisk: hr.has(l.id)
 		}));
 	}
-	function qualityFindings(d, f) {
-		const out = [], F = (code, severity, text) => {
+	var isoOk = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	var asOfOf = (d, today) => isoOk(d.asOf) ? d.asOf : today;
+	function executionSummary(d, today0) {
+		const today = asOfOf(d, today0), open = d.ncrs.filter((n) => n.status !== "cerrada");
+		return {
+			inspections: d.inspections.length,
+			nonConforming: d.inspections.filter((i) => i.result === "no_conforme").length,
+			ncrs: d.ncrs.length,
+			ncrOpen: open.length,
+			ncrOverdue: isoOk(today) ? open.filter((n) => isoOk(n.dueDate) && n.dueDate < today).length : 0,
+			ncrCritical: open.filter((n) => n.severity === "critica").length
+		};
+	}
+	function qualityFindings(d, f, today0 = "") {
+		const today = asOfOf(d, today0), out = [], F = (code, severity, text) => {
 			out.push({
 				code,
 				severity,
@@ -418,7 +502,7 @@
 			});
 		};
 		const leafBy = new Map(f.leaves.map((l) => [l.id, l])), roles = new Set(f.roles.map((r) => r.toLowerCase()));
-		if (!(d.checks.length || d.metrics.length || d.coq.length)) return out;
+		if (!(d.checks.length || d.metrics.length || d.coq.length || d.inspections.length || d.ncrs.length)) return out;
 		coverage(d, f).filter((r) => r.needs).filter((r) => !r.checks.length).forEach((r) => {
 			if (r.highRisk) F("Q2", "riesgo", "El paquete " + r.leaf.code + " «" + r.leaf.name + "» tiene un riesgo alto abierto y ninguna actividad de control o aseguramiento: nada verifica su criterio de aceptación.");
 			else F("Q1", "aviso", "El paquete " + r.leaf.code + " «" + r.leaf.name + "» tiene criterio de aceptación («" + r.leaf.acceptance.trim().slice(0, 70) + (r.leaf.acceptance.trim().length > 70 ? "…" : "") + "») pero ninguna actividad que lo verifique.");
@@ -444,11 +528,26 @@
 		if (d.coq.length && s.byCat.prevencion <= 0) F("Q10", "aviso", "El costo de la calidad no invierte nada en prevención: es lo que más barato evita fallas (evaluar solo detecta el defecto ya hecho).");
 		if (d.coq.length && s.failureShare !== null && s.failureShare > 50) F("Q10", "aviso", "Más de la mitad del costo de la calidad (" + Math.round(s.failureShare) + " %) es por fallas: el plan gasta más en corregir que en prevenir y evaluar.");
 		if (d.coq.some((c) => c.amount === null)) F("Q10", "info", "Hay partidas del costo de la calidad sin monto.");
+		const checkBy = new Map(d.checks.map((c) => [c.id, c])), ncrBy = new Map(d.ncrs.map((n) => [n.id, n]));
+		d.inspections.forEach((i) => {
+			const w = i.code + (checkBy.has(i.checkId) ? " (" + checkBy.get(i.checkId).code + ")" : "");
+			if (!checkBy.has(i.checkId)) F("Q15", "aviso", w + ": no corresponde a ningún control del plan" + (i.checkId ? " (el control ya no existe)" : "") + ": una inspección sin control planificado no tiene criterio de aceptación contra el cual juzgarla.");
+			if (i.result === "no_conforme" && !(i.ncrId && ncrBy.has(i.ncrId))) F("Q13", "aviso", w + ": resultado NO CONFORME sin una no conformidad registrada: el defecto se detectó pero nadie está obligado a corregirlo.");
+			if (!isoOk(i.date)) F("Q15", "info", w + ": sin fecha de inspección.");
+		});
+		d.ncrs.forEach((n) => {
+			const w = n.code + (n.description.trim() ? " «" + n.description.trim().slice(0, 60) + (n.description.trim().length > 60 ? "…" : "") + "»" : ""), open = n.status !== "cerrada";
+			if (open && n.severity === "critica") F("Q12", "riesgo", w + ": no conformidad CRÍTICA sin cerrar: puede comprometer la aceptación del entregable (y la seguridad o el cumplimiento normativo).");
+			if (open && isoOk(today) && isoOk(n.dueDate) && n.dueDate < today) F("Q12", n.severity === "menor" ? "info" : "aviso", w + ": la corrección vencía el " + n.dueDate + " y sigue " + NCR_STATUS_LABEL[n.status].toLowerCase() + ".");
+			if (open && (!n.action.trim() || !n.owner.trim() || !isoOk(n.dueDate))) F("Q14", "aviso", w + ": abierta sin acción correctiva, responsable o fecha límite: nadie sabe qué hacer ni para cuándo.");
+			if (!open && (!n.action.trim() || !isoOk(n.closedOn))) F("Q14", "info", w + ": cerrada sin registrar la acción correctiva o la fecha de cierre (no queda evidencia de cómo se resolvió).");
+			if (!n.wbsId || !leafBy.has(n.wbsId)) F("Q15", "info", w + ": no apunta a un paquete de trabajo de la EDT.");
+		});
 		return out;
 	}
-	function qualityState(d, f) {
-		if (!(d.checks.length || d.metrics.length || d.coq.length)) return "vacio";
-		const fs = qualityFindings(d, f);
+	function qualityState(d, f, today = "") {
+		if (!(d.checks.length || d.metrics.length || d.coq.length || d.inspections.length || d.ncrs.length)) return "vacio";
+		const fs = qualityFindings(d, f, today);
 		return fs.some((x) => x.severity === "riesgo") ? "rojo" : fs.some((x) => x.severity === "aviso") ? "ambar" : "verde";
 	}
 	//#endregion
@@ -1359,6 +1458,103 @@
 			4e4
 		]
 	];
+	var INSPECTIONS = [
+		[
+			"IN-01",
+			"QC-01",
+			"2026-07-09",
+			"conforme",
+			"Director de Proyecto",
+			"Acta firmada por el Sponsor.",
+			""
+		],
+		[
+			"IN-02",
+			"QC-02",
+			"2026-08-05",
+			"conforme",
+			"Comité Directivo / Sponsor",
+			"Plan y líneas base aprobados.",
+			""
+		],
+		[
+			"IN-03",
+			"QC-03",
+			"2026-08-31",
+			"conforme",
+			"Jefe de Ingeniería",
+			"Informe geotécnico firmado por especialista colegiado.",
+			""
+		],
+		[
+			"IN-04",
+			"QC-04",
+			"2026-09-30",
+			"observada",
+			"Jefe de Ingeniería",
+			"Observaciones de detalle en los cuadros de columnas: se corrigen y reemiten.",
+			"nc2"
+		],
+		[
+			"IN-05",
+			"QC-05",
+			"2026-09-29",
+			"conforme",
+			"Jefe de Ingeniería",
+			"Memoria eléctrica y sanitaria sin observaciones.",
+			""
+		],
+		[
+			"IN-06",
+			"QC-09",
+			"2026-10-13",
+			"conforme",
+			"Control de Calidad",
+			"Protocolos de fábrica de tableros y equipos archivados.",
+			""
+		],
+		[
+			"IN-07",
+			"QC-07",
+			"2026-10-20",
+			"no_conforme",
+			"Control de Calidad",
+			"Lote 2: tres piezas con soldadura fuera de tolerancia y certificado de calidad incompleto.",
+			"nc1"
+		],
+		[
+			"IN-08",
+			"QC-08",
+			"2026-11-02",
+			"conforme",
+			"Control de Calidad",
+			"Guías, certificados y cantidades de materiales conformes.",
+			""
+		]
+	];
+	var NCRS = [[
+		"NC-01",
+		"3.1",
+		"Lote 2 de estructuras: tres piezas con soldadura fuera de tolerancia y certificado de calidad incompleto",
+		"mayor",
+		"2026-10-20",
+		"en_correccion",
+		"Reproceso de soldadura en fábrica, nueva inspección de Control de Calidad y entrega del certificado del lote 2",
+		"Proveedor — Estructuras metálicas",
+		"2026-11-20",
+		""
+	], [
+		"NC-02",
+		"2.2",
+		"Observaciones de detalle en los cuadros de columnas de los planos estructurales",
+		"menor",
+		"2026-09-30",
+		"cerrada",
+		"Planos corregidos y reemitidos (revisión B) y revisados por el Jefe de Ingeniería",
+		"Ingeniero Estructural",
+		"2026-10-07",
+		"2026-10-06"
+	]];
 	function buildSampleQuality() {
 		const id = (code) => "w-" + code, metrics = METRICS.map(([code, name, wbs, definition, target, tolerance, method, frequency, owner], i) => normalizeMetric({
 			id: "qm" + (i + 1),
@@ -1391,13 +1587,40 @@
 			description,
 			amount
 		}, "cq" + (i + 1)));
+		const checkId = (code) => "qc" + (CHECKS.findIndex((c) => c[0] === code) + 1);
+		const inspections = INSPECTIONS.map(([code, qc, date, result, inspector, notes, ncr], i) => normalizeInspection({
+			id: "in" + (i + 1),
+			code,
+			checkId: checkId(qc),
+			date,
+			result,
+			inspector,
+			notes,
+			ncrId: ncr
+		}, "in" + (i + 1)));
+		const ncrs = NCRS.map(([code, wbs, description, severity, detectedOn, status, action, owner, dueDate, closedOn], i) => normalizeNcr({
+			id: "nc" + (i + 1),
+			code,
+			wbsId: id(wbs),
+			description,
+			severity,
+			detectedOn,
+			status,
+			action,
+			owner,
+			dueDate,
+			closedOn
+		}, "nc" + (i + 1)));
 		return {
 			policy: "DISTRIB+ entrega un almacén que cumple los planos aprobados y las normas aplicables, verificado con ensayos y pruebas documentados: la calidad se planifica y se previene antes de inspeccionarse, y ninguna entrega se acepta sin su registro de conformidad.",
 			standards: "Reglamento Nacional de Edificaciones (RNE): E.050 Suelos y Cimentaciones, E.060 Concreto Armado, E.090 Estructuras Metálicas; Código Nacional de Electricidad — Utilización; planos y especificaciones técnicas aprobados. (Ilustrativo: verificar contra la versión vigente.)",
 			metrics,
 			checks,
 			coq,
-			idCounter: metrics.length + checks.length + coq.length + 1
+			inspections,
+			ncrs,
+			asOf: "2026-11-03",
+			idCounter: metrics.length + checks.length + coq.length + inspections.length + ncrs.length + 1
 		};
 	}
 	//#endregion
@@ -1473,8 +1696,32 @@
     <td style="min-width:150px"><input data-f="record" value="${esc(c.record)}" aria-label="Registro"></td>
     <td style="min-width:120px"><select data-f="metricId" aria-label="Métrica">${`<option value=""></option>` + d.metrics.map((m) => `<option value="${esc(m.id)}"${m.id === c.metricId ? " selected" : ""}>${esc(m.code)}</option>`).join("")}</select></td>${del("check", c.id)}</tr>`;
 	}
+	var enumOpts = (list, labels, cur) => list.map((o) => `<option value="${o}"${o === cur ? " selected" : ""}>${esc(labels[o])}</option>`).join("");
+	function inspRow(i, d) {
+		return `<tr data-k="insp" data-id="${esc(i.id)}">
+    <td style="width:70px"><input data-f="code" value="${esc(i.code)}" aria-label="Código"></td>
+    <td style="min-width:150px"><select data-f="checkId" aria-label="Control del plan">${`<option value=""></option>` + d.checks.map((c) => `<option value="${esc(c.id)}"${c.id === i.checkId ? " selected" : ""}>${esc(c.code)} ${esc(c.what.slice(0, 50))}</option>`).join("") + (i.checkId && !d.checks.some((c) => c.id === i.checkId) ? `<option value="${esc(i.checkId)}" selected>(ya no existe)</option>` : "")}</select></td>
+    <td style="width:130px"><input data-f="date" type="date" value="${esc(i.date)}" aria-label="Fecha"></td>
+    <td style="width:150px"><select data-f="result" aria-label="Resultado">${enumOpts(INSPECTION_RESULTS, RESULT_LABEL, i.result)}</select></td>
+    <td style="min-width:130px"><input data-f="inspector" list="rolesList" value="${esc(i.inspector)}" aria-label="Inspector"></td>
+    <td style="min-width:200px"><textarea data-f="notes" aria-label="Observaciones">${esc(i.notes)}</textarea></td>
+    <td style="min-width:120px"><select data-f="ncrId" aria-label="No conformidad">${`<option value=""></option>` + d.ncrs.map((n) => `<option value="${esc(n.id)}"${n.id === i.ncrId ? " selected" : ""}>${esc(n.code)}</option>`).join("")}</select></td>${del("insp", i.id)}</tr>`;
+	}
+	function ncrRow(n, f) {
+		return `<tr data-k="ncr" data-id="${esc(n.id)}">
+    <td style="width:70px"><input data-f="code" value="${esc(n.code)}" aria-label="Código"></td>
+    <td style="min-width:150px"><select data-f="wbsId" aria-label="Paquete">${leafOpts(f, n.wbsId)}</select></td>
+    <td style="min-width:200px"><textarea data-f="description" aria-label="Descripción">${esc(n.description)}</textarea></td>
+    <td style="width:110px"><select data-f="severity" aria-label="Gravedad">${enumOpts(NCR_SEVERITIES, SEVERITY_LABEL, n.severity)}</select></td>
+    <td style="width:130px"><input data-f="detectedOn" type="date" value="${esc(n.detectedOn)}" aria-label="Detectada"></td>
+    <td style="width:130px"><select data-f="status" aria-label="Estado">${enumOpts(NCR_STATUSES, NCR_STATUS_LABEL, n.status)}</select></td>
+    <td style="min-width:200px"><textarea data-f="action" aria-label="Acción correctiva">${esc(n.action)}</textarea></td>
+    <td style="min-width:130px"><input data-f="owner" list="rolesList" value="${esc(n.owner)}" aria-label="Responsable"></td>
+    <td style="width:130px"><input data-f="dueDate" type="date" value="${esc(n.dueDate)}" aria-label="Fecha límite"></td>
+    <td style="width:130px"><input data-f="closedOn" type="date" value="${esc(n.closedOn)}" aria-label="Cerrada el"></td>${del("ncr", n.id)}</tr>`;
+	}
 	function render() {
-		const f = getCtx().facts, root = $("mainArea"), fs = qualityFindings(data, f);
+		const f = getCtx().facts, root = $("mainArea"), fs = qualityFindings(data, f, todayLocalISO());
 		const flagged = /* @__PURE__ */ new Set();
 		fs.forEach((x) => {
 			const m = /^(QC-\d+)/.exec(x.text);
@@ -1493,6 +1740,10 @@
     <div class="card"><h3>Aseguramiento y control por paquete (${data.checks.length})</h3><p class="hint">Cada paquete con criterio de aceptación necesita al menos una actividad que lo verifique; «Aseguramiento» previene, «Control» detecta.</p>
       ${data.checks.length ? `<table class="an" id="tblChecks"><thead><tr><th>Cód.</th><th>Paquete</th><th>Qué se verifica</th><th>Criterio de aceptación</th><th>Tipo</th><th>Método</th><th>Frecuencia</th><th>Responsable</th><th>Registro</th><th>Métrica</th><th></th></tr></thead><tbody>${data.checks.map((c) => checkRow(c, f, data, flagged)).join("")}</tbody></table>` : `<div class="empty-hint">Sin actividades de control ni aseguramiento. Agrega la primera con <b>＋ Control / aseguramiento</b>, o usa <b>Cargar ejemplo</b> para explorar el caso DISTRIB+.</div>`}
       <datalist id="rolesList">${f.roles.map((r) => `<option value="${esc(r)}">`).join("")}</datalist></div>
+    <div class="card"><h3>Ejecución: inspecciones (${data.inspections.length})</h3><div class="fd" style="max-width:260px"><label for="asOf">Fecha de corte del seguimiento (vacía = hoy)</label><input id="asOf" type="date" data-p="asOf" value="${esc(data.asOf)}"></div><p class="hint">Lo que realmente se inspeccionó, ensayó o probó: qué control del plan, cuándo y con qué resultado. Un resultado «No conforme» exige registrar su no conformidad.</p>
+      ${data.inspections.length ? `<table class="an" id="tblInsp"><thead><tr><th>Cód.</th><th>Control del plan</th><th>Fecha</th><th>Resultado</th><th>Inspector</th><th>Observaciones</th><th>No conformidad</th><th></th></tr></thead><tbody>${data.inspections.map((i) => inspRow(i, data)).join("")}</tbody></table>` : `<div class="empty-hint">Sin inspecciones. Cuando empiece la ejecución, registra la primera con <b>＋ Inspección</b>.</div>`}</div>
+    <div class="card"><h3>Ejecución: no conformidades (${data.ncrs.length})</h3><p class="hint">Cada defecto detectado con su gravedad, la acción correctiva, quién la hace y para cuándo. Una crítica sin cerrar es un riesgo para la aceptación; una abierta sin acción o vencida se avisa.</p>
+      ${data.ncrs.length ? `<table class="an" id="tblNcr"><thead><tr><th>Cód.</th><th>Paquete</th><th>Descripción</th><th>Gravedad</th><th>Detectada</th><th>Estado</th><th>Acción correctiva</th><th>Responsable</th><th>Fecha límite</th><th>Cerrada</th><th></th></tr></thead><tbody>${data.ncrs.map((n) => ncrRow(n, f)).join("")}</tbody></table>` : `<div class="empty-hint">Sin no conformidades registradas.</div>`}</div>
     <div class="card"><h3>Costo de la calidad</h3><p class="hint">Conformidad: prevención + evaluación. No conformidad: fallas internas (antes de la entrega) + externas (después).</p>
       ${data.coq.length ? `<table class="an" id="tblCoq"><thead><tr><th>Categoría</th><th>Descripción</th><th>Monto</th><th></th></tr></thead><tbody>${data.coq.map((c) => `<tr data-k="coq" data-id="${esc(c.id)}"><td style="width:170px"><select data-f="cat" aria-label="Categoría">${COQ_CATS.map((k) => `<option value="${k}"${k === c.cat ? " selected" : ""}>${COQ_LABEL[k]}</option>`).join("")}</select></td><td><input data-f="description" value="${esc(c.description)}" aria-label="Descripción"></td><td style="width:140px"><input data-f="amount" type="number" min="0" step="any" value="${c.amount === null ? "" : c.amount}" aria-label="Monto"></td>${del("coq", c.id)}</tr>`).join("")}</tbody></table>` : `<div class="empty-hint">Sin partidas. Agrega la primera con <b>＋ Partida de costo</b>.</div>`}
       <div class="bars" id="coqBars"></div></div>
@@ -1502,11 +1753,12 @@
 		wireMain();
 	}
 	function refreshMeta() {
-		const f = getCtx().facts, cov = coverage(data, f), fs = qualityFindings(data, f), st = qualityState(data, f), s = coqSummary(data.coq, f.baseCost);
+		const f = getCtx().facts, cov = coverage(data, f), today = todayLocalISO(), fs = qualityFindings(data, f, today), st = qualityState(data, f, today), s = coqSummary(data.coq, f.baseCost), ex = executionSummary(data, today);
 		const needing = cov.filter((r) => r.needs), ok = needing.filter((r) => r.checks.length).length;
 		$("kpis").innerHTML = `<div class="kpi"><b>${ok}/${needing.length}</b><span>Paquetes con criterio de aceptación verificados</span></div>
     <div class="kpi"><b>${data.metrics.length}</b><span>Métricas</span></div>
     <div class="kpi"><b>${data.checks.filter((c) => c.kind === "Aseguramiento").length} / ${data.checks.filter((c) => c.kind === "Control").length}</b><span>Aseguramiento / control</span></div>
+    <div class="kpi"><b>${ex.inspections} / ${ex.ncrOpen}</b><span>Inspecciones / no conformidades abiertas${ex.ncrOverdue ? " · " + ex.ncrOverdue + " vencida(s)" : ""}${ex.ncrCritical ? " · " + ex.ncrCritical + " crítica(s)" : ""}</span></div>
     <div class="kpi"><b>${money(s.total)}</b><span>Costo de la calidad${s.pctOfBase !== null ? " · " + s.pctOfBase.toFixed(1) + " % del costo base" : ""}</span></div>
     <div class="kpi"><span class="pill st-${st}">${STATE_LABEL[st]}</span><span style="display:block;margin-top:6px">Estado del plan</span></div>`;
 		const bars = document.getElementById("coqBars");
@@ -1524,7 +1776,7 @@
 			const tr = el.closest("tr"), f = el.getAttribute("data-f");
 			if (!tr || !f) return;
 			const k = tr.getAttribute("data-k"), id = tr.getAttribute("data-id");
-			const item = (k === "metric" ? data.metrics : k === "check" ? data.checks : data.coq).find((x) => x.id === id);
+			const item = (k === "metric" ? data.metrics : k === "check" ? data.checks : k === "insp" ? data.inspections : k === "ncr" ? data.ncrs : data.coq).find((x) => x.id === id);
 			if (!item) return;
 			if (f === "wbsIds") item.wbsIds = Array.from(el.selectedOptions).map((o) => o.value);
 			else if (f === "amount") {
@@ -1537,7 +1789,9 @@
 		[
 			"tblMetrics",
 			"tblChecks",
-			"tblCoq"
+			"tblCoq",
+			"tblInsp",
+			"tblNcr"
 		].forEach((tid) => {
 			const t = document.getElementById(tid);
 			if (!t) return;
@@ -1554,8 +1808,18 @@
 				data.checks.forEach((c) => {
 					if (c.metricId === id) c.metricId = "";
 				});
-			} else if (k === "check") data.checks = data.checks.filter((c) => c.id !== id);
-			else data.coq = data.coq.filter((c) => c.id !== id);
+			} else if (k === "check") {
+				data.checks = data.checks.filter((c) => c.id !== id);
+				data.inspections.forEach((i) => {
+					if (i.checkId === id) i.checkId = "";
+				});
+			} else if (k === "insp") data.inspections = data.inspections.filter((i) => i.id !== id);
+			else if (k === "ncr") {
+				data.ncrs = data.ncrs.filter((n) => n.id !== id);
+				data.inspections.forEach((i) => {
+					if (i.ncrId === id) i.ncrId = "";
+				});
+			} else data.coq = data.coq.filter((c) => c.id !== id);
 			render();
 			save();
 			setStatus("Fila eliminada.");
@@ -1606,6 +1870,30 @@
 		save();
 		setStatus("Métrica agregada.");
 		focusLast("#tblMetrics input[data-f=name]");
+	}
+	function addInsp() {
+		const id = newId("in");
+		data.inspections.push(normalizeInspection({
+			id,
+			code: nextInspectionCode(data.inspections),
+			date: todayLocalISO()
+		}, id));
+		render();
+		save();
+		setStatus("Inspección agregada: elige el control del plan y el resultado.");
+		focusLast("#tblInsp select[data-f=checkId]");
+	}
+	function addNcr() {
+		const id = newId("nc");
+		data.ncrs.push(normalizeNcr({
+			id,
+			code: nextNcrCode(data.ncrs),
+			detectedOn: todayLocalISO()
+		}, id));
+		render();
+		save();
+		setStatus("No conformidad agregada: elige el paquete y describe el defecto.");
+		focusLast("#tblNcr select[data-f=wbsId]");
 	}
 	function addCoq() {
 		const id = newId("cq");
@@ -1694,12 +1982,17 @@
 		d.metrics.forEach((m) => {
 			m.wbsIds = m.wbsIds.map(re).filter(Boolean);
 		});
+		d.ncrs.forEach((n) => {
+			n.wbsId = re(n.wbsId);
+		});
 		return d;
 	}
 	function wireToolbar() {
 		$("btnAddCheck").addEventListener("click", addCheck);
 		$("btnAddMetric").addEventListener("click", addMetric);
 		$("btnAddCoq").addEventListener("click", addCoq);
+		$("btnAddInsp").addEventListener("click", addInsp);
+		$("btnAddNcr").addEventListener("click", addNcr);
 		$("btnCsv").addEventListener("click", exportCsv);
 		$("btnSample").addEventListener("click", () => {
 			showConfirm("Esto reemplazará el plan actual con el caso de ejemplo DISTRIB+ S.A. ¿Continuar?", "Cargar ejemplo").then((ok) => {
@@ -1747,7 +2040,10 @@
 			metrics: data.metrics,
 			checks: data.checks,
 			coq: data.coq,
-			idCounter: data.idCounter
+			idCounter: data.idCounter,
+			inspections: data.inspections,
+			ncrs: data.ncrs,
+			asOf: data.asOf
 		});
 		function pull() {
 			const p = window.GPI.active();

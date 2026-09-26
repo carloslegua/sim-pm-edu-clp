@@ -5,7 +5,7 @@
 // usarlos en un proyecto real. Los montos del costo de la calidad son ilustrativos y se suponen incluidos en las partidas del presupuesto.
 // tests/unit/quality-sample.test.ts verifica la coherencia con el diccionario, el OBS y los riesgos.
 import { SAMPLE_CASE_BASE_COST, SAMPLE_CASE_LEAVES, SAMPLE_OBS_ROLES } from "./case-distribplus";
-import { normalizeCheck, normalizeCoq, normalizeMetric, type QualityData, type QualityFacts } from "./quality-plan";
+import { normalizeCheck, normalizeCoq, normalizeInspection, normalizeMetric, normalizeNcr, type QualityData, type QualityFacts } from "./quality-plan";
 import { SAMPLE_WBS_DICTIONARY } from "./wbs-sample";
 import { SAMPLE_PLAN, buildSampleRisks } from "./risk-sample";
 import { inherentScore, isOpen, levelOf } from "./risk-analysis";
@@ -54,14 +54,37 @@ const COQ: Array<[string, string, number]> = [
   ["evaluacion", "Ensayos de laboratorio (concreto, suelos y densidad de campo)", 95000], ["evaluacion", "Inspecciones y pruebas de recepción", 55000],
   ["falla_interna", "Retrabajo previsto por observaciones de inspección", 70000], ["falla_externa", "Reserva para garantías y reparaciones después de la entrega", 40000]
 ];
+// Inspecciones: código · control · fecha · resultado · inspector · notas · no conformidad (id)
+type I = [string, string, string, string, string, string, string];
+const INSPECTIONS: I[] = [
+  ["IN-01", "QC-01", "2026-07-09", "conforme", "Director de Proyecto", "Acta firmada por el Sponsor.", ""],
+  ["IN-02", "QC-02", "2026-08-05", "conforme", "Comité Directivo / Sponsor", "Plan y líneas base aprobados.", ""],
+  ["IN-03", "QC-03", "2026-08-31", "conforme", "Jefe de Ingeniería", "Informe geotécnico firmado por especialista colegiado.", ""],
+  ["IN-04", "QC-04", "2026-09-30", "observada", "Jefe de Ingeniería", "Observaciones de detalle en los cuadros de columnas: se corrigen y reemiten.", "nc2"],
+  ["IN-05", "QC-05", "2026-09-29", "conforme", "Jefe de Ingeniería", "Memoria eléctrica y sanitaria sin observaciones.", ""],
+  ["IN-06", "QC-09", "2026-10-13", "conforme", "Control de Calidad", "Protocolos de fábrica de tableros y equipos archivados.", ""],
+  ["IN-07", "QC-07", "2026-10-20", "no_conforme", "Control de Calidad", "Lote 2: tres piezas con soldadura fuera de tolerancia y certificado de calidad incompleto.", "nc1"],
+  ["IN-08", "QC-08", "2026-11-02", "conforme", "Control de Calidad", "Guías, certificados y cantidades de materiales conformes.", ""]
+];
+// No conformidades: código · paquete · descripción · gravedad · detectada · estado · acción correctiva · responsable · fecha límite · cerrada
+type N = [string, string, string, string, string, string, string, string, string, string];
+const NCRS: N[] = [
+  ["NC-01", "3.1", "Lote 2 de estructuras: tres piezas con soldadura fuera de tolerancia y certificado de calidad incompleto", "mayor", "2026-10-20", "en_correccion", "Reproceso de soldadura en fábrica, nueva inspección de Control de Calidad y entrega del certificado del lote 2", "Proveedor — Estructuras metálicas", "2026-11-20", ""],
+  ["NC-02", "2.2", "Observaciones de detalle en los cuadros de columnas de los planos estructurales", "menor", "2026-09-30", "cerrada", "Planos corregidos y reemitidos (revisión B) y revisados por el Jefe de Ingeniería", "Ingeniero Estructural", "2026-10-07", "2026-10-06"]
+];
 export function buildSampleQuality(): QualityData {
   const id = (code: string): string => "w-" + code, metrics = METRICS.map(([code, name, wbs, definition, target, tolerance, method, frequency, owner], i) => normalizeMetric({ id: "qm" + (i + 1), code, name, wbsIds: wbs.map(id), definition, target, tolerance, method, frequency, owner }, "qm" + (i + 1)));
   // el criterio de cada control es el criterio de aceptación del paquete en el Diccionario de la EDT (una sola fuente)
   const checks = CHECKS.map(([code, wbs, what, kind, method, frequency, owner, record, metricId], i) => normalizeCheck({ id: "qc" + (i + 1), code, wbsId: id(wbs), what, criterion: SAMPLE_WBS_DICTIONARY[wbs].acceptance, kind, method, frequency, owner, record, metricId }, "qc" + (i + 1)));
   const coq = COQ.map(([cat, description, amount], i) => normalizeCoq({ id: "cq" + (i + 1), cat, description, amount }, "cq" + (i + 1)));
+  // Ejecución al corte del caso (2026-11-03, el de Valor Ganado): los controles de los paquetes ya terminados o avanzados dejan su inspección. Estructuras metálicas (3.1, 90 %) trae UNA
+  // no conformidad mayor abierta (soldadura y certificado incompletos: el riesgo R-08 de la fábrica), con su acción, responsable y fecha límite futura; planos estructurales (2.2) tuvo una menor ya cerrada.
+  const checkId = (code: string): string => "qc" + (CHECKS.findIndex((c) => c[0] === code) + 1);
+  const inspections = INSPECTIONS.map(([code, qc, date, result, inspector, notes, ncr], i) => normalizeInspection({ id: "in" + (i + 1), code, checkId: checkId(qc), date, result, inspector, notes, ncrId: ncr }, "in" + (i + 1)));
+  const ncrs = NCRS.map(([code, wbs, description, severity, detectedOn, status, action, owner, dueDate, closedOn], i) => normalizeNcr({ id: "nc" + (i + 1), code, wbsId: id(wbs), description, severity, detectedOn, status, action, owner, dueDate, closedOn }, "nc" + (i + 1)));
   return {
     policy: "DISTRIB+ entrega un almacén que cumple los planos aprobados y las normas aplicables, verificado con ensayos y pruebas documentados: la calidad se planifica y se previene antes de inspeccionarse, y ninguna entrega se acepta sin su registro de conformidad.",
     standards: "Reglamento Nacional de Edificaciones (RNE): E.050 Suelos y Cimentaciones, E.060 Concreto Armado, E.090 Estructuras Metálicas; Código Nacional de Electricidad — Utilización; planos y especificaciones técnicas aprobados. (Ilustrativo: verificar contra la versión vigente.)",
-    metrics, checks, coq, idCounter: metrics.length + checks.length + coq.length + 1
+    metrics, checks, coq, inspections, ncrs, asOf: "2026-11-03", idCounter: metrics.length + checks.length + coq.length + inspections.length + ncrs.length + 1
   };
 }

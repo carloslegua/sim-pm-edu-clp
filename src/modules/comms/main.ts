@@ -19,9 +19,10 @@ import type { EditSession } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
 import { levelName } from "../../shared/stakeholder-engagement";
 import { gatherCommFacts } from "../../shared/plan-facts";
+import { todayLocalISO } from "../../shared/local-date";
 import {
-  FREQUENCIES, METHODS, blankItem, channelsFor, commFindings, commState, coverage, nextCode, normalizeComms,
-  type CommData, type CommFacts, type CommItem, type CommState
+  FREQUENCIES, LOG_STATUSES, LOG_STATUS_LABEL, METHODS, blankItem, channelsFor, commFindings, commState, coverage, nextCode, nextLogCode, normalizeComms, normalizeLog,
+  type CommData, type CommFacts, type CommItem, type CommLog, type CommState
 } from "../../shared/comms-plan";
 import { buildSampleComms, sampleCommFacts } from "../../shared/comms-sample";
 
@@ -50,7 +51,7 @@ function getCtx(): { connected: boolean; facts: CommFacts } {
 }
 
 // ---------- estado ----------
-let data: CommData = { items: [], plan: { escalation: "", restrictions: "", review: "" }, idCounter: 1 };
+let data: CommData = normalizeComms(null);
 const byId = (id: string | undefined): CommItem | undefined => data.items.find((c) => c.id === id);
 
 // ---------- render ----------
@@ -70,9 +71,20 @@ function rowHtml(c: CommItem, f: CommFacts, flagged: Set<string>): string {
     <td style="min-width:150px"><input data-f="storage" value="${esc(c.storage)}" aria-label="Registro"></td>
     <td><button class="btn sm danger" data-del="${esc(c.id)}" title="Eliminar" aria-label="Eliminar">✕</button></td></tr>`;
 }
+function logRow(l: CommLog): string {
+  return `<tr data-lk="log" data-id="${esc(l.id)}">
+    <td style="width:74px"><input data-lf="code" value="${esc(l.code)}" aria-label="Código"></td>
+    <td style="min-width:170px"><select data-lf="itemId" aria-label="Comunicación del plan">${`<option value=""></option>` + data.items.map((c) => `<option value="${esc(c.id)}"${c.id === l.itemId ? " selected" : ""}>${esc(c.code)} ${esc(c.info.slice(0, 45))}</option>`).join("") + (l.itemId && !data.items.some((c) => c.id === l.itemId) ? `<option value="${esc(l.itemId)}" selected>(ya no existe)</option>` : "")}</select></td>
+    <td style="width:130px"><input data-lf="date" type="date" value="${esc(l.date)}" aria-label="Fecha"></td>
+    <td style="width:130px"><select data-lf="status" aria-label="Estado">${LOG_STATUSES.map((s) => `<option value="${s}"${s === l.status ? " selected" : ""}>${LOG_STATUS_LABEL[s]}</option>`).join("")}</select></td>
+    <td style="min-width:130px"><input data-lf="by" list="rolesList" value="${esc(l.by)}" aria-label="Emitió"></td>
+    <td style="min-width:200px"><textarea data-lf="summary" aria-label="Qué se comunicó o motivo">${esc(l.summary)}</textarea></td>
+    <td style="min-width:150px"><input data-lf="evidence" value="${esc(l.evidence)}" aria-label="Evidencia"></td>
+    <td><button class="btn sm danger" data-dellog="${esc(l.id)}" title="Eliminar" aria-label="Eliminar">✕</button></td></tr>`;
+}
 function render(): void {
   const C = getCtx(), f = C.facts, root = $("mainArea");
-  const flagged = new Set(commFindings(data, f).map((x) => x.itemId).filter((x): x is string => !!x));
+  const flagged = new Set(commFindings(data, f, todayLocalISO()).map((x) => x.itemId).filter((x): x is string => !!x));
   root.innerHTML = `
     <div class="view-head"><h2>Matriz de comunicaciones</h2>
       <p>Cada fila responde: <b>qué</b> información, <b>para qué</b>, <b>a quién</b>, <b>quién</b> la emite, <b>cada cuánto</b>, <b>por qué medio</b> y <b>dónde queda el registro</b>. Los destinatarios salen de Stakeholder Studio y los emisores del OBS. Abajo se revisa que a cada interesado le llegue lo que su estrategia exige.</p></div>
@@ -82,6 +94,9 @@ function render(): void {
       <datalist id="rolesList">${f.roles.map((r) => `<option value="${esc(r)}">`).join("")}</datalist>`
         : `<div class="empty-hint">Aún no hay comunicaciones. Agrega la primera con <b>＋ Nueva comunicación</b>, o usa <b>Cargar ejemplo</b> para explorar el caso DISTRIB+.</div>`}
     </div>
+    <div class="card"><h3>Ejecución: bitácora de comunicaciones emitidas (${data.log.length})</h3><p class="hint">Lo que realmente se comunicó (o se reprogramó u omitió): qué comunicación del plan, cuándo, quién y dónde queda la evidencia. Contra la fecha de corte se avisa la comunicación periódica sin emitir.</p>
+      <div class="fd" style="max-width:260px"><label for="asOf">Fecha de corte del seguimiento (vacía = hoy)</label><input id="asOf" type="date" data-p="asOf" value="${esc(data.asOf)}"></div>
+      ${data.log.length ? `<table class="an" id="tblLog"><thead><tr><th>Cód.</th><th>Comunicación del plan</th><th>Fecha</th><th>Estado</th><th>Emitió</th><th>Qué se comunicó / motivo</th><th>Evidencia</th><th></th></tr></thead><tbody>${data.log.map((l) => logRow(l)).join("")}</tbody></table>` : `<div class="empty-hint">Sin comunicaciones registradas. Cuando empiece la ejecución, registra la primera con <b>＋ Comunicación emitida</b>.</div>`}</div>
     <div class="grid2">
       <div class="card fd"><h3>Escalamiento</h3><label for="planEscalation">Ruta y plazos para los asuntos sin respuesta</label><textarea id="planEscalation" data-p="escalation">${esc(data.plan.escalation)}</textarea></div>
       <div class="card fd"><h3>Restricciones y confidencialidad</h3><label for="planRestrictions">Quién puede decir qué, idioma, información restringida</label><textarea id="planRestrictions" data-p="restrictions">${esc(data.plan.restrictions)}</textarea></div>
@@ -93,7 +108,7 @@ function render(): void {
 }
 // KPIs, cobertura y hallazgos: se actualizan al editar sin volver a dibujar la matriz (no se pierde el foco).
 function refreshMeta(): void {
-  const C = getCtx(), f = C.facts, cov = coverage(data.items, f), fs = commFindings(data, f), st = commState(data, f);
+  const C = getCtx(), f = C.facts, cov = coverage(data.items, f), fs = commFindings(data, f, todayLocalISO()), st = commState(data, f, todayLocalISO());
   const covered = cov.filter((r) => r.items.length).length;
   $("kpis").innerHTML = `<div class="kpi"><b>${data.items.length}</b><span>Comunicaciones planificadas</span></div>
     <div class="kpi"><b>${covered}/${f.stakeholders.length}</b><span>Interesados con comunicación</span></div>
@@ -118,13 +133,24 @@ function wireMain(): void {
     m.addEventListener("change", (e) => upd(e.target as Element));
     m.querySelectorAll<HTMLElement>("[data-del]").forEach((b) => b.addEventListener("click", () => { data.items = data.items.filter((c) => c.id !== b.dataset.del); render(); save(); setStatus("Comunicación eliminada."); }));
   }
-  document.querySelectorAll<HTMLTextAreaElement>("[data-p]").forEach((t) => t.addEventListener("input", () => { (data.plan as unknown as Record<string, string>)[t.dataset.p as string] = t.value; refreshMeta(); save(); }));
+  document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("[data-p]").forEach((t) => t.addEventListener("input", () => { const k = t.dataset.p as string; if (k === "asOf") data.asOf = t.value; else (data.plan as unknown as Record<string, string>)[k] = t.value; refreshMeta(); save(); }));
+  const lg = document.getElementById("tblLog");
+  if (lg) {
+    const updLog = (el: Element): void => { const tr = el.closest("tr"), l = tr && data.log.find((x) => x.id === tr.getAttribute("data-id")), f = el.getAttribute("data-lf"); if (!l || !f) return; (l as unknown as Record<string, string>)[f] = (el as HTMLInputElement).value; refreshMeta(); save(); };
+    lg.addEventListener("input", (e) => { const t = e.target as Element; if (t.tagName !== "SELECT") updLog(t); });
+    lg.addEventListener("change", (e) => updLog(e.target as Element));
+    lg.querySelectorAll<HTMLElement>("[data-dellog]").forEach((b) => b.addEventListener("click", () => { data.log = data.log.filter((l) => l.id !== b.dataset.dellog); render(); save(); setStatus("Registro eliminado."); }));
+  }
 }
 
 // ---------- acciones ----------
 function addItem(): void {
   const id = "cm" + data.idCounter++, c = blankItem(id, nextCode(data.items)); data.items.push(c); render(); save(); setStatus(c.code + " creada: completa qué, para qué, a quién y cada cuánto.");
   const row = document.querySelector(`tr[data-id="${id}"] textarea`) as HTMLElement | null; if (row) row.focus();
+}
+function addLog(): void {
+  const id = "lg" + data.idCounter++, l = normalizeLog({ id, code: nextLogCode(data.log), date: todayLocalISO() }, id); data.log.push(l); render(); save(); setStatus(l.code + " creada: elige la comunicación del plan y registra la evidencia.");
+  const row = document.querySelector(`tr[data-id="${id}"] select`) as HTMLElement | null; if (row) row.focus();
 }
 function exportCsv(): void {
   const f = getCtx().facts, name = (id: string): string => (f.stakeholders.find((s) => s.id === id) || { name: id }).name, q = (v: string): string => '"' + v.replace(/"/g, '""') + '"';
@@ -144,7 +170,7 @@ function showConfirm(message: string, title: string, okText = "Aceptar"): Promis
   });
 }
 function wireToolbar(): void {
-  $("btnAdd").addEventListener("click", addItem);
+  $("btnAdd").addEventListener("click", addItem); $("btnAddLog").addEventListener("click", addLog);
   $("btnCsv").addEventListener("click", exportCsv);
   $("btnSample").addEventListener("click", () => {
     showConfirm("Esto reemplazará la matriz actual con el caso de ejemplo DISTRIB+ S.A. ¿Continuar?", "Cargar ejemplo").then((ok) => {
@@ -155,7 +181,7 @@ function wireToolbar(): void {
     });
   });
   $("btnClear").addEventListener("click", () => {
-    showConfirm("Esto borrará toda la matriz de comunicaciones y las reglas del plan. ¿Continuar?", "Nueva matriz").then((ok) => { if (ok) { data = { items: [], plan: { escalation: "", restrictions: "", review: "" }, idCounter: 1 }; render(); save(); setStatus("Matriz nueva iniciada."); } });
+    showConfirm("Esto borrará toda la matriz de comunicaciones y las reglas del plan. ¿Continuar?", "Nueva matriz").then((ok) => { if (ok) { data = normalizeComms(null); render(); save(); setStatus("Matriz nueva iniciada."); } });
   });
 }
 
@@ -172,7 +198,7 @@ function save(): void { saveFn(); }
     const b = document.getElementById("banner");
     if (b) { b.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar la matriz de comunicaciones aquí: recárgala, o vuelve a activar el proyecto original desde el Panel de Control."; b.classList.add("show"); }
   }
-  const payload = () => ({ items: data.items, plan: data.plan, idCounter: data.idCounter });
+  const payload = () => ({ items: data.items, plan: data.plan, idCounter: data.idCounter, log: data.log, asOf: data.asOf });
   function pull(): void {
     const p = window.GPI!.active(); if (!p) return;
     loadedProjectId = window.GPI!.activeId(); session = window.GPI!.openSession("comms"); ctxDirty = true;

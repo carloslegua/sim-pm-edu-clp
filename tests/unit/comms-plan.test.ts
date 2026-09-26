@@ -1,6 +1,6 @@
 // Plan de Comunicaciones: src/shared/comms-plan.ts y su ejemplo DISTRIB+.
 import { describe, expect, it } from "vitest";
-import { blankItem, blankPlan, channelsFor, commFindings, commState, coverage, nextCode, normalizeComms, type CommData, type CommFacts } from "../../src/shared/comms-plan";
+import { blankItem, blankPlan, channelsFor, commFindings, commState, coverage, nextCode, nextLogCode, normalizeComms, normalizeLog, type CommData, type CommFacts } from "../../src/shared/comms-plan";
 import { SAMPLE_COMM_ROLES, SAMPLE_COMM_STAKEHOLDERS, buildSampleComms, sampleCommFacts } from "../../src/shared/comms-sample";
 
 const facts = (): CommFacts => ({
@@ -11,12 +11,12 @@ const facts = (): CommFacts => ({
   ]
 });
 const item = (o: Record<string, unknown>) => ({ ...blankItem("x", "CM-01"), info: "Avance", purpose: "Alinear", sender: "Director de Proyecto", frequency: "Mensual", method: "Informe escrito", storage: "Acta", ...o });
-const data = (items: ReturnType<typeof item>[]): CommData => ({ items, plan: { escalation: "48 h al PM", restrictions: "", review: "Mensual" }, idCounter: 9 });
+const data = (items: ReturnType<typeof item>[]): CommData => ({ items, plan: { escalation: "48 h al PM", restrictions: "", review: "Mensual" }, idCounter: 9, log: [], asOf: "" });
 const codes = (d: CommData, f = facts()) => commFindings(d, f).map((x) => x.code);
 
 describe("normalización y utilidades", () => {
   it("un .json viejo o vacío se lee sin fallar", () => {
-    expect(normalizeComms(null)).toEqual({ items: [], plan: blankPlan(), idCounter: 1 });
+    expect(normalizeComms(null)).toEqual({ items: [], plan: blankPlan(), idCounter: 1, log: [], asOf: "" });
     const d = normalizeComms({ items: [{ id: "q", info: "x", stkIds: ["a", 3], frequency: "Semanal" }, null], plan: { escalation: "e" } });
     expect(d.items).toHaveLength(2); expect(d.items[0].stkIds).toEqual(["a", "3"]); expect(d.items[1].code).toBe("cm2"); expect(d.plan.escalation).toBe("e"); expect(d.idCounter).toBe(3);
   });
@@ -64,7 +64,7 @@ describe("commFindings", () => {
 describe("ejemplo DISTRIB+", () => {
   it("11 comunicaciones que cubren a los 12 interesados del caso, con emisores del OBS, y el plan queda en orden", () => {
     const d = buildSampleComms(), f = sampleCommFacts();
-    expect(d.items).toHaveLength(11); expect(d.idCounter).toBe(12);
+    expect(d.items).toHaveLength(11); expect(d.log).toHaveLength(12); expect(d.idCounter).toBe(24);
     expect(SAMPLE_COMM_STAKEHOLDERS.map((s) => s.id)).toEqual(["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12"]);
     const cubiertos = new Set(d.items.flatMap((c) => c.stkIds)); expect(cubiertos.size).toBe(12);
     expect(d.items.every((c) => SAMPLE_COMM_ROLES.indexOf(c.sender) >= 0)).toBe(true);
@@ -78,4 +78,31 @@ describe("ejemplo DISTRIB+", () => {
     expect(by("CM-04").frequency).toBe("Mensual"); expect(by("CM-05").frequency).toBe("Quincenal");
     expect(by("CM-06").frequency).toBe("Semanal"); expect(by("CM-06").sender).toBe("Jefe de Logística"); // fabricación 3.1
   });
+});
+
+describe("bitácora de comunicaciones emitidas (ejecución)", () => {
+  const lg = (o: Record<string, unknown>) => normalizeLog({ id: "l", code: "LG-01", itemId: "1", date: "2026-11-01", status: "emitida", by: "Director de Proyecto", summary: "Avance", evidence: "Acta", ...o }, "l");
+  const base = (log: ReturnType<typeof lg>[], asOf = "2026-11-03") => ({ ...data([item({ id: "1", stkIds: ["a"], frequency: "Quincenal" }), item({ id: "2", code: "CM-02", stkIds: ["b", "c"], frequency: "Por hito" })]), log, asOf });
+  it("un .json sin bitácora se lee en blanco; código siguiente; estado y fecha inválidos se corrigen", () => {
+    expect(normalizeComms({ items: [] }).log).toEqual([]); expect(normalizeComms({ items: [] }).asOf).toBe(""); expect(nextLogCode([])).toBe("LG-01"); expect(nextLogCode([lg({ code: "LG-04" })])).toBe("LG-05");
+    expect(normalizeLog({ status: "rara" }, "x").status).toBe("emitida"); expect(normalizeComms({ asOf: "ayer" }).asOf).toBe("");
+  });
+  it("sin bitácora no hay hallazgos de ejecución (aún no empezó)", () => { expect(codes(base([]))).not.toEqual(expect.arrayContaining(["M13", "M14", "M15", "M16"])); });
+  it("REPRO M16: la comunicación quincenal sin emitir en más de dos períodos (30 d) se avisa con la fecha de corte; una reciente no", () => {
+    const viejo = commFindings(base([lg({ date: "2026-09-20" })]), facts()).find((x) => x.code === "M16")!; expect(viejo.severity).toBe("aviso"); expect(viejo.text).toMatch(/quincenal.*2026-09-20 \(hace 44 días\).*2026-11-03/);
+    expect(codes(base([lg({ date: "2026-10-20" })]))).not.toContain("M16");
+    expect(commFindings(base([lg({ itemId: "2" })]), facts()).find((x) => x.code === "M16")!.text).toMatch(/no hay ninguna emitida/);   // hay bitácora pero ninguna de la quincenal
+  });
+  it("M15: el interesado a gestionar de cerca sin comunicación emitida en 45 días; solo cuenta lo EMITIDO", () => {
+    const f = facts();
+    expect(commFindings(base([lg({ date: "2026-09-01" })]), f).find((x) => x.code === "M15")!.text).toMatch(/Sponsor.*2026-09-01.*63 días/);
+    expect(commFindings(base([lg({ date: "2026-10-30", status: "reprogramada", summary: "por agenda" })]), f).some((x) => x.code === "M15")).toBe(true);   // reprogramada no cuenta
+    expect(commFindings(base([lg({ date: "2026-10-30" })]), f).some((x) => x.code === "M15")).toBe(false);
+  });
+  it("M13/M14: entrada sin comunicación del plan, omitida o reprogramada sin motivo, emitida sin evidencia", () => {
+    expect(codes(base([lg({ itemId: "zz" })]))).toContain("M13");
+    expect(commFindings(base([lg({ status: "omitida", summary: "" })]), facts()).find((x) => x.code === "M14")!.text).toMatch(/omitida y no dice por qué/);
+    expect(commFindings(base([lg({ evidence: "" })]), facts()).find((x) => x.code === "M14")!.severity).toBe("info");
+  });
+  it("la fecha de corte del plan manda sobre el reloj", () => { expect(codes(base([lg({ date: "2026-09-20" })], "2026-10-01"))).not.toContain("M16"); });
 });

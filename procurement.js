@@ -321,6 +321,26 @@
 		Entregada: 4
 	};
 	var FIXED_PRICE = ["Precio fijo (FFP)", "Precio fijo con ajuste económico (FPEPA)"];
+	var PAY_STATUSES = [
+		"programado",
+		"pagado",
+		"retenido"
+	];
+	var PAY_LABEL = {
+		programado: "Programado",
+		pagado: "Pagado",
+		retenido: "Retenido"
+	};
+	var CLAIM_STATUSES = [
+		"abierto",
+		"resuelto",
+		"rechazado"
+	];
+	var CLAIM_LABEL = {
+		abierto: "Abierto",
+		resuelto: "Resuelto",
+		rechazado: "Rechazado"
+	};
 	var str = (v) => v === null || v === void 0 ? "" : String(v);
 	var strs = (v) => Array.isArray(v) ? v.map(str).filter(Boolean) : [];
 	var numOrNull = (v) => {
@@ -360,18 +380,64 @@
 			notes: str(x.notes)
 		};
 	}
+	function normalizePayment(o, fb) {
+		const x = rec(o), id = str(x.id) || fb;
+		return {
+			id,
+			code: str(x.code) || id,
+			itemId: str(x.itemId),
+			date: str(x.date),
+			concept: str(x.concept),
+			amount: numOrNull(x.amount),
+			status: PAY_STATUSES.indexOf(x.status) >= 0 ? x.status : "programado"
+		};
+	}
+	function normalizeClaim(o, fb) {
+		const x = rec(o), id = str(x.id) || fb;
+		return {
+			id,
+			code: str(x.code) || id,
+			itemId: str(x.itemId),
+			date: str(x.date),
+			description: str(x.description),
+			amount: numOrNull(x.amount),
+			status: CLAIM_STATUSES.indexOf(x.status) >= 0 ? x.status : "abierto",
+			resolvedOn: str(x.resolvedOn)
+		};
+	}
 	function normalizeProcurement(raw, today = "") {
-		const x = rec(raw), items = (Array.isArray(x.items) ? x.items : []).map((o, i) => normalizeItem(o, "pr" + (i + 1)));
+		const x = rec(raw), items = (Array.isArray(x.items) ? x.items : []).map((o, i) => normalizeItem(o, "pr" + (i + 1))), ad = rec(x.admin);
+		const payments = (Array.isArray(ad.payments) ? ad.payments : []).map((o, i) => normalizePayment(o, "pg" + (i + 1))), claims = (Array.isArray(ad.claims) ? ad.claims : []).map((o, i) => normalizeClaim(o, "rc" + (i + 1)));
 		return {
 			strategy: str(x.strategy),
 			performance: str(x.performance),
 			approvals: str(x.approvals),
 			asOf: iso(str(x.asOf)) ? str(x.asOf) : today,
 			items,
-			idCounter: Number(x.idCounter) || items.length + 1
+			idCounter: Number(x.idCounter) || items.length + payments.length + claims.length + 1,
+			admin: {
+				payments,
+				claims
+			}
 		};
 	}
 	var blankProcurement = (today = "") => normalizeProcurement(null, today);
+	function nextPaymentCode(p) {
+		let max = 0;
+		p.forEach((c) => {
+			const m = /(\d+)\s*$/.exec(c.code);
+			if (m) max = Math.max(max, Number(m[1]));
+		});
+		return "PG-" + String(max + 1).padStart(2, "0");
+	}
+	function nextClaimCode(p) {
+		let max = 0;
+		p.forEach((c) => {
+			const m = /(\d+)\s*$/.exec(c.code);
+			if (m) max = Math.max(max, Number(m[1]));
+		});
+		return "RC-" + String(max + 1).padStart(2, "0");
+	}
 	function nextCode(items) {
 		let max = 0;
 		items.forEach((c) => {
@@ -457,10 +523,43 @@
 			f.risks.filter((r) => r.high && r.threat && r.wbsIds.some((i) => it.wbsIds.indexOf(i) >= 0) && !cited.has(r.id)).forEach((r) => F("P8", "info", it.id, w + ": el riesgo alto " + r.code + " «" + r.title + "» afecta sus paquetes y no lo cita: define si el contrato lo transfiere, lo mitiga o lo acepta."));
 			if (it.riskIds.some((i) => !f.risks.some((r) => r.id === i)) && f.risks.length) F("P8", "info", it.id, w + ": cita un riesgo que ya no está abierto en el Registro de Riesgos.");
 		});
+		const itemBy = new Map(d.items.map((i) => [i.id, i]));
+		d.items.forEach((it) => {
+			const mine = d.admin.payments.filter((p) => p.itemId === it.id), paid = mine.filter((p) => p.status === "pagado").reduce((s, p) => s + (p.amount || 0), 0), sched = mine.filter((p) => p.status !== "retenido").reduce((s, p) => s + (p.amount || 0), 0), w = it.code + (it.name.trim() ? " «" + it.name.trim() + "»" : "");
+			if (it.value !== null && it.value > 0 && paid > it.value + .5) F("P14", "riesgo", it.id, w + ": lo PAGADO (" + Math.round(paid).toLocaleString("es-PE") + ") supera el valor del contrato (" + Math.round(it.value).toLocaleString("es-PE") + "): un pago sin respaldo contractual o una orden de cambio sin registrar.");
+			else if (it.value !== null && it.value > 0 && sched > it.value + .5) F("P14", "aviso", it.id, w + ": lo pagado y programado (" + Math.round(sched).toLocaleString("es-PE") + ") supera el valor del contrato (" + Math.round(it.value).toLocaleString("es-PE") + ").");
+			if (mine.some((p) => p.status === "pagado") && STATUS_RANK[it.status] < STATUS_RANK.Contratada) F("P15", "aviso", it.id, w + ": tiene pagos realizados pero está «" + it.status + "»: no se paga lo que aún no se contrató.");
+		});
+		d.admin.payments.forEach((p) => {
+			const w = p.code + (itemBy.has(p.itemId) ? " (" + itemBy.get(p.itemId).code + ")" : "");
+			if (!itemBy.has(p.itemId)) F("P15", "aviso", null, w + ": no corresponde a ninguna adquisición del plan" + (p.itemId ? " (ya no existe)" : "") + ": un pago sin contrato no tiene a qué imputarse.");
+			if (p.status === "pagado" && (!iso(p.date) || p.amount === null)) F("P17", "info", p.itemId || null, w + ": pagado sin fecha o sin monto registrado.");
+		});
+		d.admin.claims.forEach((c) => {
+			const w = c.code + (itemBy.has(c.itemId) ? " (" + itemBy.get(c.itemId).code + ")" : "");
+			if (!itemBy.has(c.itemId)) F("P15", "aviso", null, w + ": no corresponde a ninguna adquisición del plan.");
+			const age = c.status === "abierto" ? daysBetween(c.date, d.asOf) : null;
+			if (age !== null && age > 30) F("P16", "aviso", c.itemId || null, w + ": reclamo ABIERTO hace " + age + " días (más de 30 a la fecha de corte " + d.asOf + "): sin resolverse puede volverse una controversia o un cambio de precio.");
+			if (c.status === "resuelto" && !iso(c.resolvedOn)) F("P17", "info", c.itemId || null, w + ": resuelto sin fecha de resolución.");
+		});
 		if (d.items.length && !d.strategy.trim()) F("P13", "info", null, "El plan no declara la estrategia de adquisiciones (qué se compra, qué se hace, cómo se contrata en general).");
 		if (d.items.length && !d.performance.trim()) F("P13", "info", null, "El plan no dice cómo se mide y se gestiona el desempeño de los proveedores (entregas, calidad, plazos).");
 		if (d.items.length && !d.approvals.trim()) F("P13", "info", null, "El plan no dice quién autoriza contratar y hasta qué monto.");
 		return out;
+	}
+	function adminSummary(d) {
+		const over = d.items.filter((it) => it.value !== null && it.value > 0 && d.admin.payments.filter((p) => p.itemId === it.id && p.status === "pagado").reduce((s, p) => s + (p.amount || 0), 0) > it.value + .5).length;
+		const open = d.admin.claims.filter((c) => c.status === "abierto");
+		return {
+			payments: d.admin.payments.length,
+			paid: d.admin.payments.filter((p) => p.status === "pagado").reduce((s, p) => s + (p.amount || 0), 0),
+			overpaid: over,
+			claimsOpen: open.length,
+			claimsStale: open.filter((c) => {
+				const a = daysBetween(c.date, d.asOf);
+				return a !== null && a > 30;
+			}).length
+		};
 	}
 	function procurementState(d, f) {
 		if (!d.items.length) return "vacio";
@@ -1179,7 +1278,11 @@
 			approvals: "Adjudicaciones y contratos hasta USD 100.000: Director de Proyecto. Mayores a ese monto: Comité Directivo / Sponsor, con el informe de evaluación de ofertas y la revisión de Asesoría Legal.",
 			asOf: SAMPLE_AS_OF,
 			items,
-			idCounter: items.length + 1
+			idCounter: items.length + 1,
+			admin: {
+				payments: [],
+				claims: []
+			}
 		};
 	}
 	//#endregion
@@ -1266,6 +1369,20 @@
     </div>
     <div style="margin-top:10px"><button class="btn sm danger" data-del="${esc(it.id)}">Eliminar esta adquisición</button></div></div></details>`;
 	}
+	var itemSel = (attr, cur) => `<select ${attr} aria-label="Adquisición"><option value=""></option>${data.items.map((i) => `<option value="${esc(i.id)}"${i.id === cur ? " selected" : ""}>${esc(i.code)} ${esc(i.name.slice(0, 40))}</option>`).join("")}${cur && !data.items.some((i) => i.id === cur) ? `<option value="${esc(cur)}" selected>(ya no existe)</option>` : ""}</select>`;
+	var enumSel = (attr, list, labels, cur) => `<select ${attr}>${list.map((o) => `<option value="${o}"${o === cur ? " selected" : ""}>${esc(labels[o])}</option>`).join("")}</select>`;
+	function payRow(p) {
+		return `<tr data-ak="pay" data-id="${esc(p.id)}"><td style="width:70px"><input data-af="code" value="${esc(p.code)}" aria-label="Código"></td><td style="min-width:160px">${itemSel("data-af=\"itemId\"", p.itemId)}</td>
+    <td style="width:130px"><input data-af="date" type="date" value="${esc(p.date)}" aria-label="Fecha"></td><td style="min-width:180px"><input data-af="concept" value="${esc(p.concept)}" aria-label="Concepto"></td>
+    <td style="width:130px"><input data-af="amount" type="number" min="0" step="any" value="${p.amount === null ? "" : p.amount}" aria-label="Monto"></td><td style="width:130px">${enumSel("data-af=\"status\" aria-label=\"Estado\"", PAY_STATUSES, PAY_LABEL, p.status)}</td>
+    <td><button class="btn sm danger" data-delpay="${esc(p.id)}" aria-label="Eliminar">✕</button></td></tr>`;
+	}
+	function claimRow(c) {
+		return `<tr data-ak="claim" data-id="${esc(c.id)}"><td style="width:70px"><input data-af="code" value="${esc(c.code)}" aria-label="Código"></td><td style="min-width:160px">${itemSel("data-af=\"itemId\"", c.itemId)}</td>
+    <td style="width:130px"><input data-af="date" type="date" value="${esc(c.date)}" aria-label="Fecha"></td><td style="min-width:200px"><textarea data-af="description" aria-label="Descripción">${esc(c.description)}</textarea></td>
+    <td style="width:130px"><input data-af="amount" type="number" min="0" step="any" value="${c.amount === null ? "" : c.amount}" aria-label="Monto"></td><td style="width:130px">${enumSel("data-af=\"status\" aria-label=\"Estado\"", CLAIM_STATUSES, CLAIM_LABEL, c.status)}</td>
+    <td style="width:130px"><input data-af="resolvedOn" type="date" value="${esc(c.resolvedOn)}" aria-label="Resuelto el"></td><td><button class="btn sm danger" data-delclaim="${esc(c.id)}" aria-label="Eliminar">✕</button></td></tr>`;
+	}
 	function render() {
 		const f = getCtx().facts, root = $("mainArea"), fs = procurementFindings(data, f), flagged = new Set(fs.map((x) => x.itemId).filter((x) => !!x));
 		$("asOf").value = data.asOf;
@@ -1279,17 +1396,22 @@
       <div class="card fd"><h3>Autorizaciones</h3><label for="approvals">Quién autoriza contratar y hasta qué monto</label><textarea id="approvals" data-p="approvals">${esc(data.approvals)}</textarea></div>
     </div>
     <div id="items">${data.items.length ? data.items.map((it) => itemHtml(it, f, flagged)).join("") : `<div class="empty-hint">Aún no hay adquisiciones. Agrega la primera con <b>＋ Nueva adquisición</b>, o usa <b>Cargar ejemplo</b> para explorar el caso DISTRIB+.</div>`}</div>
+    <div class="card"><h3>Administración de contratos: pagos (${data.admin.payments.length})</h3><p class="hint">Cada pago de un contrato: programado, pagado o retenido. Lo pagado no puede superar el valor del contrato ni imputarse a una adquisición que aún no se contrató.</p>
+      ${data.admin.payments.length ? `<table class="an" id="tblPay"><thead><tr><th>Cód.</th><th>Adquisición</th><th>Fecha</th><th>Concepto</th><th>Monto</th><th>Estado</th><th></th></tr></thead><tbody>${data.admin.payments.map(payRow).join("")}</tbody></table>` : `<div class="empty-hint">Sin pagos registrados. Cuando se firme un contrato, registra el primero con <b>＋ Pago</b>.</div>`}</div>
+    <div class="card"><h3>Administración de contratos: reclamos (${data.admin.claims.length})</h3><p class="hint">Reclamos del proveedor o del proyecto (plazo, precio, calidad). Un reclamo abierto más de 30 días a la fecha de corte se avisa.</p>
+      ${data.admin.claims.length ? `<table class="an" id="tblClaim"><thead><tr><th>Cód.</th><th>Adquisición</th><th>Fecha</th><th>Descripción</th><th>Monto</th><th>Estado</th><th>Resuelto el</th><th></th></tr></thead><tbody>${data.admin.claims.map(claimRow).join("")}</tbody></table>` : `<div class="empty-hint">Sin reclamos registrados.</div>`}</div>
     <datalist id="rolesList">${f.roles.map((r) => `<option value="${esc(r)}">`).join("")}</datalist><datalist id="suppliersList">${f.suppliers.map((r) => `<option value="${esc(r)}">`).join("")}</datalist>
     <div class="card"><h3>Hallazgos del plan</h3><div id="finds"></div></div>`;
 		refreshMeta();
 		wireMain();
 	}
 	function refreshMeta() {
-		const f = getCtx().facts, s = summary(data, f), fs = procurementFindings(data, f), st = procurementState(data, f);
+		const f = getCtx().facts, s = summary(data, f), fs = procurementFindings(data, f), st = procurementState(data, f), ad = adminSummary(data);
 		$("kpis").innerHTML = `<div class="kpi"><b>${s.count}</b><span>Adquisiciones planificadas</span></div>
     <div class="kpi"><b>${money(s.total)}</b><span>Valor estimado${s.pctOfBase !== null ? " · " + s.pctOfBase.toFixed(0) + " % del costo base" : ""}</span></div>
     <div class="kpi"><b>${s.late} / ${s.soon}</b><span>Convocatorias vencidas / próximas (≤ 30 d)</span></div>
     <div class="kpi"><b>${s.byStatus.Contratada + s.byStatus.Entregada}/${s.count}</b><span>Contratadas o entregadas</span></div>
+    <div class="kpi"><b>${money(ad.paid)}</b><span>Pagado a contratos · ${ad.claimsOpen} reclamo(s) abierto(s)${ad.claimsStale ? " (" + ad.claimsStale + " de más de 30 d)" : ""}</span></div>
     <div class="kpi"><span class="pill st-${st}">${STATE_LABEL[st]}</span><span style="display:block;margin-top:6px">Estado del plan</span></div>`;
 		data.items.forEach((it) => {
 			const d = document.querySelector(`details.pr[data-id="${it.id}"]`);
@@ -1369,6 +1491,37 @@
 			refreshMeta();
 			save();
 		}));
+		const updAdmin = (el) => {
+			const tr = el.closest("tr"), f = el.getAttribute("data-af");
+			if (!tr || !f) return;
+			const o = (tr.getAttribute("data-ak") === "pay" ? data.admin.payments : data.admin.claims).find((x) => x.id === tr.getAttribute("data-id"));
+			if (!o) return;
+			const v = el.value;
+			o[f] = f === "amount" ? v === "" || !isFinite(Number(v)) ? null : Number(v) : v;
+			refreshMeta();
+			save();
+		};
+		["tblPay", "tblClaim"].forEach((tid) => {
+			const t = document.getElementById(tid);
+			if (!t) return;
+			t.addEventListener("input", (e) => {
+				const x = e.target;
+				if (x.tagName !== "SELECT") updAdmin(x);
+			});
+			t.addEventListener("change", (e) => updAdmin(e.target));
+			t.querySelectorAll("[data-delpay]").forEach((b) => b.addEventListener("click", () => {
+				data.admin.payments = data.admin.payments.filter((p) => p.id !== b.dataset.delpay);
+				render();
+				save();
+				setStatus("Pago eliminado.");
+			}));
+			t.querySelectorAll("[data-delclaim]").forEach((b) => b.addEventListener("click", () => {
+				data.admin.claims = data.admin.claims.filter((c) => c.id !== b.dataset.delclaim);
+				render();
+				save();
+				setStatus("Reclamo eliminado.");
+			}));
+		});
 	}
 	function addItem() {
 		const id = newId(), it = normalizeItem({
@@ -1384,6 +1537,28 @@
 		setStatus(it.code + " creada: completa qué cubre, el contrato y las fechas.");
 		const el = document.querySelector(`details.pr[data-id="${id}"] [data-f="name"]`);
 		if (el) el.focus();
+	}
+	function addPay() {
+		const id = "pg" + data.idCounter++, p = normalizePayment({
+			id,
+			code: nextPaymentCode(data.admin.payments),
+			date: todayISO()
+		}, id);
+		data.admin.payments.push(p);
+		render();
+		save();
+		setStatus(p.code + " creado: elige la adquisición y el monto.");
+	}
+	function addClaim() {
+		const id = "rc" + data.idCounter++, c = normalizeClaim({
+			id,
+			code: nextClaimCode(data.admin.claims),
+			date: todayISO()
+		}, id);
+		data.admin.claims.push(c);
+		render();
+		save();
+		setStatus(c.code + " creado: elige la adquisición y describe el reclamo.");
 	}
 	function exportCsv() {
 		const f = getCtx().facts, leaf = (id) => {
@@ -1467,6 +1642,8 @@
 	}
 	function wireToolbar() {
 		$("btnAdd").addEventListener("click", addItem);
+		$("btnAddPay").addEventListener("click", addPay);
+		$("btnAddClaim").addEventListener("click", addClaim);
 		$("btnCsv").addEventListener("click", exportCsv);
 		$("asOf").addEventListener("change", (e) => {
 			const v = e.target.value;
@@ -1524,7 +1701,8 @@
 			approvals: data.approvals,
 			asOf: data.asOf,
 			items: data.items,
-			idCounter: data.idCounter
+			idCounter: data.idCounter,
+			admin: data.admin
 		});
 		function pull() {
 			const p = window.GPI.active();

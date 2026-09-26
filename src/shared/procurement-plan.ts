@@ -25,7 +25,19 @@ export interface ProcItem {
   value: number | null; needDate: string; leadDays: number | null; selectionDays: number | null;
   supplier: string; status: string; owner: string; awardDate: string; riskIds: string[]; notes: string;
 }
-export interface ProcData { strategy: string; performance: string; approvals: string; asOf: string; items: ProcItem[]; idCounter: number; }
+// ADMINISTRACIÓN DE CONTRATOS (auditoría, media): el plan termina donde se contrata; en la ejecución se registran los PAGOS de cada contrato (programados, pagados, retenidos) y los RECLAMOS
+// (del proveedor o del proyecto) con su estado. Contra la fecha de corte del plan (`asOf`) se avisa lo pagado por encima del contrato, lo pagado sin contrato y los reclamos abiertos mucho tiempo.
+export const PAY_STATUSES = ["programado", "pagado", "retenido"] as const;
+export type PayStatus = typeof PAY_STATUSES[number];
+export const PAY_LABEL: Record<PayStatus, string> = { programado: "Programado", pagado: "Pagado", retenido: "Retenido" };
+export const CLAIM_STATUSES = ["abierto", "resuelto", "rechazado"] as const;
+export type ClaimStatus = typeof CLAIM_STATUSES[number];
+export const CLAIM_LABEL: Record<ClaimStatus, string> = { abierto: "Abierto", resuelto: "Resuelto", rechazado: "Rechazado" };
+export const CLAIM_STALE_DAYS = 30;   // umbral didáctico declarado: un reclamo abierto más de 30 días respecto de la fecha de corte se avisa
+export interface ProcPayment { id: string; code: string; itemId: string; date: string; concept: string; amount: number | null; status: PayStatus; }
+export interface ProcClaim { id: string; code: string; itemId: string; date: string; description: string; amount: number | null; status: ClaimStatus; resolvedOn: string; }
+export interface ProcAdmin { payments: ProcPayment[]; claims: ProcClaim[]; }
+export interface ProcData { strategy: string; performance: string; approvals: string; asOf: string; items: ProcItem[]; idCounter: number; admin: ProcAdmin; }
 
 const str = (v: unknown): string => (v === null || v === undefined ? "" : String(v));
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.map(str).filter(Boolean) : []);
@@ -42,11 +54,16 @@ export function normalizeItem(o: unknown, fb: string): ProcItem {
     supplier: str(x.supplier), status: STATUS_RANK[str(x.status)] !== undefined ? str(x.status) : "Planificada", owner: str(x.owner), awardDate: str(x.awardDate), riskIds: strs(x.riskIds), notes: str(x.notes)
   };
 }
+export function normalizePayment(o: unknown, fb: string): ProcPayment { const x = rec(o), id = str(x.id) || fb; return { id, code: str(x.code) || id, itemId: str(x.itemId), date: str(x.date), concept: str(x.concept), amount: numOrNull(x.amount), status: (PAY_STATUSES.indexOf(x.status as PayStatus) >= 0 ? x.status : "programado") as PayStatus }; }
+export function normalizeClaim(o: unknown, fb: string): ProcClaim { const x = rec(o), id = str(x.id) || fb; return { id, code: str(x.code) || id, itemId: str(x.itemId), date: str(x.date), description: str(x.description), amount: numOrNull(x.amount), status: (CLAIM_STATUSES.indexOf(x.status as ClaimStatus) >= 0 ? x.status : "abierto") as ClaimStatus, resolvedOn: str(x.resolvedOn) }; }
 export function normalizeProcurement(raw: unknown, today = ""): ProcData {
-  const x = rec(raw), items = (Array.isArray(x.items) ? x.items : []).map((o, i) => normalizeItem(o, "pr" + (i + 1)));
-  return { strategy: str(x.strategy), performance: str(x.performance), approvals: str(x.approvals), asOf: iso(str(x.asOf)) ? str(x.asOf) : today, items, idCounter: Number(x.idCounter) || items.length + 1 };
+  const x = rec(raw), items = (Array.isArray(x.items) ? x.items : []).map((o, i) => normalizeItem(o, "pr" + (i + 1))), ad = rec(x.admin);
+  const payments = (Array.isArray(ad.payments) ? ad.payments : []).map((o, i) => normalizePayment(o, "pg" + (i + 1))), claims = (Array.isArray(ad.claims) ? ad.claims : []).map((o, i) => normalizeClaim(o, "rc" + (i + 1)));
+  return { strategy: str(x.strategy), performance: str(x.performance), approvals: str(x.approvals), asOf: iso(str(x.asOf)) ? str(x.asOf) : today, items, idCounter: Number(x.idCounter) || items.length + payments.length + claims.length + 1, admin: { payments, claims } };
 }
 export const blankProcurement = (today = ""): ProcData => normalizeProcurement(null, today);
+export function nextPaymentCode(p: ProcPayment[]): string { let max = 0; p.forEach((c) => { const m = /(\d+)\s*$/.exec(c.code); if (m) max = Math.max(max, Number(m[1])); }); return "PG-" + String(max + 1).padStart(2, "0"); }
+export function nextClaimCode(p: ProcClaim[]): string { let max = 0; p.forEach((c) => { const m = /(\d+)\s*$/.exec(c.code); if (m) max = Math.max(max, Number(m[1])); }); return "RC-" + String(max + 1).padStart(2, "0"); }
 export function nextCode(items: ProcItem[]): string { let max = 0; items.forEach((c) => { const m = /(\d+)\s*$/.exec(c.code); if (m) max = Math.max(max, Number(m[1])); }); return "PR-" + String(max + 1).padStart(2, "0"); }
 
 // ---- fechas ----
@@ -122,12 +139,39 @@ export function procurementFindings(d: ProcData, f: ProcFacts): PFinding[] {
     f.risks.filter((r) => r.high && r.threat && r.wbsIds.some((i) => it.wbsIds.indexOf(i) >= 0) && !cited.has(r.id)).forEach((r) => F("P8", "info", it.id, w + ": el riesgo alto " + r.code + " «" + r.title + "» afecta sus paquetes y no lo cita: define si el contrato lo transfiere, lo mitiga o lo acepta."));
     if (it.riskIds.some((i) => !f.risks.some((r) => r.id === i)) && f.risks.length) F("P8", "info", it.id, w + ": cita un riesgo que ya no está abierto en el Registro de Riesgos.");
   });
+  // ---- ejecución: administración de contratos (pagos y reclamos) ----
+  const itemBy = new Map(d.items.map((i) => [i.id, i] as const));
+  d.items.forEach((it) => {
+    const mine = d.admin.payments.filter((p) => p.itemId === it.id), paid = mine.filter((p) => p.status === "pagado").reduce((s, p) => s + (p.amount || 0), 0), sched = mine.filter((p) => p.status !== "retenido").reduce((s, p) => s + (p.amount || 0), 0), w = it.code + (it.name.trim() ? " «" + it.name.trim() + "»" : "");
+    if (it.value !== null && it.value > 0 && paid > it.value + 0.5) F("P14", "riesgo", it.id, w + ": lo PAGADO (" + Math.round(paid).toLocaleString("es-PE") + ") supera el valor del contrato (" + Math.round(it.value).toLocaleString("es-PE") + "): un pago sin respaldo contractual o una orden de cambio sin registrar.");
+    else if (it.value !== null && it.value > 0 && sched > it.value + 0.5) F("P14", "aviso", it.id, w + ": lo pagado y programado (" + Math.round(sched).toLocaleString("es-PE") + ") supera el valor del contrato (" + Math.round(it.value).toLocaleString("es-PE") + ").");
+    if (mine.some((p) => p.status === "pagado") && STATUS_RANK[it.status] < STATUS_RANK.Contratada) F("P15", "aviso", it.id, w + ": tiene pagos realizados pero está «" + it.status + "»: no se paga lo que aún no se contrató.");
+  });
+  d.admin.payments.forEach((p) => {
+    const w = p.code + (itemBy.has(p.itemId) ? " (" + (itemBy.get(p.itemId) as ProcItem).code + ")" : "");
+    if (!itemBy.has(p.itemId)) F("P15", "aviso", null, w + ": no corresponde a ninguna adquisición del plan" + (p.itemId ? " (ya no existe)" : "") + ": un pago sin contrato no tiene a qué imputarse.");
+    if (p.status === "pagado" && (!iso(p.date) || p.amount === null)) F("P17", "info", p.itemId || null, w + ": pagado sin fecha o sin monto registrado.");
+  });
+  d.admin.claims.forEach((c) => {
+    const w = c.code + (itemBy.has(c.itemId) ? " (" + (itemBy.get(c.itemId) as ProcItem).code + ")" : "");
+    if (!itemBy.has(c.itemId)) F("P15", "aviso", null, w + ": no corresponde a ninguna adquisición del plan.");
+    const age = c.status === "abierto" ? daysBetween(c.date, d.asOf) : null;
+    if (age !== null && age > CLAIM_STALE_DAYS) F("P16", "aviso", c.itemId || null, w + ": reclamo ABIERTO hace " + age + " días (más de " + CLAIM_STALE_DAYS + " a la fecha de corte " + d.asOf + "): sin resolverse puede volverse una controversia o un cambio de precio.");
+    if (c.status === "resuelto" && !iso(c.resolvedOn)) F("P17", "info", c.itemId || null, w + ": resuelto sin fecha de resolución.");
+  });
   if (d.items.length && !d.strategy.trim()) F("P13", "info", null, "El plan no declara la estrategia de adquisiciones (qué se compra, qué se hace, cómo se contrata en general).");
   if (d.items.length && !d.performance.trim()) F("P13", "info", null, "El plan no dice cómo se mide y se gestiona el desempeño de los proveedores (entregas, calidad, plazos).");
   if (d.items.length && !d.approvals.trim()) F("P13", "info", null, "El plan no dice quién autoriza contratar y hasta qué monto.");
   return out;
 }
 export type ProcState = "vacio" | "verde" | "ambar" | "rojo";
+// Resumen de la administración de contratos, para el plan para la dirección.
+export interface AdminSummary { payments: number; paid: number; overpaid: number; claimsOpen: number; claimsStale: number; }
+export function adminSummary(d: ProcData): AdminSummary {
+  const over = d.items.filter((it) => it.value !== null && it.value > 0 && d.admin.payments.filter((p) => p.itemId === it.id && p.status === "pagado").reduce((s, p) => s + (p.amount || 0), 0) > it.value + 0.5).length;
+  const open = d.admin.claims.filter((c) => c.status === "abierto");
+  return { payments: d.admin.payments.length, paid: d.admin.payments.filter((p) => p.status === "pagado").reduce((s, p) => s + (p.amount || 0), 0), overpaid: over, claimsOpen: open.length, claimsStale: open.filter((c) => { const a = daysBetween(c.date, d.asOf); return a !== null && a > CLAIM_STALE_DAYS; }).length };
+}
 export function procurementState(d: ProcData, f: ProcFacts): ProcState {
   if (!d.items.length) return "vacio";
   const fs = procurementFindings(d, f);

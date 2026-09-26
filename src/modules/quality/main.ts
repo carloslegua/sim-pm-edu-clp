@@ -18,9 +18,11 @@ import { installGpiBadge } from "../../shared/gpi-badge";
 import type { EditSession } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
 import { gatherQualityFacts } from "../../shared/plan-facts";
+import { todayLocalISO } from "../../shared/local-date";
 import {
-  CHECK_KINDS, COQ_CATS, COQ_GROUP, COQ_LABEL, QUALITY_METHODS, blankQuality, coqSummary, coverage, nextCheckCode, nextMetricCode, normalizeCheck, normalizeCoq, normalizeMetric, normalizeQuality,
-  qualityFindings, qualityState, type QCheck, type QMetric, type QualityData, type QualityFacts, type QualityState
+  CHECK_KINDS, COQ_CATS, COQ_GROUP, COQ_LABEL, INSPECTION_RESULTS, NCR_SEVERITIES, NCR_STATUSES, NCR_STATUS_LABEL, QUALITY_METHODS, RESULT_LABEL, SEVERITY_LABEL, blankQuality, coqSummary, coverage, executionSummary,
+  nextCheckCode, nextInspectionCode, nextMetricCode, nextNcrCode, normalizeCheck, normalizeCoq, normalizeInspection, normalizeMetric, normalizeNcr, normalizeQuality,
+  qualityFindings, qualityState, type QCheck, type QInspection, type QMetric, type QNcr, type QualityData, type QualityFacts, type QualityState
 } from "../../shared/quality-plan";
 import { buildSampleQuality, sampleQualityFacts } from "../../shared/quality-sample";
 
@@ -81,8 +83,32 @@ function checkRow(c: QCheck, f: QualityFacts, d: QualityData, flagged: Set<strin
     <td style="min-width:150px"><input data-f="record" value="${esc(c.record)}" aria-label="Registro"></td>
     <td style="min-width:120px"><select data-f="metricId" aria-label="Métrica">${`<option value=""></option>` + d.metrics.map((m) => `<option value="${esc(m.id)}"${m.id === c.metricId ? " selected" : ""}>${esc(m.code)}</option>`).join("")}</select></td>${del("check", c.id)}</tr>`;
 }
+const enumOpts = (list: readonly string[], labels: Record<string, string>, cur: string): string => list.map((o) => `<option value="${o}"${o === cur ? " selected" : ""}>${esc(labels[o])}</option>`).join("");
+function inspRow(i: QInspection, d: QualityData): string {
+  return `<tr data-k="insp" data-id="${esc(i.id)}">
+    <td style="width:70px"><input data-f="code" value="${esc(i.code)}" aria-label="Código"></td>
+    <td style="min-width:150px"><select data-f="checkId" aria-label="Control del plan">${`<option value=""></option>` + d.checks.map((c) => `<option value="${esc(c.id)}"${c.id === i.checkId ? " selected" : ""}>${esc(c.code)} ${esc(c.what.slice(0, 50))}</option>`).join("") + (i.checkId && !d.checks.some((c) => c.id === i.checkId) ? `<option value="${esc(i.checkId)}" selected>(ya no existe)</option>` : "")}</select></td>
+    <td style="width:130px"><input data-f="date" type="date" value="${esc(i.date)}" aria-label="Fecha"></td>
+    <td style="width:150px"><select data-f="result" aria-label="Resultado">${enumOpts(INSPECTION_RESULTS, RESULT_LABEL, i.result)}</select></td>
+    <td style="min-width:130px"><input data-f="inspector" list="rolesList" value="${esc(i.inspector)}" aria-label="Inspector"></td>
+    <td style="min-width:200px"><textarea data-f="notes" aria-label="Observaciones">${esc(i.notes)}</textarea></td>
+    <td style="min-width:120px"><select data-f="ncrId" aria-label="No conformidad">${`<option value=""></option>` + d.ncrs.map((n) => `<option value="${esc(n.id)}"${n.id === i.ncrId ? " selected" : ""}>${esc(n.code)}</option>`).join("")}</select></td>${del("insp", i.id)}</tr>`;
+}
+function ncrRow(n: QNcr, f: QualityFacts): string {
+  return `<tr data-k="ncr" data-id="${esc(n.id)}">
+    <td style="width:70px"><input data-f="code" value="${esc(n.code)}" aria-label="Código"></td>
+    <td style="min-width:150px"><select data-f="wbsId" aria-label="Paquete">${leafOpts(f, n.wbsId)}</select></td>
+    <td style="min-width:200px"><textarea data-f="description" aria-label="Descripción">${esc(n.description)}</textarea></td>
+    <td style="width:110px"><select data-f="severity" aria-label="Gravedad">${enumOpts(NCR_SEVERITIES, SEVERITY_LABEL, n.severity)}</select></td>
+    <td style="width:130px"><input data-f="detectedOn" type="date" value="${esc(n.detectedOn)}" aria-label="Detectada"></td>
+    <td style="width:130px"><select data-f="status" aria-label="Estado">${enumOpts(NCR_STATUSES, NCR_STATUS_LABEL, n.status)}</select></td>
+    <td style="min-width:200px"><textarea data-f="action" aria-label="Acción correctiva">${esc(n.action)}</textarea></td>
+    <td style="min-width:130px"><input data-f="owner" list="rolesList" value="${esc(n.owner)}" aria-label="Responsable"></td>
+    <td style="width:130px"><input data-f="dueDate" type="date" value="${esc(n.dueDate)}" aria-label="Fecha límite"></td>
+    <td style="width:130px"><input data-f="closedOn" type="date" value="${esc(n.closedOn)}" aria-label="Cerrada el"></td>${del("ncr", n.id)}</tr>`;
+}
 function render(): void {
-  const C = getCtx(), f = C.facts, root = $("mainArea"), fs = qualityFindings(data, f);
+  const C = getCtx(), f = C.facts, root = $("mainArea"), fs = qualityFindings(data, f, todayLocalISO());
   const flagged = new Set<string>();   // filas de control con hallazgo: se marcan por código al inicio de su texto
   fs.forEach((x) => { const m = /^(QC-\d+)/.exec(x.text); if (m) flagged.add(m[1]); });
   root.innerHTML = `
@@ -98,6 +124,10 @@ function render(): void {
     <div class="card"><h3>Aseguramiento y control por paquete (${data.checks.length})</h3><p class="hint">Cada paquete con criterio de aceptación necesita al menos una actividad que lo verifique; «Aseguramiento» previene, «Control» detecta.</p>
       ${data.checks.length ? `<table class="an" id="tblChecks"><thead><tr><th>Cód.</th><th>Paquete</th><th>Qué se verifica</th><th>Criterio de aceptación</th><th>Tipo</th><th>Método</th><th>Frecuencia</th><th>Responsable</th><th>Registro</th><th>Métrica</th><th></th></tr></thead><tbody>${data.checks.map((c) => checkRow(c, f, data, flagged)).join("")}</tbody></table>` : `<div class="empty-hint">Sin actividades de control ni aseguramiento. Agrega la primera con <b>＋ Control / aseguramiento</b>, o usa <b>Cargar ejemplo</b> para explorar el caso DISTRIB+.</div>`}
       <datalist id="rolesList">${f.roles.map((r) => `<option value="${esc(r)}">`).join("")}</datalist></div>
+    <div class="card"><h3>Ejecución: inspecciones (${data.inspections.length})</h3><div class="fd" style="max-width:260px"><label for="asOf">Fecha de corte del seguimiento (vacía = hoy)</label><input id="asOf" type="date" data-p="asOf" value="${esc(data.asOf)}"></div><p class="hint">Lo que realmente se inspeccionó, ensayó o probó: qué control del plan, cuándo y con qué resultado. Un resultado «No conforme» exige registrar su no conformidad.</p>
+      ${data.inspections.length ? `<table class="an" id="tblInsp"><thead><tr><th>Cód.</th><th>Control del plan</th><th>Fecha</th><th>Resultado</th><th>Inspector</th><th>Observaciones</th><th>No conformidad</th><th></th></tr></thead><tbody>${data.inspections.map((i) => inspRow(i, data)).join("")}</tbody></table>` : `<div class="empty-hint">Sin inspecciones. Cuando empiece la ejecución, registra la primera con <b>＋ Inspección</b>.</div>`}</div>
+    <div class="card"><h3>Ejecución: no conformidades (${data.ncrs.length})</h3><p class="hint">Cada defecto detectado con su gravedad, la acción correctiva, quién la hace y para cuándo. Una crítica sin cerrar es un riesgo para la aceptación; una abierta sin acción o vencida se avisa.</p>
+      ${data.ncrs.length ? `<table class="an" id="tblNcr"><thead><tr><th>Cód.</th><th>Paquete</th><th>Descripción</th><th>Gravedad</th><th>Detectada</th><th>Estado</th><th>Acción correctiva</th><th>Responsable</th><th>Fecha límite</th><th>Cerrada</th><th></th></tr></thead><tbody>${data.ncrs.map((n) => ncrRow(n, f)).join("")}</tbody></table>` : `<div class="empty-hint">Sin no conformidades registradas.</div>`}</div>
     <div class="card"><h3>Costo de la calidad</h3><p class="hint">Conformidad: prevención + evaluación. No conformidad: fallas internas (antes de la entrega) + externas (después).</p>
       ${data.coq.length ? `<table class="an" id="tblCoq"><thead><tr><th>Categoría</th><th>Descripción</th><th>Monto</th><th></th></tr></thead><tbody>${data.coq.map((c) => `<tr data-k="coq" data-id="${esc(c.id)}"><td style="width:170px"><select data-f="cat" aria-label="Categoría">${COQ_CATS.map((k) => `<option value="${k}"${k === c.cat ? " selected" : ""}>${COQ_LABEL[k]}</option>`).join("")}</select></td><td><input data-f="description" value="${esc(c.description)}" aria-label="Descripción"></td><td style="width:140px"><input data-f="amount" type="number" min="0" step="any" value="${c.amount === null ? "" : c.amount}" aria-label="Monto"></td>${del("coq", c.id)}</tr>`).join("")}</tbody></table>` : `<div class="empty-hint">Sin partidas. Agrega la primera con <b>＋ Partida de costo</b>.</div>`}
       <div class="bars" id="coqBars"></div></div>
@@ -107,11 +137,12 @@ function render(): void {
 }
 // KPIs, costo, cobertura y hallazgos: se actualizan al editar sin volver a dibujar las tablas (no se pierde el foco).
 function refreshMeta(): void {
-  const C = getCtx(), f = C.facts, cov = coverage(data, f), fs = qualityFindings(data, f), st = qualityState(data, f), s = coqSummary(data.coq, f.baseCost);
+  const C = getCtx(), f = C.facts, cov = coverage(data, f), today = todayLocalISO(), fs = qualityFindings(data, f, today), st = qualityState(data, f, today), s = coqSummary(data.coq, f.baseCost), ex = executionSummary(data, today);
   const needing = cov.filter((r) => r.needs), ok = needing.filter((r) => r.checks.length).length;
   $("kpis").innerHTML = `<div class="kpi"><b>${ok}/${needing.length}</b><span>Paquetes con criterio de aceptación verificados</span></div>
     <div class="kpi"><b>${data.metrics.length}</b><span>Métricas</span></div>
     <div class="kpi"><b>${data.checks.filter((c) => c.kind === "Aseguramiento").length} / ${data.checks.filter((c) => c.kind === "Control").length}</b><span>Aseguramiento / control</span></div>
+    <div class="kpi"><b>${ex.inspections} / ${ex.ncrOpen}</b><span>Inspecciones / no conformidades abiertas${ex.ncrOverdue ? " · " + ex.ncrOverdue + " vencida(s)" : ""}${ex.ncrCritical ? " · " + ex.ncrCritical + " crítica(s)" : ""}</span></div>
     <div class="kpi"><b>${money(s.total)}</b><span>Costo de la calidad${s.pctOfBase !== null ? " · " + s.pctOfBase.toFixed(1) + " % del costo base" : ""}</span></div>
     <div class="kpi"><span class="pill st-${st}">${STATE_LABEL[st]}</span><span style="display:block;margin-top:6px">Estado del plan</span></div>`;
   const bars = document.getElementById("coqBars");
@@ -124,13 +155,13 @@ function wireMain(): void {
   const upd = (el: Element): void => {
     const tr = el.closest("tr"), f = el.getAttribute("data-f"); if (!tr || !f) return;
     const k = tr.getAttribute("data-k"), id = tr.getAttribute("data-id");
-    const item = (k === "metric" ? data.metrics : k === "check" ? data.checks : data.coq).find((x) => x.id === id) as unknown as Record<string, unknown> | undefined; if (!item) return;
+    const item = (k === "metric" ? data.metrics : k === "check" ? data.checks : k === "insp" ? data.inspections : k === "ncr" ? data.ncrs : data.coq).find((x) => x.id === id) as unknown as Record<string, unknown> | undefined; if (!item) return;
     if (f === "wbsIds") item.wbsIds = Array.from((el as HTMLSelectElement).selectedOptions).map((o) => o.value);
     else if (f === "amount") { const v = (el as HTMLInputElement).value; item.amount = v === "" || !isFinite(Number(v)) ? null : Number(v); }
     else item[f] = (el as HTMLInputElement).value;
     refreshMeta(); save();
   };
-  ["tblMetrics", "tblChecks", "tblCoq"].forEach((tid) => {
+  ["tblMetrics", "tblChecks", "tblCoq", "tblInsp", "tblNcr"].forEach((tid) => {
     const t = document.getElementById(tid); if (!t) return;
     t.addEventListener("input", (e) => { const x = e.target as Element; if (x.tagName !== "SELECT") upd(x); });
     t.addEventListener("change", (e) => upd(e.target as Element));
@@ -138,7 +169,10 @@ function wireMain(): void {
   document.querySelectorAll<HTMLElement>("[data-del]").forEach((b) => b.addEventListener("click", () => {
     const [k, id] = (b.dataset.del as string).split(":");
     if (k === "metric") { data.metrics = data.metrics.filter((m) => m.id !== id); data.checks.forEach((c) => { if (c.metricId === id) c.metricId = ""; }); }
-    else if (k === "check") data.checks = data.checks.filter((c) => c.id !== id); else data.coq = data.coq.filter((c) => c.id !== id);
+    else if (k === "check") { data.checks = data.checks.filter((c) => c.id !== id); data.inspections.forEach((i) => { if (i.checkId === id) i.checkId = ""; }); }
+    else if (k === "insp") data.inspections = data.inspections.filter((i) => i.id !== id);
+    else if (k === "ncr") { data.ncrs = data.ncrs.filter((n) => n.id !== id); data.inspections.forEach((i) => { if (i.ncrId === id) i.ncrId = ""; }); }
+    else data.coq = data.coq.filter((c) => c.id !== id);
     render(); save(); setStatus("Fila eliminada.");
   }));
   document.querySelectorAll<HTMLElement>("[data-edt]").forEach((b) => b.addEventListener("click", () => {
@@ -154,6 +188,8 @@ function wireMain(): void {
 function focusLast(sel: string): void { const els = document.querySelectorAll<HTMLElement>(sel); if (els.length) els[els.length - 1].focus(); }
 function addCheck(): void { const id = newId("qc"); data.checks.push(normalizeCheck({ id, code: nextCheckCode(data.checks) }, id)); render(); save(); setStatus("Control agregado: elige el paquete y completa qué se verifica."); focusLast("#tblChecks select[data-f=wbsId]"); }
 function addMetric(): void { const id = newId("qm"); data.metrics.push(normalizeMetric({ id, code: nextMetricCode(data.metrics) }, id)); render(); save(); setStatus("Métrica agregada."); focusLast("#tblMetrics input[data-f=name]"); }
+function addInsp(): void { const id = newId("in"); data.inspections.push(normalizeInspection({ id, code: nextInspectionCode(data.inspections), date: todayLocalISO() }, id)); render(); save(); setStatus("Inspección agregada: elige el control del plan y el resultado."); focusLast("#tblInsp select[data-f=checkId]"); }
+function addNcr(): void { const id = newId("nc"); data.ncrs.push(normalizeNcr({ id, code: nextNcrCode(data.ncrs), detectedOn: todayLocalISO() }, id)); render(); save(); setStatus("No conformidad agregada: elige el paquete y describe el defecto."); focusLast("#tblNcr select[data-f=wbsId]"); }
 function addCoq(): void { const id = newId("cq"); data.coq.push(normalizeCoq({ id }, id)); render(); save(); setStatus("Partida agregada."); focusLast("#tblCoq input[data-f=description]"); }
 function exportCsv(): void {
   const f = getCtx().facts, leaf = (id: string): string => { const l = f.leaves.find((x) => x.id === id); return l ? l.code + " " + l.name : ""; }, q = (v: string): string => '"' + v.replace(/"/g, '""') + '"';
@@ -176,11 +212,11 @@ function showConfirm(message: string, title: string, okText = "Aceptar"): Promis
 function remapSample(d: QualityData): QualityData {
   const C = getCtx(); if (!C.connected) return d;
   const byCode = new Map(C.facts.leaves.map((l) => [l.code, l.id] as const)), re = (id: string): string => { const c = id.replace(/^w-/, ""); return byCode.get(c) || ""; };
-  d.checks.forEach((c) => { c.wbsId = re(c.wbsId); }); d.metrics.forEach((m) => { m.wbsIds = m.wbsIds.map(re).filter(Boolean); });
+  d.checks.forEach((c) => { c.wbsId = re(c.wbsId); }); d.metrics.forEach((m) => { m.wbsIds = m.wbsIds.map(re).filter(Boolean); }); d.ncrs.forEach((n) => { n.wbsId = re(n.wbsId); });
   return d;
 }
 function wireToolbar(): void {
-  $("btnAddCheck").addEventListener("click", addCheck); $("btnAddMetric").addEventListener("click", addMetric); $("btnAddCoq").addEventListener("click", addCoq); $("btnCsv").addEventListener("click", exportCsv);
+  $("btnAddCheck").addEventListener("click", addCheck); $("btnAddMetric").addEventListener("click", addMetric); $("btnAddCoq").addEventListener("click", addCoq); $("btnAddInsp").addEventListener("click", addInsp); $("btnAddNcr").addEventListener("click", addNcr); $("btnCsv").addEventListener("click", exportCsv);
   $("btnSample").addEventListener("click", () => {
     showConfirm("Esto reemplazará el plan actual con el caso de ejemplo DISTRIB+ S.A. ¿Continuar?", "Cargar ejemplo").then((ok) => {
       if (!ok) return;
@@ -207,7 +243,7 @@ function save(): void { saveFn(); }
     const b = document.getElementById("banner");
     if (b) { b.innerHTML = "<b>El proyecto activo cambió en otra pestaña.</b> Esta pestaña quedó desactualizada y ya no puede guardar el plan de calidad aquí: recárgala, o vuelve a activar el proyecto original desde el Panel de Control."; b.classList.add("show"); }
   }
-  const payload = () => ({ policy: data.policy, standards: data.standards, metrics: data.metrics, checks: data.checks, coq: data.coq, idCounter: data.idCounter });
+  const payload = () => ({ policy: data.policy, standards: data.standards, metrics: data.metrics, checks: data.checks, coq: data.coq, idCounter: data.idCounter, inspections: data.inspections, ncrs: data.ncrs, asOf: data.asOf });
   function pull(): void {
     const p = window.GPI!.active(); if (!p) return;
     loadedProjectId = window.GPI!.activeId(); session = window.GPI!.openSession("quality"); ctxDirty = true;

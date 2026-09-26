@@ -1,6 +1,6 @@
 // Plan de Calidad: src/shared/quality-plan.ts y su ejemplo DISTRIB+.
 import { describe, expect, it } from "vitest";
-import { blankQuality, coqSummary, coverage, nextCheckCode, nextMetricCode, normalizeCheck, normalizeMetric, normalizeQuality, qualityFindings, qualityState, type QualityData, type QualityFacts } from "../../src/shared/quality-plan";
+import { blankQuality, coqSummary, coverage, executionSummary, nextCheckCode, nextInspectionCode, nextMetricCode, nextNcrCode, normalizeCheck, normalizeInspection, normalizeMetric, normalizeNcr, normalizeQuality, qualityFindings, qualityState, type QualityData, type QualityFacts } from "../../src/shared/quality-plan";
 import { buildSampleQuality, sampleQualityFacts } from "../../src/shared/quality-sample";
 import { SAMPLE_OBS_ROLES } from "../../src/shared/case-distribplus";
 import { SAMPLE_WBS_DICTIONARY } from "../../src/shared/wbs-sample";
@@ -18,7 +18,7 @@ const codes = (d: QualityData, f = facts()) => qualityFindings(d, f).map((x) => 
 
 describe("normalización", () => {
   it("un .json viejo o vacío se lee sin fallar; categorías desconocidas del costo pasan a prevención", () => {
-    expect(normalizeQuality(null)).toEqual({ policy: "", standards: "", metrics: [], checks: [], coq: [], idCounter: 1 });
+    expect(normalizeQuality(null)).toEqual({ policy: "", standards: "", metrics: [], checks: [], coq: [], idCounter: 1, inspections: [], ncrs: [], asOf: "" });
     const d = normalizeQuality({ checks: [{ id: "a", wbsId: "l1" }, null], coq: [{ cat: "xx", amount: "12" }, { cat: "falla_interna", amount: "" }], metrics: [{ name: "M" }] });
     expect(d.checks).toHaveLength(2); expect(d.coq[0]).toMatchObject({ cat: "prevencion", amount: 12 }); expect(d.coq[1].amount).toBeNull(); expect(d.metrics[0].code).toBe("qm1");
     expect(normalizeMetric({ wbsIds: ["a", 2] }, "z").wbsIds).toEqual(["a", "2"]);
@@ -91,5 +91,51 @@ describe("ejemplo DISTRIB+", () => {
   it("el costo de la calidad del ejemplo: 350.000 (4,9 % del costo base), con más conformidad que fallas", () => {
     const s = coqSummary(buildSampleQuality().coq, sampleQualityFacts().baseCost);
     expect(s.total).toBe(350000); expect(s.conformity).toBe(240000); expect(s.nonConformity).toBe(110000); expect(s.pctOfBase).toBeCloseTo(4.93, 1);
+  });
+});
+
+describe("ejecución: inspecciones y no conformidades", () => {
+  const ins = (o: Record<string, unknown>) => normalizeInspection({ id: "i", code: "IN-01", checkId: "c1", date: "2026-11-01", result: "conforme", inspector: "QA", ...o }, "i");
+  const ncr = (o: Record<string, unknown>) => normalizeNcr({ id: "n", code: "NC-01", wbsId: "l1", description: "Soldadura fuera de tolerancia", severity: "mayor", detectedOn: "2026-10-20", status: "en_correccion", action: "Reproceso", owner: "Proveedor", dueDate: "2026-11-20", ...o }, "n");
+  const exec = (inspections: ReturnType<typeof ins>[], ncrs: ReturnType<typeof ncr>[], asOf = "2026-11-03"): QualityData => ({ ...data({ checks: [chk({ id: "c1", wbsId: "l1" })] }), inspections, ncrs, asOf });
+  it("un .json sin ejecución se lee en blanco; códigos siguientes; valores inválidos se corrigen", () => {
+    const d = normalizeQuality({ checks: [] }); expect(d.inspections).toEqual([]); expect(d.ncrs).toEqual([]); expect(d.asOf).toBe("");
+    expect(nextInspectionCode([])).toBe("IN-01"); expect(nextNcrCode([ncr({ code: "NC-09" })])).toBe("NC-10");
+    expect(normalizeInspection({ result: "rara" }, "x").result).toBe("conforme"); expect(normalizeNcr({ severity: "x", status: "y" }, "x")).toMatchObject({ severity: "menor", status: "abierta" });
+  });
+  it("una ejecución completa y al día no tiene hallazgos", () => {
+    const d = exec([ins({ result: "no_conforme", ncrId: "n" })], [ncr({})]);
+    expect(qualityFindings(d, facts()).filter((x) => /^Q1[2-5]$/.test(x.code))).toEqual([]);
+  });
+  it("Q12: una no conformidad CRÍTICA sin cerrar es un riesgo; una vencida, aviso (info si es menor); cerrada no cuenta", () => {
+    const f = (n: ReturnType<typeof ncr>) => qualityFindings(exec([], [n]), facts()).filter((x) => x.code === "Q12");
+    expect(f(ncr({ severity: "critica" }))[0].severity).toBe("riesgo"); expect(qualityState(exec([], [ncr({ severity: "critica" })]), facts())).toBe("rojo");
+    const v = f(ncr({ dueDate: "2026-10-30" }))[0]; expect(v.severity).toBe("aviso"); expect(v.text).toMatch(/vencía el 2026-10-30 y sigue en corrección/);
+    expect(f(ncr({ dueDate: "2026-10-30", severity: "menor" }))[0].severity).toBe("info");
+    expect(f(ncr({ severity: "critica", status: "cerrada", closedOn: "2026-10-25" }))).toEqual([]);
+  });
+  it("la fecha de corte del seguimiento manda sobre el reloj (el ejemplo no envejece)", () => {
+    const d = exec([], [ncr({ dueDate: "2026-11-20" })]); expect(qualityFindings(d, facts(), "2027-03-01").some((x) => x.code === "Q12")).toBe(false);
+    d.asOf = ""; expect(qualityFindings(d, facts(), "2027-03-01").some((x) => x.code === "Q12")).toBe(true);
+  });
+  it("Q13: inspección NO CONFORME sin no conformidad registrada; Q15: sin control del plan o sin fecha", () => {
+    expect(qualityFindings(exec([ins({ result: "no_conforme" })], []), facts()).find((x) => x.code === "Q13")!.text).toMatch(/NO CONFORME sin una no conformidad/);
+    expect(qualityFindings(exec([ins({ checkId: "zz" })], []), facts()).find((x) => x.code === "Q15")!.text).toMatch(/no corresponde a ningún control del plan/);
+    expect(qualityFindings(exec([ins({ date: "" })], []), facts()).find((x) => x.code === "Q15")!.severity).toBe("info");
+  });
+  it("Q14: abierta sin acción, responsable o fecha límite (aviso); cerrada sin acción o sin fecha de cierre (info)", () => {
+    expect(qualityFindings(exec([], [ncr({ action: "" })]), facts()).find((x) => x.code === "Q14")!.severity).toBe("aviso");
+    expect(qualityFindings(exec([], [ncr({ status: "cerrada", closedOn: "" })]), facts()).find((x) => x.code === "Q14")!.severity).toBe("info");
+  });
+  it("executionSummary cuenta inspecciones, abiertas, vencidas a la fecha de corte y críticas", () => {
+    const d = exec([ins({ result: "no_conforme", ncrId: "n" }), ins({ id: "j" })], [ncr({ dueDate: "2026-10-30" }), ncr({ id: "m", severity: "critica" }), ncr({ id: "k", status: "cerrada", closedOn: "2026-10-25" })]);
+    expect(executionSummary(d, "2030-01-01")).toEqual({ inspections: 2, nonConforming: 1, ncrs: 3, ncrOpen: 2, ncrOverdue: 1, ncrCritical: 1 });
+  });
+  it("el ejemplo DISTRIB+ trae su ejecución al corte del caso (2026-11-03) y sigue sin hallazgos", () => {
+    const d = buildSampleQuality(), f = sampleQualityFacts();
+    expect(d.asOf).toBe("2026-11-03"); expect(d.inspections).toHaveLength(8); expect(d.ncrs.map((n) => [n.code, n.status])).toEqual([["NC-01", "en_correccion"], ["NC-02", "cerrada"]]);
+    expect(d.inspections.find((i) => i.result === "no_conforme")!.ncrId).toBe("nc1"); expect(d.inspections.every((i) => d.checks.some((c) => c.id === i.checkId))).toBe(true);
+    expect(qualityFindings(d, f)).toEqual([]); expect(qualityFindings(d, f, "2030-01-01")).toEqual([]);
+    expect(executionSummary(d, "")).toEqual({ inspections: 8, nonConforming: 1, ncrs: 2, ncrOpen: 1, ncrOverdue: 0, ncrCritical: 0 });
   });
 });

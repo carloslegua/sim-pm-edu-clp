@@ -4,8 +4,7 @@ import { cpm, scheduleNetwork, wbsCodes } from "../../src/core/gpi-core";
 import { SAMPLE_START_DATE, sampleScheduleModules, sampleSchedulePlan } from "../../src/shared/schedule-sample";
 import {
   addDays, blankProcurement, criteriaSum, daysBetween, launchBy, nextCode, normalizeItem, normalizeProcurement, procurementFindings, procurementState, summary,
-  type ProcData, type ProcFacts, type ProcItem
-} from "../../src/shared/procurement-plan";
+  type ProcData, type ProcFacts, type ProcItem, adminSummary, nextClaimCode, nextPaymentCode, normalizeClaim, normalizePayment } from "../../src/shared/procurement-plan";
 import { SAMPLE_AS_OF, buildSampleProcurement, sampleProcurementFacts } from "../../src/shared/procurement-sample";
 import { SAMPLE_OBS_ROLES } from "../../src/shared/case-distribplus";
 import { buildSampleQuality } from "../../src/shared/quality-sample";
@@ -16,7 +15,7 @@ const facts = (): ProcFacts => ({
 });
 const crit = [{ name: "Precio", weight: 50 }, { name: "Técnica", weight: 30 }, { name: "Plazo", weight: 20 }];
 const item = (o: Record<string, unknown> = {}): ProcItem => normalizeItem({ id: "p1", code: "PR-01", name: "Estructuras", wbsIds: ["l1"], decision: "Comprar", contractType: "Precio fijo (FFP)", selection: "Licitación abierta", criteria: crit, value: 1000, needDate: "2026-12-01", leadDays: 30, selectionDays: 30, supplier: "Proveedor A", status: "Planificada", owner: "Jefe de Logística", riskIds: ["r1"], ...o }, "p1");
-const data = (items: ProcItem[], o: Partial<ProcData> = {}): ProcData => ({ strategy: "Estrategia", performance: "Desempeño", approvals: "Aprobaciones", asOf: "2026-08-03", items, idCounter: 9, ...o });
+const data = (items: ProcItem[], o: Partial<ProcData> = {}): ProcData => ({ strategy: "Estrategia", performance: "Desempeño", approvals: "Aprobaciones", asOf: "2026-08-03", items, idCounter: 9, admin: { payments: [], claims: [] }, ...o });
 const codes = (d: ProcData, f = facts()) => procurementFindings(d, f).map((x) => x.code);
 
 describe("fechas y normalización", () => {
@@ -25,7 +24,7 @@ describe("fechas y normalización", () => {
     expect(addDays("2026-03-01", -1)).toBe("2026-02-28"); expect(daysBetween("2026-08-03", "2026-09-13")).toBe(41); expect(daysBetween("", "2026-01-01")).toBeNull();
   });
   it("un .json viejo o vacío se lee sin fallar; estado desconocido = planificada; código siguiente", () => {
-    expect(blankProcurement("2026-01-01")).toEqual({ strategy: "", performance: "", approvals: "", asOf: "2026-01-01", items: [], idCounter: 1 });
+    expect(blankProcurement("2026-01-01")).toEqual({ strategy: "", performance: "", approvals: "", asOf: "2026-01-01", items: [], idCounter: 1, admin: { payments: [], claims: [] } });
     const d = normalizeProcurement({ items: [{ id: "a", status: "raro", value: "12", criteria: [{ name: "P", weight: "60" }], full: false }, null], asOf: "mal" }, "2026-05-05");
     expect(d.items[0]).toMatchObject({ status: "Planificada", value: 12, full: false }); expect(d.items[0].criteria[0].weight).toBe(60); expect(d.asOf).toBe("2026-05-05"); expect(d.items[1].code).toBe("pr2");
     expect(nextCode([])).toBe("PR-01"); expect(nextCode([item({ code: "PR-07" })])).toBe("PR-08"); expect(criteriaSum(item())).toBe(100);
@@ -112,5 +111,34 @@ describe("ejemplo DISTRIB+", () => {
     const alto = f.risks.filter((r) => r.high && r.threat); expect(alto.length).toBeGreaterThan(0);
     alto.filter((r) => d.items.some((i) => r.wbsIds.some((w) => i.wbsIds.indexOf(w) >= 0))).forEach((r) => expect(d.items.some((i) => i.riskIds.indexOf(r.id) >= 0), r.code).toBe(true));
     d.items.forEach((i) => expect(criteriaSum(i)).toBe(100));
+  });
+});
+
+describe("administración de contratos (ejecución): pagos y reclamos", () => {
+  const pay = (o: Record<string, unknown>) => normalizePayment({ id: "g", code: "PG-01", itemId: "p1", date: "2026-08-01", concept: "Anticipo", amount: 300, status: "pagado", ...o }, "g");
+  const claim = (o: Record<string, unknown>) => normalizeClaim({ id: "c", code: "RC-01", itemId: "p1", date: "2026-07-20", description: "Retraso de entrega", amount: 50, status: "abierto", ...o }, "c");
+  const admin = (payments: ReturnType<typeof pay>[], claims: ReturnType<typeof claim>[] = [], its = [item({ status: "Contratada", awardDate: "2026-07-20" })]) => data(its, { admin: { payments, claims } });
+  it("un .json sin administración se lee en blanco; códigos siguientes; estados inválidos se corrigen", () => {
+    expect(normalizeProcurement({ items: [] }).admin).toEqual({ payments: [], claims: [] }); expect(nextPaymentCode([])).toBe("PG-01"); expect(nextClaimCode([claim({ code: "RC-07" })])).toBe("RC-08");
+    expect(normalizePayment({ status: "x" }, "a").status).toBe("programado"); expect(normalizeClaim({ status: "x" }, "a").status).toBe("abierto");
+  });
+  it("sin pagos ni reclamos no hay hallazgos de ejecución", () => { expect(codes(admin([]))).not.toEqual(expect.arrayContaining(["P14", "P15", "P16", "P17"])); });
+  it("REPRO P14: lo PAGADO por encima del valor del contrato es un riesgo; solo programado por encima, aviso; retenido no cuenta", () => {
+    const f = (payments: ReturnType<typeof pay>[]) => procurementFindings(admin(payments), facts()).find((x) => x.code === "P14");
+    expect(f([pay({ amount: 600 }), pay({ id: "h", code: "PG-02", amount: 500 })])!.severity).toBe("riesgo");   // 1100 > 1000
+    expect(f([pay({ amount: 600 }), pay({ id: "h", code: "PG-02", amount: 500, status: "programado" })])!.severity).toBe("aviso");
+    expect(f([pay({ amount: 600 }), pay({ id: "h", code: "PG-02", amount: 900, status: "retenido" })])).toBeUndefined();
+    expect(procurementState(admin([pay({ amount: 1200 })]), facts())).toBe("rojo");
+  });
+  it("P15: pagos de una adquisición sin contratar o que no existe", () => {
+    expect(procurementFindings(admin([pay({})], [], [item({ status: "Convocada" })]), facts()).find((x) => x.code === "P15")!.text).toMatch(/pagos realizados pero está «Convocada»/);
+    expect(procurementFindings(admin([pay({ itemId: "zz" })]), facts()).find((x) => x.code === "P15")!.text).toMatch(/no corresponde a ninguna adquisición/);
+  });
+  it("P16: reclamo ABIERTO más de 30 días a la fecha de corte; resuelto o reciente no", () => {
+    const f = (c: ReturnType<typeof claim>) => procurementFindings(admin([], [c]), facts()).find((x) => x.code === "P16");   // corte 2026-08-03
+    expect(f(claim({ date: "2026-06-20" }))!.text).toMatch(/ABIERTO hace 44 días/); expect(f(claim({ date: "2026-07-20" }))).toBeUndefined(); expect(f(claim({ date: "2026-06-20", status: "resuelto", resolvedOn: "2026-07-01" }))).toBeUndefined();
+  });
+  it("adminSummary cuenta pagos, lo pagado, contratos pagados de más y reclamos abiertos / viejos", () => {
+    expect(adminSummary(admin([pay({ amount: 700 }), pay({ id: "h", amount: 400 })], [claim({ date: "2026-06-20" }), claim({ id: "d", date: "2026-07-30" })]))).toEqual({ payments: 2, paid: 1100, overpaid: 1, claimsOpen: 2, claimsStale: 1 });
   });
 });

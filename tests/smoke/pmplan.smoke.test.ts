@@ -169,6 +169,21 @@ describe("Plan_Direccion.html (Plan para la Dirección del Proyecto)", () => {
     (doc.getElementById("docBack") as HTMLElement).click(); expect(documento(doc)).toMatch(/Política aprobada por el sponsor/);
   });
 
+  it("los REGISTROS DE EJECUCIÓN (inspecciones y no conformidades, bitácora de comunicaciones, pagos y reclamos) no invalidan el plan aprobado; una no conformidad crítica sí llega como P27", async () => {
+    const seed = conCalidad("Política aprobada por el sponsor") as any;
+    seed.projects.p1.modules.comms = { items: [{ id: "cm1", code: "CM-01", info: "Avance", purpose: "Alinear", stkIds: [], audience: "Sponsor", sender: "PM", frequency: "Mensual", method: "Informe escrito", storage: "Acta" }], plan: {}, idCounter: 2 };
+    seed.projects.p1.modules.procurement = { idCounter: 2, asOf: "2026-10-01", items: [{ id: "pr1", code: "PR-01", name: "Estructuras", wbsIds: ["w1"], decision: "Comprar", contractType: "Precio unitario", selection: "Concurso de precios", criteria: [{ name: "Precio", weight: 100 }], value: 900, needDate: "2027-10-15", leadDays: 10, selectionDays: 30, status: "Contratada", owner: "PM" }] };
+    const db = await aprobarPlan(seed), q = db.projects.p1.modules.quality;
+    q.inspections = [{ id: "i1", code: "IN-01", checkId: "c1", date: "2026-11-01", result: "no_conforme", inspector: "QA", notes: "", ncrId: "n1" }];
+    q.ncrs = [{ id: "n1", code: "NC-01", wbsId: "w1", description: "Soldadura", severity: "critica", detectedOn: "2026-11-01", status: "abierta", action: "Reproceso", owner: "QA", dueDate: "2026-12-01", closedOn: "" }]; q.asOf = "2026-11-03";
+    Object.assign(db.projects.p1.modules.comms, { log: [{ id: "l1", code: "LG-01", itemId: "cm1", date: "2026-11-01", status: "emitida", by: "PM", summary: "Avance", evidence: "Acta" }], asOf: "2026-11-03" });
+    Object.assign(db.projects.p1.modules.procurement, { admin: { payments: [{ id: "g1", code: "PG-01", itemId: "pr1", date: "2026-11-01", concept: "Anticipo", amount: 10, status: "pagado" }], claims: [] } });
+    const dom = await abrir(db), doc = dom.window.document;
+    expect(estado(doc)).toMatch(/Plan aprobado v1\.0 por Rosa Paredes, Sponsor el \d{4}-\d{2}-\d{2} \(sin cambios desde la aprobación\)/);          // lo vivo no cambia el plan aprobado
+    expect(estado(doc)).not.toMatch(/CAMBIOS SIN APROBAR/);
+    expect(estado(doc)).toMatch(/P27 .*1 no conformidad\(es\) CRÍTICA\(S\) sin cerrar/);
+  });
+
   it("exportar a Word con cambios sin aprobar exporta el documento APROBADO (nunca uno reconstruido que se haga pasar por él)", async () => {
     const db = await aprobarPlan(conCalidad("Política aprobada por el sponsor"));
     db.projects.p1.modules.quality.policy = "Política MODIFICADA después de aprobar";

@@ -124,6 +124,12 @@
 		};
 	}
 	//#endregion
+	//#region src/shared/local-date.ts
+	function todayLocalISO(d = /* @__PURE__ */ new Date()) {
+		const p = (n) => (n < 10 ? "0" : "") + n;
+		return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+	}
+	//#endregion
 	//#region src/shared/comms-plan.ts
 	var FREQUENCIES = [
 		"Única vez",
@@ -144,6 +150,16 @@
 		"Presentación"
 	];
 	var HIGH_FREQ = ["Diaria", "Semanal"];
+	var LOG_STATUSES = [
+		"emitida",
+		"reprogramada",
+		"omitida"
+	];
+	var LOG_STATUS_LABEL = {
+		emitida: "Emitida",
+		reprogramada: "Reprogramada",
+		omitida: "Omitida"
+	};
 	var str = (v) => v === null || v === void 0 ? "" : String(v);
 	var strs = (v) => Array.isArray(v) ? v.map(str).filter(Boolean) : [];
 	var blankPlan = () => ({
@@ -168,9 +184,23 @@
 			notes: str(x.notes)
 		};
 	}
+	function normalizeLog(o, fallbackId) {
+		const x = o && typeof o === "object" ? o : {}, id = str(x.id) || fallbackId;
+		return {
+			id,
+			code: str(x.code) || id,
+			itemId: str(x.itemId),
+			date: str(x.date),
+			status: LOG_STATUSES.indexOf(x.status) >= 0 ? x.status : "emitida",
+			by: str(x.by),
+			summary: str(x.summary),
+			evidence: str(x.evidence)
+		};
+	}
 	function normalizeComms(raw) {
 		const x = raw && typeof raw === "object" ? raw : {}, p = x.plan && typeof x.plan === "object" ? x.plan : {};
 		const items = (Array.isArray(x.items) ? x.items : []).map((o, i) => normalizeItem(o, "cm" + (i + 1)));
+		const log = (Array.isArray(x.log) ? x.log : []).map((o, i) => normalizeLog(o, "lg" + (i + 1)));
 		return {
 			items,
 			plan: {
@@ -178,13 +208,32 @@
 				restrictions: str(p.restrictions),
 				review: str(p.review)
 			},
-			idCounter: Number(x.idCounter) || items.length + 1
+			idCounter: Number(x.idCounter) || items.length + log.length + 1,
+			log,
+			asOf: /^\d{4}-\d{2}-\d{2}$/.test(str(x.asOf)) ? str(x.asOf) : ""
 		};
 	}
 	var blankItem = (id, code) => normalizeItem({
 		id,
 		code
 	}, id);
+	function nextLogCode(log) {
+		let max = 0;
+		log.forEach((c) => {
+			const m = /(\d+)\s*$/.exec(c.code);
+			if (m) max = Math.max(max, Number(m[1]));
+		});
+		return "LG-" + String(max + 1).padStart(2, "0");
+	}
+	var isoOk = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	var asOfOf = (d, today) => isoOk(d.asOf) ? d.asOf : today;
+	var dayGap = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
+	var PERIOD_DAYS = {
+		Diaria: 1,
+		Semanal: 7,
+		Quincenal: 15,
+		Mensual: 30
+	};
 	function nextCode(items) {
 		let max = 0;
 		items.forEach((c) => {
@@ -201,8 +250,8 @@
 			gap: s.engCurrent !== null && s.engDesired !== null ? s.engDesired - s.engCurrent : null
 		}));
 	}
-	function commFindings(d, f) {
-		const out = [], F = (code, severity, itemId, text) => {
+	function commFindings(d, f, today0 = "") {
+		const today = asOfOf(d, today0), out = [], F = (code, severity, itemId, text) => {
 			out.push({
 				code,
 				severity,
@@ -232,11 +281,29 @@
 		});
 		if (d.items.length && !d.plan.escalation.trim()) F("M11", "aviso", null, "El plan no define la ruta de escalamiento de los asuntos de comunicación (a quién y en cuánto tiempo).");
 		if (d.items.length && !d.plan.review.trim()) F("M12", "info", null, "El plan no dice cómo ni cuándo se revisa y actualiza la matriz (p. ej. tras cada cambio de interesados).");
+		const itemBy = new Map(d.items.map((c) => [c.id, c])), emitted = d.log.filter((l) => l.status === "emitida" && isoOk(l.date));
+		d.log.forEach((l) => {
+			const w = l.code + (itemBy.has(l.itemId) ? " (" + itemBy.get(l.itemId).code + ")" : "");
+			if (!itemBy.has(l.itemId)) F("M13", "aviso", null, w + ": no corresponde a ninguna comunicación de la matriz" + (l.itemId ? " (ya no existe)" : "") + ": lo que se comunica sin estar planificado no tiene destinatarios ni propósito acordados.");
+			if (l.status !== "emitida" && !l.summary.trim()) F("M14", "aviso", null, w + ": está " + LOG_STATUS_LABEL[l.status].toLowerCase() + " y no dice por qué: una comunicación que no se hizo necesita su motivo y, si se reprograma, su nueva fecha.");
+			if (l.status === "emitida" && (!isoOk(l.date) || !l.evidence.trim())) F("M14", "info", null, w + ": emitida sin " + (!isoOk(l.date) ? "fecha" : "evidencia") + " registrada: sin evidencia no se puede demostrar que se comunicó.");
+		});
+		if (isoOk(today) && d.log.length) {
+			d.items.filter((c) => PERIOD_DAYS[c.frequency] !== void 0).forEach((c) => {
+				const mine = emitted.filter((l) => l.itemId === c.id).map((l) => l.date).sort(), last = mine.length ? mine[mine.length - 1] : "", limit = PERIOD_DAYS[c.frequency] * 2;
+				if (!last || dayGap(last, today) > limit) F("M16", "aviso", c.id, c.code + " «" + c.info.trim().slice(0, 50) + "»: es " + c.frequency.toLowerCase() + " y " + (last ? "la última emitida fue el " + last + " (hace " + dayGap(last, today) + " días)" : "no hay ninguna emitida") + " a la fecha de corte " + today + ": el plan promete un ritmo que la ejecución no cumple.");
+			});
+			coverage(d.items, f).forEach((r) => {
+				if (r.stk.quadrant !== "cerca") return;
+				const ids = new Set(r.items.map((c) => c.id)), mine = emitted.filter((l) => ids.has(l.itemId)).map((l) => l.date).sort(), last = mine.length ? mine[mine.length - 1] : "";
+				if (!last || dayGap(last, today) > 45) F("M15", "aviso", null, "«" + r.stk.name + "» es un interesado a gestionar de cerca y " + (last ? "su última comunicación emitida fue el " + last + " (hace " + dayGap(last, today) + " días)" : "no se le ha emitido ninguna comunicación") + ": supera los 45 días de silencio.");
+			});
+		}
 		return out;
 	}
-	function commState(d, f) {
+	function commState(d, f, today = "") {
 		if (!d.items.length) return "vacio";
-		const fs = commFindings(d, f);
+		const fs = commFindings(d, f, today);
 		return fs.some((x) => x.severity === "riesgo") ? "rojo" : fs.some((x) => x.severity === "aviso") ? "ambar" : "verde";
 	}
 	//#endregion
@@ -453,6 +520,116 @@
 			"Informe con cargo de recepción"
 		]
 	];
+	var LOG = [
+		[
+			"LG-01",
+			"CM-01",
+			"2026-10-16",
+			"emitida",
+			"Director de Proyecto",
+			"Avance: hitos de ingeniería cerrados; pedido al sponsor de la decisión sobre la reserva de gestión.",
+			"Acta de reunión del 16/10"
+		],
+		[
+			"LG-02",
+			"CM-01",
+			"2026-10-30",
+			"emitida",
+			"Director de Proyecto",
+			"Avance de Procura y estado de la licencia; se aprueba mantener la línea base LB-1.",
+			"Acta de reunión del 30/10"
+		],
+		[
+			"LG-03",
+			"CM-02",
+			"2026-10-30",
+			"emitida",
+			"Director de Proyecto",
+			"Informe de valor ganado al 30/10: SPI 0,93 y CPI 0,98; sustenta el desembolso de octubre.",
+			"Informe firmado y cargo del banco"
+		],
+		[
+			"LG-04",
+			"CM-03",
+			"2026-10-27",
+			"emitida",
+			"Asesoría Legal",
+			"Observaciones de la municipalidad al expediente de la licencia; plazo de subsanación de 10 días.",
+			"Cargo de ingreso y acta de reunión técnica"
+		],
+		[
+			"LG-05",
+			"CM-03",
+			"2026-11-02",
+			"emitida",
+			"Asesoría Legal",
+			"Subsanación presentada; se espera la resolución.",
+			"Cargo de ingreso 2026-11-02"
+		],
+		[
+			"LG-06",
+			"CM-04",
+			"2026-10-15",
+			"emitida",
+			"Residente de Obra",
+			"Mesa de diálogo: plan de tráfico y ruido para el inicio del movimiento de tierras.",
+			"Acta de la mesa y libro de reclamos"
+		],
+		[
+			"LG-07",
+			"CM-05",
+			"2026-10-22",
+			"emitida",
+			"Asesoría Legal",
+			"Seguimiento del acuerdo laboral y cupo de contratación local.",
+			"Acta firmada por ambas partes"
+		],
+		[
+			"LG-08",
+			"CM-05",
+			"2026-11-05",
+			"reprogramada",
+			"Asesoría Legal",
+			"La reunión del 5/11 se pasa al 9/11 por la agenda del sindicato.",
+			""
+		],
+		[
+			"LG-09",
+			"CM-06",
+			"2026-10-30",
+			"emitida",
+			"Jefe de Logística",
+			"Lote 2 de estructuras con soldadura fuera de tolerancia: reproceso en fábrica y nueva fecha de entrega (NC-01).",
+			"Reporte de fabricación semanal"
+		],
+		[
+			"LG-10",
+			"CM-10",
+			"2026-10-29",
+			"emitida",
+			"Residente de Obra",
+			"Coordinación con la constructora del inicio de movimiento de tierras y pendientes de Procura.",
+			"Acta semanal de obra"
+		],
+		[
+			"LG-11",
+			"CM-11",
+			"2026-10-28",
+			"emitida",
+			"Control de Calidad",
+			"Informe mensual de cumplimiento ambiental y de seguridad: sin observaciones.",
+			"Informe con cargo de recepción"
+		],
+		[
+			"LG-12",
+			"CM-08",
+			"2026-08-06",
+			"emitida",
+			"Director de Proyecto",
+			"Comunicado del hito «Aprobación del Plan de Gestión»: línea base inicial aprobada.",
+			"Copia del comunicado"
+		]
+	];
 	function buildSampleComms() {
 		const items = ROWS.map(([code, info, purpose, stkIds, sender, frequency, method, channel, storage], i) => normalizeItem({
 			id: "cm" + (i + 1),
@@ -467,15 +644,29 @@
 			channel,
 			storage
 		}, "cm" + (i + 1)));
+		const plan = {
+			...blankPlan(),
+			escalation: "Un asunto sin respuesta en 48 horas pasa del responsable de la comunicación al Director de Proyecto; si afecta una línea base, a la Gerencia General (sponsor) en la siguiente reunión quincenal o antes si es urgente.",
+			restrictions: "Las cifras de costo y las negociaciones con el sindicato y la municipalidad son de circulación restringida (solo sponsor, Director de Proyecto y Asesoría Legal). Toda comunicación a la prensa y a la comunidad la emite únicamente el Director de Proyecto. Idioma: español.",
+			review: "La matriz se revisa cada mes con el informe de avance y siempre que cambie el registro de interesados o se apruebe un cambio que afecte a un interesado."
+		};
+		const itemId = (code) => "cm" + (ROWS.findIndex((r) => r[0] === code) + 1);
+		const log = LOG.map(([code, cm, date, status, by, summary, evidence], i) => normalizeLog({
+			id: "lg" + (i + 1),
+			code,
+			itemId: itemId(cm),
+			date,
+			status,
+			by,
+			summary,
+			evidence
+		}, "lg" + (i + 1)));
 		return {
 			items,
-			plan: {
-				...blankPlan(),
-				escalation: "Un asunto sin respuesta en 48 horas pasa del responsable de la comunicación al Director de Proyecto; si afecta una línea base, a la Gerencia General (sponsor) en la siguiente reunión quincenal o antes si es urgente.",
-				restrictions: "Las cifras de costo y las negociaciones con el sindicato y la municipalidad son de circulación restringida (solo sponsor, Director de Proyecto y Asesoría Legal). Toda comunicación a la prensa y a la comunidad la emite únicamente el Director de Proyecto. Idioma: español.",
-				review: "La matriz se revisa cada mes con el informe de avance y siempre que cambie el registro de interesados o se apruebe un cambio que afecte a un interesado."
-			},
-			idCounter: items.length + 1
+			plan,
+			log,
+			asOf: "2026-11-03",
+			idCounter: items.length + log.length + 1
 		};
 	}
 	//#endregion
@@ -517,15 +708,7 @@
 		}
 		return ctx;
 	}
-	var data = {
-		items: [],
-		plan: {
-			escalation: "",
-			restrictions: "",
-			review: ""
-		},
-		idCounter: 1
-	};
+	var data = normalizeComms(null);
 	var byId = (id) => data.items.find((c) => c.id === id);
 	var opts = (list, cur) => `<option value=""></option>` + list.map((o) => `<option${o === cur ? " selected" : ""}>${esc(o)}</option>`).join("") + (cur && list.indexOf(cur) < 0 ? `<option selected>${esc(cur)}</option>` : "");
 	function rowHtml(c, f, flagged) {
@@ -543,9 +726,20 @@
     <td style="min-width:150px"><input data-f="storage" value="${esc(c.storage)}" aria-label="Registro"></td>
     <td><button class="btn sm danger" data-del="${esc(c.id)}" title="Eliminar" aria-label="Eliminar">✕</button></td></tr>`;
 	}
+	function logRow(l) {
+		return `<tr data-lk="log" data-id="${esc(l.id)}">
+    <td style="width:74px"><input data-lf="code" value="${esc(l.code)}" aria-label="Código"></td>
+    <td style="min-width:170px"><select data-lf="itemId" aria-label="Comunicación del plan">${`<option value=""></option>` + data.items.map((c) => `<option value="${esc(c.id)}"${c.id === l.itemId ? " selected" : ""}>${esc(c.code)} ${esc(c.info.slice(0, 45))}</option>`).join("") + (l.itemId && !data.items.some((c) => c.id === l.itemId) ? `<option value="${esc(l.itemId)}" selected>(ya no existe)</option>` : "")}</select></td>
+    <td style="width:130px"><input data-lf="date" type="date" value="${esc(l.date)}" aria-label="Fecha"></td>
+    <td style="width:130px"><select data-lf="status" aria-label="Estado">${LOG_STATUSES.map((s) => `<option value="${s}"${s === l.status ? " selected" : ""}>${LOG_STATUS_LABEL[s]}</option>`).join("")}</select></td>
+    <td style="min-width:130px"><input data-lf="by" list="rolesList" value="${esc(l.by)}" aria-label="Emitió"></td>
+    <td style="min-width:200px"><textarea data-lf="summary" aria-label="Qué se comunicó o motivo">${esc(l.summary)}</textarea></td>
+    <td style="min-width:150px"><input data-lf="evidence" value="${esc(l.evidence)}" aria-label="Evidencia"></td>
+    <td><button class="btn sm danger" data-dellog="${esc(l.id)}" title="Eliminar" aria-label="Eliminar">✕</button></td></tr>`;
+	}
 	function render() {
 		const f = getCtx().facts, root = $("mainArea");
-		const flagged = new Set(commFindings(data, f).map((x) => x.itemId).filter((x) => !!x));
+		const flagged = new Set(commFindings(data, f, todayLocalISO()).map((x) => x.itemId).filter((x) => !!x));
 		root.innerHTML = `
     <div class="view-head"><h2>Matriz de comunicaciones</h2>
       <p>Cada fila responde: <b>qué</b> información, <b>para qué</b>, <b>a quién</b>, <b>quién</b> la emite, <b>cada cuánto</b>, <b>por qué medio</b> y <b>dónde queda el registro</b>. Los destinatarios salen de Stakeholder Studio y los emisores del OBS. Abajo se revisa que a cada interesado le llegue lo que su estrategia exige.</p></div>
@@ -554,6 +748,9 @@
       ${data.items.length ? `<table class="an" id="matrix"><thead><tr><th>Cód.</th><th>Información</th><th>Propósito</th><th>Destinatarios</th><th>Emisor</th><th>Frecuencia</th><th>Medio</th><th>Canal / formato</th><th>Registro</th><th></th></tr></thead><tbody>${data.items.map((c) => rowHtml(c, f, flagged)).join("")}</tbody></table>
       <datalist id="rolesList">${f.roles.map((r) => `<option value="${esc(r)}">`).join("")}</datalist>` : `<div class="empty-hint">Aún no hay comunicaciones. Agrega la primera con <b>＋ Nueva comunicación</b>, o usa <b>Cargar ejemplo</b> para explorar el caso DISTRIB+.</div>`}
     </div>
+    <div class="card"><h3>Ejecución: bitácora de comunicaciones emitidas (${data.log.length})</h3><p class="hint">Lo que realmente se comunicó (o se reprogramó u omitió): qué comunicación del plan, cuándo, quién y dónde queda la evidencia. Contra la fecha de corte se avisa la comunicación periódica sin emitir.</p>
+      <div class="fd" style="max-width:260px"><label for="asOf">Fecha de corte del seguimiento (vacía = hoy)</label><input id="asOf" type="date" data-p="asOf" value="${esc(data.asOf)}"></div>
+      ${data.log.length ? `<table class="an" id="tblLog"><thead><tr><th>Cód.</th><th>Comunicación del plan</th><th>Fecha</th><th>Estado</th><th>Emitió</th><th>Qué se comunicó / motivo</th><th>Evidencia</th><th></th></tr></thead><tbody>${data.log.map((l) => logRow(l)).join("")}</tbody></table>` : `<div class="empty-hint">Sin comunicaciones registradas. Cuando empiece la ejecución, registra la primera con <b>＋ Comunicación emitida</b>.</div>`}</div>
     <div class="grid2">
       <div class="card fd"><h3>Escalamiento</h3><label for="planEscalation">Ruta y plazos para los asuntos sin respuesta</label><textarea id="planEscalation" data-p="escalation">${esc(data.plan.escalation)}</textarea></div>
       <div class="card fd"><h3>Restricciones y confidencialidad</h3><label for="planRestrictions">Quién puede decir qué, idioma, información restringida</label><textarea id="planRestrictions" data-p="restrictions">${esc(data.plan.restrictions)}</textarea></div>
@@ -565,7 +762,7 @@
 		wireMain();
 	}
 	function refreshMeta() {
-		const f = getCtx().facts, cov = coverage(data.items, f), fs = commFindings(data, f), st = commState(data, f);
+		const f = getCtx().facts, cov = coverage(data.items, f), fs = commFindings(data, f, todayLocalISO()), st = commState(data, f, todayLocalISO());
 		const covered = cov.filter((r) => r.items.length).length;
 		$("kpis").innerHTML = `<div class="kpi"><b>${data.items.length}</b><span>Comunicaciones planificadas</span></div>
     <div class="kpi"><b>${covered}/${f.stakeholders.length}</b><span>Interesados con comunicación</span></div>
@@ -604,10 +801,33 @@
 			}));
 		}
 		document.querySelectorAll("[data-p]").forEach((t) => t.addEventListener("input", () => {
-			data.plan[t.dataset.p] = t.value;
+			const k = t.dataset.p;
+			if (k === "asOf") data.asOf = t.value;
+			else data.plan[k] = t.value;
 			refreshMeta();
 			save();
 		}));
+		const lg = document.getElementById("tblLog");
+		if (lg) {
+			const updLog = (el) => {
+				const tr = el.closest("tr"), l = tr && data.log.find((x) => x.id === tr.getAttribute("data-id")), f = el.getAttribute("data-lf");
+				if (!l || !f) return;
+				l[f] = el.value;
+				refreshMeta();
+				save();
+			};
+			lg.addEventListener("input", (e) => {
+				const t = e.target;
+				if (t.tagName !== "SELECT") updLog(t);
+			});
+			lg.addEventListener("change", (e) => updLog(e.target));
+			lg.querySelectorAll("[data-dellog]").forEach((b) => b.addEventListener("click", () => {
+				data.log = data.log.filter((l) => l.id !== b.dataset.dellog);
+				render();
+				save();
+				setStatus("Registro eliminado.");
+			}));
+		}
 	}
 	function addItem() {
 		const id = "cm" + data.idCounter++, c = blankItem(id, nextCode(data.items));
@@ -616,6 +836,19 @@
 		save();
 		setStatus(c.code + " creada: completa qué, para qué, a quién y cada cuánto.");
 		const row = document.querySelector(`tr[data-id="${id}"] textarea`);
+		if (row) row.focus();
+	}
+	function addLog() {
+		const id = "lg" + data.idCounter++, l = normalizeLog({
+			id,
+			code: nextLogCode(data.log),
+			date: todayLocalISO()
+		}, id);
+		data.log.push(l);
+		render();
+		save();
+		setStatus(l.code + " creada: elige la comunicación del plan y registra la evidencia.");
+		const row = document.querySelector(`tr[data-id="${id}"] select`);
 		if (row) row.focus();
 	}
 	function exportCsv() {
@@ -681,6 +914,7 @@
 	}
 	function wireToolbar() {
 		$("btnAdd").addEventListener("click", addItem);
+		$("btnAddLog").addEventListener("click", addLog);
 		$("btnCsv").addEventListener("click", exportCsv);
 		$("btnSample").addEventListener("click", () => {
 			showConfirm("Esto reemplazará la matriz actual con el caso de ejemplo DISTRIB+ S.A. ¿Continuar?", "Cargar ejemplo").then((ok) => {
@@ -695,15 +929,7 @@
 		$("btnClear").addEventListener("click", () => {
 			showConfirm("Esto borrará toda la matriz de comunicaciones y las reglas del plan. ¿Continuar?", "Nueva matriz").then((ok) => {
 				if (ok) {
-					data = {
-						items: [],
-						plan: {
-							escalation: "",
-							restrictions: "",
-							review: ""
-						},
-						idCounter: 1
-					};
+					data = normalizeComms(null);
 					render();
 					save();
 					setStatus("Matriz nueva iniciada.");
@@ -732,7 +958,9 @@
 		const payload = () => ({
 			items: data.items,
 			plan: data.plan,
-			idCounter: data.idCounter
+			idCounter: data.idCounter,
+			log: data.log,
+			asOf: data.asOf
 		});
 		function pull() {
 			const p = window.GPI.active();
