@@ -189,6 +189,9 @@ src/shared/write-session.ts      → (se inlinea en cada IIFE) guardado con sesi
                                     edición + resultado común de escritura
 src/shared/charter-baseline.ts   → (se inlinea en project-charter.js) aprobación y versiones del Acta: instantánea, deriva y nueva versión
                                     (reutiliza el motor de requirements-baseline.ts)
+src/shared/milestone-check.ts    → (se inlinea en schedule-plan.js y plan-direccion.js) restricciones de los hitos (FNLT/FNET/MSO/MFO) contra el fin del CPM
+src/shared/schedule-progress.ts  → (se inlinea en cronograma-cpm.js y gpi-core.js) avance real (fecha de corte, % por actividad) y pronóstico: CPM sobre lo que falta
+src/shared/beta-pert.ts          → (se inlinea donde se usa) muestreo Beta-PERT único (pert-network, range-estimating)
 src/shared/local-date.ts         → (se inlinea donde se usa) `todayLocalISO()`: fecha de hoy LOCAL (no UTC)
 src/shared/gpi-badge.ts          → (se inlinea en cada IIFE) barra «Panel · Sincronizar · Panel» única
 src/shared/html.ts               → (se inlinea en cada IIFE) `esc` de HTML

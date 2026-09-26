@@ -42,6 +42,7 @@ import { SAMPLE_PLAN as SAMPLE_RISK_PLAN, buildSampleRisks } from "../../shared/
 import { ACCURACY_SOURCE, accuracyOriginText, accuracyRange, appliedAccuracy, classAdvisory, definitionMaturity, normalizeAccuracyOverride, overrideProblem, pct as pctTxt, publishedBandText, type AccuracyOverride, type EstimateClass, type MaturityInput } from "../../shared/estimate-class";
 import { SAMPLE_START_DATE, sampleScheduleModules, sampleSchedulePlan } from "../../shared/schedule-sample";
 import { fmtDays, makeEngine, resolveTargets, type Engine, type Network } from "../../shared/schedule-risk";
+import type { PertDur } from "../../shared/range-estimating";
 import {
   analyzeChangeOrders, contingencyByRisk, orderEffect, planBaselining, requiredAuthority, validateApproval,
   CO_KIND_HINT, CO_KIND_LABEL, FUND_CONT, FUND_EXTRA, FUND_MGMT,
@@ -321,6 +322,10 @@ function riskCtx(): RiskCtx {
 }
 const riskRefs = (ctx: RiskCtx) => ctx.risks.map((r) => ({ ...toRiskRef(r), plannedMax: r.costImpact.high !== null ? r.costImpact.high : r.costImpact.likely }));
 function includeRisksOn(): boolean { const c = document.getElementById("rngRisks") as HTMLInputElement | null; return !c || c.checked; }
+// Opt-in (por omisión NO): sortear también las duraciones Beta-PERT de las actividades con terna válida en la MISMA iteración que los eventos de riesgo.
+function pertOn(): boolean { const c = document.getElementById("rngPert") as HTMLInputElement | null; return !!c && c.checked; }
+function pertCount(): number { return net ? net.nodes.filter((n) => !n.isMilestone && n.pert).length : 0; }
+function pertActsOf(): PertDur[] { if (!pertOn() || !net) return []; return net.nodes.filter((n) => !n.isMilestone && n.pert).map((n) => ({ id: n.id, dur: n.dur, o: (n.pert as { o: number }).o, m: (n.pert as { m: number }).m, p: (n.pert as { p: number }).p })); }
 // ---- cronograma: la red de actividades y el CPM (AACE 40R-08 / 57R-09: el riesgo de plazo cuesta) ----
 // Costos LEE la red, no la escribe: conectado, la del proyecto; independiente, la red DISTRIB+ completa. Se arma
 // perezosamente y se invalida cuando otro módulo cambia el proyecto o al volver a esta pestaña.
@@ -355,24 +360,24 @@ function eventsCtx(): EventsCtx {
 // Los eventos (su costo directo y cuánto extienden el plazo) NO dependen de las partidas, de la correlación ni del costo
 // por día: se simulan UNA vez por conjunto de eventos y red (el CPM es lo caro) y se reutilizan en cada recálculo.
 const eventOutcomes: Record<string, EventOutcomes> = {};
-function outcomesFor(events: RiskEvent[], g: Engine | null): EventOutcomes | undefined {
-  if (!events.length) return undefined;
-  const key = JSON.stringify([events.map((e) => [e.id, e.prob, e.low, e.likely, e.high, e.sign, e.days, e.targets]), g ? g.base : null]);
+function outcomesFor(events: RiskEvent[], g: Engine | null, pa: PertDur[] = []): EventOutcomes | undefined {
+  if (!events.length && !(g && pa.length)) return undefined;
+  const key = JSON.stringify([events.map((e) => [e.id, e.prob, e.low, e.likely, e.high, e.sign, e.days, e.targets]), g ? g.base : null, pa.length ? pa.map((a) => [a.id, a.dur, a.o, a.m, a.p]) : 0]);
   if (!(key in eventOutcomes)) {
     if (Object.keys(eventOutcomes).length > 6) Object.keys(eventOutcomes).forEach((k) => { delete eventOutcomes[k]; });
-    eventOutcomes[key] = simulateEvents(events, g ? { base: g.base, duration: (d) => g.duration(d) } : null, DEFAULT_ITERATIONS, DEFAULT_SEED);
+    eventOutcomes[key] = simulateEvents(events, g ? { base: g.base, duration: (d) => g.duration(d) } : null, DEFAULT_ITERATIONS, DEFAULT_SEED, pa);
   }
   return eventOutcomes[key];
 }
 // `withSchedule = false` simula solo el costo directo de los eventos (para separar su aporte del costo del retraso).
 function simulate(rho: number, withEvents: boolean = includeRisksOn(), withSchedule: boolean = true): RangeResult | null {
   const events = withEvents ? eventsCtx().events : [];
-  const g = withEvents ? getEng() : null, cpd = g && withSchedule ? timeCostPerDay() : 0;
-  const key = JSON.stringify([state.ranges.map((l) => [l.ml, l.lowPct, l.highPct]), rho, events.map((e) => [e.id, e.prob, e.low, e.likely, e.high, e.sign, e.days, e.targets]), g && withSchedule ? [g.base, cpd] : null]);
+  const g = withEvents ? getEng() : null, cpd = g && withSchedule ? timeCostPerDay() : 0, pa = g && withSchedule ? pertActsOf() : [];
+  const key = JSON.stringify([state.ranges.map((l) => [l.ml, l.lowPct, l.highPct]), rho, events.map((e) => [e.id, e.prob, e.low, e.likely, e.high, e.sign, e.days, e.targets]), g && withSchedule ? [g.base, cpd] : null, pa.length ? pa.map((a) => [a.id, a.dur, a.o, a.m, a.p]) : 0]);
   if (!(key in simCache)) {
     if (Object.keys(simCache).length > 24) Object.keys(simCache).forEach((k) => { delete simCache[k]; });
     simCache[key] = simulateRange(state.ranges, {
-      correlation: rho, iterations: DEFAULT_ITERATIONS, seed: DEFAULT_SEED, events, outcomes: outcomesFor(events, g),
+      correlation: rho, iterations: DEFAULT_ITERATIONS, seed: DEFAULT_SEED, events, outcomes: outcomesFor(events, g, pa), pertActs: pa.length ? pa : undefined,
       schedule: g && withSchedule ? { base: g.base, costPerDay: cpd, duration: (d) => g.duration(d) } : undefined
     });
   }
@@ -448,6 +453,7 @@ function eventAdvisories(): string[] {
 // Panel de eventos: qué riesgos entran a la simulación, con qué base (residual / inherente) y cuánto aportan a la contingencia.
 function renderEvents(res: RangeResult | null, p: number): void {
   const box = $("rngEvents"), on = includeRisksOn();
+  { const pc = $("rngPert") as HTMLInputElement, n = pertCount(); pc.disabled = n === 0 && !pc.checked; $("rngPertNote").textContent = n ? n + " actividad(es) con terna PERT válida (o ≤ m ≤ p) en Análisis PERT." : "Ninguna actividad tiene una terna PERT válida en este proyecto: esta opción no cambiaría nada."; }
   if (!on) { box.innerHTML = `<div class="muted small">Los eventos de riesgo NO se incluyen: la contingencia cubre solo la incertidumbre de las partidas.</div>`; return; }
   const ec = eventsCtx();
   const src = ec.source === "registro" ? "Registro de Riesgos del proyecto" : ec.source === "ejemplo" ? "caso de ejemplo DISTRIB+ (modo independiente)" : "sin Registro de Riesgos";
@@ -468,7 +474,7 @@ function renderEvents(res: RangeResult | null, p: number): void {
     <table class="rng-res" style="max-width:520px"><thead><tr><th>Confianza</th><th class="num">Duración</th><th class="num">Reserva de plazo</th><th>Fin</th></tr></thead><tbody>
       <tr><td>Plan (sin riesgos)</td><td class="num">${fmtDays(s.base)}</td><td class="num">—</td><td>${esc(finishOf(s.base)) || "—"}</td></tr>
       ${[50, 70, 80, 90].map((q) => `<tr class="${q === p ? "rng-selrow" : ""}"><td>P${q}${q === p ? " · decisión" : ""}</td><td class="num">${fmtDays(s.p[q])}</td><td class="num">${fmtDays(Math.max(0, s.p[q] - s.base))}</td><td>${esc(finishOf(s.p[q])) || "—"}</td></tr>`).join("")}</tbody></table>
-    <div class="muted" style="font-size:11.5px;margin-top:6px">${s.events} evento(s) retrasan actividades del cronograma · probabilidad de terminar después de lo previsto ${Math.round(s.probDelay * 1000) / 10} % · retraso medio ${fmtDays(Math.round((s.mean - s.base) * 10) / 10)}${cpd > 0 ? " · costo medio de la extensión " + fmt(s.timeCostMean) + " (a " + fmt(cpd) + " por día)" : ""}. Es la misma simulación del Registro de Riesgos (mismos eventos y semilla).</div>` : "";
+    <div class="muted" style="font-size:11.5px;margin-top:6px">${s.events} evento(s) retrasan actividades del cronograma · probabilidad de terminar después de lo previsto ${Math.round(s.probDelay * 1000) / 10} % · retraso medio ${fmtDays(Math.round((s.mean - s.base) * 10) / 10)}${cpd > 0 ? " · costo medio de la extensión " + fmt(s.timeCostMean) + " (a " + fmt(cpd) + " por día)" : ""}.${s.integrated ? " <b>Incluye la variabilidad de " + s.pertActs + " duración(es) PERT sorteada(s) en la misma iteración</b> (opción activada): por eso ya no coincide con el análisis de plazo del Registro de Riesgos, que usa las duraciones determinísticas." : " Es la misma simulación del Registro de Riesgos (mismos eventos y semilla)."}</div>` : "";
   box.innerHTML = `<div class="muted small" style="margin-bottom:6px"><b>Fuente:</b> ${esc(src)} · ${ec.open} riesgo(s) abierto(s): <b>${ec.events.length}</b> entran a la simulación${ec.excluded.length ? ", " + ec.excluded.length + " sin cuantificar" : ""}. La contingencia cubre la exposición que <b>queda tras la respuesta</b> (residual).</div>
     <div style="overflow-x:auto"><table class="rng-res"><thead><tr><th>Cód.</th><th>Riesgo</th><th>Tipo</th><th class="num">Prob.</th><th class="num">Costo directo: mín / más prob. / máx</th><th class="num">Plazo: más prob. → fin del proyecto</th><th>Base</th><th class="num">Valor esperado (costo)</th></tr></thead><tbody>${rows}</tbody>
       <tfoot><tr style="font-weight:700"><td colspan="7">Valor esperado neto de los eventos${ec.events.length > 14 ? " (incluye los " + (ec.events.length - 14) + " no mostrados)" : ""}</td><td class="num">${fmt(ec.ev)}</td></tr></tfoot></table></div>
@@ -631,7 +637,7 @@ function escDelays(): Float64Array | null {
   if (!includeRisksOn()) return null;
   const g = getEng(); if (!g) return null;
   const ev = eventsCtx().events;
-  const oc = ev.length ? outcomesFor(ev, g) : undefined;
+  const pa = pertActsOf(), oc = ev.length || pa.length ? outcomesFor(ev, g, pa) : undefined;
   return oc && oc.ext ? oc.ext : null;
 }
 function escSim(plan: EscPlan, pkgs: EscPackage[]): EscSim | null {
@@ -1231,8 +1237,8 @@ function rangeDocHtml(): string {
     : "No incluye eventos de riesgo discretos (ninguno cuantificado en el registro, o se excluyeron).";
   // Plazo integrado (AACE 57R-09): efecto de los eventos sobre el fin del proyecto y su costo.
   const sc = res && res.schedule, cpd = timeCostPerDay(), basisT = (($("rngTimeBasis") as HTMLInputElement | null) || { value: "" }).value.trim();
-  const schedTxt = sc && sc.events
-    ? ` <b>Plazo:</b> ${sc.events} evento(s) retrasan actividades del cronograma (CPM real, duración base ${fmtDays(sc.base)}); con P${p} el plazo es ${fmtDays(sc.p[p])} (reserva de plazo ${fmtDays(Math.max(0, sc.p[p] - sc.base))}${finishOf(sc.p[p]) ? ", fin " + esc(finishOf(sc.p[p])) : ""}).${cpd > 0 ? " La extensión del plazo se costea a " + fmt(cpd) + " por día" + (basisT ? " (" + esc(basisT) + ")" : "") + ": costo medio " + fmt(sc.timeCostMean) + ", incluido en la contingencia." : " No se definió un costo por día de extensión: el retraso no se traduce a costo."}`
+  const schedTxt = sc && (sc.events || sc.integrated)
+    ? ` <b>Plazo:</b> ${sc.events} evento(s) retrasan actividades del cronograma${sc.integrated ? " y las duraciones de <b>" + sc.pertActs + " actividad(es) se sortean también (Beta-PERT) en la misma iteración</b>" : ""} (CPM real, duración base ${fmtDays(sc.base)}); con P${p} el plazo es ${fmtDays(sc.p[p])} (reserva de plazo ${fmtDays(Math.max(0, sc.p[p] - sc.base))}${finishOf(sc.p[p]) ? ", fin " + esc(finishOf(sc.p[p])) : ""}).${cpd > 0 ? " La extensión del plazo se costea a " + fmt(cpd) + " por día" + (basisT ? " (" + esc(basisT) + ")" : "") + ": costo medio " + fmt(sc.timeCostMean) + ", incluido en la contingencia." : " No se definió un costo por día de extensión: el retraso no se traduce a costo."}`
     : "";
   return `<p style="font-size:12.5px;margin:10px 0 4px"><b>Base de la contingencia — estimación por rangos y simulación Monte Carlo (AACE RP 41R-08 y 40R-08).</b> ${res
     ? `Distribución triangular por partida; correlación entre partidas ${Math.round(res.correlation * 100)} %; ${res.iterations.toLocaleString("es-PE")} iteraciones (semilla ${res.seed}, reproducible). Estimado base Σ más probable ${fmt(res.ml)}; P50 ${fmt(res.p[50])}, P${p} ${fmt(res.p[p])}. Contingencia = P${p} − estimado base = <b>${fmt(contingencyAt(res, p).amount)}</b>. Cubre la incertidumbre de los rangos del estimado. ${evTxt}${schedTxt}`
@@ -1379,7 +1385,7 @@ function collect(): Record<string, unknown> {
       },
       rangeAnalysis: {
         lines: state.ranges, correlation: corrValue(), iterations: DEFAULT_ITERATIONS, seed: DEFAULT_SEED, includeRisks: includeRisksOn(),
-        timeCostPerDay: timeCostPerDay(), timeCostBasis: (($("rngTimeBasis") as HTMLInputElement | null) || { value: "" }).value, results: rangeSummary()
+        includePert: pertOn(), timeCostPerDay: timeCostPerDay(), timeCostBasis: (($("rngTimeBasis") as HTMLInputElement | null) || { value: "" }).value, results: rangeSummary()
       },
       mgmtReservePct: +($("mgmtPct") as HTMLInputElement).value, escalation: {
         // Los cuatro primeros y el tipo de cambio son los de siempre (proyectos antiguos los leen igual); lo demás es la escalación por
@@ -1408,7 +1414,7 @@ function rangeSummary(): Record<string, number> | null {
   const r = simulate(corrValue());
   if (!r) return null;
   const out: Record<string, number> = { ml: r.ml, mean: r.mean, sd: r.sd, p10: r.p[10], p50: r.p[50], p70: r.p[70], p80: r.p[80], p90: r.p[90], events: r.events, eventsEV: r.eventsEV };
-  if (r.schedule) Object.assign(out, { schedBase: r.schedule.base, schedP50: r.schedule.p[50], schedP70: r.schedule.p[70], schedP80: r.schedule.p[80], schedP90: r.schedule.p[90], schedProbDelay: r.schedule.probDelay, timeCostMean: r.schedule.timeCostMean });
+  if (r.schedule) Object.assign(out, { schedBase: r.schedule.base, schedP50: r.schedule.p[50], schedP70: r.schedule.p[70], schedP80: r.schedule.p[80], schedP90: r.schedule.p[90], schedPertActs: r.schedule.pertActs, schedProbDelay: r.schedule.probDelay, timeCostMean: r.schedule.timeCostMean });
   return out;
 }
 function buildJSON(): void { $("jsonView").textContent = JSON.stringify(collect(), null, 2); }
@@ -1597,6 +1603,8 @@ function applyData(d: any): void {
     if (ra.correlation != null && isFinite(Number(ra.correlation))) ($("corrPct") as HTMLInputElement).value = String(Math.round(Number(ra.correlation) * 100));
     // Proyectos guardados antes de incluir los eventos de riesgo no traen el campo: se leen como «incluidos» (el valor por omisión).
     if (ra.includeRisks === false) ($("rngRisks") as HTMLInputElement).checked = false;
+    // Sorteo integrado de duraciones PERT: opt-in; los proyectos guardados antes no lo traen y quedan sin él.
+    ($("rngPert") as HTMLInputElement).checked = ra.includePert === true;
     // Campos de la integración con el cronograma: los proyectos guardados antes no los traen y se leen como «sin costo por día».
     if (ra.timeCostPerDay != null && isFinite(Number(ra.timeCostPerDay))) ($("rngTimeCost") as HTMLInputElement).value = String(ra.timeCostPerDay > 0 ? ra.timeCostPerDay : "");
     if (ra.timeCostBasis != null) ($("rngTimeBasis") as HTMLInputElement).value = String(ra.timeCostBasis);

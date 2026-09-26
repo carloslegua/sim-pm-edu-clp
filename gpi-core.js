@@ -142,6 +142,160 @@ var GPI = (function(exports) {
 		return base.projectDuration > 0 ? (projectDuration - base.projectDuration) / base.projectDuration * 100 : null;
 	}
 	//#endregion
+	//#region src/shared/schedule-progress.ts
+	var iso = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	var clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+	function normalizeProgress(o) {
+		const x = o && typeof o === "object" ? o : {}, raw = x.pct && typeof x.pct === "object" && !Array.isArray(x.pct) ? x.pct : {}, pct = {};
+		Object.keys(raw).forEach((id) => {
+			const v = Number(raw[id]);
+			if (isFinite(v) && String(raw[id]).trim() !== "") pct[id] = clamp(Math.round(v * 10) / 10, 0, 100);
+		});
+		return {
+			statusDate: iso(String(x.statusDate || "")) ? String(x.statusDate) : "",
+			pct
+		};
+	}
+	function workOffset(startISO, dateISO, cal) {
+		if (!iso(startISO) || !iso(dateISO)) return null;
+		const work = {};
+		(cal && cal.workDayIdx && cal.workDayIdx.length ? cal.workDayIdx : [
+			1,
+			2,
+			3,
+			4,
+			5
+		]).forEach((d) => {
+			work[d] = true;
+		});
+		const hol = {};
+		(cal && cal.holidays || []).forEach((h) => {
+			hol[String(h).slice(0, 10)] = true;
+		});
+		const isWork = (d) => !!work[d.getUTCDay()] && !hol[d.toISOString().slice(0, 10)];
+		const d = /* @__PURE__ */ new Date(startISO + "T12:00:00Z"), end = Date.parse(dateISO + "T12:00:00Z");
+		while (!isWork(d)) d.setUTCDate(d.getUTCDate() + 1);
+		let n = 0;
+		while (d.getTime() < end) {
+			if (isWork(d)) n++;
+			d.setUTCDate(d.getUTCDate() + 1);
+		}
+		return n;
+	}
+	var NONE = {
+		ok: false,
+		reason: "",
+		statusDate: "",
+		statusOffset: 0,
+		planFinish: "",
+		planDuration: 0,
+		forecastFinish: "",
+		forecastDuration: 0,
+		delayDays: 0,
+		baselineFinish: "",
+		vsBaselineDays: null,
+		pctActual: 0,
+		pctPlanned: 0,
+		spiT: null,
+		done: 0,
+		inProgress: 0,
+		notStarted: 0,
+		late: [],
+		byId: {}
+	};
+	function computeForecast(i) {
+		const p = normalizeProgress(i.progress);
+		if (!p.statusDate) return {
+			...NONE,
+			reason: "Falta la fecha de corte del avance."
+		};
+		if (!iso(i.startDate)) return {
+			...NONE,
+			statusDate: p.statusDate,
+			reason: "El proyecto no tiene fecha de inicio: sin ella no se puede ubicar la fecha de corte en el cronograma."
+		};
+		const so = workOffset(i.startDate, p.statusDate, i.calendar);
+		const cal = i.calendar;
+		const plan = i.cpm(i.nodes.map((n) => ({
+			id: n.id,
+			dur: n.dur
+		})), i.links, cal, { startDate: i.startDate });
+		if (!plan.ok) return {
+			...NONE,
+			statusDate: p.statusDate,
+			reason: "La red tiene un ciclo: no se puede calcular el pronóstico."
+		};
+		const acts = i.nodes.filter((n) => !n.isMilestone && n.dur > 0), pctOf = (id) => clamp(p.pct[id] || 0, 0, 100);
+		const fnodes = i.nodes.map((n) => {
+			if (n.isMilestone || n.dur <= 0) return {
+				id: n.id,
+				dur: 0,
+				minStart: 0
+			};
+			const pc = pctOf(n.id);
+			if (pc >= 100) return {
+				id: n.id,
+				dur: 0,
+				minStart: 0
+			};
+			if (pc > 0) return {
+				id: n.id,
+				dur: Math.ceil(n.dur * (1 - pc / 100) - 1e-9),
+				minStart: so
+			};
+			return {
+				id: n.id,
+				dur: n.dur,
+				minStart: so
+			};
+		});
+		const fc = i.cpm(fnodes, i.links, cal, { startDate: i.startDate });
+		if (!fc.ok) return {
+			...NONE,
+			statusDate: p.statusDate,
+			reason: "La red tiene un ciclo: no se puede calcular el pronóstico."
+		};
+		const totalDur = acts.reduce((s, n) => s + n.dur, 0);
+		const pctActual = totalDur ? acts.reduce((s, n) => s + n.dur * pctOf(n.id) / 100, 0) / totalDur * 100 : 0;
+		const pctPlanned = totalDur ? acts.reduce((s, n) => s + n.dur * clamp((so - plan.rows[n.id].es) / n.dur, 0, 1), 0) / totalDur * 100 : 0;
+		const late = acts.filter((n) => pctOf(n.id) < 100).map((n) => ({
+			id: n.id,
+			code: n.code || "",
+			name: n.name || "",
+			slipDays: Math.round((fc.rows[n.id].ef - plan.rows[n.id].ef) * 10) / 10,
+			forecastFinish: fc.rows[n.id].finishDate || ""
+		})).filter((a) => a.slipDays > 0).sort((a, b) => b.slipDays - a.slipDays);
+		const byId = {};
+		acts.filter((n) => pctOf(n.id) < 100).forEach((n) => {
+			byId[n.id] = {
+				finish: fc.rows[n.id].finishDate || "",
+				slipDays: Math.round((fc.rows[n.id].ef - plan.rows[n.id].ef) * 10) / 10
+			};
+		});
+		const bd = i.baselineDuration;
+		return {
+			ok: true,
+			reason: "",
+			statusDate: p.statusDate,
+			statusOffset: so,
+			planFinish: plan.projectFinishDate,
+			planDuration: plan.projectDuration,
+			forecastFinish: fc.projectFinishDate,
+			forecastDuration: fc.projectDuration,
+			delayDays: Math.round((fc.projectDuration - plan.projectDuration) * 10) / 10,
+			baselineFinish: i.baselineFinish || "",
+			vsBaselineDays: bd === null || bd === void 0 ? null : Math.round((fc.projectDuration - bd) * 10) / 10,
+			pctActual: Math.round(pctActual * 10) / 10,
+			pctPlanned: Math.round(pctPlanned * 10) / 10,
+			spiT: pctPlanned > 0 ? Math.round(pctActual / pctPlanned * 1e3) / 1e3 : null,
+			done: acts.filter((n) => pctOf(n.id) >= 100).length,
+			inProgress: acts.filter((n) => pctOf(n.id) > 0 && pctOf(n.id) < 100).length,
+			notStarted: acts.filter((n) => pctOf(n.id) <= 0).length,
+			late,
+			byId
+		};
+	}
+	//#endregion
 	//#region src/shared/a11y-labels.ts
 	var SELECTOR = "input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=image]),select,textarea";
 	var LABELISH = "label,.fl,.lab,.label,legend,.eyebrow,.wl,.lbl";
@@ -2889,9 +3043,10 @@ var GPI = (function(exports) {
 		function lagWD(l) {
 			return lagToWorkDays(l, cal);
 		}
-		const dur = {}, ids = [];
+		const dur = {}, minStart = {}, ids = [];
 		nd.forEach((n) => {
 			dur[n.id] = Number(n.dur) || 0;
+			minStart[n.id] = Number(n.minStart) || 0;
 			ids.push(n.id);
 		});
 		const inSet = {};
@@ -2932,7 +3087,7 @@ var GPI = (function(exports) {
 		};
 		const ES = {}, EF = {};
 		ids.forEach((id) => {
-			ES[id] = 0;
+			ES[id] = Math.max(0, minStart[id] || 0);
 		});
 		order.forEach((id) => {
 			inc[id].forEach((l) => {
@@ -3230,6 +3385,34 @@ var GPI = (function(exports) {
 			baselineDeviationPct: bl && result.ok ? deviationPct(bl.snapshot, result.projectDuration) : null
 		};
 	}
+	function scheduleForecast() {
+		try {
+			if (!readable() || !active()) return null;
+			const sched = getModule("schedule"), pr = sched ? sched.progress : null;
+			if (!pr || !normalizeProgress(pr).statusDate) return null;
+			const m = meta(), net = scheduleNetwork(getModule("wbs"), getModule("activities"), getModule("pert"), sched, getModule("schedulePlan"), m ? m.startDate : "");
+			if (!net.nodes.some((n) => !n.isMilestone)) return null;
+			const bl = normalizeBaseline(sched ? sched.baseline : null);
+			return computeForecast({
+				nodes: net.nodes.map((n) => ({
+					id: n.id,
+					dur: n.dur,
+					isMilestone: n.isMilestone,
+					code: n.code,
+					name: n.name
+				})),
+				links: net.links,
+				calendar: net.calendar,
+				startDate: net.startDate,
+				progress: pr,
+				cpm,
+				baselineDuration: bl ? bl.snapshot.projectDuration : null,
+				baselineFinish: bl ? bl.snapshot.finishDate : ""
+			});
+		} catch (e) {
+			return null;
+		}
+	}
 	function esc(s) {
 		return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
 			"&": "&amp;",
@@ -3249,9 +3432,15 @@ var GPI = (function(exports) {
 	function scheduleNetwork(wbs, act, pert, sched, sp, startDate) {
 		const a = act || {}, byLeaf = a.byLeaf || {}, milestones = a.milestones || [];
 		const dur = {};
+		const triple = {};
 		try {
 			pertStats(pert, act, wbs).rows.forEach((r) => {
 				dur[r.id] = r.dur;
+				if (r.valid && r.o != null && r.m != null && r.p != null && r.p > r.o) triple[r.id] = {
+					o: r.o,
+					m: r.m,
+					p: r.p
+				};
 			});
 		} catch (e) {}
 		const nodes = [];
@@ -3288,7 +3477,8 @@ var GPI = (function(exports) {
 					leafId: l.id,
 					dur: d == null ? 0 : d,
 					hasDur: d != null,
-					isMilestone: false
+					isMilestone: false,
+					pert: triple[av.id] || null
 				});
 			});
 			milestones.filter((m) => m.leafId === l.id).forEach((m) => pushMs(m, l.id));
@@ -3361,7 +3551,8 @@ var GPI = (function(exports) {
 		addWorkingDays,
 		scheduleStats,
 		scheduleNetwork,
-		activeScheduleNetwork
+		activeScheduleNetwork,
+		scheduleForecast
 	};
 	var schema = SCHEMA;
 	var NOTICE_ID = "gpi-storage-notice";
@@ -3504,6 +3695,7 @@ var GPI = (function(exports) {
 	exports.saveMeta = saveMeta;
 	exports.saveModule = saveModule;
 	exports.saveState = saveState;
+	exports.scheduleForecast = scheduleForecast;
 	exports.scheduleNetwork = scheduleNetwork;
 	exports.schedulePlanAudit = schedulePlanAudit;
 	exports.scheduleStats = scheduleStats;

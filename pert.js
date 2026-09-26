@@ -63,23 +63,7 @@
 		};
 	}
 	//#endregion
-	//#region src/shared/range-estimating.ts
-	function mulberry32(seed) {
-		let a = seed >>> 0;
-		return () => {
-			a = a + 1831565813 >>> 0;
-			let t = a;
-			t = Math.imul(t ^ t >>> 15, t | 1);
-			t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-			return ((t ^ t >>> 14) >>> 0) / 4294967296;
-		};
-	}
-	var PERT_SIM_PERCENTILES = [
-		10,
-		50,
-		80,
-		90
-	];
+	//#region src/shared/beta-pert.ts
 	var normal = (rnd) => {
 		const u = Math.max(rnd(), 1e-12), v = rnd();
 		return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
@@ -98,6 +82,24 @@
 		const a = 1 + 4 * (m - o) / (p - o), b = 1 + 4 * (p - m) / (p - o), ga = gamma(a, rnd);
 		return o + ga / (ga + gamma(b, rnd)) * (p - o);
 	}
+	//#endregion
+	//#region src/shared/range-estimating.ts
+	function mulberry32(seed) {
+		let a = seed >>> 0;
+		return () => {
+			a = a + 1831565813 >>> 0;
+			let t = a;
+			t = Math.imul(t ^ t >>> 15, t | 1);
+			t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+			return ((t ^ t >>> 14) >>> 0) / 4294967296;
+		};
+	}
+	var PERT_SIM_PERCENTILES = [
+		10,
+		50,
+		80,
+		90
+	];
 	var isTriple = (a) => a.o != null && a.m != null && a.p != null && isFinite(a.o) && isFinite(a.m) && isFinite(a.p) && a.o > 0 && a.o <= a.m && a.m <= a.p && a.p > a.o;
 	function simulatePertNetwork(acts, links, calendar, cpm, opts = {}) {
 		const n = Math.max(200, Math.round(opts.iterations || 2e3)), rnd = mulberry32(opts.seed || 20260713);

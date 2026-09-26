@@ -182,6 +182,7 @@ export interface ScheduleModule {
   linkCounter: number;
   import: ScheduleImportInfo | null;
   baseline: ScheduleBaseline | null;
+  progress?: { statusDate: string; pct: Record<string, number> } | null;   // avance real (opcional; las cronogramas guardados antes no lo traen)
 }
 
 export interface RequirementItem {

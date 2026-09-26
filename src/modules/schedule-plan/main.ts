@@ -28,6 +28,7 @@ import { installGpiBadge } from "../../shared/gpi-badge";
 import type { EditSession, ObsModule, ProjectMeta, RaciModule, SchedulePlanModule, WbsModule } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
 import { SAMPLE_CALENDAR } from "../../shared/schedule-sample";
+import { checkMilestones, milestoneSummary, type MilestoneStatus } from "../../shared/milestone-check";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global { interface Window { GPI?: GpiApi; } }
@@ -52,7 +53,7 @@ function defaultThresholds(): Threshold[] {
 // ---------- ESTADO ----------
 interface WorkingTime { from: string; to: string; }
 interface Holiday { date: string; name: string; }
-interface Milestone { name: string; date: string; type: string; constraint: string; notes: string; }
+interface Milestone { name: string; date: string; type: string; constraint: string; notes: string; wbsCode?: string; }   // wbsCode (opcional): elementos de la EDT que cierran el hito, para compararlo con el CPM
 interface RoleRow { role: string; person: string; responsibility: string; raci: string; }
 interface ReportRow { name: string; frequency: string; audience: string; tool: string; }
 
@@ -145,12 +146,12 @@ function sampleState(): ScheduleState {
       updateFrequency: "Corte semanal, todos los viernes a las 17:00 (hora Lima); consolidación quincenal para el Comité de Obra."
     },
     milestones: [
-      { name: "Aprobación del Plan de Gestión del Proyecto", date: "2026-08-05", type: "interno", constraint: "FNLT", notes: "Cierra el paquete del Plan de gestión (1.2): línea base inicial." },
-      { name: "Fin de Ingeniería y Diseño", date: "2026-09-30", type: "interno", constraint: "FNLT", notes: "" },
-      { name: "Fin de Procura (entrega de estructuras, materiales y equipos)", date: "2026-11-04", type: "contractual", constraint: "FNLT", notes: "Lo cierra el paquete de materiales de construcción (Proveedor B, 3.2); las estructuras metálicas (Proveedor A) se entregan el 19/10 y los equipos eléctricos (Proveedor C) el 13/10." },
-      { name: "Permisos y licencias municipales aprobados", date: "2026-11-11", type: "regulatorio", constraint: "FNET", notes: "Habilita el inicio de movimiento de tierras (4.1)." },
-      { name: "Fin de cimentaciones", date: "2027-02-04", type: "interno", constraint: "FNLT", notes: "Hito H2 de la red del cronograma." },
-      { name: "Entrega final y acta de cierre", date: "2027-07-23", type: "contractual", constraint: "FNLT", notes: "Fin de Pruebas y Puesta en Marcha (5.3); cierre contractual con el cliente. Es el fin de la ruta crítica del cronograma CPM (273 días laborables)." }
+      { name: "Aprobación del Plan de Gestión del Proyecto", date: "2026-08-05", type: "interno", constraint: "FNLT", wbsCode: "1.2", notes: "Cierra el paquete del Plan de gestión (1.2): línea base inicial." },
+      { name: "Fin de Ingeniería y Diseño", date: "2026-09-30", type: "interno", constraint: "FNLT", wbsCode: "2.2, 2.3", notes: "Fin de los diseños estructural (2.2) y eléctrico-sanitario (2.3); los permisos (2.4) cierran en el hito siguiente." },
+      { name: "Fin de Procura (entrega de estructuras, materiales y equipos)", date: "2026-11-04", type: "contractual", constraint: "FNLT", wbsCode: "3", notes: "Lo cierra el paquete de materiales de construcción (Proveedor B, 3.2); las estructuras metálicas (Proveedor A) se entregan el 19/10 y los equipos eléctricos (Proveedor C) el 13/10." },
+      { name: "Permisos y licencias municipales aprobados", date: "2026-11-11", type: "regulatorio", constraint: "FNET", wbsCode: "2.4", notes: "Habilita el inicio de movimiento de tierras (4.1)." },
+      { name: "Fin de cimentaciones", date: "2027-02-04", type: "interno", constraint: "FNLT", wbsCode: "4.2", notes: "Hito H2 de la red del cronograma." },
+      { name: "Entrega final y acta de cierre", date: "2027-07-23", type: "contractual", constraint: "FNLT", wbsCode: "5.3", notes: "Fin de Pruebas y Puesta en Marcha (5.3); cierre contractual con el cliente. Es el fin de la ruta crítica del cronograma CPM (273 días laborables)." }
     ],
     scheduleReserve: {
       pct: 8,
@@ -468,6 +469,7 @@ function renderTables(): void {
         { value: "FNET", label: "FNET" }, { value: "FNLT", label: "FNLT" },
         { value: "MSO", label: "MSO" }, { value: "MFO", label: "MFO" }
       ] },
+      { key: "wbsCode", label: "Código EDT que lo cierra", type: "text", width: "120px", placeholder: "p. ej. 2.2, 2.3" },
       { key: "notes", label: "Notas", type: "textarea" }
     ], { addLabel: "+ Agregar hito", onChange: onDirty });
 
@@ -629,12 +631,24 @@ function diffDaysIso(a: string, b: string): number {
   return Math.round((db.getTime() - da.getTime()) / 86400000);
 }
 
+// Restricciones de los hitos contra el fin que da el CPM (auditoría, media): ver shared/milestone-check.ts.
+const MS_ICON: Record<MilestoneStatus, string> = { cumple: "✓", incumple: "⛔", espera: "⏳", "sin-vinculo": "○", "sin-cpm": "○", "no-aplica": "·" };
+function renderMilestoneCheck(wbs: WbsModule | null): void {
+  const box = document.getElementById("mil-check"); if (!box) return;
+  if (!wbs) { box.innerHTML = "Vincula un proyecto con EDT y cronograma para comparar la restricción de cada hito con las fechas del CPM."; return; }
+  const cs = checkMilestones(state.milestones, wbs as never), s = milestoneSummary(cs), rows = cs.filter((c) => c.status !== "no-aplica");
+  box.className = "info-panel" + (s.violated ? " warn" : "");
+  box.innerHTML = "<b>Restricciones de los hitos contra el CPM:</b> " + (s.checked ? s.checked + " comparado(s) · " + (s.violated ? "<b>" + s.violated + " incumplido(s)</b>" : "ninguno incumplido") + (s.waiting ? " · " + s.waiting + " con espera" : "") : "ninguno comparado") + (s.unlinked ? " · " + s.unlinked + " sin vínculo con la EDT" : "")
+    + (rows.length ? "<ul style='margin:6px 0 0 18px;padding:0'>" + rows.map((c) => "<li>" + MS_ICON[c.status] + " <b>" + esc(c.name || "(sin nombre)") + "</b> [" + esc(c.constraint) + " " + esc(c.date) + "]: " + esc(c.text) + "</li>").join("") + "</ul>" : "");
+}
+
 function updateMetaPanels(): void {
   const hasGpi = typeof window.GPI !== "undefined" && !!window.GPI.available && window.GPI.available();
   const meta = hasGpi ? window.GPI!.meta() : null;
   // EDT efectiva: con cronograma, fechas del CPM y costos de Estimar los Costos (los valores manuales de la EDT no se actualizan).
   const wbs: WbsModule | null = hasGpi ? (window.GPI!.util.effectiveWbs() ?? null) : null;
   const raci: RaciModule | null = hasGpi ? (window.GPI!.getModule("raci") ?? null) : null;
+  renderMilestoneCheck(wbs);
 
   // 1. Introducción — datos comunes del proyecto
   const introPanel = document.getElementById("introMetaPanel") as HTMLElement;
@@ -766,7 +780,7 @@ function wireImportMilestones(): void {
       if (!p.end) return;
       const name = "Fin de " + p.name;
       if (state.milestones.some((m) => m.name === name)) return;
-      state.milestones.push({ name, date: p.end, type: "interno", constraint: "FNLT", notes: 'Importado automáticamente desde la fase "' + p.name + '" de la EDT.' });
+      state.milestones.push({ name, date: p.end, type: "interno", constraint: "FNLT", wbsCode: window.GPI!.util.wbsCodes(wbs || ({} as WbsModule))[p.id] || "", notes: 'Importado automáticamente desde la fase "' + p.name + '" de la EDT.' });
       added++;
     });
     renderTables(); onDirty();

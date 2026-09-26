@@ -89,6 +89,124 @@
 		]
 	};
 	//#endregion
+	//#region src/shared/milestone-check.ts
+	var str = (v) => v === null || v === void 0 ? "" : String(v);
+	var iso = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	var dayDiff = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
+	var DATED_CONSTRAINTS = [
+		"FNLT",
+		"FNET",
+		"MSO",
+		"MFO"
+	];
+	function endsByCode(wbs) {
+		const out = {};
+		if (!wbs || !wbs.nodes || !wbs.nodes[wbs.rootId]) return out;
+		const seen = /* @__PURE__ */ new Set();
+		const walk = (id, code) => {
+			const n = wbs.nodes[id];
+			if (!n || seen.has(id)) return "";
+			seen.add(id);
+			const kids = Array.isArray(n.children) ? n.children.map(str).filter((c) => !!wbs.nodes[c]) : [];
+			let end = kids.length ? "" : iso(str(n.end)) ? str(n.end) : "";
+			kids.forEach((c, i) => {
+				const e = walk(c, (code ? code + "." : "") + (i + 1));
+				if (e && (!end || e > end)) end = e;
+			});
+			if (code) out[code] = end;
+			return end;
+		};
+		walk(wbs.rootId, "");
+		return out;
+	}
+	var splitCodes = (s) => str(s).split(/[,;\s]+/).map((c) => c.trim()).filter(Boolean);
+	function checkMilestones(milestones, wbs) {
+		const ends = endsByCode(wbs);
+		return (Array.isArray(milestones) ? milestones : []).map((raw) => {
+			const m = raw && typeof raw === "object" ? raw : {}, name = str(m.name).trim(), date = str(m.date), constraint = str(m.constraint).toUpperCase(), codes = splitCodes(str(m.wbsCode));
+			const base = {
+				name,
+				date,
+				constraint,
+				codes,
+				cpmFinish: "",
+				days: null
+			};
+			if (DATED_CONSTRAINTS.indexOf(constraint) < 0) return {
+				...base,
+				status: "no-aplica",
+				text: "La restricción " + (constraint || "—") + " no fija una fecha que comparar con el CPM."
+			};
+			if (!iso(date)) return {
+				...base,
+				status: "no-aplica",
+				text: "El hito no tiene fecha."
+			};
+			if (!codes.length) return {
+				...base,
+				status: "sin-vinculo",
+				text: "Tiene restricción " + constraint + " pero no indica qué elementos de la EDT lo cierran: no se puede compararla con el CPM."
+			};
+			const found = codes.map((c) => ends[c]).filter((e) => !!e);
+			if (found.length !== codes.length) return {
+				...base,
+				status: "sin-cpm",
+				text: "No hay fecha de fin para " + codes.filter((c) => !ends[c]).join(", ") + " (código inexistente en la EDT o sin fechas)."
+			};
+			const finish = found.reduce((a, b) => b > a ? b : a), diff = dayDiff(date, finish);
+			const at = codes.join(" + ") + " termina el " + finish;
+			if (constraint === "FNLT") return diff > 0 ? {
+				...base,
+				cpmFinish: finish,
+				days: diff,
+				status: "incumple",
+				text: at + ", " + diff + " día(s) DESPUÉS de la fecha del hito (a más tardar el " + date + ")."
+			} : {
+				...base,
+				cpmFinish: finish,
+				days: Math.abs(diff),
+				status: "cumple",
+				text: at + (diff === 0 ? ": justo en la fecha límite (sin holgura)." : ", " + -diff + " día(s) antes de la fecha límite.")
+			};
+			if (constraint === "FNET") return diff < 0 ? {
+				...base,
+				cpmFinish: finish,
+				days: -diff,
+				status: "espera",
+				text: at + ", " + -diff + " día(s) ANTES de la fecha mínima (" + date + "): el trabajo tendría que esperar."
+			} : {
+				...base,
+				cpmFinish: finish,
+				days: diff,
+				status: "cumple",
+				text: at + ": no antes del " + date + "."
+			};
+			return diff === 0 ? {
+				...base,
+				cpmFinish: finish,
+				days: 0,
+				status: "cumple",
+				text: at + ": coincide con la fecha obligatoria."
+			} : {
+				...base,
+				cpmFinish: finish,
+				days: Math.abs(diff),
+				status: "incumple",
+				text: at + ", " + Math.abs(diff) + " día(s) " + (diff > 0 ? "después" : "antes") + " de la fecha obligatoria (" + date + ")."
+			};
+		});
+	}
+	function milestoneSummary(cs) {
+		const bad = cs.filter((c) => c.status === "incumple");
+		return {
+			checked: cs.filter((c) => c.status === "cumple" || c.status === "incumple" || c.status === "espera").length,
+			violated: bad.length,
+			waiting: cs.filter((c) => c.status === "espera").length,
+			unlinked: cs.filter((c) => c.status === "sin-vinculo" || c.status === "sin-cpm").length,
+			first: bad.length ? bad[0].name + ": " + bad[0].text : ""
+		};
+	}
+	//#endregion
 	//#region src/modules/schedule-plan/main.ts
 	var FIXED_TOOL = "Microsoft Project (MS Project)";
 	function defaultThresholds() {
@@ -277,6 +395,7 @@
 					date: "2026-08-05",
 					type: "interno",
 					constraint: "FNLT",
+					wbsCode: "1.2",
 					notes: "Cierra el paquete del Plan de gestión (1.2): línea base inicial."
 				},
 				{
@@ -284,13 +403,15 @@
 					date: "2026-09-30",
 					type: "interno",
 					constraint: "FNLT",
-					notes: ""
+					wbsCode: "2.2, 2.3",
+					notes: "Fin de los diseños estructural (2.2) y eléctrico-sanitario (2.3); los permisos (2.4) cierran en el hito siguiente."
 				},
 				{
 					name: "Fin de Procura (entrega de estructuras, materiales y equipos)",
 					date: "2026-11-04",
 					type: "contractual",
 					constraint: "FNLT",
+					wbsCode: "3",
 					notes: "Lo cierra el paquete de materiales de construcción (Proveedor B, 3.2); las estructuras metálicas (Proveedor A) se entregan el 19/10 y los equipos eléctricos (Proveedor C) el 13/10."
 				},
 				{
@@ -298,6 +419,7 @@
 					date: "2026-11-11",
 					type: "regulatorio",
 					constraint: "FNET",
+					wbsCode: "2.4",
 					notes: "Habilita el inicio de movimiento de tierras (4.1)."
 				},
 				{
@@ -305,6 +427,7 @@
 					date: "2027-02-04",
 					type: "interno",
 					constraint: "FNLT",
+					wbsCode: "4.2",
 					notes: "Hito H2 de la red del cronograma."
 				},
 				{
@@ -312,6 +435,7 @@
 					date: "2027-07-23",
 					type: "contractual",
 					constraint: "FNLT",
+					wbsCode: "5.3",
 					notes: "Fin de Pruebas y Puesta en Marcha (5.3); cierre contractual con el cliente. Es el fin de la ruta crítica del cronograma CPM (273 días laborables)."
 				}
 			],
@@ -970,6 +1094,13 @@
 				]
 			},
 			{
+				key: "wbsCode",
+				label: "Código EDT que lo cierra",
+				type: "text",
+				width: "120px",
+				placeholder: "p. ej. 2.2, 2.3"
+			},
+			{
 				key: "notes",
 				label: "Notas",
 				type: "textarea"
@@ -1186,11 +1317,31 @@
 		if (isNaN(da.getTime()) || isNaN(db.getTime())) return 0;
 		return Math.round((db.getTime() - da.getTime()) / 864e5);
 	}
+	var MS_ICON = {
+		cumple: "✓",
+		incumple: "⛔",
+		espera: "⏳",
+		"sin-vinculo": "○",
+		"sin-cpm": "○",
+		"no-aplica": "·"
+	};
+	function renderMilestoneCheck(wbs) {
+		const box = document.getElementById("mil-check");
+		if (!box) return;
+		if (!wbs) {
+			box.innerHTML = "Vincula un proyecto con EDT y cronograma para comparar la restricción de cada hito con las fechas del CPM.";
+			return;
+		}
+		const cs = checkMilestones(state.milestones, wbs), s = milestoneSummary(cs), rows = cs.filter((c) => c.status !== "no-aplica");
+		box.className = "info-panel" + (s.violated ? " warn" : "");
+		box.innerHTML = "<b>Restricciones de los hitos contra el CPM:</b> " + (s.checked ? s.checked + " comparado(s) · " + (s.violated ? "<b>" + s.violated + " incumplido(s)</b>" : "ninguno incumplido") + (s.waiting ? " · " + s.waiting + " con espera" : "") : "ninguno comparado") + (s.unlinked ? " · " + s.unlinked + " sin vínculo con la EDT" : "") + (rows.length ? "<ul style='margin:6px 0 0 18px;padding:0'>" + rows.map((c) => "<li>" + MS_ICON[c.status] + " <b>" + esc(c.name || "(sin nombre)") + "</b> [" + esc(c.constraint) + " " + esc(c.date) + "]: " + esc(c.text) + "</li>").join("") + "</ul>" : "");
+	}
 	function updateMetaPanels() {
 		const hasGpi = typeof window.GPI !== "undefined" && !!window.GPI.available && window.GPI.available();
 		const meta = hasGpi ? window.GPI.meta() : null;
 		const wbs = hasGpi ? window.GPI.util.effectiveWbs() ?? null : null;
 		const raci = hasGpi ? window.GPI.getModule("raci") ?? null : null;
+		renderMilestoneCheck(wbs);
 		const introPanel = document.getElementById("introMetaPanel");
 		if (hasGpi && window.GPI.active()) introPanel.innerHTML = "<b>Proyecto activo:</b> " + esc(meta?.name || "—") + (meta?.code ? " · " + esc(meta.code) : "") + "<br><b>Cliente:</b> " + esc(meta?.client || "—") + " · <b>Ubicación:</b> " + esc(meta?.location || "—") + "<br><b>Vigencia:</b> " + esc(meta?.startDate || "—") + " → " + esc(meta?.endDate || "—") + " · <b>CAPEX:</b> " + moneyFmt(meta?.capex, meta?.currency);
 		else introPanel.innerHTML = "Sin proyecto activo vinculado. Los datos comunes (cliente, fechas, CAPEX) se completan automáticamente desde el Panel de Control.";
@@ -1314,6 +1465,7 @@
 					date: p.end,
 					type: "interno",
 					constraint: "FNLT",
+					wbsCode: window.GPI.util.wbsCodes(wbs || {})[p.id] || "",
 					notes: "Importado automáticamente desde la fase \"" + p.name + "\" de la EDT."
 				});
 				added++;

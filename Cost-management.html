@@ -506,6 +506,7 @@
         </div>
         <div class="rng-events">
           <label class="rng-chk"><input type="checkbox" id="rngRisks" checked onchange="onContMethod()"><span><b>Incluir los eventos de riesgo del Registro de Riesgos</b> <span class="muted">(AACE 40R-08: la contingencia reúne la incertidumbre del estimado y los riesgos discretos)</span></span></label>
+          <label class="rng-chk"><input type="checkbox" id="rngPert" onchange="onContMethod()"><span><b>Sortear también las duraciones PERT en la misma iteración</b> <span class="muted">(opcional; por omisión, el plazo solo refleja los eventos de riesgo sobre las duraciones determinísticas. Con esto cada iteración sortea además la duración Beta-PERT de las actividades con terna válida y corre el CPM con ambas cosas a la vez)</span> <span class="muted" id="rngPertNote"></span></span></label>
           <div class="rng-time">
             <label><span>Costo de cada día de extensión del plazo</span><input id="rngTimeCost" class="mono" type="number" min="0" step="any" placeholder="0" onchange="onContMethod()"></label>
             <label><span>Fundamento (qué incluye)</span><input id="rngTimeBasis" type="text" placeholder="Gastos generales, dirección y alquileres por día laborable" onchange="onContMethod()"></label>

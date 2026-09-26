@@ -11,6 +11,17 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Auditoría integral, hallazgos medios de cronograma y riesgo (M14, M15, M18)**:
+  - **M14 — Restricciones de los hitos.** FNLT/FNET/MSO/MFO del Plan del Cronograma nunca se comparaban con el CPM. `src/shared/milestone-check.ts`: cada hito
+    puede indicar qué elementos de la EDT lo cierran (`wbsCode`, opcional) y se compara con el fin de la EDT efectiva; el Plan del Cronograma muestra
+    cumple/incumple/espera con los días, y el Plan para la Dirección lo recoge como P25. El ejemplo trae los seis hitos vinculados y todos cumplen.
+  - **M15 — Avance real.** `schedule.progress` (opcional): fecha de corte y % por actividad. `src/shared/schedule-progress.ts` recalcula el CPM del núcleo sobre lo que
+    falta (`CpmNode.minStart`: lo pendiente no empieza antes del corte) y da fin pronosticado, contra el plan y la línea base, SPI(t) por duración y las actividades que
+    se corren. Tarjeta «Avance real y pronóstico» en Cronograma/CPM (con «Cargar el avance del ejemplo» = el corte 2026-11-03 de Valor Ganado), `GPI.util.scheduleForecast()` y
+    P26 en el Plan para la Dirección. Por duración, no por costo: el ejemplo va en plazo (SPI(t) 1,02, fin 2027-07-19) mientras el SPI de Valor Ganado (0,925) pesa por costo.
+  - **M18 — Plazo integrado.** Opción (apagada por omisión) en Costos: «Sortear también las duraciones PERT en la misma iteración». Con ternas PERT válidas, cada iteración
+    sortea la duración Beta-PERT de esas actividades (flujo aleatorio propio, los eventos no cambian) y corre el CPM con ambas cosas a la vez; `NetworkNode.pert` lleva la
+    terna. `beta-pert.ts` es ahora la única implementación del muestreo. Con el caso completo: 10.000 iteraciones en pocos segundos.
 - **Auditoría integral, hallazgos medios de caso y metodología (M3, M4, M5, M9, M12, M19, M24)**:
   - **M3 — Fechas manuales de la EDT.** Las fechas y duraciones del ejemplo de WBS Builder eran de otro calendario (terminaban en nov. 2026) y no
     coincidían con el CPM del caso; ahora son los tramos reales (fin 2027-07-23). Consecuencia visible: el ejemplo independiente muestra los

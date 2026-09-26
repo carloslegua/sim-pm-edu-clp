@@ -68,7 +68,7 @@
 			session: next
 		};
 	}
-	var str$8 = (v) => v === null || v === void 0 ? "" : String(v);
+	var str$9 = (v) => v === null || v === void 0 ? "" : String(v);
 	var fin = (v, d = 0) => {
 		const x = Number(v);
 		return isFinite(x) ? x : d;
@@ -80,9 +80,9 @@
 		const rows = s.rows.filter((r) => r && typeof r === "object").map((r) => {
 			const q = r;
 			return {
-				id: str$8(q.id),
-				code: str$8(q.code),
-				name: str$8(q.name),
+				id: str$9(q.id),
+				code: str$9(q.code),
+				name: str$9(q.name),
 				isMilestone: !!q.isMilestone,
 				dur: fin(q.dur),
 				es: fin(q.es),
@@ -94,24 +94,24 @@
 		const log = (Array.isArray(x.log) ? x.log : []).filter((e) => e && typeof e === "object").map((e) => {
 			const q = e;
 			return {
-				version: str$8(q.version),
-				date: str$8(q.date),
-				reason: str$8(q.reason),
-				approver: str$8(q.approver),
+				version: str$9(q.version),
+				date: str$9(q.date),
+				reason: str$9(q.reason),
+				approver: str$9(q.approver),
 				sponsorAuth: !!q.sponsorAuth,
 				projectDuration: fin(q.projectDuration),
-				finishDate: str$8(q.finishDate),
+				finishDate: str$9(q.finishDate),
 				deviationPct: q.deviationPct === null || q.deviationPct === void 0 ? null : fin(q.deviationPct)
 			};
 		});
 		return {
 			frozen: x.frozen !== false,
-			version: str$8(x.version) || "LB-1",
-			date: str$8(x.date),
+			version: str$9(x.version) || "LB-1",
+			date: str$9(x.date),
 			snapshot: {
 				projectDuration: fin(s.projectDuration),
-				startDate: str$8(s.startDate),
-				finishDate: str$8(s.finishDate),
+				startDate: str$9(s.startDate),
+				finishDate: str$9(s.finishDate),
 				nearCriticalDays: fin(s.nearCriticalDays, 10),
 				rows,
 				evm: normalizeEvmReference(s.evm)
@@ -127,11 +127,11 @@
 		const packages = x.packages.filter((p) => p && typeof p === "object").map((p) => {
 			const q = p;
 			return {
-				id: str$8(q.id),
-				code: str$8(q.code),
-				name: str$8(q.name),
+				id: str$9(q.id),
+				code: str$9(q.code),
+				name: str$9(q.name),
 				bac: fin(q.bac),
-				source: str$8(q.source),
+				source: str$9(q.source),
 				es: optNum(q.es),
 				ef: optNum(q.ef)
 			};
@@ -145,7 +145,7 @@
 					4,
 					5
 				]).map((d) => Number(d)).filter((d) => isFinite(d)),
-				holidays: (Array.isArray(cal.holidays) ? cal.holidays : []).map(str$8)
+				holidays: (Array.isArray(cal.holidays) ? cal.holidays : []).map(str$9)
 			},
 			packages,
 			total: fin(x.total, packages.reduce((s, p) => s + p.bac, 0))
@@ -826,7 +826,7 @@
 		}
 	];
 	var isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
-	var str$7 = (v) => v === null || v === void 0 ? "" : String(v);
+	var str$8 = (v) => v === null || v === void 0 ? "" : String(v);
 	function blankBoe() {
 		const text = {};
 		TEXT_KEYS.forEach((k) => {
@@ -852,21 +852,21 @@
 		const b = blankBoe();
 		if (!isObj(raw)) return b;
 		TEXT_KEYS.forEach((k) => {
-			b.text[k] = str$7(raw[k]);
+			b.text[k] = str$8(raw[k]);
 		});
-		b.version = str$7(raw.version) || "1.0";
+		b.version = str$8(raw.version) || "1.0";
 		b.status = STATUSES$1.indexOf(raw.status) >= 0 ? raw.status : "borrador";
-		b.preparedBy = str$7(raw.preparedBy);
-		b.reviewedBy = str$7(raw.reviewedBy);
-		b.approvedBy = str$7(raw.approvedBy);
-		b.approvedOn = /^\d{4}-\d{2}-\d{2}$/.test(str$7(raw.approvedOn)) ? str$7(raw.approvedOn) : "";
+		b.preparedBy = str$8(raw.preparedBy);
+		b.reviewedBy = str$8(raw.reviewedBy);
+		b.approvedBy = str$8(raw.approvedBy);
+		b.approvedOn = /^\d{4}-\d{2}-\d{2}$/.test(str$8(raw.approvedOn)) ? str$8(raw.approvedOn) : "";
 		if (Array.isArray(raw.team)) b.team = raw.team.filter(isObj).map((m) => ({
-			name: str$7(m.name),
-			role: str$7(m.role)
+			name: str$8(m.name),
+			role: str$8(m.role)
 		})).filter((m) => m.name.trim() || m.role.trim());
 		if (Array.isArray(raw.refs)) b.refs = raw.refs.filter(isObj).map((r) => ({
-			title: str$7(r.title),
-			note: str$7(r.note)
+			title: str$8(r.title),
+			note: str$8(r.note)
 		})).filter((r) => r.title.trim() || r.note.trim());
 		if (Array.isArray(raw.checklist)) raw.checklist.filter(isObj).forEach((c) => {
 			const it = b.checklist.find((x) => x.id === c.id);
@@ -911,51 +911,51 @@
 		"Diferida",
 		"Implementada"
 	];
-	var str$6 = (v) => v === null || v === void 0 ? "" : String(v);
+	var str$7 = (v) => v === null || v === void 0 ? "" : String(v);
 	var numOrNull$2 = (v) => {
 		if (v === null || v === void 0 || v === "") return null;
 		const n = Number(v);
 		return isFinite(n) ? n : null;
 	};
-	var strs$3 = (v) => Array.isArray(v) ? v.map(str$6).filter(Boolean) : [];
+	var strs$3 = (v) => Array.isArray(v) ? v.map(str$7).filter(Boolean) : [];
 	function normalizeCr(o, fallbackId) {
 		const x = o && typeof o === "object" ? o : {}, im = x.impact && typeof x.impact === "object" ? x.impact : {};
 		const impact = {};
 		AREAS.forEach((a) => {
 			const q = im[a] && typeof im[a] === "object" ? im[a] : {};
 			impact[a] = {
-				state: ["sin_impacto", "con_impacto"].indexOf(str$6(q.state)) >= 0 ? q.state : "sin_evaluar",
-				note: str$6(q.note)
+				state: ["sin_impacto", "con_impacto"].indexOf(str$7(q.state)) >= 0 ? q.state : "sin_evaluar",
+				note: str$7(q.note)
 			};
 		});
-		const id = str$6(x.id) || fallbackId;
+		const id = str$7(x.id) || fallbackId;
 		return {
 			id,
-			code: str$6(x.code) || id,
-			title: str$6(x.title),
-			description: str$6(x.description),
-			requester: str$6(x.requester),
-			requestedOn: str$6(x.requestedOn),
-			origin: str$6(x.origin),
-			type: str$6(x.type),
+			code: str$7(x.code) || id,
+			title: str$7(x.title),
+			description: str$7(x.description),
+			requester: str$7(x.requester),
+			requestedOn: str$7(x.requestedOn),
+			origin: str$7(x.origin),
+			type: str$7(x.type),
 			impact,
 			wbsIds: strs$3(x.wbsIds),
 			actIds: strs$3(x.actIds),
 			daysDelta: numOrNull$2(x.daysDelta),
 			costDelta: numOrNull$2(x.costDelta),
-			fund: str$6(x.fund),
+			fund: str$7(x.fund),
 			orderIds: strs$3(x.orderIds),
 			modIds: strs$3(x.modIds),
 			riskIds: strs$3(x.riskIds),
-			scheduleBaseline: str$6(x.scheduleBaseline),
+			scheduleBaseline: str$7(x.scheduleBaseline),
 			status: CR_STATUSES.indexOf(x.status) >= 0 ? x.status : "Pendiente",
-			decidedOn: str$6(x.decidedOn),
-			approver: str$6(x.approver),
-			authLevel: str$6(x.authLevel),
+			decidedOn: str$7(x.decidedOn),
+			approver: str$7(x.approver),
+			authLevel: str$7(x.authLevel),
 			sponsorAuth: !!x.sponsorAuth,
-			rationale: str$6(x.rationale),
-			implementedOn: str$6(x.implementedOn),
-			notes: str$6(x.notes)
+			rationale: str$7(x.rationale),
+			implementedOn: str$7(x.implementedOn),
+			notes: str$7(x.notes)
 		};
 	}
 	var MOD_STATUS_LABEL = {
@@ -1172,23 +1172,23 @@
 		const n = toNum(v);
 		return n !== null && Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
 	}
-	var str$5 = (v) => v === null || v === void 0 ? "" : String(v);
+	var str$6 = (v) => v === null || v === void 0 ? "" : String(v);
 	var arrNum = (v, def) => Array.isArray(v) && v.length === def.length && v.every((x) => toNum(x) !== null) ? v.map((x) => toNum(x)) : def.slice();
 	function normalizePlan(p) {
 		const o = p && typeof p === "object" ? p : {};
-		const cats = Array.isArray(o.categories) ? o.categories.map(str$5).map((s) => s.trim()).filter(Boolean) : [];
+		const cats = Array.isArray(o.categories) ? o.categories.map(str$6).map((s) => s.trim()).filter(Boolean) : [];
 		return {
 			probPct: arrNum(o.probPct, DEFAULT_PLAN.probPct),
 			costBandsPct: arrNum(o.costBandsPct, DEFAULT_PLAN.costBandsPct),
 			timeBandsDays: arrNum(o.timeBandsDays, DEFAULT_PLAN.timeBandsDays),
-			scopeDescriptors: Array.isArray(o.scopeDescriptors) && o.scopeDescriptors.length === 5 ? o.scopeDescriptors.map(str$5) : DEFAULT_PLAN.scopeDescriptors.slice(),
+			scopeDescriptors: Array.isArray(o.scopeDescriptors) && o.scopeDescriptors.length === 5 ? o.scopeDescriptors.map(str$6) : DEFAULT_PLAN.scopeDescriptors.slice(),
 			thresholdMedium: toNum(o.thresholdMedium) ?? DEFAULT_PLAN.thresholdMedium,
 			thresholdHigh: toNum(o.thresholdHigh) ?? DEFAULT_PLAN.thresholdHigh,
 			reviewDays: toNum(o.reviewDays) ?? DEFAULT_PLAN.reviewDays,
 			categories: cats.length ? cats : DEFAULT_PLAN.categories.slice(),
-			methodology: str$5(o.methodology),
-			reservePolicy: str$5(o.reservePolicy),
-			roles: str$5(o.roles),
+			methodology: str$6(o.methodology),
+			reservePolicy: str$6(o.reservePolicy),
+			roles: str$6(o.roles),
 			reserves: normalizeReserves(o.reserves)
 		};
 	}
@@ -1274,22 +1274,22 @@
 		const x = o && typeof o === "object" ? o : {};
 		const type = x.type === "oportunidad" ? "oportunidad" : "amenaza";
 		const status = RISK_STATUSES.indexOf(x.status) >= 0 ? x.status : "identificado";
-		const id = str$5(x.id) || fallbackId;
+		const id = str$6(x.id) || fallbackId;
 		return {
 			id,
-			code: str$5(x.code) || id,
-			title: str$5(x.title),
-			cause: str$5(x.cause),
-			event: str$5(x.event),
-			effect: str$5(x.effect),
+			code: str$6(x.code) || id,
+			title: str$6(x.title),
+			cause: str$6(x.cause),
+			event: str$6(x.event),
+			effect: str$6(x.effect),
 			type,
-			category: str$5(x.category),
-			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str$5).filter(Boolean) : [],
-			actIds: Array.isArray(x.actIds) ? x.actIds.map(str$5).filter(Boolean) : [],
-			owner: str$5(x.owner),
-			proximity: PROXIMITY.indexOf(str$5(x.proximity)) >= 0 ? str$5(x.proximity) : "",
-			identifiedOn: str$5(x.identifiedOn),
-			reviewedOn: str$5(x.reviewedOn),
+			category: str$6(x.category),
+			wbsIds: Array.isArray(x.wbsIds) ? x.wbsIds.map(str$6).filter(Boolean) : [],
+			actIds: Array.isArray(x.actIds) ? x.actIds.map(str$6).filter(Boolean) : [],
+			owner: str$6(x.owner),
+			proximity: PROXIMITY.indexOf(str$6(x.proximity)) >= 0 ? str$6(x.proximity) : "",
+			identifiedOn: str$6(x.identifiedOn),
+			reviewedOn: str$6(x.reviewedOn),
 			status,
 			prob: toLevel(x.prob),
 			impCost: toLevel(x.impCost),
@@ -1298,12 +1298,12 @@
 			probPct: toNum(x.probPct),
 			costImpact: range(x.costImpact),
 			timeImpact: range(x.timeImpact),
-			strategy: str$5(x.strategy),
-			response: str$5(x.response),
-			trigger: str$5(x.trigger),
-			responseOwner: str$5(x.responseOwner),
+			strategy: str$6(x.strategy),
+			response: str$6(x.response),
+			trigger: str$6(x.trigger),
+			responseOwner: str$6(x.responseOwner),
 			responseCost: toNum(x.responseCost),
-			secondary: str$5(x.secondary),
+			secondary: str$6(x.secondary),
 			resProb: toLevel(x.resProb),
 			resImpCost: toLevel(x.resImpCost),
 			resImpTime: toLevel(x.resImpTime),
@@ -1311,10 +1311,10 @@
 			resProbPct: toNum(x.resProbPct),
 			resCostImpact: range(x.resCostImpact),
 			resTimeImpact: range(x.resTimeImpact),
-			materializedOn: str$5(x.materializedOn),
+			materializedOn: str$6(x.materializedOn),
 			actualCost: toNum(x.actualCost),
 			actualDelay: toNum(x.actualDelay),
-			notes: str$5(x.notes)
+			notes: str$6(x.notes)
 		};
 	}
 	var isOpen = (r) => r.status !== "materializado" && r.status !== "cerrado";
@@ -1527,6 +1527,124 @@
 			suppliers: Array.from(new Set(obs.map((n) => (n.person || "").trim()).concat((Array.isArray(sk) ? sk : []).map((s) => String(rec$4(s).org || "").trim())).filter(Boolean))),
 			estimateClass: cl >= 1 && cl <= 5 ? cl : null,
 			baseCost: baseCostOf(G)
+		};
+	}
+	//#endregion
+	//#region src/shared/milestone-check.ts
+	var str$5 = (v) => v === null || v === void 0 ? "" : String(v);
+	var iso$2 = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	var dayDiff = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
+	var DATED_CONSTRAINTS = [
+		"FNLT",
+		"FNET",
+		"MSO",
+		"MFO"
+	];
+	function endsByCode(wbs) {
+		const out = {};
+		if (!wbs || !wbs.nodes || !wbs.nodes[wbs.rootId]) return out;
+		const seen = /* @__PURE__ */ new Set();
+		const walk = (id, code) => {
+			const n = wbs.nodes[id];
+			if (!n || seen.has(id)) return "";
+			seen.add(id);
+			const kids = Array.isArray(n.children) ? n.children.map(str$5).filter((c) => !!wbs.nodes[c]) : [];
+			let end = kids.length ? "" : iso$2(str$5(n.end)) ? str$5(n.end) : "";
+			kids.forEach((c, i) => {
+				const e = walk(c, (code ? code + "." : "") + (i + 1));
+				if (e && (!end || e > end)) end = e;
+			});
+			if (code) out[code] = end;
+			return end;
+		};
+		walk(wbs.rootId, "");
+		return out;
+	}
+	var splitCodes = (s) => str$5(s).split(/[,;\s]+/).map((c) => c.trim()).filter(Boolean);
+	function checkMilestones(milestones, wbs) {
+		const ends = endsByCode(wbs);
+		return (Array.isArray(milestones) ? milestones : []).map((raw) => {
+			const m = raw && typeof raw === "object" ? raw : {}, name = str$5(m.name).trim(), date = str$5(m.date), constraint = str$5(m.constraint).toUpperCase(), codes = splitCodes(str$5(m.wbsCode));
+			const base = {
+				name,
+				date,
+				constraint,
+				codes,
+				cpmFinish: "",
+				days: null
+			};
+			if (DATED_CONSTRAINTS.indexOf(constraint) < 0) return {
+				...base,
+				status: "no-aplica",
+				text: "La restricción " + (constraint || "—") + " no fija una fecha que comparar con el CPM."
+			};
+			if (!iso$2(date)) return {
+				...base,
+				status: "no-aplica",
+				text: "El hito no tiene fecha."
+			};
+			if (!codes.length) return {
+				...base,
+				status: "sin-vinculo",
+				text: "Tiene restricción " + constraint + " pero no indica qué elementos de la EDT lo cierran: no se puede compararla con el CPM."
+			};
+			const found = codes.map((c) => ends[c]).filter((e) => !!e);
+			if (found.length !== codes.length) return {
+				...base,
+				status: "sin-cpm",
+				text: "No hay fecha de fin para " + codes.filter((c) => !ends[c]).join(", ") + " (código inexistente en la EDT o sin fechas)."
+			};
+			const finish = found.reduce((a, b) => b > a ? b : a), diff = dayDiff(date, finish);
+			const at = codes.join(" + ") + " termina el " + finish;
+			if (constraint === "FNLT") return diff > 0 ? {
+				...base,
+				cpmFinish: finish,
+				days: diff,
+				status: "incumple",
+				text: at + ", " + diff + " día(s) DESPUÉS de la fecha del hito (a más tardar el " + date + ")."
+			} : {
+				...base,
+				cpmFinish: finish,
+				days: Math.abs(diff),
+				status: "cumple",
+				text: at + (diff === 0 ? ": justo en la fecha límite (sin holgura)." : ", " + -diff + " día(s) antes de la fecha límite.")
+			};
+			if (constraint === "FNET") return diff < 0 ? {
+				...base,
+				cpmFinish: finish,
+				days: -diff,
+				status: "espera",
+				text: at + ", " + -diff + " día(s) ANTES de la fecha mínima (" + date + "): el trabajo tendría que esperar."
+			} : {
+				...base,
+				cpmFinish: finish,
+				days: diff,
+				status: "cumple",
+				text: at + ": no antes del " + date + "."
+			};
+			return diff === 0 ? {
+				...base,
+				cpmFinish: finish,
+				days: 0,
+				status: "cumple",
+				text: at + ": coincide con la fecha obligatoria."
+			} : {
+				...base,
+				cpmFinish: finish,
+				days: Math.abs(diff),
+				status: "incumple",
+				text: at + ", " + Math.abs(diff) + " día(s) " + (diff > 0 ? "después" : "antes") + " de la fecha obligatoria (" + date + ")."
+			};
+		});
+	}
+	function milestoneSummary(cs) {
+		const bad = cs.filter((c) => c.status === "incumple");
+		return {
+			checked: cs.filter((c) => c.status === "cumple" || c.status === "incumple" || c.status === "espera").length,
+			violated: bad.length,
+			waiting: cs.filter((c) => c.status === "espera").length,
+			unlinked: cs.filter((c) => c.status === "sin-vinculo" || c.status === "sin-cpm").length,
+			first: bad.length ? bad[0].name + ": " + bad[0].text : ""
 		};
 	}
 	//#endregion
@@ -1966,6 +2084,8 @@
 		].forEach(([k, n]) => {
 			if (!f[k].has) F("P17", "info", n, "El Plan de " + n + " aún no está elaborado: el plan para la dirección se aprueba con sus planes subsidiarios.");
 		});
+		if (s.forecast && (s.forecast.delayDays > 0 || s.forecast.vsBaselineDays !== null && s.forecast.vsBaselineDays > 0)) F("P26", "aviso", "Cronograma", "Con el avance real al " + s.forecast.statusDate + ", el fin pronosticado es " + s.forecast.forecastFinish + (s.forecast.delayDays > 0 ? ", " + s.forecast.delayDays + " día(s) laborable(s) después del planificado (" + s.forecast.planFinish + ")" : "") + (s.forecast.vsBaselineDays !== null && s.forecast.vsBaselineDays > 0 ? "; " + s.forecast.vsBaselineDays + " día(s) laborable(s) sobre la línea base" : "") + ": el plan aprobado ya no describe lo que va a ocurrir.");
+		if (s.milestones && s.milestones.violated > 0) F("P25", "aviso", "Cronograma", s.milestones.violated + " hito(s) del Plan del Cronograma incumplen su restricción contra el CPM. El primero — " + s.milestones.first + " Ajusta la fecha del hito, la red o la restricción, o registra un cambio.");
 		if (anyData && !isPredictive(f.charter.approach)) F("P23", "aviso", "Acta", "El Acta declara un enfoque «" + f.charter.approach.trim() + "», pero esta suite modela un ciclo de vida PREDICTIVO (líneas base de alcance, cronograma y costo, CPM, valor ganado): no representa iteraciones, backlog ni velocidad. Documenta en «Enfoque y adaptación» cómo se aplica el plan aquí, o corrige el enfoque del Acta.");
 		if (anyData) {
 			const miss = [
@@ -2701,7 +2821,16 @@
 					date: bl.date,
 					approver: last ? last.approver : ""
 				} : emptyBase(),
-				deviationPct: ss.baselineDeviationPct
+				deviationPct: ss.baselineDeviationPct,
+				milestones: milestoneSummary(checkMilestones(sp && sp.milestones, wbs))
+			};
+			const fcst = G.util.scheduleForecast();
+			if (fcst && fcst.ok) f.schedule.forecast = {
+				statusDate: fcst.statusDate,
+				planFinish: fcst.planFinish,
+				forecastFinish: fcst.forecastFinish,
+				delayDays: fcst.delayDays,
+				vsBaselineDays: fcst.vsBaselineDays
 			};
 			const cs = G.util.costSummary(cost), boe = normalizeBoe(cost && cost.estimate && cost.estimate.boe);
 			const blog = cost && Array.isArray(cost.baselineLog) ? cost.baselineLog : [], lastLb = blog.length ? blog[blog.length - 1] : null;

@@ -28,6 +28,8 @@ import type { ActivitiesModule, EditSession, MilestoneItem, PertModule, Schedule
 import { pushWithSession } from "../../shared/write-session";
 import { probWithin, simulatePertNetwork, type PertSimResult, type SimAct } from "../../shared/pert-network";
 import { buildEvmReference } from "../../shared/evm-reference";
+import { computeForecast, normalizeProgress, spreadPackagePct, type CpmFnP, type Forecast, type ProgressState } from "../../shared/schedule-progress";
+import { EVM_SAMPLE_PERCENT, EVM_SAMPLE_STATUS_DATE } from "../../shared/evm-sample";
 import type { EvmReference } from "../../shared/schedule-control";
 import type { CpmFn, NetLink } from "../../shared/schedule-risk";
 import {
@@ -59,7 +61,7 @@ declare global { interface Window { GPI?: GpiApi; JSZip?: JSZipCtor; } }
 // "schedule" (enlaces + auditoría). Nada derivado (ES/EF/…) se persiste.
 interface Link { id: string; from: string; to: string; type: ScheduleLinkType; lag: number; lagUnit: ScheduleLagUnit; source: "manual" | "import"; }
 interface ImportInfo { at: number; tool: string; rowMap: Record<number, string>; dates: Record<string, { start: string; finish: string }>; }
-interface ScheduleState { links: Link[]; linkCounter: number; import: ImportInfo | null; baseline: unknown | null; }
+interface ScheduleState { links: Link[]; linkCounter: number; import: ImportInfo | null; baseline: unknown | null; progress?: ProgressState; }
 
 let mode: "live" | "sample" = "live";
 let stateLive: ScheduleState = { links: [], linkCounter: 1, import: null, baseline: null };
@@ -597,7 +599,7 @@ function renderControl(R: RunCpmResult): void {
   const hrows = health.checks.map((c) => "<tr><td><b>" + esc(c.label) + "</b><div class='ctl-items'>" + esc(c.detail) + (c.items.length ? "<br>" + c.items.map(esc).join(" · ") : "") + "</div></td><td class='num'>" + c.count + " / " + c.total + " (" + d1(c.pct) + " %)</td><td>" + esc(c.limit) + "</td><td>" + pill(c.pass) + "</td></tr>").join("");
   const healthHtml = "<div class='ctl-card'><h3>Salud de la red</h3><p class='sub'>Antes de fiarte de la ruta crítica, revisa la calidad de la red. Verificaciones tipo <b>DCMA 14-Point Assessment</b> (valores de <b>referencia</b> de la industria: orientan, no bloquean). <b>" + health.passed + " de " + health.evaluated + "</b> verificaciones cumplen.</p>"
     + "<table class='ctl'><thead><tr><th>Verificación</th><th class='num'>Resultado</th><th>Umbral de referencia</th><th>Estado</th></tr></thead><tbody>" + hrows + "</tbody></table>"
-    + "<div class='ctl-note'>No se evalúan las restricciones duras de fecha, los recursos ni el avance real: la suite no los modela. La ruta casi crítica usa el umbral del Plan de Gestión del Cronograma (" + plan.nearCriticalDays + " d" + (plan.nearCriticalDefined ? "" : ", valor por omisión: el plan no lo define") + ").</div></div>";
+    + "<div class='ctl-note'>Estas verificaciones son de la red planificada: no evalúan los recursos ni imponen restricciones de fecha al CPM (las de los hitos se comparan en el Plan del Cronograma) y el avance real se registra en «Avance real y pronóstico». La ruta casi crítica usa el umbral del Plan de Gestión del Cronograma (" + plan.nearCriticalDays + " d" + (plan.nearCriticalDefined ? "" : ", valor por omisión: el plan no lo define") + ").</div></div>";
   // --- línea base ---
   let baseHtml: string;
   if (!base) {
@@ -630,8 +632,73 @@ function renderControl(R: RunCpmResult): void {
     + "<tr><td>Umbral de rebaselinado (desviación de la duración)</td><td class='num'>" + plan.rebaselinePct + " %</td><td>" + (plan.rebaselinePct > 0 ? "del plan: por encima, autoriza el sponsor" : "el plan no lo define: no se exige al sponsor") + "</td></tr>"
     + "<tr><td>Consumo de holgura de la ruta casi crítica</td><td class='num'>verde ≤ " + plan.floatGreen + " % · rojo ≥ " + plan.floatRed + " %</td><td>del plan (o 40 / 70 por omisión)</td></tr></tbody></table>"
     + (mode === "sample" ? "<div class='ctl-note'>Modo ejemplo: sin proyecto, se usan los valores por omisión.</div>" : "") + "</div>";
-  box.innerHTML = baseHtml + healthHtml + planHtml;
+  box.innerHTML = baseHtml + progressCardHtml(R) + healthHtml + planHtml;
   const b = document.getElementById("btnBaseline"); if (b) b.addEventListener("click", () => openBaselineDialog(runCpm()));
+  wireProgress(R);
+}
+
+// ---------- avance real y pronóstico (shared/schedule-progress.ts) ----------
+// El pronóstico es el CPM recalculado sobre lo que falta, con la fecha de corte como inicio mínimo. Es por DURACIÓN (Σ duración × %); el valor
+// ganado (por costo) vive en Valor Ganado. Lo guardado es solo la fecha de corte y el % de cada actividad (schedule.progress); nada derivado se persiste.
+function forecastNow(R: RunCpmResult): Forecast {
+  const cn = codeOf(R.snap), nm = nameOf(R.snap), ms = isMilestoneOf(R.snap), base = normalizeBaseline(state().baseline);
+  return computeForecast({
+    nodes: R.nodes.map((n) => ({ id: n.id, dur: n.dur, isMilestone: !!ms[n.id], code: cn[n.id] || "", name: nm[n.id] || "" })), links: R.links as never, calendar: calData(), startDate: metaStart(),
+    progress: state().progress, cpm: GPI!.util.cpm as unknown as CpmFnP, baselineDuration: base ? base.snapshot.projectDuration : null, baselineFinish: base ? base.snapshot.finishDate : ""
+  });
+}
+function progressKpisHtml(f: Forecast): string {
+  if (!f.ok) return "<div class='ctl-note'>" + esc(f.reason) + "</div>";
+  const kp = (v: string, k: string): string => "<div class='ctl-kpi'><div class='v'>" + v + "</div><div class='k'>" + k + "</div></div>";
+  return "<div class='ctl-kpis'>"
+    + kp(d1(f.pctActual) + " % / " + d1(f.pctPlanned) + " %", "avance real / planificado al corte (por duración)")
+    + kp(f.spiT === null ? "—" : f.spiT.toFixed(2), "SPI(t) por duración: real ÷ planificado")
+    + kp(esc(f.planFinish || "—") + " → " + esc(f.forecastFinish || "—"), "fin planificado → fin pronosticado")
+    + kp(sg(f.delayDays) + " d lab.", f.vsBaselineDays === null ? "desplazamiento del fin contra el plan" : "contra el plan · " + sg(f.vsBaselineDays) + " d contra la línea base")
+    + "</div><div class='ctl-items'>Terminadas: " + f.done + " · en curso: " + f.inProgress + " · sin empezar: " + f.notStarted
+    + (f.late.length ? " · <b>se corren</b>: " + f.late.slice(0, 5).map((l) => esc(l.code) + " (+" + d1(l.slipDays) + " d)").join(", ") + (f.late.length > 5 ? "…" : "") : " · ninguna actividad se corre") + "</div>";
+}
+function progressCardHtml(R: RunCpmResult): string {
+  const st = state(), p = st.progress || { statusDate: "", pct: {} }, ms = isMilestoneOf(R.snap), cn = codeOf(R.snap), nm = nameOf(R.snap);
+  const acts = R.nodes.filter((n) => !ms[n.id]), rows = R.cpm.ok ? R.cpm.rows : {};
+  const trs = acts.map((n) => { const r = rows[n.id], v = p.pct[n.id];
+    return "<tr><td class='mono'>" + esc(cn[n.id] || "") + "</td><td>" + esc(nm[n.id] || "") + "</td><td class='num'>" + (r ? esc(r.startDate) + " → " + esc(r.finishDate) : "—") + "</td>"
+      + "<td class='num'><input type='number' min='0' max='100' step='5' style='width:70px' data-prog='" + esc(n.id) + "' aria-label='% completado de " + esc(cn[n.id] || "") + "' value='" + (v === undefined ? "" : v) + "'></td><td class='num' data-progfc='" + esc(n.id) + "'>—</td></tr>"; }).join("");
+  return "<div class='ctl-card'><h3>Avance real y pronóstico</h3><p class='sub'>Registra la <b>fecha de corte</b> y el <b>% completado</b> de cada actividad: el pronóstico recalcula el CPM sobre lo que falta (lo pendiente no puede empezar antes del corte) y lo compara con el plan y con la línea base. Es por <b>duración</b>; el valor ganado (por costo) está en Valor Ganado. Supone que lo que falta se hace en su duración planificada.</p>"
+    + "<div style='display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px'><label for='progDate' style='font-weight:600'>Fecha de corte</label><input type='date' id='progDate' value='" + esc(p.statusDate) + "'>"
+    + "<button class='btn' id='btnProgSample'>Cargar el avance del ejemplo</button><button class='btn' id='btnProgClear'" + (st.progress ? "" : " disabled") + ">Limpiar el avance</button></div>"
+    + "<div id='progKpis'></div>"
+    + (acts.length ? "<div style='max-height:340px;overflow:auto;margin-top:10px'><table class='ctl'><thead><tr><th>Cód.</th><th>Actividad</th><th class='num'>Plan (inicio → fin)</th><th class='num'>% completado</th><th class='num'>Fin pronosticado</th></tr></thead><tbody>" + trs + "</tbody></table></div>" : "")
+    + "</div>";
+}
+let progTimer: ReturnType<typeof setTimeout> | undefined;
+function refreshProgress(R: RunCpmResult): void {
+  const f = forecastNow(R), k = document.getElementById("progKpis"); if (k) k.innerHTML = progressKpisHtml(f);
+  document.querySelectorAll<HTMLElement>("[data-progfc]").forEach((c) => {
+    const id = c.dataset.progfc as string, x = f.ok ? f.byId[id] : undefined, v = (state().progress || { pct: {} as Record<string, number> }).pct[id];
+    c.textContent = !f.ok ? "—" : v !== undefined && v >= 100 ? "terminada" : x ? x.finish + (x.slipDays > 0 ? " (+" + d1(x.slipDays) + " d)" : "") : "—";
+  });
+}
+function wireProgress(R: RunCpmResult): void {
+  const st = state(), ensure = (): ProgressState => (st.progress || (st.progress = { statusDate: "", pct: {} })), later = (): void => { clearTimeout(progTimer); progTimer = setTimeout(gpiPush, 700); };
+  refreshProgress(R);
+  const date = document.getElementById("progDate") as HTMLInputElement | null;
+  if (date) date.addEventListener("change", () => { ensure().statusDate = date.value; refreshProgress(R); later(); });
+  document.querySelectorAll<HTMLInputElement>("[data-prog]").forEach((inp) => inp.addEventListener("input", () => {
+    const p = ensure(), id = inp.dataset.prog as string, v = inp.value.trim();
+    if (v === "" || !isFinite(Number(v))) delete p.pct[id]; else p.pct[id] = Math.min(100, Math.max(0, Number(v)));
+    refreshProgress(R); later();
+  }));
+  const bs = document.getElementById("btnProgSample");
+  if (bs) bs.addEventListener("click", async () => {
+    if (st.progress && Object.keys(st.progress.pct).length && !(await showConfirm("Se reemplazará el avance registrado por el del ejemplo DISTRIB+ (corte " + EVM_SAMPLE_STATUS_DATE + ", el mismo de Valor Ganado).", "Cargar el avance del ejemplo"))) return;
+    const cn = codeOf(R.snap), ms = isMilestoneOf(R.snap), pct = spreadPackagePct(R.nodes.map((n) => ({ id: n.id, code: cn[n.id] || "", dur: n.dur, isMilestone: !!ms[n.id] })), EVM_SAMPLE_PERCENT);
+    if (!Object.keys(pct).length) { await showAlert("Las actividades de este proyecto no coinciden con los paquetes del ejemplo (códigos EDT 1.1 … 5.3): carga primero el ejemplo en WBS y Actividades."); return; }
+    st.progress = { statusDate: EVM_SAMPLE_STATUS_DATE, pct };
+    commit("Avance del ejemplo cargado (corte " + EVM_SAMPLE_STATUS_DATE + ").");
+  });
+  const bc = document.getElementById("btnProgClear");
+  if (bc) bc.addEventListener("click", async () => { if (!(await showConfirm("Se borrará la fecha de corte y el % de todas las actividades.", "Limpiar el avance"))) return; st.progress = undefined; commit("Avance limpiado."); });
 }
 // Referencia de VALOR GANADO que se congela con la línea base (shared/evm-reference.ts): el presupuesto por paquete (Estimar los Costos o EDT), el
 // calendario y el inicio/fin de cada paquete. Sin paquetes con costo no hay referencia (null): EVM lo avisa. Solo con un proyecto conectado.
@@ -695,7 +762,8 @@ function normSchedule(o: any): ScheduleState {
     })),
     linkCounter: Number(o.linkCounter) || ((Array.isArray(o.links) ? o.links.length : 0) + 1),
     import: o.import || null,
-    baseline: o.baseline || null
+    baseline: o.baseline || null,
+    progress: o.progress ? normalizeProgress(o.progress) : undefined   // avance real (opcional)
   };
 }
 // Aviso visible, una sola vez, de que esta pestaña quedó desactualizada

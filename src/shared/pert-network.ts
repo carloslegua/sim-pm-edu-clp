@@ -13,6 +13,7 @@
 // actividades (sin correlación), distribución Beta-PERT, semilla fija (mismo resultado para los mismos datos). Es una simulación, no una
 // probabilidad exacta: con 2 000 iteraciones el error típico de una probabilidad es ≈ ±1 punto.
 import { mulberry32 } from "./range-estimating";
+import { samplePert } from "./beta-pert";
 import type { CpmFn, NetLink } from "./schedule-risk";
 
 export const PERT_SIM_ITERATIONS = 2000;
@@ -26,22 +27,7 @@ export interface PertSimResult {
   elapsedApprox: boolean;   // hay desfases en días transcurridos: se aproximaron (ver simulatePertNetwork)
 }
 
-const normal = (rnd: () => number): number => { const u = Math.max(rnd(), 1e-12), v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
-// Gamma(k, 1) con k ≥ 1 (Marsaglia–Tsang).
-function gamma(k: number, rnd: () => number): number {
-  const d = k - 1 / 3, c = 1 / Math.sqrt(9 * d);
-  for (;;) {
-    const x = normal(rnd), t = 1 + c * x; if (t <= 0) continue;
-    const v = t * t * t, u = rnd();
-    if (Math.log(Math.max(u, 1e-300)) < 0.5 * x * x + d - d * v + d * Math.log(v)) return d * v;
-  }
-}
-// Una duración Beta-PERT en [o, p] con moda m. Terna degenerada (p ≤ o): la duración más probable.
-export function samplePert(o: number, m: number, p: number, rnd: () => number): number {
-  if (!(p > o)) return m;
-  const a = 1 + 4 * (m - o) / (p - o), b = 1 + 4 * (p - m) / (p - o), ga = gamma(a, rnd), gb = gamma(b, rnd);
-  return o + (ga / (ga + gb)) * (p - o);
-}
+export { samplePert };   // la implementación vive en beta-pert.ts (también la usa el análisis integrado de riesgos, range-estimating.ts)
 export const isTriple = (a: SimAct): boolean => a.o != null && a.m != null && a.p != null && isFinite(a.o) && isFinite(a.m) && isFinite(a.p) && a.o > 0 && a.o <= a.m && a.m <= a.p && a.p > a.o;
 
 // La simulación trabaja en DÍAS LABORABLES y NO pasa fecha de inicio al CPM: con fechas cada corrida cuesta ~150 veces más (convierte cada

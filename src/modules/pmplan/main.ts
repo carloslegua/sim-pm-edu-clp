@@ -25,6 +25,7 @@ import { modFacts, normalizeCr, portfolio as crPortfolio, type ChangeFacts, type
 import { inherentScore, levelOf, normalizePlan as normalizeRiskPlan, normalizeRisk, portfolio as riskPortfolio, rankRisks } from "../../shared/risk-analysis";
 import { QUADRANT_LABEL, levelName, quadrantOf } from "../../shared/stakeholder-engagement";
 import { gatherCommFacts, gatherProcurementFacts, gatherQualityFacts } from "../../shared/plan-facts";
+import { checkMilestones, milestoneSummary } from "../../shared/milestone-check";
 import { normalizeScopeBaseline, scopeDriftOf } from "../../shared/scope-baseline";
 import { commState, coverage as commCoverage, normalizeComms, type CommData } from "../../shared/comms-plan";
 import { COQ_CATS, COQ_LABEL, coqSummary, coverage as qualityCoverage, normalizeQuality, qualityState, type QualityData } from "../../shared/quality-plan";
@@ -105,8 +106,11 @@ function buildCtx(): Ctx {
     const last = bl && bl.log.length ? bl.log[bl.log.length - 1] : null;
     f.schedule = {
       has: ss.activities > 0, ok: ss.ok, activities: ss.activities, duration: ss.projectDuration, start: net ? net.startDate : "", finish: ss.finishDate, critical: ss.criticalCount,
-      base: bl ? { has: true, version: bl.version, date: bl.date, approver: last ? last.approver : "" } : emptyBase(), deviationPct: ss.baselineDeviationPct
+      base: bl ? { has: true, version: bl.version, date: bl.date, approver: last ? last.approver : "" } : emptyBase(), deviationPct: ss.baselineDeviationPct,
+      milestones: milestoneSummary(checkMilestones(sp && sp.milestones, wbs as never))   // restricciones de los hitos contra las fechas del CPM
     };
+    const fcst = G.util.scheduleForecast();   // pronóstico con el avance real informado en Cronograma/CPM (null si no hay fecha de corte)
+    if (fcst && fcst.ok) f.schedule.forecast = { statusDate: fcst.statusDate, planFinish: fcst.planFinish, forecastFinish: fcst.forecastFinish, delayDays: fcst.delayDays, vsBaselineDays: fcst.vsBaselineDays };
     // Costos y BOE
     const cs = G.util.costSummary(cost), boe = normalizeBoe(cost && cost.estimate && (cost.estimate as Record<string, unknown>).boe);
     const blog = cost && Array.isArray(cost.baselineLog) ? cost.baselineLog : [], lastLb = blog.length ? blog[blog.length - 1] : null;

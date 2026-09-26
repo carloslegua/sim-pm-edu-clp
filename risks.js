@@ -1936,6 +1936,26 @@
 		};
 	}
 	//#endregion
+	//#region src/shared/beta-pert.ts
+	var normal = (rnd) => {
+		const u = Math.max(rnd(), 1e-12), v = rnd();
+		return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+	};
+	function gamma(k, rnd) {
+		const d = k - 1 / 3, c = 1 / Math.sqrt(9 * d);
+		for (;;) {
+			const x = normal(rnd), t = 1 + c * x;
+			if (t <= 0) continue;
+			const v = t * t * t, u = rnd();
+			if (Math.log(Math.max(u, 1e-300)) < .5 * x * x + d - d * v + d * Math.log(v)) return d * v;
+		}
+	}
+	function samplePert(o, m, p, rnd) {
+		if (!(p > o)) return m;
+		const a = 1 + 4 * (m - o) / (p - o), b = 1 + 4 * (p - m) / (p - o), ga = gamma(a, rnd);
+		return o + ga / (ga + gamma(b, rnd)) * (p - o);
+	}
+	//#endregion
 	//#region src/shared/range-estimating.ts
 	var PERCENTILES = [
 		5,
@@ -1989,12 +2009,20 @@
 	}
 	var normIterations = (v) => Math.max(1e3, Math.min(2e5, Math.floor(Number(v) || 1e4)));
 	var normSeed = (v) => typeof v === "number" && Number.isFinite(v) ? v : DEFAULT_SEED;
-	function simulateEvents(events, schedule, iterations, seed) {
+	function simulateEvents(events, schedule, iterations, seed, pertActs) {
 		const evs = validEvents(events), N = normIterations(iterations), S = normSeed(seed);
 		const sim = schedule && isFinite(schedule.base) ? schedule : null;
-		const direct = new Float64Array(N), ext = sim ? new Float64Array(N) : null, randE = mulberry32((S ^ 1540483477) >>> 0);
+		const pa = sim && pertActs ? pertActs.filter((a) => isFinite(a.dur) && isFinite(a.o) && isFinite(a.m) && isFinite(a.p) && a.o > 0 && a.o <= a.m && a.m <= a.p && a.p > a.o) : [];
+		const direct = new Float64Array(N), ext = sim ? new Float64Array(N) : null, randE = mulberry32((S ^ 1540483477) >>> 0), randP = mulberry32((S ^ 2654435769) >>> 0);
 		for (let i = 0; i < N; i++) {
 			let t = 0, delta = null;
+			if (pa.length) {
+				delta = {};
+				for (const a of pa) {
+					const d = samplePert(a.o, a.m, a.p, randP) - a.dur;
+					if (d !== 0) delta[a.id] = d;
+				}
+			}
 			for (let j = 0; j < evs.length; j++) {
 				const e = evs[j], occurs = randE() < e.prob, u = randE(), uT = randE();
 				if (!occurs) continue;
@@ -2018,6 +2046,8 @@
 		return {
 			iterations: N,
 			seed: S,
+			integrated: pa.length > 0,
+			pertActs: pa.length,
 			n: evs.length,
 			direct,
 			ext,
@@ -2034,8 +2064,9 @@
 		if (!valid.length && !evs.length) return null;
 		const sim = o.schedule && isFinite(o.schedule.base) ? o.schedule : null;
 		const costPerDay = sim ? Math.max(0, Number(sim.costPerDay) || 0) : 0;
-		const oc = o.outcomes, reuse = !!oc && oc.iterations === iterations && oc.seed === seed && oc.n === evs.length && (!sim || !!oc.ext);
-		const eo = evs.length ? reuse ? oc : simulateEvents(evs, sim, iterations, seed) : null;
+		const wantPert = !!sim && !!o.pertActs && o.pertActs.length > 0;
+		const oc = o.outcomes, reuse = !!oc && oc.iterations === iterations && oc.seed === seed && oc.n === evs.length && (!sim || !!oc.ext) && !!oc.integrated === wantPert;
+		const eo = evs.length || wantPert ? reuse ? oc : simulateEvents(evs, sim, iterations, seed, o.pertActs) : null;
 		const dir = eo ? eo.direct : null, ext = sim && eo ? eo.ext : null;
 		const a = valid.map((l) => num(l.ml) * (1 + num(l.lowPct) / 100));
 		const m = valid.map((l) => num(l.ml));
@@ -2104,7 +2135,9 @@
 				mean: sumDur / iterations,
 				probDelay: nDelayed / iterations,
 				timeCostMean: timeCostSum / iterations,
-				events: eo ? eo.delayers : 0
+				events: eo ? eo.delayers : 0,
+				integrated: !!eo && eo.integrated,
+				pertActs: eo ? eo.pertActs : 0
 			};
 		}
 		return {

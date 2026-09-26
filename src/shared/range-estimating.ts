@@ -20,6 +20,7 @@
 //    incertidumbre y riesgo). Cada evento es Bernoulli(prob) × triangular, independiente. Para
 //    no contar dos veces, los rangos de las partidas NO deben incluir esos eventos.
 
+import { samplePert } from "./beta-pert";
 export interface RangeLine { id: string; name: string; ml: number; lowPct: number; highPct: number; basis?: string; }
 // Evento de riesgo DISCRETO (registro de riesgos): ocurre con probabilidad `prob` (0..1) y, si ocurre, su
 // impacto en costo es triangular (low ≤ likely ≤ high, valores POSITIVOS). `sign` = +1 amenaza (suma al costo),
@@ -40,7 +41,7 @@ export interface ScheduleSim {
   costPerDay: number;                                                 // costo de cada día de extensión del plazo (≥ 0)
   duration: (delta: Record<string, number>) => number | null;         // duración con esos retrasos por actividad (CPM real)
 }
-export interface RangeOptions { iterations?: number; seed?: number; correlation?: number; events?: RiskEventInput[]; schedule?: ScheduleSim; outcomes?: EventOutcomes; }
+export interface RangeOptions { iterations?: number; seed?: number; correlation?: number; events?: RiskEventInput[]; schedule?: ScheduleSim; outcomes?: EventOutcomes; pertActs?: PertDur[]; }
 export interface ScheduleResult {
   base: number; costPerDay: number;
   p: Record<number, number>;        // duración del proyecto en los percentiles de PERCENTILES (días laborables)
@@ -48,6 +49,7 @@ export interface ScheduleResult {
   probDelay: number;                // fracción de iteraciones en que el proyecto termina después de lo previsto (0..1)
   timeCostMean: number;             // costo medio de la extensión del plazo (0 si costPerDay = 0)
   events: number;                   // eventos que retrasan actividades del cronograma
+  integrated: boolean; pertActs: number;   // el plazo incluye la variabilidad de las duraciones PERT (y de cuántas actividades) en la misma iteración
 }
 export interface RangeResult {
   n: number;                        // partidas válidas simuladas
@@ -114,8 +116,13 @@ const normSeed = (v: unknown): number => (typeof v === "number" && Number.isFini
 
 // Resultado de simular SOLO los eventos: por iteración, su costo directo neto y cuánto extienden el plazo. No depende de
 // las partidas, de la correlación ni del costo por día, así que se calcula UNA vez y se reutiliza (el CPM es lo caro).
+// Duraciones con incertidumbre PERT (opt-in, auditoría media): las actividades con terna (optimista, más probable, pesimista) válida. Con ellas, CADA iteración sortea también la
+// duración Beta-PERT de esas actividades (flujo aleatorio propio: no cambia qué eventos ocurren) y el CPM se corre con ambas cosas a la vez, así el plazo refleja el riesgo
+// discreto Y la variabilidad de las duraciones en el mismo sorteo, no dos análisis sumados. La extensión (`ext`) sigue midiéndose contra la duración base determinística.
+export interface PertDur { id: string; dur: number; o: number; m: number; p: number; }
 export interface EventOutcomes {
   iterations: number; seed: number;
+  integrated: boolean; pertActs: number;   // se sortearon también las duraciones PERT (y cuántas actividades)
   n: number;                        // eventos válidos simulados
   direct: Float64Array;             // costo directo neto de los eventos en cada iteración
   ext: Float64Array | null;         // extensión del plazo en cada iteración (días laborables; < 0 si acelera); null si no se simuló el plazo
@@ -125,12 +132,14 @@ export interface EventOutcomes {
 // correlación, así que el mismo registro de riesgos da exactamente los mismos plazos en Costos y en el Registro de
 // riesgos, y agregar o quitar partidas no cambia qué eventos ocurren. Por evento SIEMPRE se consumen tres números
 // (ocurrencia, impacto en costo, impacto en plazo) aunque no ocurra, para que la secuencia no dependa de cuáles ocurren.
-export function simulateEvents(events: RiskEventInput[] | null | undefined, schedule?: Pick<ScheduleSim, "base" | "duration"> | null, iterations?: number, seed?: number): EventOutcomes {
+export function simulateEvents(events: RiskEventInput[] | null | undefined, schedule?: Pick<ScheduleSim, "base" | "duration"> | null, iterations?: number, seed?: number, pertActs?: PertDur[] | null): EventOutcomes {
   const evs = validEvents(events), N = normIterations(iterations), S = normSeed(seed);
   const sim = schedule && isFinite(schedule.base) ? schedule : null;
-  const direct = new Float64Array(N), ext = sim ? new Float64Array(N) : null, randE = mulberry32((S ^ 0x5bd1e995) >>> 0);
+  const pa = sim && pertActs ? pertActs.filter((a) => isFinite(a.dur) && isFinite(a.o) && isFinite(a.m) && isFinite(a.p) && a.o > 0 && a.o <= a.m && a.m <= a.p && a.p > a.o) : [];
+  const direct = new Float64Array(N), ext = sim ? new Float64Array(N) : null, randE = mulberry32((S ^ 0x5bd1e995) >>> 0), randP = mulberry32((S ^ 0x9e3779b9) >>> 0);
   for (let i = 0; i < N; i++) {
     let t = 0, delta: Record<string, number> | null = null;
+    if (pa.length) { delta = {}; for (const a of pa) { const d = samplePert(a.o, a.m, a.p, randP) - a.dur; if (d !== 0) delta[a.id] = d; } }
     for (let j = 0; j < evs.length; j++) {
       const e = evs[j], occurs = randE() < e.prob, u = randE(), uT = randE();
       if (!occurs) continue;
@@ -144,7 +153,7 @@ export function simulateEvents(events: RiskEventInput[] | null | undefined, sche
     direct[i] = t;
     if (sim && ext) { let dur = sim.base; if (delta) { const r = sim.duration(delta); if (r !== null) dur = r; } ext[i] = dur - sim.base; }
   }
-  return { iterations: N, seed: S, n: evs.length, direct, ext, base: sim ? sim.base : 0, delayers: sim ? evs.filter((e) => daysOk(e.days) && e.targets && e.targets.length).length : 0 };
+  return { iterations: N, seed: S, integrated: pa.length > 0, pertActs: pa.length, n: evs.length, direct, ext, base: sim ? sim.base : 0, delayers: sim ? evs.filter((e) => daysOk(e.days) && e.targets && e.targets.length).length : 0 };
 }
 
 export function simulateRange(lines: RangeLine[] | null | undefined, opts?: RangeOptions): RangeResult | null {
@@ -158,8 +167,9 @@ export function simulateRange(lines: RangeLine[] | null | undefined, opts?: Rang
   const costPerDay = sim ? Math.max(0, Number(sim.costPerDay) || 0) : 0;
   // Los eventos se simulan aparte y una sola vez: si quien llama ya tiene sus resultados (mismos eventos, iteraciones y
   // semilla) los pasa en `outcomes` y no se vuelve a correr el CPM.
-  const oc = o.outcomes, reuse = !!oc && oc.iterations === iterations && oc.seed === seed && oc.n === evs.length && (!sim || !!oc.ext);
-  const eo: EventOutcomes | null = evs.length ? (reuse ? (oc as EventOutcomes) : simulateEvents(evs, sim, iterations, seed)) : null;
+  const wantPert = !!sim && !!o.pertActs && o.pertActs.length > 0;
+  const oc = o.outcomes, reuse = !!oc && oc.iterations === iterations && oc.seed === seed && oc.n === evs.length && (!sim || !!oc.ext) && (!!oc.integrated === wantPert);
+  const eo: EventOutcomes | null = evs.length || wantPert ? (reuse ? (oc as EventOutcomes) : simulateEvents(evs, sim, iterations, seed, o.pertActs)) : null;
   const dir = eo ? eo.direct : null, ext = sim && eo ? eo.ext : null;
   const a = valid.map((l) => num(l.ml) * (1 + num(l.lowPct) / 100));
   const m = valid.map((l) => num(l.ml));
@@ -204,7 +214,7 @@ export function simulateRange(lines: RangeLine[] | null | undefined, opts?: Rang
   if (sim && durs) {
     const sd2 = Float64Array.from(durs).sort(), pd: Record<number, number> = {};
     PERCENTILES.forEach((q) => { pd[q] = quantile(sd2, q); });
-    schedule = { base: sim.base, costPerDay, p: pd, mean: sumDur / iterations, probDelay: nDelayed / iterations, timeCostMean: timeCostSum / iterations, events: eo ? eo.delayers : 0 };
+    schedule = { base: sim.base, costPerDay, p: pd, mean: sumDur / iterations, probDelay: nDelayed / iterations, timeCostMean: timeCostSum / iterations, events: eo ? eo.delayers : 0, integrated: !!eo && eo.integrated, pertActs: eo ? eo.pertActs : 0 };
   }
   return { n: valid.length, excluded: (lines || []).length - valid.length, events: evs.length, eventsEV, iterations, seed, correlation: rho, ml, mean, sd, min: sorted[0], max: sorted[iterations - 1], p, curve, schedule };
 }

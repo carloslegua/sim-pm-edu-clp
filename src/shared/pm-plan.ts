@@ -58,7 +58,8 @@ export interface PlanFacts {
   scope: { has: boolean; state: AreaState; base: BaselineFact; notDecomposed: number; drift?: { wbsInBaseline: boolean; wbsChanges: number; enunciadoChanged: boolean } };
   requirements: { has: boolean; state: AreaState; base: BaselineFact; total: number };
   wbs: { leaves: number; state: AreaState; dictPct: number; riesgo: number; aviso: number };
-  schedule: { has: boolean; ok: boolean; activities: number; duration: number | null; start: string; finish: string; critical: number; base: BaselineFact; deviationPct: number | null };
+  schedule: { has: boolean; ok: boolean; activities: number; duration: number | null; start: string; finish: string; critical: number; base: BaselineFact; deviationPct: number | null; milestones?: { checked: number; violated: number; waiting: number; unlinked: number; first: string };
+    forecast?: { statusDate: string; planFinish: string; forecastFinish: string; delayDays: number; vsBaselineDays: number | null } };   // pronóstico con el avance real (schedule.progress)
   cost: { has: boolean; bac: number; bacCurrent: number; total: number; pendingBaseline: number; capex: number | null; boeStatus: string; boeApprovedOn: string; baselineVersion: string; baselineDate: string };
   risks: { total: number; open: number; high: number };
   stakeholders: { count: number; close: number };
@@ -174,6 +175,8 @@ export function integrationFindings(f: PlanFacts): PFinding[] {
   const bac = f.cost.bacCurrent || f.cost.bac;
   if (f.procurement.has && bac > 0 && f.procurement.total > bac) F("P19", "aviso", "Adquisiciones", "El valor estimado de las adquisiciones (" + money(f.procurement.total) + ") supera el BAC vigente (" + money(bac) + "): concilia los contratos con el presupuesto.");
   if (anyData) ([["quality", "Calidad"], ["comms", "Comunicaciones"], ["procurement", "Adquisiciones"]] as const).forEach(([k, n]) => { if (!f[k].has) F("P17", "info", n, "El Plan de " + n + " aún no está elaborado: el plan para la dirección se aprueba con sus planes subsidiarios."); });
+  if (s.forecast && (s.forecast.delayDays > 0 || (s.forecast.vsBaselineDays !== null && s.forecast.vsBaselineDays > 0))) F("P26", "aviso", "Cronograma", "Con el avance real al " + s.forecast.statusDate + ", el fin pronosticado es " + s.forecast.forecastFinish + (s.forecast.delayDays > 0 ? ", " + s.forecast.delayDays + " día(s) laborable(s) después del planificado (" + s.forecast.planFinish + ")" : "") + (s.forecast.vsBaselineDays !== null && s.forecast.vsBaselineDays > 0 ? "; " + s.forecast.vsBaselineDays + " día(s) laborable(s) sobre la línea base" : "") + ": el plan aprobado ya no describe lo que va a ocurrir.");
+  if (s.milestones && s.milestones.violated > 0) F("P25", "aviso", "Cronograma", s.milestones.violated + " hito(s) del Plan del Cronograma incumplen su restricción contra el CPM. El primero — " + s.milestones.first + " Ajusta la fecha del hito, la red o la restricción, o registra un cambio.");
   if (anyData && !isPredictive(f.charter.approach)) F("P23", "aviso", "Acta", "El Acta declara un enfoque «" + f.charter.approach.trim() + "», pero esta suite modela un ciclo de vida PREDICTIVO (líneas base de alcance, cronograma y costo, CPM, valor ganado): no representa iteraciones, backlog ni velocidad. Documenta en «Enfoque y adaptación» cómo se aplica el plan aquí, o corrige el enfoque del Acta.");
   if (anyData) {
     const miss = ([["ciclo de vida y enfoque de desarrollo", f.approach.lifecycle], ["adaptación (tailoring)", f.approach.tailoring], ["gestión de la configuración", f.approach.configuration], ["proceso de gestión de cambios", f.approach.changeProcess]] as const).filter(([, t]) => !t.trim()).map(([n]) => n);

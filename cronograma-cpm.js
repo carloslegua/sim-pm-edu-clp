@@ -69,23 +69,7 @@
 		};
 	}
 	//#endregion
-	//#region src/shared/range-estimating.ts
-	function mulberry32(seed) {
-		let a = seed >>> 0;
-		return () => {
-			a = a + 1831565813 >>> 0;
-			let t = a;
-			t = Math.imul(t ^ t >>> 15, t | 1);
-			t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-			return ((t ^ t >>> 14) >>> 0) / 4294967296;
-		};
-	}
-	var PERT_SIM_PERCENTILES = [
-		10,
-		50,
-		80,
-		90
-	];
+	//#region src/shared/beta-pert.ts
 	var normal = (rnd) => {
 		const u = Math.max(rnd(), 1e-12), v = rnd();
 		return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
@@ -104,6 +88,24 @@
 		const a = 1 + 4 * (m - o) / (p - o), b = 1 + 4 * (p - m) / (p - o), ga = gamma(a, rnd);
 		return o + ga / (ga + gamma(b, rnd)) * (p - o);
 	}
+	//#endregion
+	//#region src/shared/range-estimating.ts
+	function mulberry32(seed) {
+		let a = seed >>> 0;
+		return () => {
+			a = a + 1831565813 >>> 0;
+			let t = a;
+			t = Math.imul(t ^ t >>> 15, t | 1);
+			t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+			return ((t ^ t >>> 14) >>> 0) / 4294967296;
+		};
+	}
+	var PERT_SIM_PERCENTILES = [
+		10,
+		50,
+		80,
+		90
+	];
 	var isTriple = (a) => a.o != null && a.m != null && a.p != null && isFinite(a.o) && isFinite(a.m) && isFinite(a.p) && a.o > 0 && a.o <= a.m && a.m <= a.p && a.p > a.o;
 	function simulatePertNetwork(acts, links, calendar, cpm, opts = {}) {
 		const n = Math.max(200, Math.round(opts.iterations || 2e3)), rnd = mulberry32(opts.seed || 20260713);
@@ -224,6 +226,197 @@
 			total: packages.reduce((s, p) => s + p.bac, 0)
 		};
 	}
+	//#endregion
+	//#region src/shared/schedule-progress.ts
+	var iso = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+	var clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+	function normalizeProgress(o) {
+		const x = o && typeof o === "object" ? o : {}, raw = x.pct && typeof x.pct === "object" && !Array.isArray(x.pct) ? x.pct : {}, pct = {};
+		Object.keys(raw).forEach((id) => {
+			const v = Number(raw[id]);
+			if (isFinite(v) && String(raw[id]).trim() !== "") pct[id] = clamp(Math.round(v * 10) / 10, 0, 100);
+		});
+		return {
+			statusDate: iso(String(x.statusDate || "")) ? String(x.statusDate) : "",
+			pct
+		};
+	}
+	function workOffset(startISO, dateISO, cal) {
+		if (!iso(startISO) || !iso(dateISO)) return null;
+		const work = {};
+		(cal && cal.workDayIdx && cal.workDayIdx.length ? cal.workDayIdx : [
+			1,
+			2,
+			3,
+			4,
+			5
+		]).forEach((d) => {
+			work[d] = true;
+		});
+		const hol = {};
+		(cal && cal.holidays || []).forEach((h) => {
+			hol[String(h).slice(0, 10)] = true;
+		});
+		const isWork = (d) => !!work[d.getUTCDay()] && !hol[d.toISOString().slice(0, 10)];
+		const d = /* @__PURE__ */ new Date(startISO + "T12:00:00Z"), end = Date.parse(dateISO + "T12:00:00Z");
+		while (!isWork(d)) d.setUTCDate(d.getUTCDate() + 1);
+		let n = 0;
+		while (d.getTime() < end) {
+			if (isWork(d)) n++;
+			d.setUTCDate(d.getUTCDate() + 1);
+		}
+		return n;
+	}
+	var NONE = {
+		ok: false,
+		reason: "",
+		statusDate: "",
+		statusOffset: 0,
+		planFinish: "",
+		planDuration: 0,
+		forecastFinish: "",
+		forecastDuration: 0,
+		delayDays: 0,
+		baselineFinish: "",
+		vsBaselineDays: null,
+		pctActual: 0,
+		pctPlanned: 0,
+		spiT: null,
+		done: 0,
+		inProgress: 0,
+		notStarted: 0,
+		late: [],
+		byId: {}
+	};
+	function computeForecast(i) {
+		const p = normalizeProgress(i.progress);
+		if (!p.statusDate) return {
+			...NONE,
+			reason: "Falta la fecha de corte del avance."
+		};
+		if (!iso(i.startDate)) return {
+			...NONE,
+			statusDate: p.statusDate,
+			reason: "El proyecto no tiene fecha de inicio: sin ella no se puede ubicar la fecha de corte en el cronograma."
+		};
+		const so = workOffset(i.startDate, p.statusDate, i.calendar);
+		const cal = i.calendar;
+		const plan = i.cpm(i.nodes.map((n) => ({
+			id: n.id,
+			dur: n.dur
+		})), i.links, cal, { startDate: i.startDate });
+		if (!plan.ok) return {
+			...NONE,
+			statusDate: p.statusDate,
+			reason: "La red tiene un ciclo: no se puede calcular el pronóstico."
+		};
+		const acts = i.nodes.filter((n) => !n.isMilestone && n.dur > 0), pctOf = (id) => clamp(p.pct[id] || 0, 0, 100);
+		const fnodes = i.nodes.map((n) => {
+			if (n.isMilestone || n.dur <= 0) return {
+				id: n.id,
+				dur: 0,
+				minStart: 0
+			};
+			const pc = pctOf(n.id);
+			if (pc >= 100) return {
+				id: n.id,
+				dur: 0,
+				minStart: 0
+			};
+			if (pc > 0) return {
+				id: n.id,
+				dur: Math.ceil(n.dur * (1 - pc / 100) - 1e-9),
+				minStart: so
+			};
+			return {
+				id: n.id,
+				dur: n.dur,
+				minStart: so
+			};
+		});
+		const fc = i.cpm(fnodes, i.links, cal, { startDate: i.startDate });
+		if (!fc.ok) return {
+			...NONE,
+			statusDate: p.statusDate,
+			reason: "La red tiene un ciclo: no se puede calcular el pronóstico."
+		};
+		const totalDur = acts.reduce((s, n) => s + n.dur, 0);
+		const pctActual = totalDur ? acts.reduce((s, n) => s + n.dur * pctOf(n.id) / 100, 0) / totalDur * 100 : 0;
+		const pctPlanned = totalDur ? acts.reduce((s, n) => s + n.dur * clamp((so - plan.rows[n.id].es) / n.dur, 0, 1), 0) / totalDur * 100 : 0;
+		const late = acts.filter((n) => pctOf(n.id) < 100).map((n) => ({
+			id: n.id,
+			code: n.code || "",
+			name: n.name || "",
+			slipDays: Math.round((fc.rows[n.id].ef - plan.rows[n.id].ef) * 10) / 10,
+			forecastFinish: fc.rows[n.id].finishDate || ""
+		})).filter((a) => a.slipDays > 0).sort((a, b) => b.slipDays - a.slipDays);
+		const byId = {};
+		acts.filter((n) => pctOf(n.id) < 100).forEach((n) => {
+			byId[n.id] = {
+				finish: fc.rows[n.id].finishDate || "",
+				slipDays: Math.round((fc.rows[n.id].ef - plan.rows[n.id].ef) * 10) / 10
+			};
+		});
+		const bd = i.baselineDuration;
+		return {
+			ok: true,
+			reason: "",
+			statusDate: p.statusDate,
+			statusOffset: so,
+			planFinish: plan.projectFinishDate,
+			planDuration: plan.projectDuration,
+			forecastFinish: fc.projectFinishDate,
+			forecastDuration: fc.projectDuration,
+			delayDays: Math.round((fc.projectDuration - plan.projectDuration) * 10) / 10,
+			baselineFinish: i.baselineFinish || "",
+			vsBaselineDays: bd === null || bd === void 0 ? null : Math.round((fc.projectDuration - bd) * 10) / 10,
+			pctActual: Math.round(pctActual * 10) / 10,
+			pctPlanned: Math.round(pctPlanned * 10) / 10,
+			spiT: pctPlanned > 0 ? Math.round(pctActual / pctPlanned * 1e3) / 1e3 : null,
+			done: acts.filter((n) => pctOf(n.id) >= 100).length,
+			inProgress: acts.filter((n) => pctOf(n.id) > 0 && pctOf(n.id) < 100).length,
+			notStarted: acts.filter((n) => pctOf(n.id) <= 0).length,
+			late,
+			byId
+		};
+	}
+	function spreadPackagePct(acts, pkgPct) {
+		const out = {}, byPkg = {};
+		acts.filter((a) => !a.isMilestone && a.dur > 0).forEach((a) => {
+			const k = a.code.replace(/\.\d+$/, "");
+			(byPkg[k] = byPkg[k] || []).push({
+				id: a.id,
+				dur: a.dur
+			});
+		});
+		Object.keys(byPkg).forEach((k) => {
+			const pc = pkgPct[k];
+			if (pc === void 0) return;
+			const list = byPkg[k];
+			let left = list.reduce((s, a) => s + a.dur, 0) * clamp(pc, 0, 100) / 100;
+			list.forEach((a) => {
+				const take = Math.min(a.dur, Math.max(0, left));
+				out[a.id] = Math.round(take / a.dur * 1e3) / 10;
+				left -= take;
+			});
+		});
+		return out;
+	}
+	//#endregion
+	//#region src/shared/evm-sample.ts
+	var EVM_SAMPLE_STATUS_DATE = "2026-11-03";
+	var EVM_SAMPLE_PERCENT = {
+		"1.1": 100,
+		"1.2": 100,
+		"1.3": 100,
+		"2.1": 100,
+		"2.2": 100,
+		"2.3": 100,
+		"2.4": 90,
+		"3.1": 90,
+		"3.2": 90,
+		"3.3": 100
+	};
 	function planOf(sp) {
 		const p = sp && typeof sp === "object" ? sp : {};
 		const rec = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
@@ -1361,7 +1554,7 @@
 		const base = normalizeBaseline(state().baseline);
 		const pill = (p) => p === null ? "<span class='ctl-pill info'>info</span>" : p ? "<span class='ctl-pill ok'>✓ cumple</span>" : "<span class='ctl-pill bad'>✗ no cumple</span>";
 		const hrows = health.checks.map((c) => "<tr><td><b>" + esc(c.label) + "</b><div class='ctl-items'>" + esc(c.detail) + (c.items.length ? "<br>" + c.items.map(esc).join(" · ") : "") + "</div></td><td class='num'>" + c.count + " / " + c.total + " (" + d1(c.pct) + " %)</td><td>" + esc(c.limit) + "</td><td>" + pill(c.pass) + "</td></tr>").join("");
-		const healthHtml = "<div class='ctl-card'><h3>Salud de la red</h3><p class='sub'>Antes de fiarte de la ruta crítica, revisa la calidad de la red. Verificaciones tipo <b>DCMA 14-Point Assessment</b> (valores de <b>referencia</b> de la industria: orientan, no bloquean). <b>" + health.passed + " de " + health.evaluated + "</b> verificaciones cumplen.</p><table class='ctl'><thead><tr><th>Verificación</th><th class='num'>Resultado</th><th>Umbral de referencia</th><th>Estado</th></tr></thead><tbody>" + hrows + "</tbody></table><div class='ctl-note'>No se evalúan las restricciones duras de fecha, los recursos ni el avance real: la suite no los modela. La ruta casi crítica usa el umbral del Plan de Gestión del Cronograma (" + plan.nearCriticalDays + " d" + (plan.nearCriticalDefined ? "" : ", valor por omisión: el plan no lo define") + ").</div></div>";
+		const healthHtml = "<div class='ctl-card'><h3>Salud de la red</h3><p class='sub'>Antes de fiarte de la ruta crítica, revisa la calidad de la red. Verificaciones tipo <b>DCMA 14-Point Assessment</b> (valores de <b>referencia</b> de la industria: orientan, no bloquean). <b>" + health.passed + " de " + health.evaluated + "</b> verificaciones cumplen.</p><table class='ctl'><thead><tr><th>Verificación</th><th class='num'>Resultado</th><th>Umbral de referencia</th><th>Estado</th></tr></thead><tbody>" + hrows + "</tbody></table><div class='ctl-note'>Estas verificaciones son de la red planificada: no evalúan los recursos ni imponen restricciones de fecha al CPM (las de los hitos se comparan en el Plan del Cronograma) y el avance real se registra en «Avance real y pronóstico». La ruta casi crítica usa el umbral del Plan de Gestión del Cronograma (" + plan.nearCriticalDays + " d" + (plan.nearCriticalDefined ? "" : ", valor por omisión: el plan no lo define") + ").</div></div>";
 		let baseHtml;
 		if (!base) baseHtml = "<div class='ctl-card'><h3>Línea base del cronograma</h3><p class='sub'>Todavía no hay una línea base. Es la <b>versión aprobada</b> del cronograma contra la que se mide la variación: sin ella el pronóstico solo se compara consigo mismo. Fíjala cuando el cronograma esté aprobado; después solo cambia por control de cambios (nueva versión LB-n, con motivo y aprobador).</p><button class='btn violet' id='btnBaseline'>✚ Fijar la línea base (LB-1)</button></div>";
 		else {
@@ -1375,9 +1568,103 @@
 			baseHtml = "<div class='ctl-card'><h3>Línea base del cronograma · " + esc(base.version) + "</h3><p class='sub'>Fijada el <b>" + esc(base.date) + "</b> · fin " + esc(bs.finishDate || "—") + ". El pronóstico es el CPM actual (con los cambios de duración y de enlaces desde entonces). El Gantt muestra la línea base como una marca gris bajo cada barra.</p>" + kpis + "<div class='ctl-note' style='margin:0 0 12px'><b>Consumo de holgura de la ruta casi crítica: " + lvl + "</b> — umbral del plan: verde ≤ " + plan.floatGreen + " %, rojo ≥ " + plan.floatRed + " %. " + (cmp.near.newCritical.length ? "Pasaron a ser críticas: " + esc(cmp.near.newCritical.slice(0, 4).join(", ")) + ". " : "") + (cmp.added.length || cmp.removed.length ? "Actividades nuevas: " + cmp.added.length + " · quitadas: " + cmp.removed.length + " desde la línea base." : "") + "</div>" + (nearRows ? "<h4 style='font-size:12px;margin:8px 0 4px'>Ruta casi crítica (holgura ≤ " + bs.nearCriticalDays + " d en la línea base)</h4><table class='ctl'><thead><tr><th>Cód.</th><th>Actividad</th><th class='num'>Holgura</th><th class='num'>Consumida</th></tr></thead><tbody>" + nearRows + "</tbody></table>" : "") + (chRows ? "<h4 style='font-size:12px;margin:12px 0 4px'>Actividades que cambiaron (mayor desplazamiento primero)</h4><table class='ctl'><thead><tr><th>Cód.</th><th>Actividad</th><th class='num'>Δ duración</th><th class='num'>Δ fin</th><th class='num'>Holgura</th></tr></thead><tbody>" + chRows + "</tbody></table>" + (cmp.changed.length > 12 ? "<div class='ctl-items'>… y " + (cmp.changed.length - 12) + " más.</div>" : "") : "<div class='ctl-items' style='margin-top:8px'>Ninguna actividad cambió de duración ni de fin desde la línea base.</div>") + "<h4 style='font-size:12px;margin:12px 0 4px'>Versiones de la línea base</h4><table class='ctl'><thead><tr><th>Versión</th><th>Fecha</th><th>Motivo</th><th>Aprobó</th><th class='num'>Duración</th><th class='num'>Desviación</th></tr></thead><tbody>" + logRows + "</tbody></table><div style='margin-top:12px'><button class='btn violet' id='btnBaseline'>✚ Nueva versión de la línea base (" + esc(nextVersion(base)) + ")…</button></div></div>";
 		}
 		const planHtml = "<div class='ctl-card'><h3>Umbrales del Plan de Gestión del Cronograma que se aplican aquí</h3><table class='ctl'><tbody><tr><td>Ruta casi crítica (holgura ≤)</td><td class='num'>" + plan.nearCriticalDays + " d</td><td>" + (plan.nearCriticalDefined ? "del plan" : "por omisión (el plan no lo define)") + "</td></tr><tr><td>Reserva de cronograma</td><td class='num'>" + plan.reservePct + " %</td><td>" + (plan.reservePct > 0 ? "del plan" : "el plan no la define") + "</td></tr><tr><td>Umbral de rebaselinado (desviación de la duración)</td><td class='num'>" + plan.rebaselinePct + " %</td><td>" + (plan.rebaselinePct > 0 ? "del plan: por encima, autoriza el sponsor" : "el plan no lo define: no se exige al sponsor") + "</td></tr><tr><td>Consumo de holgura de la ruta casi crítica</td><td class='num'>verde ≤ " + plan.floatGreen + " % · rojo ≥ " + plan.floatRed + " %</td><td>del plan (o 40 / 70 por omisión)</td></tr></tbody></table>" + (mode === "sample" ? "<div class='ctl-note'>Modo ejemplo: sin proyecto, se usan los valores por omisión.</div>" : "") + "</div>";
-		box.innerHTML = baseHtml + healthHtml + planHtml;
+		box.innerHTML = baseHtml + progressCardHtml(R) + healthHtml + planHtml;
 		const b = document.getElementById("btnBaseline");
 		if (b) b.addEventListener("click", () => openBaselineDialog(runCpm()));
+		wireProgress(R);
+	}
+	function forecastNow(R) {
+		const cn = codeOf(R.snap), nm = nameOf(R.snap), ms = isMilestoneOf(R.snap), base = normalizeBaseline(state().baseline);
+		return computeForecast({
+			nodes: R.nodes.map((n) => ({
+				id: n.id,
+				dur: n.dur,
+				isMilestone: !!ms[n.id],
+				code: cn[n.id] || "",
+				name: nm[n.id] || ""
+			})),
+			links: R.links,
+			calendar: calData(),
+			startDate: metaStart(),
+			progress: state().progress,
+			cpm: GPI.util.cpm,
+			baselineDuration: base ? base.snapshot.projectDuration : null,
+			baselineFinish: base ? base.snapshot.finishDate : ""
+		});
+	}
+	function progressKpisHtml(f) {
+		if (!f.ok) return "<div class='ctl-note'>" + esc(f.reason) + "</div>";
+		const kp = (v, k) => "<div class='ctl-kpi'><div class='v'>" + v + "</div><div class='k'>" + k + "</div></div>";
+		return "<div class='ctl-kpis'>" + kp(d1(f.pctActual) + " % / " + d1(f.pctPlanned) + " %", "avance real / planificado al corte (por duración)") + kp(f.spiT === null ? "—" : f.spiT.toFixed(2), "SPI(t) por duración: real ÷ planificado") + kp(esc(f.planFinish || "—") + " → " + esc(f.forecastFinish || "—"), "fin planificado → fin pronosticado") + kp(sg(f.delayDays) + " d lab.", f.vsBaselineDays === null ? "desplazamiento del fin contra el plan" : "contra el plan · " + sg(f.vsBaselineDays) + " d contra la línea base") + "</div><div class='ctl-items'>Terminadas: " + f.done + " · en curso: " + f.inProgress + " · sin empezar: " + f.notStarted + (f.late.length ? " · <b>se corren</b>: " + f.late.slice(0, 5).map((l) => esc(l.code) + " (+" + d1(l.slipDays) + " d)").join(", ") + (f.late.length > 5 ? "…" : "") : " · ninguna actividad se corre") + "</div>";
+	}
+	function progressCardHtml(R) {
+		const st = state(), p = st.progress || {
+			statusDate: "",
+			pct: {}
+		}, ms = isMilestoneOf(R.snap), cn = codeOf(R.snap), nm = nameOf(R.snap);
+		const acts = R.nodes.filter((n) => !ms[n.id]), rows = R.cpm.ok ? R.cpm.rows : {};
+		const trs = acts.map((n) => {
+			const r = rows[n.id], v = p.pct[n.id];
+			return "<tr><td class='mono'>" + esc(cn[n.id] || "") + "</td><td>" + esc(nm[n.id] || "") + "</td><td class='num'>" + (r ? esc(r.startDate) + " → " + esc(r.finishDate) : "—") + "</td><td class='num'><input type='number' min='0' max='100' step='5' style='width:70px' data-prog='" + esc(n.id) + "' aria-label='% completado de " + esc(cn[n.id] || "") + "' value='" + (v === void 0 ? "" : v) + "'></td><td class='num' data-progfc='" + esc(n.id) + "'>—</td></tr>";
+		}).join("");
+		return "<div class='ctl-card'><h3>Avance real y pronóstico</h3><p class='sub'>Registra la <b>fecha de corte</b> y el <b>% completado</b> de cada actividad: el pronóstico recalcula el CPM sobre lo que falta (lo pendiente no puede empezar antes del corte) y lo compara con el plan y con la línea base. Es por <b>duración</b>; el valor ganado (por costo) está en Valor Ganado. Supone que lo que falta se hace en su duración planificada.</p><div style='display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px'><label for='progDate' style='font-weight:600'>Fecha de corte</label><input type='date' id='progDate' value='" + esc(p.statusDate) + "'><button class='btn' id='btnProgSample'>Cargar el avance del ejemplo</button><button class='btn' id='btnProgClear'" + (st.progress ? "" : " disabled") + ">Limpiar el avance</button></div><div id='progKpis'></div>" + (acts.length ? "<div style='max-height:340px;overflow:auto;margin-top:10px'><table class='ctl'><thead><tr><th>Cód.</th><th>Actividad</th><th class='num'>Plan (inicio → fin)</th><th class='num'>% completado</th><th class='num'>Fin pronosticado</th></tr></thead><tbody>" + trs + "</tbody></table></div>" : "") + "</div>";
+	}
+	var progTimer;
+	function refreshProgress(R) {
+		const f = forecastNow(R), k = document.getElementById("progKpis");
+		if (k) k.innerHTML = progressKpisHtml(f);
+		document.querySelectorAll("[data-progfc]").forEach((c) => {
+			const id = c.dataset.progfc, x = f.ok ? f.byId[id] : void 0, v = (state().progress || { pct: {} }).pct[id];
+			c.textContent = !f.ok ? "—" : v !== void 0 && v >= 100 ? "terminada" : x ? x.finish + (x.slipDays > 0 ? " (+" + d1(x.slipDays) + " d)" : "") : "—";
+		});
+	}
+	function wireProgress(R) {
+		const st = state(), ensure = () => st.progress || (st.progress = {
+			statusDate: "",
+			pct: {}
+		}), later = () => {
+			clearTimeout(progTimer);
+			progTimer = setTimeout(gpiPush, 700);
+		};
+		refreshProgress(R);
+		const date = document.getElementById("progDate");
+		if (date) date.addEventListener("change", () => {
+			ensure().statusDate = date.value;
+			refreshProgress(R);
+			later();
+		});
+		document.querySelectorAll("[data-prog]").forEach((inp) => inp.addEventListener("input", () => {
+			const p = ensure(), id = inp.dataset.prog, v = inp.value.trim();
+			if (v === "" || !isFinite(Number(v))) delete p.pct[id];
+			else p.pct[id] = Math.min(100, Math.max(0, Number(v)));
+			refreshProgress(R);
+			later();
+		}));
+		const bs = document.getElementById("btnProgSample");
+		if (bs) bs.addEventListener("click", async () => {
+			if (st.progress && Object.keys(st.progress.pct).length && !await showConfirm("Se reemplazará el avance registrado por el del ejemplo DISTRIB+ (corte 2026-11-03, el mismo de Valor Ganado).", "Cargar el avance del ejemplo")) return;
+			const cn = codeOf(R.snap), ms = isMilestoneOf(R.snap), pct = spreadPackagePct(R.nodes.map((n) => ({
+				id: n.id,
+				code: cn[n.id] || "",
+				dur: n.dur,
+				isMilestone: !!ms[n.id]
+			})), EVM_SAMPLE_PERCENT);
+			if (!Object.keys(pct).length) {
+				await showAlert("Las actividades de este proyecto no coinciden con los paquetes del ejemplo (códigos EDT 1.1 … 5.3): carga primero el ejemplo en WBS y Actividades.");
+				return;
+			}
+			st.progress = {
+				statusDate: EVM_SAMPLE_STATUS_DATE,
+				pct
+			};
+			commit("Avance del ejemplo cargado (corte " + EVM_SAMPLE_STATUS_DATE + ").");
+		});
+		const bc = document.getElementById("btnProgClear");
+		if (bc) bc.addEventListener("click", async () => {
+			if (!await showConfirm("Se borrará la fecha de corte y el % de todas las actividades.", "Limpiar el avance")) return;
+			st.progress = void 0;
+			commit("Avance limpiado.");
+		});
 	}
 	function evmReferenceNow(R) {
 		try {
@@ -1487,7 +1774,8 @@
 			})),
 			linkCounter: Number(o.linkCounter) || (Array.isArray(o.links) ? o.links.length : 0) + 1,
 			import: o.import || null,
-			baseline: o.baseline || null
+			baseline: o.baseline || null,
+			progress: o.progress ? normalizeProgress(o.progress) : void 0
 		};
 	}
 	function markProjectStale() {

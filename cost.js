@@ -101,6 +101,26 @@
 		};
 	}
 	//#endregion
+	//#region src/shared/beta-pert.ts
+	var normal = (rnd) => {
+		const u = Math.max(rnd(), 1e-12), v = rnd();
+		return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+	};
+	function gamma(k, rnd) {
+		const d = k - 1 / 3, c = 1 / Math.sqrt(9 * d);
+		for (;;) {
+			const x = normal(rnd), t = 1 + c * x;
+			if (t <= 0) continue;
+			const v = t * t * t, u = rnd();
+			if (Math.log(Math.max(u, 1e-300)) < .5 * x * x + d - d * v + d * Math.log(v)) return d * v;
+		}
+	}
+	function samplePert(o, m, p, rnd) {
+		if (!(p > o)) return m;
+		const a = 1 + 4 * (m - o) / (p - o), b = 1 + 4 * (p - m) / (p - o), ga = gamma(a, rnd);
+		return o + ga / (ga + gamma(b, rnd)) * (p - o);
+	}
+	//#endregion
 	//#region src/shared/range-estimating.ts
 	var PERCENTILES = [
 		5,
@@ -155,12 +175,20 @@
 	}
 	var normIterations = (v) => Math.max(1e3, Math.min(2e5, Math.floor(Number(v) || 1e4)));
 	var normSeed = (v) => typeof v === "number" && Number.isFinite(v) ? v : DEFAULT_SEED;
-	function simulateEvents(events, schedule, iterations, seed) {
+	function simulateEvents(events, schedule, iterations, seed, pertActs) {
 		const evs = validEvents(events), N = normIterations(iterations), S = normSeed(seed);
 		const sim = schedule && isFinite(schedule.base) ? schedule : null;
-		const direct = new Float64Array(N), ext = sim ? new Float64Array(N) : null, randE = mulberry32((S ^ 1540483477) >>> 0);
+		const pa = sim && pertActs ? pertActs.filter((a) => isFinite(a.dur) && isFinite(a.o) && isFinite(a.m) && isFinite(a.p) && a.o > 0 && a.o <= a.m && a.m <= a.p && a.p > a.o) : [];
+		const direct = new Float64Array(N), ext = sim ? new Float64Array(N) : null, randE = mulberry32((S ^ 1540483477) >>> 0), randP = mulberry32((S ^ 2654435769) >>> 0);
 		for (let i = 0; i < N; i++) {
 			let t = 0, delta = null;
+			if (pa.length) {
+				delta = {};
+				for (const a of pa) {
+					const d = samplePert(a.o, a.m, a.p, randP) - a.dur;
+					if (d !== 0) delta[a.id] = d;
+				}
+			}
 			for (let j = 0; j < evs.length; j++) {
 				const e = evs[j], occurs = randE() < e.prob, u = randE(), uT = randE();
 				if (!occurs) continue;
@@ -184,6 +212,8 @@
 		return {
 			iterations: N,
 			seed: S,
+			integrated: pa.length > 0,
+			pertActs: pa.length,
 			n: evs.length,
 			direct,
 			ext,
@@ -200,8 +230,9 @@
 		if (!valid.length && !evs.length) return null;
 		const sim = o.schedule && isFinite(o.schedule.base) ? o.schedule : null;
 		const costPerDay = sim ? Math.max(0, Number(sim.costPerDay) || 0) : 0;
-		const oc = o.outcomes, reuse = !!oc && oc.iterations === iterations && oc.seed === seed && oc.n === evs.length && (!sim || !!oc.ext);
-		const eo = evs.length ? reuse ? oc : simulateEvents(evs, sim, iterations, seed) : null;
+		const wantPert = !!sim && !!o.pertActs && o.pertActs.length > 0;
+		const oc = o.outcomes, reuse = !!oc && oc.iterations === iterations && oc.seed === seed && oc.n === evs.length && (!sim || !!oc.ext) && !!oc.integrated === wantPert;
+		const eo = evs.length || wantPert ? reuse ? oc : simulateEvents(evs, sim, iterations, seed, o.pertActs) : null;
 		const dir = eo ? eo.direct : null, ext = sim && eo ? eo.ext : null;
 		const a = valid.map((l) => num$1(l.ml) * (1 + num$1(l.lowPct) / 100));
 		const m = valid.map((l) => num$1(l.ml));
@@ -270,7 +301,9 @@
 				mean: sumDur / iterations,
 				probDelay: nDelayed / iterations,
 				timeCostMean: timeCostSum / iterations,
-				events: eo ? eo.delayers : 0
+				events: eo ? eo.delayers : 0,
+				integrated: !!eo && eo.integrated,
+				pertActs: eo ? eo.pertActs : 0
 			};
 		}
 		return {
@@ -4281,6 +4314,23 @@
 		const c = document.getElementById("rngRisks");
 		return !c || c.checked;
 	}
+	function pertOn() {
+		const c = document.getElementById("rngPert");
+		return !!c && c.checked;
+	}
+	function pertCount() {
+		return net ? net.nodes.filter((n) => !n.isMilestone && n.pert).length : 0;
+	}
+	function pertActsOf() {
+		if (!pertOn() || !net) return [];
+		return net.nodes.filter((n) => !n.isMilestone && n.pert).map((n) => ({
+			id: n.id,
+			dur: n.dur,
+			o: n.pert.o,
+			m: n.pert.m,
+			p: n.pert.p
+		}));
+	}
 	var net = null;
 	var eng = null;
 	var netDirty = true;
@@ -4340,18 +4390,28 @@
 		};
 	}
 	var eventOutcomes = {};
-	function outcomesFor(events, g) {
-		if (!events.length) return void 0;
-		const key = JSON.stringify([events.map((e) => [
-			e.id,
-			e.prob,
-			e.low,
-			e.likely,
-			e.high,
-			e.sign,
-			e.days,
-			e.targets
-		]), g ? g.base : null]);
+	function outcomesFor(events, g, pa = []) {
+		if (!events.length && !(g && pa.length)) return void 0;
+		const key = JSON.stringify([
+			events.map((e) => [
+				e.id,
+				e.prob,
+				e.low,
+				e.likely,
+				e.high,
+				e.sign,
+				e.days,
+				e.targets
+			]),
+			g ? g.base : null,
+			pa.length ? pa.map((a) => [
+				a.id,
+				a.dur,
+				a.o,
+				a.m,
+				a.p
+			]) : 0
+		]);
 		if (!(key in eventOutcomes)) {
 			if (Object.keys(eventOutcomes).length > 6) Object.keys(eventOutcomes).forEach((k) => {
 				delete eventOutcomes[k];
@@ -4359,13 +4419,13 @@
 			eventOutcomes[key] = simulateEvents(events, g ? {
 				base: g.base,
 				duration: (d) => g.duration(d)
-			} : null, DEFAULT_ITERATIONS, DEFAULT_SEED);
+			} : null, DEFAULT_ITERATIONS, DEFAULT_SEED, pa);
 		}
 		return eventOutcomes[key];
 	}
 	function simulate(rho, withEvents = includeRisksOn(), withSchedule = true) {
 		const events = withEvents ? eventsCtx().events : [];
-		const g = withEvents ? getEng() : null, cpd = g && withSchedule ? timeCostPerDay() : 0;
+		const g = withEvents ? getEng() : null, cpd = g && withSchedule ? timeCostPerDay() : 0, pa = g && withSchedule ? pertActsOf() : [];
 		const key = JSON.stringify([
 			state.ranges.map((l) => [
 				l.ml,
@@ -4383,7 +4443,14 @@
 				e.days,
 				e.targets
 			]),
-			g && withSchedule ? [g.base, cpd] : null
+			g && withSchedule ? [g.base, cpd] : null,
+			pa.length ? pa.map((a) => [
+				a.id,
+				a.dur,
+				a.o,
+				a.m,
+				a.p
+			]) : 0
 		]);
 		if (!(key in simCache)) {
 			if (Object.keys(simCache).length > 24) Object.keys(simCache).forEach((k) => {
@@ -4394,7 +4461,8 @@
 				iterations: DEFAULT_ITERATIONS,
 				seed: DEFAULT_SEED,
 				events,
-				outcomes: outcomesFor(events, g),
+				outcomes: outcomesFor(events, g, pa),
+				pertActs: pa.length ? pa : void 0,
 				schedule: g && withSchedule ? {
 					base: g.base,
 					costPerDay: cpd,
@@ -4498,8 +4566,13 @@
 		return out;
 	}
 	function renderEvents(res, p) {
-		const box = $("rngEvents");
-		if (!includeRisksOn()) {
+		const box = $("rngEvents"), on = includeRisksOn();
+		{
+			const pc = $("rngPert"), n = pertCount();
+			pc.disabled = n === 0 && !pc.checked;
+			$("rngPertNote").textContent = n ? n + " actividad(es) con terna PERT válida (o ≤ m ≤ p) en Análisis PERT." : "Ninguna actividad tiene una terna PERT válida en este proyecto: esta opción no cambiaría nada.";
+		}
+		if (!on) {
 			box.innerHTML = `<div class="muted small">Los eventos de riesgo NO se incluyen: la contingencia cubre solo la incertidumbre de las partidas.</div>`;
 			return;
 		}
@@ -4532,7 +4605,7 @@
 			80,
 			90
 		].map((q) => `<tr class="${q === p ? "rng-selrow" : ""}"><td>P${q}${q === p ? " · decisión" : ""}</td><td class="num">${fmtDays(s.p[q])}</td><td class="num">${fmtDays(Math.max(0, s.p[q] - s.base))}</td><td>${esc(finishOf(s.p[q])) || "—"}</td></tr>`).join("")}</tbody></table>
-    <div class="muted" style="font-size:11.5px;margin-top:6px">${s.events} evento(s) retrasan actividades del cronograma · probabilidad de terminar después de lo previsto ${Math.round(s.probDelay * 1e3) / 10} % · retraso medio ${fmtDays(Math.round((s.mean - s.base) * 10) / 10)}${cpd > 0 ? " · costo medio de la extensión " + fmt(s.timeCostMean) + " (a " + fmt(cpd) + " por día)" : ""}. Es la misma simulación del Registro de Riesgos (mismos eventos y semilla).</div>` : "";
+    <div class="muted" style="font-size:11.5px;margin-top:6px">${s.events} evento(s) retrasan actividades del cronograma · probabilidad de terminar después de lo previsto ${Math.round(s.probDelay * 1e3) / 10} % · retraso medio ${fmtDays(Math.round((s.mean - s.base) * 10) / 10)}${cpd > 0 ? " · costo medio de la extensión " + fmt(s.timeCostMean) + " (a " + fmt(cpd) + " por día)" : ""}.${s.integrated ? " <b>Incluye la variabilidad de " + s.pertActs + " duración(es) PERT sorteada(s) en la misma iteración</b> (opción activada): por eso ya no coincide con el análisis de plazo del Registro de Riesgos, que usa las duraciones determinísticas." : " Es la misma simulación del Registro de Riesgos (mismos eventos y semilla)."}</div>` : "";
 		box.innerHTML = `<div class="muted small" style="margin-bottom:6px"><b>Fuente:</b> ${esc(src)} · ${ec.open} riesgo(s) abierto(s): <b>${ec.events.length}</b> entran a la simulación${ec.excluded.length ? ", " + ec.excluded.length + " sin cuantificar" : ""}. La contingencia cubre la exposición que <b>queda tras la respuesta</b> (residual).</div>
     <div style="overflow-x:auto"><table class="rng-res"><thead><tr><th>Cód.</th><th>Riesgo</th><th>Tipo</th><th class="num">Prob.</th><th class="num">Costo directo: mín / más prob. / máx</th><th class="num">Plazo: más prob. → fin del proyecto</th><th>Base</th><th class="num">Valor esperado (costo)</th></tr></thead><tbody>${rows}</tbody>
       <tfoot><tr style="font-weight:700"><td colspan="7">Valor esperado neto de los eventos${ec.events.length > 14 ? " (incluye los " + (ec.events.length - 14) + " no mostrados)" : ""}</td><td class="num">${fmt(ec.ev)}</td></tr></tfoot></table></div>
@@ -4849,7 +4922,7 @@
 		const g = getEng();
 		if (!g) return null;
 		const ev = eventsCtx().events;
-		const oc = ev.length ? outcomesFor(ev, g) : void 0;
+		const pa = pertActsOf(), oc = ev.length || pa.length ? outcomesFor(ev, g, pa) : void 0;
 		return oc && oc.ext ? oc.ext : null;
 	}
 	function escSim(plan, pkgs) {
@@ -5694,7 +5767,7 @@
 		const ec = includeRisksOn() ? eventsCtx() : null;
 		const evTxt = ec && ec.events.length ? `Incluye <b>${ec.events.length} evento(s) de riesgo</b> del ${ec.source === "registro" ? "Registro de Riesgos del proyecto" : "caso de ejemplo"} (${esc(ec.events.slice(0, 6).map((e) => e.code).join(", "))}${ec.events.length > 6 ? "…" : ""}), con su riesgo <b>residual</b> cuando está cuantificado; valor esperado neto ${fmt(ec.ev)}.` : "No incluye eventos de riesgo discretos (ninguno cuantificado en el registro, o se excluyeron).";
 		const sc = res && res.schedule, cpd = timeCostPerDay(), basisT = ($("rngTimeBasis") || { value: "" }).value.trim();
-		const schedTxt = sc && sc.events ? ` <b>Plazo:</b> ${sc.events} evento(s) retrasan actividades del cronograma (CPM real, duración base ${fmtDays(sc.base)}); con P${p} el plazo es ${fmtDays(sc.p[p])} (reserva de plazo ${fmtDays(Math.max(0, sc.p[p] - sc.base))}${finishOf(sc.p[p]) ? ", fin " + esc(finishOf(sc.p[p])) : ""}).${cpd > 0 ? " La extensión del plazo se costea a " + fmt(cpd) + " por día" + (basisT ? " (" + esc(basisT) + ")" : "") + ": costo medio " + fmt(sc.timeCostMean) + ", incluido en la contingencia." : " No se definió un costo por día de extensión: el retraso no se traduce a costo."}` : "";
+		const schedTxt = sc && (sc.events || sc.integrated) ? ` <b>Plazo:</b> ${sc.events} evento(s) retrasan actividades del cronograma${sc.integrated ? " y las duraciones de <b>" + sc.pertActs + " actividad(es) se sortean también (Beta-PERT) en la misma iteración</b>" : ""} (CPM real, duración base ${fmtDays(sc.base)}); con P${p} el plazo es ${fmtDays(sc.p[p])} (reserva de plazo ${fmtDays(Math.max(0, sc.p[p] - sc.base))}${finishOf(sc.p[p]) ? ", fin " + esc(finishOf(sc.p[p])) : ""}).${cpd > 0 ? " La extensión del plazo se costea a " + fmt(cpd) + " por día" + (basisT ? " (" + esc(basisT) + ")" : "") + ": costo medio " + fmt(sc.timeCostMean) + ", incluido en la contingencia." : " No se definió un costo por día de extensión: el retraso no se traduce a costo."}` : "";
 		return `<p style="font-size:12.5px;margin:10px 0 4px"><b>Base de la contingencia — estimación por rangos y simulación Monte Carlo (AACE RP 41R-08 y 40R-08).</b> ${res ? `Distribución triangular por partida; correlación entre partidas ${Math.round(res.correlation * 100)} %; ${res.iterations.toLocaleString("es-PE")} iteraciones (semilla ${res.seed}, reproducible). Estimado base Σ más probable ${fmt(res.ml)}; P50 ${fmt(res.p[50])}, P${p} ${fmt(res.p[p])}. Contingencia = P${p} − estimado base = <b>${fmt(contingencyAt(res, p).amount)}</b>. Cubre la incertidumbre de los rangos del estimado. ${evTxt}${schedTxt}` : "Aún no hay partidas válidas."}</p>
     <table class="dt"><thead><tr><td style="font-weight:700;color:var(--muted)">Partida</td><td style="font-weight:700;color:var(--muted);text-align:right">Más probable</td><td style="font-weight:700;color:var(--muted);text-align:right">Mín / Máx</td><td style="font-weight:700;color:var(--muted)">Fundamento del rango</td></tr></thead><tbody>${lines}</tbody></table>`;
 	}
@@ -5854,6 +5927,7 @@
 					iterations: DEFAULT_ITERATIONS,
 					seed: DEFAULT_SEED,
 					includeRisks: includeRisksOn(),
+					includePert: pertOn(),
 					timeCostPerDay: timeCostPerDay(),
 					timeCostBasis: ($("rngTimeBasis") || { value: "" }).value,
 					results: rangeSummary()
@@ -5924,6 +5998,7 @@
 			schedP70: r.schedule.p[70],
 			schedP80: r.schedule.p[80],
 			schedP90: r.schedule.p[90],
+			schedPertActs: r.schedule.pertActs,
 			schedProbDelay: r.schedule.probDelay,
 			timeCostMean: r.schedule.timeCostMean
 		});
@@ -6201,6 +6276,7 @@
 			}));
 			if (ra.correlation != null && isFinite(Number(ra.correlation))) $("corrPct").value = String(Math.round(Number(ra.correlation) * 100));
 			if (ra.includeRisks === false) $("rngRisks").checked = false;
+			$("rngPert").checked = ra.includePert === true;
 			if (ra.timeCostPerDay != null && isFinite(Number(ra.timeCostPerDay))) $("rngTimeCost").value = String(ra.timeCostPerDay > 0 ? ra.timeCostPerDay : "");
 			if (ra.timeCostBasis != null) $("rngTimeBasis").value = String(ra.timeCostBasis);
 		}

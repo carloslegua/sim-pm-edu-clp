@@ -1087,7 +1087,9 @@ basada en `gpi-shared.css` con overrides puntuales de ancho.
     adelantos 0, desfases ≤ 5 % de los enlaces, FS ≥ 90 %, holgura alta > 44 d ≤ 5 %,
     holgura negativa 0, duración alta > 44 d ≤ 5 %), más sin duración, ruta casi
     crítica y peso de la ruta crítica (informativas). Orientan, no bloquean. No se
-    evalúan restricciones duras, recursos ni avance real (la suite no los modela). En
+    evalúan recursos ni imponen restricciones de fecha al CPM (las de los hitos se
+    comparan en el Plan del Cronograma, `milestone-check.ts`); el avance real se
+    registra aparte en la tarjeta «Avance real y pronóstico». En
     la lógica faltante se admite UN inicio y UN fin del proyecto (de preferencia
     hitos). Con el ejemplo DISTRIB+ completo enseña dos cosas reales: 4 desfases SS
     (7,8 % > 5 %) y holguras enormes (informes y Procura, 8 actividades > 44 d).
@@ -2810,6 +2812,19 @@ Costs")
 - **Plan para la Dirección:** `pmplan.approach` {lifecycle, tailoring, configuration, changeProcess} es lo único que declara el plan por sí mismo
   (además de su aprobación). Entra en las huellas (`digests.planApproach`, componente «Enfoque, ciclo de vida y adaptación»). Los planes aprobados antes no
   tienen esa huella y no se marcan como modificados. P23/P24 son avisos, no bloquean la aprobación.
+
+## Restricciones de hitos, avance real y plazo integrado (auditoría, medias M14 / M15 / M18)
+
+- **Hitos del Plan del Cronograma:** `schedulePlan.milestones[].wbsCode` (opcional, códigos EDT separados por coma; una fase = su fin más tardío). `checkMilestones`
+  compara la fecha del hito con el fin de la EDT EFECTIVA (fechas del CPM): FNLT incumple si el CPM termina después; FNET «espera» si termina antes; MSO/MFO solo
+  cumplen si coinciden; ASAP/ALAP no comparan. Días en calendario. Sin vínculo o con código inexistente se dice, no se inventa.
+- **Avance real:** `schedule.progress = {statusDate, pct: {actId: 0–100}}` es lo único que se guarda; el pronóstico se calcula siempre (`computeForecast`, y
+  `GPI.util.scheduleForecast()` para el Panel y el Plan para la Dirección). `cpm()` acepta `CpmNode.minStart` (offset laborable; sin él todo igual que antes). El avance
+  se informa al INICIO de la fecha de corte; lo terminado no ocupa tiempo, lo en curso conserva la duración restante (redondeada hacia arriba), los hitos no se fijan al
+  corte. El pronóstico supone que lo que falta se hace en su duración planificada. Medidas por duración, no por costo (Valor Ganado es el de costo).
+- **Plazo integrado (Costos):** `simulateEvents(..., pertActs)` sortea también la duración Beta-PERT de las actividades con terna válida (`NetworkNode.pert`) en cada
+  iteración, con su propio flujo aleatorio (los eventos ocurren igual con o sin la opción). `EventOutcomes.integrated` distingue los resultados guardados en caché.
+  Guardado como `cost.rangeAnalysis.includePert` (opcional; ausente = apagado).
 
 ## JSZip vendorizado en el repo, no cargado desde un CDN
 

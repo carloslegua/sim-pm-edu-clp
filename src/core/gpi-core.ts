@@ -27,6 +27,7 @@ import type {
 } from "./types";
 import { analyzeChangeOrders } from "../shared/change-orders";
 import { deviationPct as baselineDeviationPct, normalizeBaseline } from "../shared/schedule-control";
+import { computeForecast, normalizeProgress, type CpmFnP, type Forecast } from "../shared/schedule-progress";
 import { installA11yLabels } from "../shared/a11y-labels";
 import { normalizePlan as normalizeRiskPlan, normalizeRisk, portfolio as riskPortfolioOf, type Portfolio as RiskPortfolio } from "../shared/risk-analysis";
 export type { EditSession, WriteResult, WriteStatus } from "./types";
@@ -2210,7 +2211,9 @@ function lagToWorkDays(l: ScheduleLink, calendar?: ProjectCalendar | null): numb
   return v; // "d"
 }
 
-export interface CpmNode { id: string; dur?: number; }
+// `minStart` (opcional): inicio mínimo en días laborables desde el inicio del proyecto (la fecha de corte del avance real: lo que falta por hacer no puede
+// empezar antes). Sin él (todos los usos anteriores) el resultado es el de siempre.
+export interface CpmNode { id: string; dur?: number; minStart?: number; }
 export interface CpmRow {
   es: number; ef: number; ls: number; lf: number; tf: number; ff: number; critical: boolean;
   startDate: string; finishDate: string;
@@ -2251,8 +2254,8 @@ export function cpm(nodes?: CpmNode[] | null, links?: ScheduleLink[] | null, cal
     return (l.type === "SS" || l.type === "SF") ? (rt as RealTimeAxis).floorStart(t) : (rt as RealTimeAxis).floorEnd(t);
   };
   function lagWD(l: ScheduleLink): number { return lagToWorkDays(l, cal); }
-  const dur: Record<string, number> = {}, ids: string[] = [];
-  nd.forEach((n) => { dur[n.id] = Number(n.dur) || 0; ids.push(n.id); });
+  const dur: Record<string, number> = {}, minStart: Record<string, number> = {}, ids: string[] = [];
+  nd.forEach((n) => { dur[n.id] = Number(n.dur) || 0; minStart[n.id] = Number(n.minStart) || 0; ids.push(n.id); });
   const inSet: Record<string, boolean> = {}; ids.forEach((id) => { inSet[id] = true; });
   const out: Record<string, ScheduleLink[]> = {}, inc: Record<string, ScheduleLink[]> = {}, indeg: Record<string, number> = {}, outdeg: Record<string, number> = {};
   ids.forEach((id) => { out[id] = []; inc[id] = []; indeg[id] = 0; outdeg[id] = 0; });
@@ -2269,7 +2272,7 @@ export function cpm(nodes?: CpmNode[] | null, links?: ScheduleLink[] | null, cal
   }
   // forward pass
   const ES: Record<string, number> = {}, EF: Record<string, number> = {};
-  ids.forEach((id) => { ES[id] = 0; });
+  ids.forEach((id) => { ES[id] = Math.max(0, minStart[id] || 0); });
   order.forEach((id) => {
     inc[id].forEach((l) => {
       let lb: number;
@@ -2505,6 +2508,24 @@ export function scheduleStats(): ScheduleStats {
   };
 }
 
+// Pronóstico del cronograma con el AVANCE REAL informado (fecha de corte y % por actividad, en schedule.progress): el CPM recalculado sobre lo que
+// falta (shared/schedule-progress.ts). null si no hay proyecto, red o fecha de corte. La misma función que usa Cronograma/CPM para su tarjeta.
+export function scheduleForecast(): Forecast | null {
+  try {
+    if (!readable() || !active()) return null;
+    const sched = getModule("schedule") as ScheduleModule | null, pr = sched ? sched.progress : null;
+    if (!pr || !normalizeProgress(pr).statusDate) return null;
+    const m = meta(), net = scheduleNetwork(getModule("wbs") as WbsModule | null, getModule("activities") as ActivitiesModule | null, getModule("pert") as PertModule | null,
+      sched, getModule("schedulePlan") as SchedulePlanModule | null, m ? m.startDate : "");
+    if (!net.nodes.some((n) => !n.isMilestone)) return null;
+    const bl = normalizeBaseline(sched ? sched.baseline : null);
+    return computeForecast({
+      nodes: net.nodes.map((n) => ({ id: n.id, dur: n.dur, isMilestone: n.isMilestone, code: n.code, name: n.name })), links: net.links as never, calendar: net.calendar, startDate: net.startDate,
+      progress: pr, cpm: cpm as unknown as CpmFnP, baselineDuration: bl ? bl.snapshot.projectDuration : null, baselineFinish: bl ? bl.snapshot.finishDate : ""
+    });
+  } catch (e) { return null; }
+}
+
 // =================================================================
 // GPI.ui — helpers de interfaz compartidos (Fase 3 de MIGRATION.md).
 //
@@ -2560,7 +2581,9 @@ export const ui = { esc, kpi };
 // Trabaja sobre los módulos que se le pasan (como pertStats): el modo independiente de los
 // módulos que la usan le pasa el ejemplo DISTRIB+, el conectado, los datos del proyecto.
 // ---------------------------------------------------------------
-export interface NetworkNode { id: string; code: string; name: string; leafId: string | null; dur: number; hasDur: boolean; isMilestone: boolean; }
+// `pert`: la terna (optimista, más probable, pesimista) de la actividad si Análisis PERT la tiene completa y coherente (o ≤ m ≤ p); null si no. Es lo que usa la
+// simulación INTEGRADA de plazo (eventos de riesgo + duraciones PERT en la misma iteración, opt-in en Costos).
+export interface NetworkNode { id: string; code: string; name: string; leafId: string | null; dur: number; hasDur: boolean; isMilestone: boolean; pert?: { o: number; m: number; p: number } | null; }
 export interface ScheduleNetwork {
   nodes: NetworkNode[]; links: ScheduleLink[]; calendar: ProjectCalendar; startDate: string;
   hasElapsedLags: boolean;   // hay desfases en días transcurridos ("ed"): sin fecha de inicio el CPM los aproxima
@@ -2571,7 +2594,8 @@ export function scheduleNetwork(
 ): ScheduleNetwork {
   const a = act || ({} as Partial<ActivitiesModule>), byLeaf = a.byLeaf || {}, milestones = a.milestones || [];
   const dur: Record<string, number | null> = {};
-  try { pertStats(pert, act, wbs).rows.forEach((r) => { dur[r.id] = r.dur; }); } catch (e) { /* noop */ }
+  const triple: Record<string, { o: number; m: number; p: number }> = {};
+  try { pertStats(pert, act, wbs).rows.forEach((r) => { dur[r.id] = r.dur; if (r.valid && r.o != null && r.m != null && r.p != null && r.p > r.o) triple[r.id] = { o: r.o, m: r.m, p: r.p }; }); } catch (e) { /* noop */ }
   const nodes: NetworkNode[] = [];
   const leaves = wbsLeaves(wbs);
   const known: Record<string, boolean> = {}; leaves.forEach((l) => { known[l.id] = true; });
@@ -2584,7 +2608,7 @@ export function scheduleNetwork(
   leaves.forEach((l) => {
     (byLeaf[l.id] || []).forEach((av, i) => {
       const d = dur[av.id];
-      nodes.push({ id: av.id, code: l.code + "." + (i + 1), name: av.name || "", leafId: l.id, dur: d == null ? 0 : d, hasDur: d != null, isMilestone: false });
+      nodes.push({ id: av.id, code: l.code + "." + (i + 1), name: av.name || "", leafId: l.id, dur: d == null ? 0 : d, hasDur: d != null, isMilestone: false, pert: triple[av.id] || null });
     });
     milestones.filter((m) => m.leafId === l.id).forEach((m) => pushMs(m, l.id));
     (after[l.id] || []).forEach((m) => pushMs(m, null));
@@ -2621,7 +2645,7 @@ export const util = {
   costSummary, riskPortfolio, pad2, charterRans, requirementsAudit, reqByWbsLeaf,
   scopeDeliverables, wbsDelIds, scopeAudit, traceMatrix,
   parsePredecessorCell, buildScheduleLinks, scheduleValidate,
-  projectCalendar, cpm, parseISO, addWorkingDays, scheduleStats, scheduleNetwork, activeScheduleNetwork
+  projectCalendar, cpm, parseISO, addWorkingDays, scheduleStats, scheduleNetwork, activeScheduleNetwork, scheduleForecast
 };
 
 // Objeto agregado, exportado por conveniencia (p. ej. `import { GPI } from

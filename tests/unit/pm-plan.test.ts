@@ -105,6 +105,16 @@ describe("integrationFindings — el cruce entre líneas base", () => {
     ["Predictivo", "predictivo (cascada)", "Cascada", ""].forEach((a) => { f.charter.approach = a; expect(codes(f), a).not.toContain("P23"); });
     expect(codes(emptyFacts())).toEqual([]);
   });
+  it("P25: hitos del Plan del Cronograma que incumplen su restricción contra el CPM", () => {
+    const f = completo(); f.schedule.milestones = { checked: 6, violated: 0, waiting: 0, unlinked: 0, first: "" }; expect(codes(f)).toEqual(["P13"]);
+    f.schedule.milestones = { checked: 6, violated: 2, waiting: 0, unlinked: 0, first: "Fin de Ingeniería: 1.2 termina el 2026-11-11, 42 día(s) DESPUÉS de la fecha del hito." };
+    const p = integrationFindings(f).find((x) => x.code === "P25")!; expect(p.severity).toBe("aviso"); expect(p.text).toMatch(/^2 hito\(s\).*Fin de Ingeniería.*42 día/);
+  });
+  it("P26: con el avance real, el fin pronosticado se corre respecto del plan o de la línea base", () => {
+    const f = completo(); f.schedule.forecast = { statusDate: "2026-11-03", planFinish: "2027-07-21", forecastFinish: "2027-07-19", delayDays: -4, vsBaselineDays: 0 }; expect(codes(f)).toEqual(["P13"]);   // adelantado: nada que avisar
+    f.schedule.forecast = { statusDate: "2026-11-03", planFinish: "2027-07-21", forecastFinish: "2027-08-02", delayDays: 8, vsBaselineDays: 8 };
+    const p = integrationFindings(f).find((x) => x.code === "P26")!; expect(p.severity).toBe("aviso"); expect(p.text).toMatch(/2026-11-03.*2027-08-02.*8 día\(s\) laborable\(s\) después del planificado.*8 día\(s\).*línea base/);
+  });
   it("P24: el plan no declara ciclo de vida, adaptación, configuración ni proceso de cambios: los nombra uno a uno", () => {
     const f = completo(); f.approach = { lifecycle: "", tailoring: "  ", configuration: "x", changeProcess: "" };
     expect(integrationFindings(f).find((x) => x.code === "P24")!.text).toMatch(/no declara: ciclo de vida y enfoque de desarrollo; adaptación \(tailoring\); proceso de gestión de cambios\./);

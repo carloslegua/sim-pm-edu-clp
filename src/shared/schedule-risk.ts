@@ -23,7 +23,7 @@ import type { Range3 } from "./risk-analysis";
 import { triInv } from "./range-estimating";
 
 // ---- red y CPM (estructurales: coinciden con lo que devuelve el núcleo, sin importarlo en tiempo de ejecución) ----
-export interface NetNode { id: string; code: string; name: string; leafId: string | null; dur: number; hasDur: boolean; isMilestone: boolean; }
+export interface NetNode { id: string; code: string; name: string; leafId: string | null; dur: number; hasDur: boolean; isMilestone: boolean; pert?: { o: number; m: number; p: number } | null; }
 export interface NetLink { from: string; to: string; type: "FS" | "SS" | "FF" | "SF"; lag?: number; lagUnit?: "d" | "ed" | "h" | "w"; }
 export interface Network { nodes: NetNode[]; links: NetLink[]; calendar: unknown; startDate: string; hasElapsedLags: boolean; }
 export interface CpmRowLike { es: number; ef: number; tf: number; critical: boolean; }
