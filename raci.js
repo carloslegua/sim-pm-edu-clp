@@ -63,6 +63,157 @@
 		};
 	}
 	//#endregion
+	//#region src/shared/raci-sample.ts
+	var SPONSOR = "Comité Directivo / Sponsor";
+	var DP = "Director de Proyecto";
+	var ING = "Jefe de Ingeniería";
+	var GEO = "Especialista en Geotecnia";
+	var EST = "Ingeniero Estructural";
+	var MEP = "Ingeniero MEP";
+	var LOG = "Jefe de Logística";
+	var PA = "Proveedor — Estructuras metálicas";
+	var PB = "Proveedor — Materiales de construcción";
+	var PC = "Proveedor — Equipos eléctricos";
+	var RES = "Residente de Obra";
+	var RACI_LIVE_PLAN = [
+		{
+			code: "1.1",
+			R: [DP],
+			A: SPONSOR
+		},
+		{
+			code: "1.2",
+			R: [DP],
+			A: SPONSOR
+		},
+		{
+			code: "1.3",
+			R: [DP],
+			A: SPONSOR
+		},
+		{
+			code: "2.1",
+			R: [GEO],
+			A: ING,
+			C: [DP]
+		},
+		{
+			code: "2.2",
+			R: [EST],
+			A: ING,
+			C: [GEO]
+		},
+		{
+			code: "2.3",
+			R: [MEP],
+			A: ING
+		},
+		{
+			code: "2.4",
+			R: ["Asesoría Legal"],
+			A: DP,
+			C: [ING, LOG]
+		},
+		{
+			code: "3.1",
+			R: [PA],
+			A: LOG,
+			C: [EST]
+		},
+		{
+			code: "3.2",
+			R: [PB],
+			A: LOG
+		},
+		{
+			code: "3.3",
+			R: [PC],
+			A: LOG,
+			C: [MEP]
+		},
+		{
+			code: "4.1",
+			R: ["Cuadrilla A — Movimiento de tierras"],
+			A: RES,
+			C: [GEO]
+		},
+		{
+			code: "4.2",
+			R: ["Cuadrilla B — Cimentaciones"],
+			A: RES,
+			C: [EST]
+		},
+		{
+			code: "4.3",
+			R: ["Cuadrilla C — Estructura y cobertura"],
+			A: RES
+		},
+		{
+			code: "4.4",
+			R: ["Cuadrilla D — Acabados y cerramientos"],
+			A: RES
+		},
+		{
+			code: "4.5",
+			R: ["Subcontrata MEP"],
+			A: RES,
+			C: [MEP]
+		},
+		{
+			code: "5.1",
+			R: ["Control de Calidad"],
+			A: RES,
+			C: [MEP]
+		},
+		{
+			code: "5.2",
+			R: [DP],
+			A: SPONSOR,
+			C: [ING]
+		},
+		{
+			code: "5.3",
+			R: [DP],
+			A: SPONSOR,
+			I: [
+				ING,
+				LOG,
+				RES
+			]
+		}
+	];
+	function buildLiveRaci(leaves, cols) {
+		const leafBy = {}, colBy = {}, unresolved = [], out = {};
+		leaves.forEach((l) => {
+			leafBy[l.code] = l.id;
+		});
+		cols.forEach((c) => {
+			colBy[c.role.trim()] = c.id;
+		});
+		RACI_LIVE_PLAN.forEach((r) => {
+			const lid = leafBy[r.code];
+			if (!lid) {
+				unresolved.push("paquete " + r.code);
+				return;
+			}
+			const cell = {};
+			const put = (role, letter) => {
+				const cid = colBy[role];
+				if (cid) cell[cid] = letter;
+				else if (unresolved.indexOf("puesto «" + role + "»") < 0) unresolved.push("puesto «" + role + "»");
+			};
+			r.R.forEach((x) => put(x, "R"));
+			put(r.A, "A");
+			(r.C || []).forEach((x) => put(x, "C"));
+			(r.I || []).forEach((x) => put(x, "I"));
+			if (Object.keys(cell).length) out[lid] = cell;
+		});
+		return {
+			assignments: out,
+			unresolved
+		};
+	}
+	//#endregion
 	//#region src/modules/raci/main.ts
 	var RACI_DEFS = [
 		{
@@ -953,6 +1104,23 @@
 			if (await showConfirm("Esto reemplazará la matriz actual por el ejemplo DISTRIB+ S.A. (independiente del proyecto activo). El ejemplo trae errores deliberados para practicar con el Velocímetro de Gobernanza. ¿Continuar?", "Cargar ejemplo")) {
 				loadSample();
 				render();
+			}
+		});
+		document.getElementById("btnLoadSampleLive").addEventListener("click", async () => {
+			if (mode !== "live" && !tryLoadLive()) {
+				await showAlert("El proyecto activo aún no tiene paquetes de trabajo (WBS) y puestos (OBS) suficientes. Carga primero el ejemplo en WBS Builder y en Equipo del Proyecto (OBS) y vuelve aquí.", "Cargar ejemplo en el proyecto");
+				return;
+			}
+			const built = buildLiveRaci(rows, cols);
+			if (!Object.keys(built.assignments).length) {
+				await showAlert("Ningún paquete ni puesto del proyecto coincide con los del ejemplo (Código EDT y nombre del puesto). Carga el mismo ejemplo en WBS Builder y en Equipo del Proyecto.", "Cargar ejemplo en el proyecto");
+				return;
+			}
+			if (await showConfirm("Se reemplazarán las asignaciones R/A/C/I del proyecto por el ejemplo DISTRIB+ bien armado (un R y un A por paquete)." + (built.unresolved.length ? " No se pudieron ubicar: " + built.unresolved.slice(0, 6).join(", ") + (built.unresolved.length > 6 ? "…" : "") + "." : "") + " ¿Continuar?", "Cargar ejemplo en el proyecto")) {
+				assignments = built.assignments;
+				syncToGpi();
+				render();
+				setStatus("Matriz de ejemplo DISTRIB+ cargada en el proyecto (" + Object.keys(built.assignments).length + " paquetes).");
 			}
 		});
 		document.getElementById("btnReset").addEventListener("click", async () => {

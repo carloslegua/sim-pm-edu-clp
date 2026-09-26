@@ -11,6 +11,13 @@ ocurre, moviéndose a una entrada con fecha cuando se corte una versión.
 
 ### Fixed
 
+- **Auditoría integral, hallazgo medio M6 — «Cargar ejemplo» sobre el proyecto de Análisis PERT, Matriz RACI y Costos.** Los tres solo tenían ejemplo en modo independiente
+  (PERT: un caso didáctico de 12 actividades; RACI: con errores deliberados; Costos: solo sin proyecto conectado) y con el proyecto DISTRIB+ armado no había cómo cargar su
+  parte del caso. Ahora cada uno tiene su botón «⇩ Cargar ejemplo en el proyecto» (acción explícita, con confirmación): PERT trae las 43 ternas O/P
+  (`shared/pert-sample.ts`, M automática, colas mayores en los paquetes con riesgo), RACI una matriz bien armada de 18 paquetes con un R y un A cada uno
+  (`shared/raci-sample.ts`; el ejemplo con errores deliberados se conserva) y Costos las 3 órdenes de cambio atadas a los paquetes reales (y a R-03 si el Registro de Riesgos está
+  cargado), las 5 partidas por rangos, el costo por día, la escalación por índices y la BOE aprobada: BAC 8.081.108 y total 8.485.163, las cifras del caso.
+  `tests/fixtures/distribplus-completo-v2.json` se regeneró con el caso completo.
 - **Auditoría integral, hallazgos medios de cronograma y riesgo (M14, M15, M18)**:
   - **M14 — Restricciones de los hitos.** FNLT/FNET/MSO/MFO del Plan del Cronograma nunca se comparaban con el CPM. `src/shared/milestone-check.ts`: cada hito
     puede indicar qué elementos de la EDT lo cierran (`wbsCode`, opcional) y se compara con el fin de la EDT efectiva; el Plan del Cronograma muestra

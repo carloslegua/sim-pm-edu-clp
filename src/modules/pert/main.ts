@@ -18,6 +18,7 @@ import type { ActivitiesModule, ActivityItem, EditSession, PertEntry, PertModule
 import { pushWithSession } from "../../shared/write-session";
 import { probWithin, simulatePertNetwork, type PertSimResult, type SimAct } from "../../shared/pert-network";
 import type { CpmFn, NetLink } from "../../shared/schedule-risk";
+import { SAMPLE_PERT_PLAN } from "../../shared/pert-sample";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global { interface Window { GPI?: GpiApi; } }
@@ -204,6 +205,7 @@ function render(): void {
   chip.className = "mode-chip " + (mode === "sample" ? "sample" : "live");
   (document.getElementById("btnSample") as HTMLElement).style.display = mode === "sample" ? "none" : "";
   (document.getElementById("btnLive") as HTMLElement).style.display = mode === "sample" ? "" : "none";
+  (document.getElementById("btnLoadSampleLive") as HTMLElement).style.display = mode === "sample" ? "none" : "";
   (document.getElementById("btnReload") as HTMLButtonElement).disabled = mode === "sample";
   (document.getElementById("inputModeSel") as HTMLSelectElement).value = state().inputMode;
   const pctMode = state().inputMode === "pct";
@@ -889,6 +891,33 @@ function enterSample(): void {
 }
 function enterLive(): void { mode = "live"; render(); setStatus("De vuelta a las actividades del proyecto."); }
 
+// «Cargar ejemplo en el proyecto» (auditoría, media): las ternas O/P del ejemplo DISTRIB+ (shared/pert-sample.ts) sobre las actividades REALES del proyecto, ubicadas por
+// Código de la actividad + nombre (el mismo criterio que el ejemplo de Cronograma/CPM). M queda automática. Acción explícita del alumno: reemplaza las ternas actuales.
+async function loadSampleIntoProject(): Promise<void> {
+  if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) {
+    await showAlert("Esto solo aplica con un proyecto activo conectado al Panel de Control. Usa «Modo ejemplo» para explorar el caso sin conexión.", "Cargar ejemplo");
+    return;
+  }
+  gpiPull();
+  const prev = mode; mode = "live";   // treeRows()/actsData() deben mirar el proyecto REAL
+  const idBy: Record<string, string> = {};
+  const byLeaf: Record<string, ActivityItem[]> = (actsData() || { byLeaf: {} as Record<string, ActivityItem[]> }).byLeaf || {};
+  treeRows().filter((r) => r.kind === "package").forEach((r) => (byLeaf[r.id] || []).forEach((a, i) => { idBy[r.code + "." + (i + 1) + "|" + (a.name || "")] = a.id; }));
+  const hits = SAMPLE_PERT_PLAN.filter(([code, name]) => idBy[code + "|" + name]);
+  if (!hits.length) {
+    mode = prev;
+    await showAlert("Ninguna actividad del proyecto coincide con las del ejemplo (Código + nombre). Carga primero el ejemplo en WBS Builder y en Definir las Actividades y vuelve aquí.", "Cargar ejemplo");
+    return;
+  }
+  const ok = await showConfirm("Se reemplazarán las ternas O/M/P del proyecto por las del ejemplo DISTRIB+ (" + hits.length + " de sus " + SAMPLE_PERT_PLAN.length + " actividades coinciden). La M queda automática (sigue a la duración base).", "Cargar ejemplo en el proyecto");
+  if (!ok) { mode = prev; render(); return; }
+  const by: Record<string, PertEntry> = {};
+  hits.forEach(([code, name, o, p]) => { by[idBy[code + "|" + name]] = { o: String(o), m: "", mAuto: true, p: String(p) }; });
+  stateLive = { byActivity: by, inputMode: "dias" };
+  onDirty(true);
+  setStatus("Ejemplo DISTRIB+ cargado: " + hits.length + " ternas O/P (M automática).");
+}
+
 // ---------- toolbar ----------
 function wireToolbar(): void {
   document.getElementById("inputModeSel")!.addEventListener("change", (e) => { switchInputMode((e.target as HTMLSelectElement).value as "dias" | "pct"); });
@@ -898,6 +927,7 @@ function wireToolbar(): void {
   document.getElementById("btnReload")!.addEventListener("click", () => { gpiPull(); render(); setStatus("Actividades recargadas desde el proyecto."); });
   document.getElementById("btnSample")!.addEventListener("click", enterSample);
   document.getElementById("btnLive")!.addEventListener("click", enterLive);
+  document.getElementById("btnLoadSampleLive")!.addEventListener("click", loadSampleIntoProject);
   document.getElementById("btnClear")!.addEventListener("click", async () => {
     const ok = await showConfirm("Se eliminarán todas las ternas O/M/P del análisis actual" + (mode === "sample" ? " (modo ejemplo)" : "") + ". Las actividades no se tocan. ¿Continuar?", "Limpiar análisis");
     if (!ok) return;

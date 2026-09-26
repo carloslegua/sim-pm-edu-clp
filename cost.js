@@ -6041,6 +6041,68 @@
 			$("actCostP1").value = String(v);
 		} catch (e) {}
 	}
+	var sampleArmedAt = 0;
+	function loadSampleIntoProject() {
+		if (!gpiOn()) {
+			showToast("Abre este módulo desde el Panel de Control para cargar el ejemplo en un proyecto.");
+			return;
+		}
+		const G = GPI, leaves = G.util.wbsLeaves(G.util.effectiveWbs());
+		if (!leaves.length) {
+			showToast("La EDT del proyecto activo está vacía: carga primero el ejemplo en WBS Builder.");
+			return;
+		}
+		const btn = $("btnLoadSampleCost");
+		if ((state.co.length || state.ranges.length) && Date.now() - sampleArmedAt > 6e3) {
+			sampleArmedAt = Date.now();
+			btn.textContent = "¿Reemplazar los datos de Costos? Pulsa de nuevo";
+			setTimeout(() => {
+				btn.textContent = "⇩ Cargar ejemplo en el proyecto";
+			}, 6e3);
+			return;
+		}
+		sampleArmedAt = 0;
+		btn.textContent = "⇩ Cargar ejemplo en el proyecto";
+		const idByCode = {};
+		leaves.forEach((l) => {
+			idByCode[l.code] = l.id;
+		});
+		const rc = riskCtx();
+		let unlinked = 0;
+		state.co = SAMPLE_CO.map((o) => {
+			const c = {
+				...o,
+				wbsId: o.wbsCode ? idByCode[o.wbsCode] || "" : ""
+			};
+			if (c.riskCode) {
+				const rk = rc.source === "registro" ? rc.risks.find((r) => r.code === c.riskCode) : null;
+				if (rk) c.riskId = rk.id;
+				else {
+					delete c.riskId;
+					unlinked++;
+				}
+			}
+			return c;
+		});
+		state.ranges = JSON.parse(JSON.stringify(SAMPLE_RANGES));
+		$("rngTimeCost").value = String(SAMPLE_TIME_COST);
+		$("rngTimeBasis").value = SAMPLE_TIME_BASIS;
+		state.esc = buildSampleEscPlan((c) => idByCode[c] || "");
+		$("escMethod").value = "indices";
+		escInputsKey = "";
+		state.boe = buildSampleBoe();
+		renderBoe();
+		seedFromProject();
+		userEdited = true;
+		netDirty = true;
+		renderCO();
+		recalcCont();
+		buildDoc();
+		checkThresholds();
+		save();
+		flash();
+		showToast("Ejemplo DISTRIB+ cargado en Costos (" + state.co.length + " órdenes de cambio, " + state.ranges.length + " partidas, escalación por índices y BOE)." + (unlinked ? " La orden de cambio por riesgo no quedó vinculada: carga el ejemplo del Registro de Riesgos y vuelve a cargarlo." : ""));
+	}
 	function pullFromWBS() {
 		if (!gpiOn()) {
 			showToast("Abre este módulo desde el Panel de Control para conectar la EDT.");
@@ -6324,6 +6386,8 @@
 		load();
 		const connected = gpiOn();
 		if (connected) loadedProjectId = GPI.activeId();
+		const bls = document.getElementById("btnLoadSampleCost");
+		if (bls) bls.style.display = connected ? "inline-flex" : "none";
 		const pw1 = document.getElementById("pullWbs1"), pw3 = document.getElementById("pullWbs3");
 		if (pw1) pw1.style.display = connected ? "inline-flex" : "none";
 		if (pw3) pw3.style.display = connected ? "inline-flex" : "none";
@@ -6378,6 +6442,7 @@
 		save,
 		recalcCont,
 		onBaseInput,
+		loadSampleIntoProject,
 		pullFromWBS,
 		pullFromCostEstimate,
 		addCO,

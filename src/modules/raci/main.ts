@@ -13,6 +13,7 @@ import type * as GpiCore from "../../core/gpi-core";
 import { installGpiBadge } from "../../shared/gpi-badge";
 import type { EditSession, ObsModule, ProjectMeta, WbsModule } from "../../core/types";
 import { pushWithSession } from "../../shared/write-session";
+import { buildLiveRaci } from "../../shared/raci-sample";
 
 type GpiApi = typeof GpiCore.GPI;
 declare global {
@@ -510,6 +511,15 @@ function init(): void {
   document.getElementById("btnSample")!.addEventListener("click", async () => {
     const ok = await showConfirm("Esto reemplazará la matriz actual por el ejemplo DISTRIB+ S.A. (independiente del proyecto activo). El ejemplo trae errores deliberados para practicar con el Velocímetro de Gobernanza. ¿Continuar?", "Cargar ejemplo");
     if (ok) { loadSample(); render(); }
+  });
+  // «Cargar ejemplo en el proyecto» (auditoría, media): el ejemplo de arriba es INDEPENDIENTE y trae errores deliberados; con un proyecto conectado no había una matriz de
+  // ejemplo bien armada que cargar. Esta escribe la del caso (shared/raci-sample.ts) sobre las filas y columnas REALES: paquetes por Código EDT y puestos por nombre.
+  document.getElementById("btnLoadSampleLive")!.addEventListener("click", async () => {
+    if (mode !== "live" && !tryLoadLive()) { await showAlert("El proyecto activo aún no tiene paquetes de trabajo (WBS) y puestos (OBS) suficientes. Carga primero el ejemplo en WBS Builder y en Equipo del Proyecto (OBS) y vuelve aquí.", "Cargar ejemplo en el proyecto"); return; }
+    const built = buildLiveRaci(rows, cols);
+    if (!Object.keys(built.assignments).length) { await showAlert("Ningún paquete ni puesto del proyecto coincide con los del ejemplo (Código EDT y nombre del puesto). Carga el mismo ejemplo en WBS Builder y en Equipo del Proyecto.", "Cargar ejemplo en el proyecto"); return; }
+    const ok = await showConfirm("Se reemplazarán las asignaciones R/A/C/I del proyecto por el ejemplo DISTRIB+ bien armado (un R y un A por paquete)." + (built.unresolved.length ? " No se pudieron ubicar: " + built.unresolved.slice(0, 6).join(", ") + (built.unresolved.length > 6 ? "…" : "") + "." : "") + " ¿Continuar?", "Cargar ejemplo en el proyecto");
+    if (ok) { assignments = built.assignments; syncToGpi(); render(); setStatus("Matriz de ejemplo DISTRIB+ cargada en el proyecto (" + Object.keys(built.assignments).length + " paquetes)."); }
   });
   document.getElementById("btnReset")!.addEventListener("click", async () => {
     const ok = await showConfirm("Esto borrará las asignaciones actuales y volverá a intentar vincular con el proyecto activo (o quedará vacía si no hay uno). ¿Continuar?", "Nueva matriz");

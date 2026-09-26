@@ -158,6 +158,268 @@
 		return lo / res.sorted.length;
 	}
 	//#endregion
+	//#region src/shared/pert-sample.ts
+	var SAMPLE_PERT_PLAN = [
+		[
+			"1.1.1",
+			"Elaboración y aprobación del acta de constitución",
+			3,
+			6
+		],
+		[
+			"1.2.1",
+			"Plan para la dirección del proyecto (líneas base)",
+			4,
+			7
+		],
+		[
+			"1.2.2",
+			"Planes subsidiarios de gestión",
+			9,
+			17
+		],
+		[
+			"1.3.1",
+			"Elaboración de informes mensuales de avance",
+			6,
+			11
+		],
+		[
+			"1.3.2",
+			"Reuniones de control y seguimiento del proyecto",
+			6,
+			11
+		],
+		[
+			"2.1.1",
+			"Calicatas exploratorias",
+			3,
+			6
+		],
+		[
+			"2.1.2",
+			"Ensayos de laboratorio de suelos",
+			8,
+			14
+		],
+		[
+			"2.1.3",
+			"Informe geotécnico",
+			3,
+			6
+		],
+		[
+			"2.2.1",
+			"Memoria de cálculo estructural",
+			8,
+			14
+		],
+		[
+			"2.2.2",
+			"Planos estructurales",
+			9,
+			17
+		],
+		[
+			"2.3.1",
+			"Memoria de cálculo eléctrico y sanitario",
+			5,
+			10
+		],
+		[
+			"2.3.2",
+			"Planos eléctricos y sanitarios",
+			7,
+			13
+		],
+		[
+			"2.4.1",
+			"Trámite de licencia de edificación municipal",
+			16,
+			40
+		],
+		[
+			"2.4.2",
+			"Trámite de certificado ITSE",
+			8,
+			20
+		],
+		[
+			"3.1.1",
+			"Fabricación de estructuras metálicas",
+			7,
+			17
+		],
+		[
+			"3.1.2",
+			"Transporte y entrega de estructuras a obra",
+			3,
+			8
+		],
+		[
+			"3.2.1",
+			"Adquisición y suministro de cemento y agregados",
+			6,
+			11
+		],
+		[
+			"3.2.2",
+			"Adquisición y suministro de materiales varios de construcción",
+			5,
+			10
+		],
+		[
+			"3.3.1",
+			"Adquisición de tableros y equipos eléctricos",
+			4,
+			7
+		],
+		[
+			"3.3.2",
+			"Adquisición de equipos de instalaciones sanitarias",
+			4,
+			7
+		],
+		[
+			"4.1.1",
+			"Corte y excavación masiva",
+			6,
+			14
+		],
+		[
+			"4.1.2",
+			"Relleno y compactación con material propio",
+			7,
+			16
+		],
+		[
+			"4.1.3",
+			"Eliminación de material excedente",
+			7,
+			16
+		],
+		[
+			"4.1.4",
+			"Nivelación y perfilado de plataforma",
+			4,
+			11
+		],
+		[
+			"4.2.1",
+			"Excavación de zanjas para zapatas",
+			4,
+			10
+		],
+		[
+			"4.2.2",
+			"Solado de concreto e=10 cm",
+			3,
+			7
+		],
+		[
+			"4.2.3",
+			"Acero de refuerzo fy=4200 kg/cm²",
+			6,
+			13
+		],
+		[
+			"4.2.4",
+			"Concreto f'c=280 kg/cm² en zapatas",
+			4,
+			8
+		],
+		[
+			"4.2.5",
+			"Encofrado y desencofrado de cimentaciones",
+			4,
+			10
+		],
+		[
+			"4.3.1",
+			"Montaje de columnas metálicas",
+			6,
+			12
+		],
+		[
+			"4.3.2",
+			"Montaje de vigas y tijerales",
+			9,
+			18
+		],
+		[
+			"4.3.3",
+			"Instalación de cobertura TR-4",
+			6,
+			12
+		],
+		[
+			"4.4.1",
+			"Tarrajeo de muros y cielorrasos",
+			32,
+			54
+		],
+		[
+			"4.4.2",
+			"Pintura general de interiores y exteriores",
+			16,
+			27
+		],
+		[
+			"4.4.3",
+			"Cerramiento perimétrico",
+			12,
+			22
+		],
+		[
+			"4.5.1",
+			"Instalación de tableros y circuitos eléctricos",
+			16,
+			27
+		],
+		[
+			"4.5.2",
+			"Instalación de redes sanitarias",
+			12,
+			21
+		],
+		[
+			"5.1.1",
+			"Pruebas de tableros y circuitos eléctricos",
+			3,
+			6
+		],
+		[
+			"5.1.2",
+			"Pruebas hidráulicas de redes sanitarias",
+			1,
+			3
+		],
+		[
+			"5.2.1",
+			"Capacitación operativa al personal del cliente",
+			6,
+			11
+		],
+		[
+			"5.2.2",
+			"Elaboración de manuales de operación y mantenimiento",
+			3,
+			6
+		],
+		[
+			"5.3.1",
+			"Elaboración de dossier de calidad y planos as-built",
+			8,
+			14
+		],
+		[
+			"5.3.2",
+			"Acta de entrega y cierre del proyecto",
+			1,
+			3
+		]
+	];
+	//#endregion
 	//#region src/modules/pert/main.ts
 	var mode = "live";
 	var stateLive = {
@@ -426,6 +688,7 @@
 		chip.className = "mode-chip " + (mode === "sample" ? "sample" : "live");
 		document.getElementById("btnSample").style.display = mode === "sample" ? "none" : "";
 		document.getElementById("btnLive").style.display = mode === "sample" ? "" : "none";
+		document.getElementById("btnLoadSampleLive").style.display = mode === "sample" ? "none" : "";
 		document.getElementById("btnReload").disabled = mode === "sample";
 		document.getElementById("inputModeSel").value = state().inputMode;
 		const pctMode = state().inputMode === "pct";
@@ -1421,6 +1684,46 @@
 		render();
 		setStatus("De vuelta a las actividades del proyecto.");
 	}
+	async function loadSampleIntoProject() {
+		if (typeof window.GPI === "undefined" || !window.GPI.available() || !window.GPI.active()) {
+			await showAlert("Esto solo aplica con un proyecto activo conectado al Panel de Control. Usa «Modo ejemplo» para explorar el caso sin conexión.", "Cargar ejemplo");
+			return;
+		}
+		gpiPull();
+		const prev = mode;
+		mode = "live";
+		const idBy = {};
+		const byLeaf = (actsData() || { byLeaf: {} }).byLeaf || {};
+		treeRows().filter((r) => r.kind === "package").forEach((r) => (byLeaf[r.id] || []).forEach((a, i) => {
+			idBy[r.code + "." + (i + 1) + "|" + (a.name || "")] = a.id;
+		}));
+		const hits = SAMPLE_PERT_PLAN.filter(([code, name]) => idBy[code + "|" + name]);
+		if (!hits.length) {
+			mode = prev;
+			await showAlert("Ninguna actividad del proyecto coincide con las del ejemplo (Código + nombre). Carga primero el ejemplo en WBS Builder y en Definir las Actividades y vuelve aquí.", "Cargar ejemplo");
+			return;
+		}
+		if (!await showConfirm("Se reemplazarán las ternas O/M/P del proyecto por las del ejemplo DISTRIB+ (" + hits.length + " de sus " + SAMPLE_PERT_PLAN.length + " actividades coinciden). La M queda automática (sigue a la duración base).", "Cargar ejemplo en el proyecto")) {
+			mode = prev;
+			render();
+			return;
+		}
+		const by = {};
+		hits.forEach(([code, name, o, p]) => {
+			by[idBy[code + "|" + name]] = {
+				o: String(o),
+				m: "",
+				mAuto: true,
+				p: String(p)
+			};
+		});
+		stateLive = {
+			byActivity: by,
+			inputMode: "dias"
+		};
+		onDirty(true);
+		setStatus("Ejemplo DISTRIB+ cargado: " + hits.length + " ternas O/P (M automática).");
+	}
 	function wireToolbar() {
 		document.getElementById("inputModeSel").addEventListener("change", (e) => {
 			switchInputMode(e.target.value);
@@ -1437,6 +1740,7 @@
 		});
 		document.getElementById("btnSample").addEventListener("click", enterSample);
 		document.getElementById("btnLive").addEventListener("click", enterLive);
+		document.getElementById("btnLoadSampleLive").addEventListener("click", loadSampleIntoProject);
 		document.getElementById("btnClear").addEventListener("click", async () => {
 			if (!await showConfirm("Se eliminarán todas las ternas O/M/P del análisis actual" + (mode === "sample" ? " (modo ejemplo)" : "") + ". Las actividades no se tocan. ¿Continuar?", "Limpiar análisis")) return;
 			if (mode === "sample") stateSample = {

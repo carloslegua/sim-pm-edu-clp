@@ -189,6 +189,8 @@ src/shared/write-session.ts      → (se inlinea en cada IIFE) guardado con sesi
                                     edición + resultado común de escritura
 src/shared/charter-baseline.ts   → (se inlinea en project-charter.js) aprobación y versiones del Acta: instantánea, deriva y nueva versión
                                     (reutiliza el motor de requirements-baseline.ts)
+src/shared/pert-sample.ts        → (se inlinea en pert.js) ternas O/P del ejemplo DISTRIB+ de Análisis PERT (43 actividades por código + nombre)
+src/shared/raci-sample.ts        → (se inlinea en raci.js) matriz RACI BIEN armada del caso para el proyecto (paquetes por código, puestos por nombre)
 src/shared/milestone-check.ts    → (se inlinea en schedule-plan.js y plan-direccion.js) restricciones de los hitos (FNLT/FNET/MSO/MFO) contra el fin del CPM
 src/shared/schedule-progress.ts  → (se inlinea en cronograma-cpm.js y gpi-core.js) avance real (fecha de corte, % por actividad) y pronóstico: CPM sobre lo que falta
 src/shared/beta-pert.ts          → (se inlinea donde se usa) muestreo Beta-PERT único (pert-network, range-estimating)
